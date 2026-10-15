@@ -20,7 +20,11 @@ from .models import Profile, Game, Concept, TitleID, TrophyGroup, ProfileGame, E
 from .services.psn_api_service import PsnApiService, psn_trophy_total
 from .psn_manager import PSNManager
 from .psn_client import IP_ECHO_URL, ProxiedPSNAWP
-from trophies.util_modules.cache import redis_client, log_api_call
+from trophies.util_modules.cache import redis_client, log_api_call, token_fingerprint
+from trophies.services.npsso_age import (
+    is_npsso_expired_error, npsso_age_days, npsso_age_level, npsso_first_seen, record_npsso_expired,
+    record_npsso_login,
+)
 from trophies.util_modules.constants import TITLE_ID_BLACKLIST, TITLE_STATS_SUPPORTED_PLATFORMS
 from trophies.util_modules.language import detect_asian_language
 from trophies.util_modules.region import detect_region_from_details
@@ -47,7 +51,6 @@ class TokenInstance:
     client: ProxiedPSNAWP
     user_cache: dict = None
     access_expiry: datetime = None
-    refresh_expiry: datetime = None
     last_health: float = time.time()
     last_refresh: float = 0
     is_busy: bool = False
@@ -56,34 +59,23 @@ class TokenInstance:
     proxy_url: str = None
     group_id: int = None
     job_start_time: float = 0  # Track when current job started for stuck detection
+    npsso_first_seen: float = None  # When this NPSSO first logged in (trophies.services.npsso_age)
 
     def __post_init__(self):
         if self.user_cache is None:
             self.user_cache = {}
-        if self.access_expiry is None or self.refresh_expiry is None:
+        if self.access_expiry is None:
             self.update_expiry_times()
-    
+
     def update_expiry_times(self):
         if self.client:
-            auth = self.client.authenticator
-            self.access_expiry = datetime.fromtimestamp(auth.access_token_expiration_time)
-            # Only set refresh_expiry on first initialization. Proactive access token
-            # refreshes create a new client (full re-auth), which recomputes
-            # refresh_token_expires_at from time.time() -- overwriting the original
-            # expiry and making all instances show identical values on the dashboard.
-            if self.refresh_expiry is None:
-                self.refresh_expiry = datetime.fromtimestamp(auth.refresh_token_expiration_time)
+            self.access_expiry = datetime.fromtimestamp(self.client.authenticator.access_token_expiration_time)
 
     def get_access_expiry_in_seconds(self):
         if self.access_expiry:
             return (self.access_expiry - datetime.now()).total_seconds()
         return -1
     
-    def get_refresh_expiry_in_seconds(self):
-        if self.refresh_expiry:
-            return (self.refresh_expiry - datetime.now()).total_seconds()
-        return -1
-        
     def cleanup_cache(self, ttl_minutes=5):
         """Remove cache entries older than ttl_minutes."""
         now = datetime.now()
@@ -415,8 +407,11 @@ class TokenKeeper:
                         user_cache={},
                         proxy_url=proxy,
                         group_id=group_id,
-                        last_health=time.time()
+                        last_health=time.time(),
+                        npsso_first_seen=record_npsso_login(token),
                     )
+                    logger.info(f"Group {group_id} Instance {i} initialized with live client")
+                    log_api_call("client_init", token, None, 200, time.time() - start_time)
                 except Exception as e:
                     inst = TokenInstance(
                         instance_id=i,
@@ -425,14 +420,18 @@ class TokenKeeper:
                         user_cache={},
                         proxy_url=proxy,
                         group_id=group_id,
-                        last_health=0
+                        last_health=0,
+                        npsso_first_seen=npsso_first_seen(token),
                     )
-                    logger.warning(f"Failed to init client for instance {i} | {token}")
+                    inst.last_error = f"{datetime.now().isoformat()} Init error: {e}"
+                    if is_npsso_expired_error(e):
+                        record_npsso_expired(token)
+                    # The fingerprint, never the token: a logged NPSSO is a working PSN login.
+                    logger.warning(f"Failed to init client for group {group_id} instance {i} (NPSSO {token_fingerprint(token)[:12]}): {e}")
+                    log_api_call("client_init", token, None, 500, time.time() - start_time, str(e))
                 self._update_outbound_ip(inst)
                 instances[i] = inst
                 redis_client.set(f"token_keeper:instance:{self.machine_id}:{group_id}:{i}:token", token)
-                logger.info(f"Group {group_id} Instance {i} initialized with live client")
-                log_api_call("client_init", token, None, 200, time.time() - start_time)
             self.group_instances[group_id] = {'instances': instances, 'proxy': proxy}
 
     def _update_outbound_ip(self, inst: TokenInstance):
@@ -473,6 +472,7 @@ class TokenKeeper:
                 inst.client.user(online_id='PlatPursuit') # Generates refresh tokens, etc.
                 inst.user_cache = {}
                 inst.update_expiry_times()
+                inst.npsso_first_seen = record_npsso_login(inst.token)
                 inst.last_refresh = time.time()
                 self._record_call(inst.token)
                 # Log API call separately - DB errors here shouldn't mark instance unhealthy
@@ -492,6 +492,8 @@ class TokenKeeper:
         except Exception as e:
             logger.error(f"Health check failed for {inst.instance_id}: {e}")
             inst.last_error = f"{datetime.now().isoformat()} Refresh error: {str(e)}"
+            if is_npsso_expired_error(e):
+                record_npsso_expired(inst.token)
             inst.last_health = 0
         else:
             inst.last_health = time.time()
@@ -2771,6 +2773,11 @@ class TokenKeeper:
         )
         return jobs_queued
 
+    @staticmethod
+    def _npsso_stats(inst: TokenInstance) -> Dict:
+        age = npsso_age_days(inst.npsso_first_seen)
+        return {"npsso_age_days": age, "npsso_age_level": npsso_age_level(age)}
+
     @property
     def stats(self) -> Dict:
         stats = {}
@@ -2784,7 +2791,7 @@ class TokenKeeper:
                         "healthy": False,
                         "calls_in_window": 0,
                         "access_token_expiry_in": -1,
-                        "refresh_token_expiry_in": -1,
+                        **self._npsso_stats(inst),
                         "token_scopes": "none",
                         "npsso_cookie": "missing",
                         "uptime_seconds": 0,
@@ -2800,7 +2807,7 @@ class TokenKeeper:
                     "healthy": time.time() - inst.last_health < self.health_interval,
                     "calls_in_window": self._get_calls_in_window(inst.token),
                     "access_token_expiry_in": inst.get_access_expiry_in_seconds(),
-                    "refresh_token_expiry_in": inst.get_refresh_expiry_in_seconds(),
+                    **self._npsso_stats(inst),
                     "token_scopes": auth.token_response.get("scope", "unknown") if auth.token_response else "none",
                     "npsso_cookie": "present" if auth.npsso_cookie else "missing",
                     "uptime_seconds": time.time() - inst.last_health if inst.last_health > 0 else 0,

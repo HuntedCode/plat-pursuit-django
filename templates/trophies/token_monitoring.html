@@ -32,7 +32,7 @@
                                                         <th>Healthy</th>
                                                         <th>Calls in Window</th>
                                                         <th>Access Expiry (s)</th>
-                                                        <th>Refresh Expiry (s)</th>
+                                                        <th>NPSSO Age (days)</th>
                                                         <th>Token Scopes</th>
                                                         <th>NPSSO Cookie</th>
                                                         <th>Last Error</th>
@@ -49,7 +49,10 @@
                                                             <td>{% if stat.healthy %}Yes{% else %}No{% endif %}</td>
                                                             <td>{{ stat.calls_in_window }}</td>
                                                             <td>{{ stat.access_token_expiry_in|floatformat:0 }}</td>
-                                                            <td>{{ stat.refresh_token_expiry_in|floatformat:0 }}</td>
+                                                            <td>
+                                                                {% if stat.npsso_age_days is None %}Unknown
+                                                                {% else %}<span class="badge {% if stat.npsso_age_level == 'danger' %}badge-error{% elif stat.npsso_age_level == 'warn' %}badge-warning{% else %}badge-ghost{% endif %}">{{ stat.npsso_age_days|floatformat:1 }}</span>{% endif %}
+                                                            </td>
                                                             <td>{{ stat.token_scopes }}</td>
                                                             <td>{{ stat.npsso_cookie }}</td>
                                                             <td>{{ stat.last_error|default:"None" }}</td>

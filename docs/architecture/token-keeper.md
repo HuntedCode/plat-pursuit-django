@@ -86,7 +86,8 @@ User triggers sync (web UI, cron, admin)
 The system authenticates with PSN using NPSSO cookies (long-lived session tokens from PlayStation Network). Each NPSSO cookie creates a `ProxiedPSNAWP` client that holds an OAuth access token (short-lived, ~1 hour) and a refresh token (longer-lived). These are wrapped in `TokenInstance` dataclass objects that track:
 
 - `is_busy`: Whether a worker thread currently holds this instance
-- `access_expiry` / `refresh_expiry`: Token lifetimes for proactive refresh
+- `access_expiry`: Access token lifetime, for proactive refresh
+- `npsso_first_seen`: When this NPSSO first logged in, for the dashboard's NPSSO age (see the NPSSO Lifetime gotcha)
 - `user_cache`: Per-instance LRU cache of PSN user lookups (keyed by account_id, 5-minute TTL)
 - `outbound_ip`: The IP address used for outbound requests (for proxy tracking)
 - `job_start_time`: When the current job started (for stuck detection)
@@ -347,9 +348,21 @@ Because they copy psnawp's `__init__`s instead of calling them, **every psnawp o
 
 psnawp does NOT raise `requests.HTTPError` for HTTP errors. It has its own exception tree rooted in `PSNAWPError`: `PSNAWPForbiddenError` for 403, `PSNAWPServerError` for 5xx, `PSNAWPTooManyRequestsError` for 429, etc. Any code in `_execute_api_call()` that handles HTTP status codes must catch BOTH `requests.HTTPError` (for direct requests calls) and the corresponding `PSNAWP*Error` (for psnawp-wrapped calls). Missing one will cause errors to fall through to the generic `except Exception` handler.
 
-### Token Refresh Expiry Display Bug
+### NPSSO Lifetime (the dashboard's NPSSO Age)
 
-`TokenInstance.update_expiry_times()` only sets `refresh_expiry` on first initialization, not on subsequent refreshes. This is intentional: proactive access token refreshes create a new `ProxiedPSNAWP` client which recomputes `refresh_token_expires_at` from `time.time()`, causing all instances to show identical refresh expiry values on the dashboard. The workaround preserves the original expiry.
+The NPSSO cookie is the credential that actually expires, and **nothing renews it**: every login sends it to Sony and gets back a fresh access token (about 1 hour) and refresh token (10 days), but never a new cookie (checked 2026-10: the login response sets only Akamai's `_abck`/`bm_*` cookies). The only fix for an expired cookie is signing in to that PSN account again and copying a new NPSSO into `TOKEN_GROUPS`.
+
+The dashboard used to show the refresh token's expiry, which reset on every login and every worker start, so it always looked nearly full and said nothing about the cookie. It now shows **NPSSO Age**, from `trophies/services/npsso_age.py`:
+
+- The age counts from the cookie's first successful login, stored in Redis under the token's fingerprint with no TTL, so it survives restarts. A new cookie gets a new fingerprint and starts at 0.
+- It turns amber at `NPSSO_WARN_DAYS` (75) and red at `NPSSO_DANGER_DAYS` (85). Sony's real lifetime is not published (psnawp says about 2 months; ours have lasted longer), so these are a starting point.
+- When Sony rejects a cookie (psnawp's "npsso code has expired" error, Sony's code 4165), its age at death is stored under `token_keeper:npsso:expired:*` and logged as `NPSSO <fingerprint> expired at N days`. Those records are the evidence for moving the warning points.
+- Ages for cookies already in use when this shipped (2026-10) start from that deploy, so they read young for their first cycle.
+- Rotate a couple of tokens at a time on different weeks so they can never all expire together.
+
+### Never Log a Token
+
+A logged NPSSO is a working PSN login for anyone who can read the logs. Identify tokens with `token_fingerprint()` (`trophies/util_modules/cache.py`, SHA-256; the first 12 characters in log lines), which is also `APIAuditLog.token_id`. `tests/engine/test_npsso_age.py` fails if any `logger` call in `token_keeper.py` formats a `token` directly.
 
 ### PSPC Platform Handling
 
@@ -478,6 +491,8 @@ python manage.py redis_admin --move-whale-jobs
 | `token_keeper_stats:{machine_id}` | pub/sub channel | n/a | Real-time stats broadcast |
 | `token_keeper_latest_stats:{machine_id}` | string (JSON) | 60s | Latest stats snapshot for dashboard polling |
 | `instance_lock:{machine_id}:{group_id}:{inst_id}` | string | 300s | Atomic token acquisition lock |
+| `token_keeper:npsso:first_seen:{fingerprint}` | string (epoch) | none | When this NPSSO first logged in; the dashboard's NPSSO age |
+| `token_keeper:npsso:expired:{fingerprint}` | string (JSON) | none | `expired_at` and `age_days` when Sony first rejected this NPSSO |
 
 ### Rate Limiting
 
