@@ -96,6 +96,15 @@ def _pick_observed_name(observations, now):
 
 # Create your models here.
 
+class DiscordAlreadyLinkedError(ValueError):
+    """`Profile.link_discord` on a profile that already has a Discord account.
+
+    Its own type so the bot's verify endpoint can show exactly this message, rather than the text of
+    any ValueError raised elsewhere in the flow. A ValueError subclass, so existing handlers still
+    catch it.
+    """
+
+
 class Profile(models.Model):
     user = models.OneToOneField(
         CustomUser,
@@ -446,7 +455,7 @@ class Profile(models.Model):
 
     def link_discord(self, discord_id: int):
         if self.discord_id:
-            raise ValueError("Discord already linked to this profile.")
+            raise DiscordAlreadyLinkedError("Discord already linked to this profile.")
         self.discord_id = discord_id
         self.discord_linked_at = timezone.now()
         self.is_discord_verified = True

@@ -11,9 +11,47 @@ from django.utils import timezone
 
 logger = logging.getLogger('psn_api')
 
+#: What both verify paths (the Discord bot's and the website's) say when the PSN profile's Gaming
+#: History is private. Verification refuses until it is public: a private profile could otherwise
+#: link and then never sync a trophy. The code stays valid, and each attempt starts a fresh sync
+#: (`start_verification_sync`), so changing the setting and verifying again is all it takes.
+#:
+#: "Private" is `psn_history_public` as the profile sync last saw it: the PSN profile summary reports
+#: trophy level 0 when Gaming History is hidden (token_keeper `_job_sync_profile_data`). Every PSN
+#: account starts at level 1, so a public profile does not read as 0. If PSN ever did, verification
+#: would refuse it, and staff can link it from the admin.
+PRIVATE_HISTORY_MESSAGE = (
+    "This PSN profile's Gaming History is private. In your PlayStation privacy settings, set "
+    "Gaming History to 'Anyone', then verify again."
+)
+
 
 class VerificationService:
     """Handles PSN profile verification logic."""
+
+    @staticmethod
+    def start_verification_sync(profile):
+        """Start the sync a verification attempt waits on, clearing what an earlier attempt left.
+
+        A private attempt leaves `sync_status='error'` behind (set by the privacy-error job). A full
+        refresh would replace it, but a retry usually falls inside the refresh cooldown (the private
+        attempt's own sync moved `last_synced`), where only the profile summary runs and nothing
+        touches the status. Both verify paths refuse on that status, so without this every such
+        retry failed with "sync failed" before its own sync could report. The sync started here
+        decides afresh. (A still-private profile can then read 'synced' until its next full refresh
+        hits PSN's 403 again; verification itself refuses it either way.)
+
+        Only the profile summary is needed to verify: it brings the About Me (the code) and the
+        privacy flag. It is queued directly when a full refresh cannot start: inside the cooldown, or
+        while another sync is marked running, where `profile_refresh` queues nothing and the
+        attempt would otherwise just time out.
+        """
+        from trophies.psn_manager import PSNManager
+
+        if profile.sync_status == 'error':
+            profile.set_sync_status('synced')
+        if profile.sync_status == 'syncing' or not profile.attempt_sync():
+            PSNManager.sync_profile_data(profile)
 
     @staticmethod
     def generate_code(profile):

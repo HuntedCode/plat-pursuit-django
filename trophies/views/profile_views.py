@@ -30,6 +30,7 @@ from trophies.services.activity_service import DAYS_PER_PAGE
 from trophies.mixins import HtmxListMixin
 from trophies.psn_manager import PSNManager
 from trophies.services.sync_service import SyncService
+from trophies.services.verification_service import PRIVATE_HISTORY_MESSAGE, VerificationService
 
 logger = logging.getLogger("psn_api")
 
@@ -1192,9 +1193,7 @@ class LinkPSNView(LoginRequiredMixin, View):
                 try:
                     start_time = timezone.now().timestamp()
                     profile = Profile.objects.get(psn_username=psn_username.lower())
-                    is_syncing = profile.attempt_sync()
-                    if not is_syncing:
-                        PSNManager.sync_profile_data(profile)
+                    VerificationService.start_verification_sync(profile)
 
                     messages.info(request, "Verification in progress...")
                     context = {
@@ -1252,16 +1251,26 @@ class ProfileVerifyView(LoginRequiredMixin, View):
         except Profile.DoesNotExist:
             return JsonResponse({'error': 'Profile not found'}, status=404)
 
-        if profile.sync_status == 'error':
-            return JsonResponse({'error': 'Sync error. Make sure your "Gaming History" permission is set to "Anybody"'}, status=400)
-
         verified = False
         synced = False
         if profile.last_synced.timestamp() > start_time_float:
+            # This attempt's sync has finished, and it decides: the save that bumps last_synced also
+            # records whether Gaming History is private, and a private profile must not link (it
+            # would never sync a trophy). Without this the poll linked it, because the privacy error
+            # status arrives seconds later.
+            if not profile.psn_history_public:
+                return JsonResponse({'error': PRIVATE_HISTORY_MESSAGE}, status=400)
             synced = True
             verified = profile.verify_code(profile.about_me)
             if verified:
                 profile.link_to_user(user)
+        elif profile.sync_status == 'error':
+            # Only before this attempt's sync finishes, so a finished sync always decides. Step 2
+            # cleared any error an earlier attempt left (VerificationService.start_verification_sync),
+            # so this is almost always this attempt's own failure.
+            if not profile.psn_history_public:
+                return JsonResponse({'error': PRIVATE_HISTORY_MESSAGE}, status=400)
+            return JsonResponse({'error': 'PSN sync failed. Please try again in a few minutes.'}, status=400)
 
         return JsonResponse({
             'synced': synced,
