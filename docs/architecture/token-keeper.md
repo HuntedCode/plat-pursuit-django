@@ -224,7 +224,9 @@ Rate limiting operates at two levels:
 
 ### Proxy Support
 
-Each token group can route through a different proxy via the `PROXY_IPS` environment variable (pipe-separated, matching the group order). The proxy URL is passed to `ProxiedRequestBuilder` which sets `session.proxies`. On initialization and refresh, each instance resolves its outbound IP via `api.ipify.org` for dashboard display.
+Each token group can route through a different proxy via the `PROXY_IPS` environment variable (pipe-separated, matching the group order). The proxy URL is passed to `ProxiedRequestBuilder` which sets `session.proxies`. On initialization and refresh, `_update_outbound_ip()` asks `api.ipify.org` for each instance's IP **through the PSN client's own session** (`ProxiedPSNAWP.session`), so the dashboard shows the address PSN actually sees.
+
+Until 2026-10 the token refresh rebuilt each client with the proxy passed positionally into psnawp's `headers` slot, so every client went out from the server's own IP about 55 minutes after each worker start (one access-token lifetime minus the 5-minute refresh threshold). The dashboard hid it because its IP check built a separate session from `inst.proxy_url`. `proxy_url` is now keyword-only, and `tests/engine/test_psn_client_init.py` checks every client build in `token_keeper.py` passes it.
 
 ### Duplicate Profile Detection
 

@@ -5,7 +5,6 @@ import threading
 import logging
 import os
 import atexit
-import requests
 from typing import Dict
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -20,7 +19,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 from .models import Profile, Game, Concept, TitleID, TrophyGroup, ProfileGame, EarnedTrophy, ScoutAccount
 from .services.psn_api_service import PsnApiService, psn_trophy_total
 from .psn_manager import PSNManager
-from .psn_client import ProxiedPSNAWP
+from .psn_client import IP_ECHO_URL, ProxiedPSNAWP
 from trophies.util_modules.cache import redis_client, log_api_call
 from trophies.util_modules.constants import TITLE_ID_BLACKLIST, TITLE_STATS_SUPPORTED_PLATFORMS
 from trophies.util_modules.language import detect_asian_language
@@ -429,21 +428,29 @@ class TokenKeeper:
                         last_health=0
                     )
                     logger.warning(f"Failed to init client for instance {i} | {token}")
-                try:
-                    session = requests.Session()
-                    if inst.proxy_url:
-                        session.proxies = {'http': inst.proxy_url, 'https': inst.proxy_url}
-                    ip_response = session.get('https://api.ipify.org', timeout=2)
-                    inst.outbound_ip = ip_response.text
-                    logger.info(f"Group {group_id} Instance {inst.instance_id} using IP: {inst.outbound_ip}")
-                except Exception as e:
-                    logger.warning(f"Failed to fetch IP for group {group_id} instance {inst.instance_id}: {e}")
-                    inst.outbound_ip = 'Unknown'
+                self._update_outbound_ip(inst)
                 instances[i] = inst
                 redis_client.set(f"token_keeper:instance:{self.machine_id}:{group_id}:{i}:token", token)
                 logger.info(f"Group {group_id} Instance {i} initialized with live client")
                 log_api_call("client_init", token, None, 200, time.time() - start_time)
             self.group_instances[group_id] = {'instances': instances, 'proxy': proxy}
+
+    def _update_outbound_ip(self, inst: TokenInstance):
+        """Record the IP address PSN sees for this instance, for the dashboard.
+
+        Asked through the PSN client's own session, so a client that lost its proxy shows the
+        server's IP. A separate session built from `inst.proxy_url` once reported the proxy's IP
+        while the client sent everything from the server's.
+        """
+        if inst.client is None:
+            inst.outbound_ip = 'Unknown'
+            return
+        try:
+            inst.outbound_ip = inst.client.session.get(IP_ECHO_URL, timeout=2).text
+            logger.info(f"Group {inst.group_id} Instance {inst.instance_id} using IP: {inst.outbound_ip}")
+        except Exception as e:
+            logger.warning(f"Failed to fetch IP for group {inst.group_id} instance {inst.instance_id}: {e}")
+            inst.outbound_ip = 'Unknown'
 
     def _is_healthy(self, inst : TokenInstance) -> bool:
         """Quick health check."""
@@ -462,7 +469,7 @@ class TokenKeeper:
                     logger.debug(f"Group {group_id} Instance {inst.instance_id} needs refresh but is busy.")
                     return
                 start = time.time()
-                inst.client = ProxiedPSNAWP(inst.token, inst.proxy_url)
+                inst.client = ProxiedPSNAWP(inst.token, proxy_url=inst.proxy_url)
                 inst.client.user(online_id='PlatPursuit') # Generates refresh tokens, etc.
                 inst.user_cache = {}
                 inst.update_expiry_times()
@@ -474,16 +481,7 @@ class TokenKeeper:
                 except Exception as log_err:
                     logger.warning(f"Failed to log API call for instance {inst.instance_id}: {log_err}")
                 logger.info(f"Instance {inst.instance_id} refreshed proactively")
-                try:
-                    session = requests.Session()
-                    if inst.proxy_url:
-                        session.proxies = {'http': inst.proxy_url, 'https': inst.proxy_url}
-                    ip_response = session.get('https://api.ipify.org', timeout=2)
-                    inst.outbound_ip = ip_response.text
-                    logger.info(f"Instance {inst.instance_id} using IP: {inst.outbound_ip}")
-                except Exception as e:
-                    logger.warning(f"Failed to fetch IP for instance {inst.instance_id}: {e}")
-                    inst.outbound_ip = 'Unknown'
+                self._update_outbound_ip(inst)
             inst.cleanup_cache()
         except OperationalError as db_err:
             # Database lock errors are transient - don't mark instance unhealthy
