@@ -65,7 +65,7 @@ sendgrid==6.12.5
 sentry-sdk==2.71.0
 six==1.17.0
 sqlparse==0.6.0
-stripe==14.1.0
+stripe==16.0.0
 tenacity==9.2.1
 typing_extensions==4.16.0
 tzdata==2026.5
