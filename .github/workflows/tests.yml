@@ -86,6 +86,16 @@ jobs:
       - name: Audit Python dependencies
         run: pip-audit -r requirements.txt --no-deps --disable-pip --progress-spinner off
 
+      # The audit above only sees pinned packages, so every package the image installs must be
+      # pinned. A bump (a Dependabot one included) can need a new or changed transitive pin:
+      # installing the pins with no dependency resolution, then `pip check`, fails if any
+      # requirement is missing or out of range.
+      - name: Check the Python pins
+        run: |
+          python -m venv /tmp/pins
+          /tmp/pins/bin/pip install --quiet --disable-pip-version-check --no-deps -r requirements.txt
+          /tmp/pins/bin/pip check
+
       # The share-card layout tests measure a real render in a real browser, because that class of
       # bug (a fixed-canvas card silently clipping its own title) cannot be caught by asserting on
       # markup -- it is a question about pixels. The pip package ships with requirements; the browser
