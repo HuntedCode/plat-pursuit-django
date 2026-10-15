@@ -92,13 +92,18 @@ jobs:
       # binary does not, so without this the tests fail on a missing executable.
       #
       # Cached on the pinned playwright version, so this downloads once per version bump rather than
-      # once per run.
+      # once per run. The version is read from requirements.txt: a hard-coded key outlived the
+      # 1.51 to 1.64 bump and would have kept restoring the old browser.
+      - name: Read the pinned Playwright version
+        id: playwright-version
+        run: echo "version=$(grep -E '^playwright==' requirements.txt | cut -d= -f3)" >> "$GITHUB_OUTPUT"
+
       - name: Cache Playwright browsers
         id: playwright-cache
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-1.51.0
+          key: ${{ runner.os }}-playwright-${{ steps.playwright-version.outputs.version }}
 
       - name: Install Playwright chromium
         run: python -m playwright install --with-deps chromium
