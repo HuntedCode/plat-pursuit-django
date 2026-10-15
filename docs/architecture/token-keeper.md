@@ -8,6 +8,9 @@ The Token Keeper is PlatPursuit's core background engine for synchronizing PSN t
   `token:{token}:{machine_id}:timestamps` and enforces its window off that same key, so throttling has
   always been correct -- but `log_api_call` read the key WITHOUT the machine component. Nothing writes
   that, so every row ever written recorded the full 300. Fixed; the read now uses `MACHINE_ID` too.
+- **`APIAuditLog.error_message` went blank on 2026-08-25.** The 2026-08-25 rewrite of `log_api_call`
+  (`801f7fca`) rebuilt the row's fields and left this one out, so failure rows from then until the
+  2026-10 fix carry no message. Rows written before 2026-08-25 still have theirs.
 - **The egress IP was a blocking third-party call per API call.** `log_api_call` did a synchronous
   `requests.get("https://api.ipify.org", timeout=5)` on every success, and it sat OUTSIDE the try that
   guards the audit write. Since `log_api_call` runs inside `_execute_api_call`'s try, an outage there

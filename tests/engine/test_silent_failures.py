@@ -140,6 +140,22 @@ def test_an_ip_lookup_outage_cannot_break_a_sync(monkeypatch):
     assert cache_mod._egress_ip() == 'unknown', 'an unknown IP is a worse audit row, not a lost sync'
 
 
+@pytest.mark.django_db
+@pytest.mark.parametrize('error_message, stored', [('PSN said no: 503', 'PSN said no: 503'), (None, '')])
+def test_the_audit_row_keeps_the_error_message(monkeypatch, error_message, stored):
+    """log_api_call takes the error message of every failing PSN call. The 2026-08-25 rewrite of its
+    row (801f7fca) left the field out, so every failure row from then on read blank."""
+    from trophies.models import APIAuditLog
+    from trophies.util_modules import cache as cache_mod
+
+    monkeypatch.setattr(cache_mod, '_egress_ip', lambda: '203.0.113.9')
+    monkeypatch.setattr(cache_mod, '_calls_in_window', lambda token: 0)
+
+    cache_mod.log_api_call('trophy_titles', 'tok', None, 503, 1.0, error_message)
+
+    assert APIAuditLog.objects.get(endpoint='trophy_titles').error_message == stored
+
+
 def test_the_egress_ip_survives_a_redis_outage_without_hammering(monkeypatch):
     """With Redis down a Redis-only cache never populates, so EVERY call fell through to the blocking
     request again -- the original bug minus the raise. The process-local cache holds regardless."""
