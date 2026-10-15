@@ -107,7 +107,12 @@ class VerifyView(APIView):
                         logger.info(f"Sync completed for profile {profile.id} after polling.")
                         break
                     if profile.sync_status == 'error':
+                        # A fresh error: start_verification_sync cleared any older one. On a full
+                        # refresh of a still-private profile the privacy job can land before the
+                        # summary sync moves last_synced, so say which problem it is.
                         logger.warning(f"Sync error for profile {profile.id} during verify.")
+                        if not profile.psn_history_public:
+                            return Response({'success': False, 'message': PRIVATE_HISTORY_MESSAGE}, status=status.HTTP_403_FORBIDDEN)
                         return Response(
                             {'success': False, 'message': 'Sync failed. Please try again later.'},
                             status=status.HTTP_502_BAD_GATEWAY,

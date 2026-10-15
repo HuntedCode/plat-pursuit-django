@@ -282,3 +282,68 @@ def test_the_website_verifies_once_the_profile_is_made_public(signed_in, monkeyp
     assert resp.json() == {'synced': True, 'verified': True}, resp.json()
     profile.refresh_from_db()
     assert profile.user == user
+
+
+def test_the_website_retry_waits_for_its_own_queued_sync(signed_in, monkeypatch):
+    """The real link page polls straight after step 2, while the sync is still queued: without
+    step 2 clearing the stale error, that first poll refused with the old privacy message."""
+    client, user = signed_in
+    profile = _left_by_a_private_attempt()
+    monkeypatch.setattr(Profile, 'attempt_sync', lambda self: True)  # queued, not run yet
+    start = timezone.now()
+
+    client.post(reverse('link_psn'), {'action': 'verify', 'psn_username': profile.psn_username})
+    first = _poll(client, profile, start)
+    _sync_finishes_public(profile.pk)(None)
+    second = _poll(client, profile, start)
+
+    assert first.json() == {'synced': False, 'verified': False}, first.json()
+    assert second.json() == {'synced': True, 'verified': True}, second.json()
+
+
+def test_a_finished_sync_decides_over_a_leftover_error(signed_in):
+    """A second tab or a reload can poll without a fresh step 2; a finished public sync wins."""
+    client, user = signed_in
+    profile = _profile_ready_to_verify()
+    Profile.objects.filter(pk=profile.pk).update(sync_status='error')
+
+    resp = _poll(client, profile, timezone.now())
+
+    assert resp.json() == {'synced': True, 'verified': True}, resp.json()
+
+
+def test_the_bot_names_privacy_when_the_privacy_job_lands_first(quiet_verify, monkeypatch):
+    """On a full refresh of a still-private profile the privacy job can set 'error' before the
+    summary sync moves last_synced; the reply must still say it is the privacy setting."""
+    profile = _profile_ready_to_verify()
+    Profile.objects.filter(pk=profile.pk).update(last_synced=timezone.now() - timedelta(minutes=10))
+
+    def privacy_job_wins(self):
+        Profile.objects.filter(pk=self.pk).update(sync_status='error', psn_history_public=False)
+        return True
+
+    monkeypatch.setattr(Profile, 'attempt_sync', privacy_job_wins)
+
+    resp = _bot_verify(profile)
+
+    assert resp.status_code == 403
+    assert resp.json()['message'] == PRIVATE_HISTORY_MESSAGE
+
+
+def test_a_sync_marked_running_still_gets_the_summary_it_needs(monkeypatch):
+    """profile_refresh queues nothing for a profile already marked 'syncing', so the attempt
+    would wait out its timeout; the summary sync is queued directly instead."""
+    from trophies.psn_manager import PSNManager
+    from trophies.services.verification_service import VerificationService
+
+    profile = _profile_ready_to_verify()
+    Profile.objects.filter(pk=profile.pk).update(sync_status='syncing')
+    profile.refresh_from_db()
+    full_refreshes, summary_syncs = [], []
+    monkeypatch.setattr(Profile, 'attempt_sync', lambda self: full_refreshes.append(self.pk) or True)
+    monkeypatch.setattr(PSNManager, 'sync_profile_data', classmethod(lambda cls, p: summary_syncs.append(p.pk)))
+
+    VerificationService.start_verification_sync(profile)
+
+    assert summary_syncs == [profile.pk]
+    assert full_refreshes == []

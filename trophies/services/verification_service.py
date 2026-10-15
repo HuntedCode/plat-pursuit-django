@@ -33,18 +33,24 @@ class VerificationService:
     def start_verification_sync(profile):
         """Start the sync a verification attempt waits on, clearing what an earlier attempt left.
 
-        A private attempt leaves `sync_status='error'` behind (set by the privacy-error job), and
-        nothing else clears it. Both verify paths refuse on that status, so without this every
-        retry after the user made their profile public failed with "sync failed" before its own
-        sync could report. The sync started here decides the status afresh.
+        A private attempt leaves `sync_status='error'` behind (set by the privacy-error job). A full
+        refresh would replace it, but a retry usually falls inside the refresh cooldown (the private
+        attempt's own sync moved `last_synced`), where only the profile summary runs and nothing
+        touches the status. Both verify paths refuse on that status, so without this every such
+        retry failed with "sync failed" before its own sync could report. The sync started here
+        decides afresh. (A still-private profile can then read 'synced' until its next full refresh
+        hits PSN's 403 again; verification itself refuses it either way.)
 
-        Inside the profile's refresh cooldown only the profile summary syncs, which is all verifying
-        needs: it brings the About Me (the code) and the privacy flag.
+        Only the profile summary is needed to verify: it brings the About Me (the code) and the
+        privacy flag. It is queued directly when a full refresh cannot start: inside the cooldown, or
+        while another sync is marked running, where `profile_refresh` queues nothing and the
+        attempt would otherwise just time out.
         """
+        from trophies.psn_manager import PSNManager
+
         if profile.sync_status == 'error':
             profile.set_sync_status('synced')
-        if not profile.attempt_sync():
-            from trophies.psn_manager import PSNManager
+        if profile.sync_status == 'syncing' or not profile.attempt_sync():
             PSNManager.sync_profile_data(profile)
 
     @staticmethod

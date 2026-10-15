@@ -1265,8 +1265,9 @@ class ProfileVerifyView(LoginRequiredMixin, View):
             if verified:
                 profile.link_to_user(user)
         elif profile.sync_status == 'error':
-            # Only before this attempt's sync finishes: step 2 cleared any error an earlier attempt
-            # left (VerificationService.start_verification_sync), so this one is new.
+            # Only before this attempt's sync finishes, so a finished sync always decides. Step 2
+            # cleared any error an earlier attempt left (VerificationService.start_verification_sync),
+            # so this is almost always this attempt's own failure.
             if not profile.psn_history_public:
                 return JsonResponse({'error': PRIVATE_HISTORY_MESSAGE}, status=400)
             return JsonResponse({'error': 'PSN sync failed. Please try again in a few minutes.'}, status=400)
