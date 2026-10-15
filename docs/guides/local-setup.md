@@ -194,7 +194,7 @@ Outside a terminal (an IDE task, a background job), Tailwind 4's watch mode exit
 ## Production Deployment (Render)
 
 The production environment runs on Render with:
-- **Web service**: Gunicorn with gevent workers
+- **Web service**: Gunicorn with sync workers. Start command (set in the Render dashboard): `gunicorn plat_pursuit.wsgi:application --bind 0.0.0.0:$PORT --workers 4 --max-requests 1000 --max-requests-jitter 100`
 - **Worker service**: Token Keeper (`python manage.py start_token_keeper`)
 - **Database**: Render PostgreSQL
 - **Redis**: Render Redis
