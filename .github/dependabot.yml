@@ -36,7 +36,7 @@ updates:
       # not, that half still arrives alone (as a one-package group PR), and can pass CI alone.
       # Never merge one half by itself: upgrade each pair on a branch, payments with a test-mode
       # checkout (dj-stripe follows the stripe SDK), the PSN client with a sync run (psnawp 3.0.1+
-      # needs pyrate-limiter 4, whose API trophies/token_keeper.py uses directly).
+      # needs pyrate-limiter 4, whose API trophies/psn_client.py uses directly).
       payments:
         patterns: [dj-stripe, stripe]
       psn-client:
