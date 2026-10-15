@@ -102,8 +102,35 @@ def test_an_on_page_anchor_gets_no_target():
     assert 'href="#section-2"' in html and 'target=' not in html
 
 
-def test_classes_are_allowed_on_any_tag():
-    assert 'class="rounded"' in render('<img src="https://x/a.png" class="rounded">')
+@pytest.mark.parametrize('markdown, author_class', [
+    ('<p class="fixed inset-0 z-50 bg-black">fake login</p>', 'inset-0'),
+    ('<a href="https://x.com" class="btn btn-error">x</a>', 'btn'),
+    ('<img src="https://x/a.png" class="w-screen h-screen">', 'w-screen'),
+    ('<h2 class="text-error">h</h2>', 'text-error'),
+])
+def test_an_authors_own_classes_are_removed(markdown, author_class):
+    """The site's Tailwind classes would let an author restyle the page: a link dressed as a
+    button, or a `fixed inset-0 z-50` element covering everything with fake content."""
+    html = render(markdown)
+    assert '&lt;' not in html
+    assert author_class not in html
+
+
+def test_the_sites_own_classes_survive():
+    html = render('Press :square:\n\n| A | B | C |\n|:--|--:|:-:|\n| x | y | z |')
+    for cls in ['ps-icon', 'text-left', 'text-right', 'text-center']:
+        assert f'class="{cls}"' in html, cls
+
+
+def test_an_image_whose_classes_are_all_removed_still_gets_the_sites_styling():
+    """nh3 leaves `class=""` behind, which the image pass reads as 'already styled'."""
+    html = render('<img src="https://x/a.png" class="w-screen">')
+    assert 'class=""' not in html
+    assert 'class="rounded-lg' in html
+
+
+def test_a_literal_empty_class_in_a_code_block_is_left_alone():
+    assert 'x class="" y' in render('```\nx class="" y\n```')
 
 
 def test_unclosed_tags_are_closed():
