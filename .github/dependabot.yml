@@ -12,7 +12,15 @@ updates:
     directory: /
     schedule:
       interval: monthly
+    # Room for every pending major to have its own PR (the default is 5). Security PRs have a
+    # separate limit and are unaffected.
+    open-pull-requests-limit: 10
     groups:
+      # Date-versioned packages look like a major update every year. certifi (the CA bundle) and
+      # tzdata matter, so they ride the monthly group whatever the version jump. A package matches
+      # the first group that fits, so this one comes first.
+      pip-date-versioned:
+        patterns: [certifi, tzdata, pytz, packaging, pycountry]
       pip-monthly:
         patterns: ['*']
         update-types: [minor, patch]
