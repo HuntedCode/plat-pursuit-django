@@ -125,7 +125,7 @@ const GROUPS = {
                 const data = await err.response?.json();
                 msg = (data && data.error) || msg;
             } catch (e) { /* no body, keep the default */ }
-            throw new Error(msg);
+            throw new Error(msg, { cause: err });
         }
     }
 
