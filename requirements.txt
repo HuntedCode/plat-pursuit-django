@@ -44,7 +44,7 @@ pillow==12.3.0
 playwright==1.64.0
 prometheus_client==0.26.0
 prompt_toolkit==3.0.53
-psnawp==3.0.0
+psnawp==3.0.3
 psycopg==3.3.6
 psycopg-binary==3.3.6
 pycountry==24.6.1
