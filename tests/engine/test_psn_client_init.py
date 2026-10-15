@@ -21,6 +21,7 @@ from pyrate_limiter import Duration, InMemoryBucket, Rate
 
 from trophies.psn_client import ProxiedAuthenticator, ProxiedPSNAWP, ProxiedRequestBuilder
 
+TOKEN_KEEPER = pathlib.Path(__file__).resolve().parents[2] / 'trophies' / 'token_keeper.py'
 HEADERS = {'User-Agent': 'test', 'Accept-Language': 'en-US', 'Country': 'US'}
 RATE = Rate(1, Duration.SECOND)
 
@@ -71,10 +72,16 @@ def test_a_proxy_passed_by_position_is_refused():
 
 
 def _client_builds_in_token_keeper():
-    src = pathlib.Path('trophies/token_keeper.py').read_text(encoding='utf-8')
+    """Every ProxiedPSNAWP(...) call, bare or through a module (`psn_client.ProxiedPSNAWP(...)`)."""
+    tree = ast.parse(TOKEN_KEEPER.read_text(encoding='utf-8'))
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module and node.module.endswith('psn_client'):
+            for alias in node.names:
+                assert alias.asname is None, f'ProxiedPSNAWP imported as {alias.asname}; this test would miss its calls'
     return [
-        node for node in ast.walk(ast.parse(src))
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == 'ProxiedPSNAWP'
+        node for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and (getattr(node.func, 'id', None) or getattr(node.func, 'attr', None)) == 'ProxiedPSNAWP'
     ]
 
 
@@ -84,7 +91,9 @@ def test_every_client_the_token_keeper_builds_gets_its_proxy():
     builds = _client_builds_in_token_keeper()
     assert len(builds) >= 2, f'expected the startup and refresh builds, found {len(builds)}'
     for call in builds:
-        assert 'proxy_url' in {k.arg for k in call.keywords}, f'token_keeper.py:{call.lineno} builds a client without its proxy'
+        proxy = next((k.value for k in call.keywords if k.arg == 'proxy_url'), None)
+        assert proxy is not None, f'token_keeper.py:{call.lineno} builds a client without its proxy'
+        assert not (isinstance(proxy, ast.Constant) and proxy.value is None), f'token_keeper.py:{call.lineno} passes proxy_url=None'
 
 
 @pytest.mark.parametrize('callers', [1, 3])
