@@ -3,7 +3,7 @@
 # requirements.txt). Install locally with:  pip install -r requirements-dev.txt
 -r requirements.txt
 
-pytest==9.0.3
+pytest==9.1.1
 pytest-django==4.9.0
 pytest-xdist==3.8.0
 factory-boy==3.3.1      # model fixtures (build a Profile/Concept/Badge in one line)
