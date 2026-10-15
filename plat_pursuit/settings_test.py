@@ -52,11 +52,16 @@ SECRET_KEY = "test-secret-key-not-for-production"  # noqa: S105
 #                       ids beside it are hardcoded, so this is the only env half). Absent ->
 #                       one provider button instead of two, and the form-enclosure guard reads
 #                       it as a button outside the form.
+#   PAYPAL_CLIENT_SECRET -- the other half of the OAuth token request's Basic auth. In CI it was
+#                       None (a requests deprecation warning: non-string passwords break in
+#                       Requests 3.0), and locally it was the developer's real sandbox secret,
+#                       sent to whatever mock answered.
 #
 # Values are deliberately obvious non-secrets: anything that looks like a real credential
 # invites someone to treat it as one.
 BOT_API_KEY = "test-bot-api-key-not-for-production"  # noqa: S105
 PAYPAL_CLIENT_ID = "test-paypal-client-id-not-for-production"
+PAYPAL_CLIENT_SECRET = "test-paypal-client-secret-not-for-production"  # noqa: S105
 
 DEBUG = False
 ALLOWED_HOSTS = ["testserver", "localhost", "127.0.0.1"]
