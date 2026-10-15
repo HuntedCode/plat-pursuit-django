@@ -1262,7 +1262,7 @@ details[open]::details-content {
    `tables` extra produces semantic table/thead/tbody/tr/th/td which we style
    GitHub-minimal: header row with a subtle background tint, thin horizontal
    dividers between body rows, no vertical borders. The
-   `prose-roadmap-table-wrap` div is added by the post-bleach pass and gives
+   `prose-roadmap-table-wrap` div is added by the post-sanitize pass and gives
    wide tables horizontal scroll without busting out of their card. */
 .prose-roadmap .prose-roadmap-table-wrap {
   @apply my-4 overflow-x-auto rounded-md border border-base-content/10;

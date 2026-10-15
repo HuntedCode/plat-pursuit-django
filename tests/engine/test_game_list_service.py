@@ -262,14 +262,16 @@ def test_a_blank_name_is_refused_by_the_service_and_by_the_database():
 
 
 @pytest.mark.parametrize('raw, stored', [
-    ('<script>alert(1)</script>Backlog', 'alert(1)Backlog'),
+    ('<script>alert(1)</script>Backlog', 'Backlog'),
+    ('<b>Bold</b> Backlog', 'Bold Backlog'),
     ('Plain Backlog', 'Plain Backlog'),
 ])
 def test_a_name_is_stripped_of_markup(raw, stored):
     """Pins the OUTPUT, not just the absence of a '<'.
 
     The first version asserted `'<' not in name` and `'Backlog' in name`, which three very different
-    sanitizer behaviours all satisfy -- including a buggy one.
+    sanitizer behaviours all satisfy -- including a buggy one. A `<script>` goes with its content
+    (nh3, since 2026-10; bleach kept the `alert(1)` text); other tags leave their text behind.
     """
     profile = _hunter()
 
@@ -277,35 +279,40 @@ def test_a_name_is_stripped_of_markup(raw, stored):
 
 
 def test_entity_encoded_markup_is_never_stored_as_live_markup():
-    """`CommentService.sanitize_text` is NOT idempotent: it bleaches, then `html.unescape()`s its own
-    output, so `&lt;script&gt;` survives the bleach as TEXT and the unescape turns it back into a
-    live `<script>`. Verified by running it, not reasoned:
+    """`CommentService.sanitize_text` is NOT idempotent: it sanitizes (nh3), then `html.unescape()`s its own
+    output, so `&lt;b&gt;` survives sanitizing as TEXT and the unescape turns it back into a live
+    `<b>`. Verified by running it, not reasoned:
 
-        pass 0: '&lt;script&gt;alert(1)&lt;/script&gt;' -> '<script>alert(1)</script>'
-        pass 1: '<script>alert(1)</script>'          -> 'alert(1)'
+        pass 0: '&lt;b&gt;Backlog&lt;/b&gt;' -> '<b>Backlog</b>'
+        pass 1: '<b>Backlog</b>'             -> 'Backlog'
 
     So ONE pass stores raw markup. That is safe under Django auto-escaping, and list names are
     headed for `og:title` and the Playwright share cards, which are not `{{ }}` contexts. The
-    service runs the sanitizer to a fixpoint, which converges on the harmless text.
+    service runs the sanitizer to a fixpoint, which converges on the harmless text. (An encoded
+    `<script>` converges on nothing at all and is refused as a blank name: see the next test.)
 
     The test this replaces asserted `'<' not in name` and passed only because it happened to pick
     the one input that does not exhibit the bug.
     """
     profile = _hunter()
 
-    game_list = svc.create_list(profile, name='&lt;script&gt;alert(1)&lt;/script&gt;')
+    game_list = svc.create_list(profile, name='&lt;b&gt;Backlog&lt;/b&gt;')
 
-    assert game_list.name == 'alert(1)'
+    assert game_list.name == 'Backlog'
     assert '<' not in game_list.name and '>' not in game_list.name
 
 
-def test_markup_that_sanitizes_away_to_nothing_is_refused_as_a_blank_name():
-    """`&#60;img ...&#62;` decodes to an `<img>` tag, which the next pass strips entirely -- so the
-    fixpoint is the empty string rather than something to store."""
+@pytest.mark.parametrize('raw', [
+    '&#60;img src=x onerror=alert(1)&#62;',
+    '&lt;script&gt;alert(1)&lt;/script&gt;',
+])
+def test_markup_that_sanitizes_away_to_nothing_is_refused_as_a_blank_name(raw):
+    """Each decodes to a tag (`<img>`, `<script>`) that the next pass removes entirely, content and
+    all -- so the fixpoint is the empty string rather than something to store."""
     profile = _hunter()
 
     with pytest.raises(svc.ListError, match='needs a name'):
-        svc.create_list(profile, name='&#60;img src=x onerror=alert(1)&#62;')
+        svc.create_list(profile, name=raw)
 
     assert GameList.objects.count() == 0
 

@@ -4322,7 +4322,7 @@ document.addEventListener('keydown', function (e) {
  *
  * The count is what the BROWSER sees. The server sanitizes before it measures, so pasted markup can
  * shrink server-side and the two disagree. The disagreement is always in the safe direction (the
- * browser stops you sooner than the server would), and reproducing bleach's rules in JS to close a
+ * browser stops you sooner than the server would), and reproducing the server sanitizer's (nh3) rules in JS to close a
  * gap nobody can hit by typing is not worth the second source of truth.
  */
 function wireCharCounters(root) {

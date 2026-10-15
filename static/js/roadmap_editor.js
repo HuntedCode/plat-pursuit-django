@@ -3760,7 +3760,7 @@
     //  In-Editor Preview
     //
     //  Each textarea can have its own preview panel that mirrors the
-    //  reader's render exactly (server roundtrip — same markdown2 + bleach
+    //  reader's render exactly (server roundtrip — same markdown2 + nh3
     //  + pill substitution path). State per textarea lives in
     //  `_previewBindings`; toggling off detaches the input listener so
     //  closed previews don't keep firing fetches in the background.
