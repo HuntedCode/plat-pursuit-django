@@ -147,12 +147,14 @@ Reviewing a Dependabot PR: CI green means the tests, the audit and the pin check
 |---------|----------|--------------|----------|
 | tar | critical | `@tailwindcss/oxide` | 7.5.2, 7.5.22 |
 | postcss | high | direct (unused by the Tailwind v4 CLI) | 8.5.6, 8.5.30 |
-| braces, micromatch | high | `@parcel/watcher` (watch mode) | removed (watcher 2.6.0 dropped them) |
+| braces, micromatch | high | `@parcel/watcher` (watch mode) | removed (watcher 2.6.0 dropped them); back on 2026-10-15, see below |
 | picomatch | high | `@parcel/watcher` | 2.3.1, 4.0.7 (the range watcher 2.6.0 asks for) |
 | browserslist | high | `autoprefixer` | 4.26.3, 4.29.3 |
 | nanoid | high | `postcss` | 3.3.11, 3.3.20 |
 | source-map-js | high | `postcss`, `@tailwindcss/node` | 1.2.1, 1.2.2 |
 | baseline-browser-mapping | moderate | `browserslist` | 2.8.16, 2.11.28 |
+
+**Accepted npm advisory (2026-10-15):** [GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm), `braces` 3.0.3 (high, stack exhaustion on deeply nested patterns), through `@tailwindcss/cli` 4.3.3 > `@parcel/watcher` 2.5.1 > `micromatch`. Tailwind 4.3 pins the watcher to exactly 2.5.1, so it cannot move to 2.6.0, and no patched `braces` exists anyway. It runs only in `npm run watch`, on this repo's own file paths, never on input from users, and nothing from npm is served. Glimmlings accepts the same advisory. Re-check when Tailwind allows `@parcel/watcher` 2.6 or a patched `braces` ships.
 
 The only `npm ci` deprecation warning is `eslint@9.39.5` (end of support). Clearing it means ESLint 10, a major upgrade, so it is deferred.
 
