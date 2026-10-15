@@ -1289,7 +1289,6 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
                     // indices (segI+1 onward) fall within the clip, so
                     // there is nothing left to draw. Break and close.
                     if (resumeIdx <= ix.segI) {
-                        intIdx++;
                         break;
                     }
 

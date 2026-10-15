@@ -387,7 +387,7 @@ const GameListEditor = {
             ).join('');
 
             // Region badges
-            let regionHTML = '';
+            let regionHTML;
             if (game.is_regional && game.region?.length) {
                 regionHTML = game.region.map(r =>
                     `<span class="badge badge-xs ${REGION_COLORS[r] || 'badge-warning'} font-bold italic">${e(r)}</span>`
@@ -446,7 +446,7 @@ const GameListEditor = {
         ).join('');
 
         // Region badges
-        let regionHTML = '';
+        let regionHTML;
         if (item.is_regional && item.region?.length) {
             regionHTML = item.region.map(r =>
                 `<span class="badge badge-xs ${REGION_COLORS[r] || 'badge-warning'} font-bold italic">${e(r)}</span>`

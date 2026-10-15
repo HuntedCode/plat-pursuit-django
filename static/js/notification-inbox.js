@@ -433,7 +433,7 @@ class NotificationInboxManager {
         }
 
         // Render type-specific enhanced content
-        let enhancedContent = '';
+        let enhancedContent;
         const metadata = notification.metadata || {};
 
         switch (notification.notification_type) {

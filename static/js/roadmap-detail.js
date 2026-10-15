@@ -265,7 +265,7 @@
             const atTop = scrollTop < 8;
             const atBottom = scrollTop + clientHeight >= scrollHeight - 8;
 
-            let mask = '';
+            let mask;
             if (atTop && atBottom) {
                 // Content fits, no mask needed
                 mask = 'none';
