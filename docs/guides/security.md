@@ -62,7 +62,7 @@ Two systems are in play:
 `REMOTE_ADDR` is always Render's internal proxy: the same address for every visitor. `core/client_ip.client_ip()` works out the visitor instead, and every IP-keyed path uses it:
 - allauth (`users/adapters.py` overrides `get_client_ip`)
 - django-ratelimit (`RATELIMIT_IP_META_KEY`)
-- DRF throttling (`core/throttling.VisitorUserRateThrottle`; DRF's own anonymous key is the raw `X-Forwarded-For` header, so a forged value per request was a fresh bucket)
+- DRF throttling (`core/throttling.VisitorUserRateThrottle`; DRF's own anonymous key is the raw `X-Forwarded-For` header, so a forged value per request was a fresh bucket; IPv6 visitors are bucketed by their /64, as allauth and django-ratelimit already do, since a home connection gets a whole /64 to rotate through)
 - ModerationLog and ReviewModerationLog
 - the Cloudflare-bypass log line
 
