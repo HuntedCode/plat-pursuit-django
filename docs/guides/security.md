@@ -56,6 +56,9 @@ Two systems are in play:
 
 - **`django-ratelimit`** handles app-level endpoints, keyed by `user` (most) or `ip` (unauthenticated), with `block=True` (returns 429 on excess).
 - **`ACCOUNT_RATE_LIMITS`** (allauth) handles the auth-flow endpoints (signup, login, password reset, email confirm). Configured in `plat_pursuit/settings.py`.
+- **DRF's throttle** (`core.throttling.VisitorUserRateThrottle`, `DEFAULT_THROTTLE_RATES['user']`, 60/min) covers every DRF view: signed-in callers by user, anonymous ones by visitor IP.
+
+**The Discord bot is exempt from both limits that apply to it** (django-ratelimit through `api.views.bot_exempt_rate`, the DRF throttle through `VisitorUserRateThrottle.allow_request`). It calls PlatPursuit for every Discord member through one account, so a per-user limit made them all share one bucket: on a busy minute every member's commands failed together. Its endpoints are bot-only, and its own commands carry per-member cooldowns. `api.permissions.is_discord_bot` is the single answer to "is this the bot?" for the permission, both exemptions and anything new.
 
 ### Client IP (who "per IP" means)
 

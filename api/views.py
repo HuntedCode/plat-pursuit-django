@@ -3,12 +3,11 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.authentication import SessionAuthentication, TokenAuthentication
-from api.permissions import IsDiscordBot
+from api.permissions import IsDiscordBot, is_discord_bot
 from .serializers import GenerateCodeSerializer, VerifySerializer, ProfileSerializer, TrophyCaseSerializer, CommentSerializer, CommentCreateSerializer
 from trophies.models import Profile, Comment, Concept, DiscordAlreadyLinkedError
 from trophies.services.verification_service import PRIVATE_HISTORY_MESSAGE, VerificationService
 from trophies.services.comment_service import CommentService
-from django.conf import settings
 from django.core.paginator import Paginator
 from django.db.models import F
 from django.utils import timezone
@@ -30,10 +29,7 @@ logger = logging.getLogger('psn_api')
 def bot_exempt_rate(default_rate):
     """Return a rate function that exempts the Discord bot from rate limiting."""
     def rate_fn(group, request):
-        if hasattr(request, 'auth') and hasattr(request.auth, 'key'):
-            if request.auth.key == settings.BOT_API_KEY:
-                return None
-        return default_rate
+        return None if is_discord_bot(request) else default_rate
     return rate_fn
 
 
