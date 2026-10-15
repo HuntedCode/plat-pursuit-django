@@ -22,7 +22,7 @@ from .psn_manager import PSNManager
 from .psn_client import IP_ECHO_URL, ProxiedPSNAWP
 from trophies.util_modules.cache import redis_client, log_api_call, token_fingerprint
 from trophies.services.npsso_age import (
-    is_npsso_expired_error, npsso_age_days, npsso_age_level, npsso_first_seen, record_npsso_expired,
+    is_npsso_rejected_error, npsso_age_days, npsso_age_level, npsso_first_seen, record_npsso_rejected,
     record_npsso_login,
 )
 from trophies.util_modules.constants import TITLE_ID_BLACKLIST, TITLE_STATS_SUPPORTED_PLATFORMS
@@ -424,8 +424,8 @@ class TokenKeeper:
                         npsso_first_seen=npsso_first_seen(token),
                     )
                     inst.last_error = f"{datetime.now().isoformat()} Init error: {e}"
-                    if is_npsso_expired_error(e):
-                        record_npsso_expired(token)
+                    if is_npsso_rejected_error(e):
+                        record_npsso_rejected(token)
                     # The fingerprint, never the token: a logged NPSSO is a working PSN login.
                     logger.warning(f"Failed to init client for group {group_id} instance {i} (NPSSO {token_fingerprint(token)[:12]}): {e}")
                     log_api_call("client_init", token, None, 500, time.time() - start_time, str(e))
@@ -492,8 +492,8 @@ class TokenKeeper:
         except Exception as e:
             logger.error(f"Health check failed for {inst.instance_id}: {e}")
             inst.last_error = f"{datetime.now().isoformat()} Refresh error: {str(e)}"
-            if is_npsso_expired_error(e):
-                record_npsso_expired(inst.token)
+            if is_npsso_rejected_error(e):
+                record_npsso_rejected(inst.token)
             inst.last_health = 0
         else:
             inst.last_health = time.time()
