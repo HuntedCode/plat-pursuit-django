@@ -57,6 +57,18 @@ Two systems are in play:
 - **`django-ratelimit`** handles app-level endpoints, keyed by `user` (most) or `ip` (unauthenticated), with `block=True` (returns 429 on excess).
 - **`ACCOUNT_RATE_LIMITS`** (allauth) handles the auth-flow endpoints (signup, login, password reset, email confirm). Configured in `plat_pursuit/settings.py`.
 
+### Client IP (who "per IP" means)
+
+Production is Cloudflare -> Render -> Gunicorn and beta is Render -> Gunicorn, so `REMOTE_ADDR` is always Render's proxy: the same address for every visitor. `core/client_ip.client_ip()` works out the visitor instead, and every IP-keyed path uses it: allauth (`users/adapters.py` overrides `get_client_ip`), django-ratelimit (`RATELIMIT_IP_META_KEY`), ModerationLog and ReviewModerationLog, and the Cloudflare-bypass log line.
+
+| Hop seen | Visitor |
+|----------|---------|
+| No `X-Forwarded-For` (dev, tests) | `REMOTE_ADDR` |
+| Rightmost public `X-Forwarded-For` entry is a Cloudflare address (production) | `CF-Connecting-IP` |
+| Rightmost public entry is anything else (beta, or a request sent straight to the Render URL) | that entry |
+
+Only the entries Render appends can be trusted; everything to their left is written by the client. That is why the helper reads from the right, skips Render's private internal hops, and believes `CF-Connecting-IP` only when the connecting hop really is Cloudflare. The ranges live in `CLOUDFLARE_NETWORKS` (from https://www.cloudflare.com/ips/). Check the result on production and beta at `/staff/request-ip/` (staff only): `client_ip` should be your own address.
+
 ### Auth Rate Limit Coverage (allauth)
 
 | Endpoint | Rate | Notes |
@@ -233,6 +245,7 @@ Greyscale PNGs are stored as RGB (about three times the bytes, identical to look
 ## Gotchas and Pitfalls
 
 - **CSP and new CDN resources.** If you add a new external script, stylesheet, font, or image source, you must update the CSP directives in settings.py or the resource will be blocked. A blocked resource fails *silently* apart from a console entry: the Cloudflare analytics beacon was CSP-blocked once and the dashboard read zero traffic while the site was being hammered.
+- **Never read `REMOTE_ADDR` or `X-Forwarded-For` for a client IP.** Use `core.client_ip.client_ip(request)`. allauth 65.14.2 stopped trusting `X-Forwarded-For` by default, and the October 2026 upgrade to 65.19 quietly turned its per-IP limits into one bucket for the whole site (ten failed logins from anyone could throttle login for everyone) until allauth was pointed at the helper. A new IP-keyed feature that reads the headers itself gets either the proxy's address or a forgeable one.
 - **Rate limit key.** All `django-ratelimit` decorators use `key='user'` which requires authentication. For unauthenticated endpoints, use `key='ip'` instead. Allauth's `ACCOUNT_RATE_LIMITS` uses its own format (`'<count>/<period>[/<scope>]'` where scope is `ip` or `key`).
 - **CORS localhost leak.** Before this hardening, localhost origins were unconditionally added to production CORS. Always gate development-only origins behind `if DEBUG`.
 - **`throttle_classes = []` disables DRF throttling.** If you see this on a view, it's intentionally removing DRF's built-in throttling. Make sure `django-ratelimit` is used as a replacement, not that throttling is simply absent.

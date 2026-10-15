@@ -11,6 +11,8 @@ from django.http import (
 )
 from django.utils import timezone
 from django.conf import settings
+
+from core.client_ip import client_ip
 import pytz
 import threading
 
@@ -220,7 +222,7 @@ class CloudflareOriginGuardMiddleware:
             logger.info(
                 'CF_BYPASS_BLOCKED path=%s ip=%s ua=%r',
                 request.path,
-                request.META.get('REMOTE_ADDR', ''),
+                client_ip(request),
                 ua[:120],
             )
             target = f'{_CLOUDFLARE_PUBLIC_ORIGIN}{request.path}'

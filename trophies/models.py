@@ -15,6 +15,7 @@ import logging
 logger = logging.getLogger("psn_api")
 from datetime import date, timedelta
 from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception_type
+from core.client_ip import client_ip
 from trophies.util_modules.language import count_unique_game_groups, calculate_trimmed_mean
 from trophies.util_modules.constants import (
     TITLE_STATS_SUPPORTED_PLATFORMS, NA_REGION_CODES, EU_REGION_CODES,
@@ -4676,14 +4677,7 @@ class Comment(models.Model):
 
         # Log to ModerationLog if moderator action (not user self-delete)
         if moderator:
-            ip_address = None
-            if request:
-                # Get IP from request
-                x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
-                if x_forwarded_for:
-                    ip_address = x_forwarded_for.split(',')[0]
-                else:
-                    ip_address = request.META.get('REMOTE_ADDR')
+            ip_address = (client_ip(request) or None) if request else None
 
             ModerationLog.objects.create(
                 moderator=moderator,
@@ -5004,13 +4998,7 @@ class Review(models.Model):
         self.save(update_fields=['is_deleted', 'deleted_at', 'body'])
 
         if moderator:
-            ip_address = None
-            if request:
-                x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
-                if x_forwarded_for:
-                    ip_address = x_forwarded_for.split(',')[0]
-                else:
-                    ip_address = request.META.get('REMOTE_ADDR')
+            ip_address = (client_ip(request) or None) if request else None
 
             ReviewModerationLog.objects.create(
                 moderator=moderator,

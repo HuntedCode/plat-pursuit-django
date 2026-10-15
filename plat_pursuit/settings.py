@@ -316,6 +316,9 @@ ACCOUNT_RATE_LIMITS = {
     'signup': '5/m/ip',
 }
 ACCOUNT_CONFIRM_EMAIL_ON_GET = True
+# django-ratelimit's `key='ip'` would otherwise read REMOTE_ADDR, which behind Render is the proxy:
+# one bucket for every visitor. allauth's limits use the same function (users/adapters.py).
+RATELIMIT_IP_META_KEY = 'core.client_ip.client_ip'
 # THE live setting in allauth 65.x (verified in app_settings.py; the *_AUTO_LOGIN spelling this
 # project also carried for a while does not exist there and reads as nothing). A fresh signup
 # clicking their confirmation link is logged in and lands on home rather than being asked to
