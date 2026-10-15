@@ -125,7 +125,7 @@ rather than a negative age (app/database clock skew is real).
 
 | Filter | Purpose |
 |--------|---------|
-| `render_markdown(text)` | Markdown to HTML via `ChecklistService.process_markdown()` with bleach sanitization |
+| `render_markdown(text)` | Markdown to HTML via `ChecklistService.process_markdown()` with nh3 sanitization |
 
 ## View Mixins
 
