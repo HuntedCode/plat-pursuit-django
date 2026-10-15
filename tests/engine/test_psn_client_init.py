@@ -8,6 +8,8 @@ TypeError and every sync would have stopped. CI stayed green because nothing bui
 These build real clients (no network: construction makes no calls) and compare our copies with
 psnawp's own classes.
 """
+import ast
+import pathlib
 import threading
 import time
 
@@ -47,9 +49,42 @@ def test_our_client_sets_what_psnawps_does():
     assert set(vars(ProxiedPSNAWP('fake-npsso'))) == set(vars(PSNAWP('fake-npsso')))
 
 
+PROXY = 'http://proxy.test:8080'
+
+
 def test_the_proxy_reaches_the_session():
-    builder = ProxiedRequestBuilder(HEADERS, RATE, proxy_url='http://proxy.test:8080')
-    assert builder.session.proxies == {'http': 'http://proxy.test:8080', 'https': 'http://proxy.test:8080'}
+    builder = ProxiedRequestBuilder(HEADERS, RATE, proxy_url=PROXY)
+    assert builder.session.proxies == {'http': PROXY, 'https': PROXY}
+
+
+def test_the_clients_session_is_the_one_its_requests_use():
+    client = ProxiedPSNAWP('fake-npsso', proxy_url=PROXY)
+    assert client.session is client.authenticator.request_builder.session
+    assert client.session.proxies == {'http': PROXY, 'https': PROXY}
+
+
+def test_a_proxy_passed_by_position_is_refused():
+    """The token refresh once passed the proxy second, into psnawp's `headers` slot, and every
+    refreshed client went out without its proxy. Keyword-only makes that a TypeError."""
+    with pytest.raises(TypeError):
+        ProxiedPSNAWP('fake-npsso', PROXY)
+
+
+def _client_builds_in_token_keeper():
+    src = pathlib.Path('trophies/token_keeper.py').read_text(encoding='utf-8')
+    return [
+        node for node in ast.walk(ast.parse(src))
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == 'ProxiedPSNAWP'
+    ]
+
+
+def test_every_client_the_token_keeper_builds_gets_its_proxy():
+    """token_keeper.py starts the TokenKeeper on import, so its client builds are checked in the
+    source: startup and the token refresh must both hand over the instance's proxy."""
+    builds = _client_builds_in_token_keeper()
+    assert len(builds) >= 2, f'expected the startup and refresh builds, found {len(builds)}'
+    for call in builds:
+        assert 'proxy_url' in {k.arg for k in call.keywords}, f'token_keeper.py:{call.lineno} builds a client without its proxy'
 
 
 @pytest.mark.parametrize('callers', [1, 3])

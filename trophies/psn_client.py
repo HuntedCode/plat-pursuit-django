@@ -16,6 +16,9 @@ from psnawp_api.core.authenticator import Authenticator as BaseAuthenticator
 from psnawp_api.core.request_builder import RequestBuilder as BaseRequestBuilder
 from pyrate_limiter import Duration, InMemoryBucket, Limiter, Rate
 
+# Answers with the caller's public IP, so asking through a client's session shows what PSN sees.
+IP_ECHO_URL = 'https://api.ipify.org'
+
 
 class ProxiedRequestBuilder(BaseRequestBuilder):
     def __init__(self, common_headers, rate_limit, proxy_url=None):
@@ -60,7 +63,9 @@ class ProxiedAuthenticator(BaseAuthenticator):
         self.cid = str(uuid.UUID(int=uuid.getnode()))
 
 class ProxiedPSNAWP(BasePSNAWP):
-    def __init__(self, npsso_cookie, headers=None, rate_limit=None, proxy_url=None):
+    # proxy_url is keyword-only: psnawp's own second parameter is `headers`, and passing the proxy
+    # there positionally once dropped it on every token refresh without any error.
+    def __init__(self, npsso_cookie, *, proxy_url=None):
         random_ua = [
             "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/55.0.6598.1817 Mobile Safari/537.36",
             "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Mobile Safari/537.36",
@@ -80,12 +85,14 @@ class ProxiedPSNAWP(BasePSNAWP):
             "Country": "US",
         }
 
-        if rate_limit is None:
-            rate_limit = Rate(1, Duration.SECOND * 3)
-
         self.authenticator = ProxiedAuthenticator(
             npsso_cookie=npsso_cookie,
             common_headers=default_headers,
-            rate_limit=rate_limit,
+            rate_limit=Rate(1, Duration.SECOND * 3),
             proxy_url=proxy_url
         )
+
+    @property
+    def session(self):
+        """The HTTP session every PSN request goes through, proxy included."""
+        return self.authenticator.request_builder.session
