@@ -44,7 +44,7 @@ pillow==12.3.0
 playwright==1.64.0
 prometheus_client==0.26.0
 prompt_toolkit==3.0.53
-psnawp==3.0.0
+psnawp==3.0.3
 psycopg==3.3.6
 psycopg-binary==3.3.6
 pycountry==24.6.1
@@ -52,7 +52,7 @@ pycparser==3.11
 pyee==14.0.0
 pykakasi==2.3.0
 pypinyin==0.55.0
-pyrate-limiter==3.9.0
+pyrate-limiter==4.5.0
 python-dateutil==2.9.0.post0
 python-dotenv==1.2.4
 python-http-client==3.3.7
