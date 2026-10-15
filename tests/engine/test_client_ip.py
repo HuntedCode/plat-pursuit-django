@@ -163,6 +163,43 @@ def test_drf_throttles_anonymous_callers_by_visitor_not_by_raw_header():
     assert first == second == VISITOR
 
 
+@pytest.mark.parametrize('ip, key', [
+    (VISITOR, VISITOR),
+    ('2601:147:4002:4930:6ceb:691b:2b4c:26ea', '2601:147:4002:4930::/64'),
+    ('2601:147:4002:4930::1', '2601:147:4002:4930::/64'),
+    ('2601:147:4002:4931::1', '2601:147:4002:4931::/64'),
+    ('', ''),
+])
+def test_drf_buckets_ipv6_by_its_64_like_the_other_limiters(ip, key):
+    """A home IPv6 connection gets a whole /64 and can rotate through it; allauth and
+    django-ratelimit already bucket by /64, and the DRF throttle now agrees with them."""
+    from core.throttling import throttle_key
+
+    assert throttle_key(ip) == key
+
+
+@pytest.mark.django_db
+def test_rotating_ipv6_addresses_in_one_64_shares_one_drf_bucket():
+    from django.contrib.auth.models import AnonymousUser
+
+    from core.throttling import VisitorUserRateThrottle
+
+    class TwoPerMinute(VisitorUserRateThrottle):
+        rate = '2/min'
+
+    def from_address(address):
+        request = _request(xff=f'{address}, {CLOUDFLARE_EDGE}', HTTP_CF_CONNECTING_IP=address)
+        request.user = AnonymousUser()
+        return request
+
+    cache.clear()
+    same_home = ['2601:147:4002:4930::1', '2601:147:4002:4930::2', '2601:147:4002:4930::3']
+    allowed = [TwoPerMinute().allow_request(from_address(a), view=None) for a in same_home]
+    assert allowed == [True, True, False], 'a third address in the same /64 is the same visitor'
+    assert TwoPerMinute().allow_request(from_address('2601:147:4002:5000::1'), view=None),         'a different /64 is a different visitor'
+    cache.clear()
+
+
 def test_drf_uses_the_visitor_throttle_by_default():
     from django.conf import settings
 
