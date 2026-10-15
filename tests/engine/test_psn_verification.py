@@ -173,12 +173,13 @@ def test_the_website_links_a_public_profile(signed_in):
     (True, 'PSN sync failed. Please try again in a few minutes.'),
 ])
 def test_a_sync_error_says_which_problem_it_is(signed_in, public, message):
-    """The old message blamed Gaming History for every sync error."""
+    """The old message blamed Gaming History for every sync error. This applies while the
+    attempt's own sync has not finished; once it has, that sync decides."""
     client, _ = signed_in
     profile = _profile_ready_to_verify(public=public)
     Profile.objects.filter(pk=profile.pk).update(sync_status='error')
 
-    resp = _poll(client, profile, timezone.now())
+    resp = _poll(client, profile, timezone.now() + timedelta(hours=1))  # this attempt's sync not done
 
     assert resp.status_code == 400
     assert resp.json()['error'] == message
@@ -201,3 +202,83 @@ def test_the_link_page_shows_the_servers_reason_not_the_status_code():
     source = (Path(__file__).resolve().parents[2] / 'static' / 'js' / 'link-psn.js').read_text(encoding='utf-8')
     assert 'API.failureMessage(error)' in source
     assert 'Error checking status:' not in source
+
+
+# ── retrying after making the profile public ───────────────────────────────────────────────────
+
+def _left_by_a_private_attempt(**overrides):
+    """What an earlier private attempt leaves: the privacy flag off, and the privacy-error job's
+    sync_status='error'. Neither was ever cleared, so every retry failed before its own sync."""
+    profile = _profile_ready_to_verify(public=False, **overrides)
+    Profile.objects.filter(pk=profile.pk).update(
+        sync_status='error', last_synced=timezone.now() - timedelta(minutes=10))
+    profile.refresh_from_db()
+    return profile
+
+
+def _sync_finishes_public(profile_pk):
+    """Stands in for the sync the retry starts: it reads the now-public PSN profile."""
+    def attempt_sync(self):
+        Profile.objects.filter(pk=profile_pk).update(
+            psn_history_public=True, last_synced=timezone.now() + timedelta(minutes=5))
+        return True
+    return attempt_sync
+
+
+def test_the_bot_verifies_once_the_profile_is_made_public(quiet_verify, monkeypatch):
+    """The sync is queued, so the poll's first pass still sees what the private attempt left; it
+    finishes (public) while the poll waits. A check of the stale flag on that first pass, as the
+    loop used to have, refused every retry."""
+    profile = _left_by_a_private_attempt()
+    finish_sync = _sync_finishes_public(profile.pk)
+    monkeypatch.setattr('api.views.time.sleep', lambda seconds: finish_sync(None))
+
+    resp = _bot_verify(profile)
+
+    assert resp.status_code == 200, resp.json()
+    profile.refresh_from_db()
+    assert profile.discord_id == DISCORD_ID
+
+
+def test_starting_a_verification_clears_what_the_last_attempt_left(monkeypatch):
+    from trophies.services.verification_service import VerificationService
+
+    profile = _left_by_a_private_attempt()
+    started = []
+    monkeypatch.setattr(Profile, 'attempt_sync', lambda self: started.append(self.pk) or True)
+
+    VerificationService.start_verification_sync(profile)
+
+    profile.refresh_from_db()
+    assert profile.sync_status == 'synced'
+    assert started == [profile.pk]
+
+
+def test_inside_the_cooldown_it_still_syncs_the_profile_summary(monkeypatch):
+    """attempt_sync refuses during the refresh cooldown; verifying only needs the summary."""
+    from trophies.psn_manager import PSNManager
+    from trophies.services.verification_service import VerificationService
+
+    profile = _profile_ready_to_verify()
+    summary_syncs = []
+    monkeypatch.setattr(Profile, 'attempt_sync', lambda self: False)
+    monkeypatch.setattr(PSNManager, 'sync_profile_data', classmethod(lambda cls, p: summary_syncs.append(p.pk)))
+
+    VerificationService.start_verification_sync(profile)
+
+    assert summary_syncs == [profile.pk]
+
+
+def test_the_website_verifies_once_the_profile_is_made_public(signed_in, monkeypatch):
+    """Step 2 starts the retry (and clears the stale error); the poll then sees its sync."""
+    client, user = signed_in
+    profile = _left_by_a_private_attempt()
+    monkeypatch.setattr(Profile, 'attempt_sync', _sync_finishes_public(profile.pk))
+    start = timezone.now()
+
+    client.post(reverse('link_psn'), {'action': 'verify', 'psn_username': profile.psn_username})
+    resp = _poll(client, profile, start)
+
+    assert resp.json() == {'synced': True, 'verified': True}, resp.json()
+    profile.refresh_from_db()
+    assert profile.user == user

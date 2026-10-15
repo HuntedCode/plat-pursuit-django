@@ -6,7 +6,7 @@ from rest_framework.authentication import SessionAuthentication, TokenAuthentica
 from api.permissions import IsDiscordBot
 from .serializers import GenerateCodeSerializer, VerifySerializer, ProfileSerializer, TrophyCaseSerializer, CommentSerializer, CommentCreateSerializer
 from trophies.models import Profile, Comment, Concept, DiscordAlreadyLinkedError
-from trophies.services.verification_service import PRIVATE_HISTORY_MESSAGE
+from trophies.services.verification_service import PRIVATE_HISTORY_MESSAGE, VerificationService
 from trophies.services.comment_service import CommentService
 from django.conf import settings
 from django.core.paginator import Paginator
@@ -99,18 +99,13 @@ class VerifyView(APIView):
                 timeout_seconds = 15
                 poll_interval_seconds = 1
 
-                is_syncing = profile.attempt_sync()
-                if not is_syncing:
-                    PSNManager.sync_profile_data(profile)
+                VerificationService.start_verification_sync(profile)
 
                 while (timezone.now() - start_time).total_seconds() < timeout_seconds:
                     profile.refresh_from_db()
                     if profile.last_synced > start_time:
                         logger.info(f"Sync completed for profile {profile.id} after polling.")
                         break
-                    if not profile.psn_history_public:
-                        logger.warning(f"Privacy error detected for profile {profile.id} during verify.")
-                        return Response({'success': False, 'message': PRIVATE_HISTORY_MESSAGE}, status=status.HTTP_403_FORBIDDEN)
                     if profile.sync_status == 'error':
                         logger.warning(f"Sync error for profile {profile.id} during verify.")
                         return Response(
@@ -124,10 +119,10 @@ class VerifyView(APIView):
                     return Response({'success': False, 'message': 'Sync timed out. Try again later.'}, status=status.HTTP_408_REQUEST_TIMEOUT)
 
                 # Privacy is decided in the same save that moves last_synced (the PSN profile summary
-                # shows trophy level 0 when Gaming History is private), so a finished sync that left
-                # the history private ends here. Checked inside the loop alone, it never fired: the
-                # sync-finished break always won, and a private profile could link with no trophies
-                # to sync.
+                # shows trophy level 0 when Gaming History is private), so this reads what THIS
+                # attempt's sync saw. It used to be checked inside the loop instead, where the
+                # sync-finished break usually beat it (a private profile linked with no trophies to
+                # sync) and where, on a retry, it read the flag the previous private attempt left.
                 if not profile.psn_history_public:
                     logger.info(f"Verify refused for profile {profile.id}: Gaming History is private.")
                     return Response({'success': False, 'message': PRIVATE_HISTORY_MESSAGE}, status=status.HTTP_403_FORBIDDEN)
