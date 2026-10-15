@@ -747,12 +747,14 @@ def _every_admin_page(client):
 
     Enumerated from the URL conf rather than listed, for the reason its twin gives: a hand-written
     list is what somebody forgets, and the whole point of this group of tests is that a page cannot
-    be ADDED without a way back out of it.
+    be ADDED without a way back out of it. Only HTML counts as a page: a JSON endpoint such as
+    `/staff/request-ip/` has no chrome to carry a way back, and the gate sweep above still holds it
+    to the admins-only rule.
     """
     pages = {}
     for url in _every_staff_url():
         resp = client.get(url)
-        if resp.status_code == 200:
+        if resp.status_code == 200 and resp['Content-Type'].startswith('text/html'):
             pages[url] = resp.content.decode()
     return pages
 
