@@ -16,13 +16,14 @@ IPV6_PREFIX = 64
 
 
 def throttle_key(ip):
-    """The bucket for `ip`: the address itself for IPv4, its /64 network for IPv6."""
+    """The bucket for `ip`: the address itself for IPv4, the start of its /64 for IPv6 (the same
+    shape allauth and django-ratelimit key on)."""
     try:
         addr = ipaddress.ip_address(ip)
     except ValueError:
         return ip
     if addr.version == 6:
-        return str(ipaddress.ip_network(f'{addr}/{IPV6_PREFIX}', strict=False))
+        return str(ipaddress.ip_network(f'{addr}/{IPV6_PREFIX}', strict=False).network_address)
     return ip
 
 

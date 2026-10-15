@@ -165,9 +165,9 @@ def test_drf_throttles_anonymous_callers_by_visitor_not_by_raw_header():
 
 @pytest.mark.parametrize('ip, key', [
     (VISITOR, VISITOR),
-    ('2601:147:4002:4930:6ceb:691b:2b4c:26ea', '2601:147:4002:4930::/64'),
-    ('2601:147:4002:4930::1', '2601:147:4002:4930::/64'),
-    ('2601:147:4002:4931::1', '2601:147:4002:4931::/64'),
+    ('2601:147:4002:4930:6ceb:691b:2b4c:26ea', '2601:147:4002:4930::'),
+    ('2601:147:4002:4930::1', '2601:147:4002:4930::'),
+    ('2601:147:4002:4931::1', '2601:147:4002:4931::'),
     ('', ''),
 ])
 def test_drf_buckets_ipv6_by_its_64_like_the_other_limiters(ip, key):
@@ -196,7 +196,8 @@ def test_rotating_ipv6_addresses_in_one_64_shares_one_drf_bucket():
     same_home = ['2601:147:4002:4930::1', '2601:147:4002:4930::2', '2601:147:4002:4930::3']
     allowed = [TwoPerMinute().allow_request(from_address(a), view=None) for a in same_home]
     assert allowed == [True, True, False], 'a third address in the same /64 is the same visitor'
-    assert TwoPerMinute().allow_request(from_address('2601:147:4002:5000::1'), view=None),         'a different /64 is a different visitor'
+    different_home = from_address('2601:147:4002:5000::1')
+    assert TwoPerMinute().allow_request(different_home, view=None), 'a different /64 is a different visitor'
     cache.clear()
 
 
