@@ -1,15 +1,20 @@
 """The visitor's IP address, for rate limits and moderation records.
 
-Production is Cloudflare -> Render -> Gunicorn; beta is Render -> Gunicorn. So `REMOTE_ADDR` is
-Render's proxy (the same for every visitor), and `X-Forwarded-For` is a list where only the
-entries Render appended can be trusted: anything to their left came from the client and can be
-forged. Render appends the address that connected to it, so walking the list from the right and
-skipping Render's own internal hops gives that address. When it is one of Cloudflare's, the
-request came through Cloudflare and `CF-Connecting-IP` names the visitor; otherwise the
-connecting address is the visitor (beta, or a request sent straight to the Render URL).
+`REMOTE_ADDR` is always Render's internal proxy, the same for every visitor. `X-Forwarded-For` is
+a list in which only the entries the proxies appended can be trusted: anything to their left came
+from the client and can be forged. So this walks the list from the right, skipping internal hops,
+to find the address that connected to Render's edge. When that is a Cloudflare address,
+`CF-Connecting-IP` names the visitor; otherwise the connecting address is the visitor.
 
-allauth (`ACCOUNT_ADAPTER`), django-ratelimit (`RATELIMIT_IP_META_KEY`) and ModerationLog all use
-this one function, so the rate limits and the audit trail agree on who a visitor is.
+Render appears to front every service with its own Cloudflare (a third-party header test against
+an onrender.com service saw a Cloudflare hop and Cloudflare-set CF-Connecting-IP, and Cloudflare
+answering a forged CF-Connecting-IP with a 403 before it reached the app), so in practice both
+production and beta take the Cloudflare branch. The other branch keeps the answer right if that
+ever changes. Check the live chain at /staff/request-ip/.
+
+allauth (`ACCOUNT_ADAPTER`), django-ratelimit (`RATELIMIT_IP_META_KEY`), DRF throttling
+(`core.throttling`) and the moderation logs all use this one function, so the rate limits and the
+audit trail agree on who a visitor is.
 """
 import ipaddress
 
@@ -26,20 +31,25 @@ CLOUDFLARE_NETWORKS = tuple(ipaddress.ip_network(net) for net in (
 
 
 def _parse(value):
-    """An IP address from a header value, or None. Tolerates spaces and a port suffix."""
+    """An IP address from a header value, or None. Tolerates spaces, a port suffix, an IPv6 zone
+    and IPv4-mapped IPv6 (stored and rate-limited as the plain IPv4 address)."""
     value = (value or '').strip()
     if value.startswith('[') and ']' in value:  # [IPv6]:port
         value = value[1:value.index(']')]
     elif value.count(':') == 1:  # IPv4:port
         value = value.split(':', 1)[0]
+    value = value.split('%', 1)[0]  # fe80::1%eth0: the zone is not part of the address
     try:
-        return ipaddress.ip_address(value)
+        ip = ipaddress.ip_address(value)
     except ValueError:
         return None
+    return getattr(ip, 'ipv4_mapped', None) or ip
 
 
 def _is_internal(ip):
-    return ip.is_private or ip.is_loopback or ip.is_link_local
+    # Not just is_private: shared address space (100.64.0.0/10) and reserved ranges are not
+    # visitors either, and treating a proxy hop as the visitor brings back the one-bucket bug.
+    return not ip.is_global
 
 
 def _is_cloudflare(ip):

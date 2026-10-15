@@ -93,6 +93,26 @@ def test_no_address_at_all_is_empty():
     assert client_ip(_request(remote='')) == ''
 
 
+@pytest.mark.parametrize('hop', ['100.64.12.1', '192.0.2.9', '240.0.0.1'])
+def test_shared_and_reserved_hops_are_not_visitors(hop):
+    """Shared address space (100.64.0.0/10) is not private to `ipaddress`, but it is a proxy hop,
+    not a visitor; reading it as one would put everyone back in one bucket."""
+    assert client_ip(_request(xff=f'{VISITOR}, {hop}')) == VISITOR
+
+
+def test_ipv4_mapped_addresses_are_read_as_ipv4():
+    """Otherwise a mapped Cloudflare edge is not recognised, and django-ratelimit's /64 mask for
+    anything with a colon puts every mapped visitor in one bucket."""
+    request = _request(xff=f'::ffff:{VISITOR}, ::ffff:{CLOUDFLARE_EDGE}', HTTP_CF_CONNECTING_IP=f'::ffff:{VISITOR}')
+    assert client_ip(request) == VISITOR
+
+
+def test_an_ipv6_zone_is_dropped():
+    """A zone id is not part of the address, and Postgres' inet column rejects one."""
+    request = _request(xff=f'{VISITOR}, {CLOUDFLARE_EDGE}', HTTP_CF_CONNECTING_IP='2001:4860:4860::8888%eth0')
+    assert client_ip(request) == '2001:4860:4860::8888'
+
+
 # ── who uses it ─────────────────────────────────────────────────────────────────────────────
 
 def test_allauth_reads_the_visitor_not_the_proxy():
@@ -128,8 +148,41 @@ def test_allauth_rate_limits_are_per_visitor_behind_the_proxy(client):
 
     assert not any(attempt(VISITOR, f'nobody{n}@example.com') for n in range(10))
     assert attempt(VISITOR, 'nobody-final@example.com'), 'the 11th failure from one visitor is throttled'
-    assert not attempt(OTHER_VISITOR, 'someone-else@example.com'),         'a different visitor behind the same proxy is not throttled'
+    assert not attempt(OTHER_VISITOR, 'someone-else@example.com'), 'a different visitor is not throttled'
     cache.clear()
+
+
+def test_drf_throttles_anonymous_callers_by_visitor_not_by_raw_header():
+    """DRF's own get_ident returns the raw X-Forwarded-For, so a fresh forged value per request
+    was a fresh bucket."""
+    from core.throttling import VisitorUserRateThrottle
+
+    throttle = VisitorUserRateThrottle()
+    first = throttle.get_ident(_request(xff=f'1.1.1.1, {VISITOR}'))
+    second = throttle.get_ident(_request(xff=f'2.2.2.2, {VISITOR}'))
+    assert first == second == VISITOR
+
+
+def test_drf_uses_the_visitor_throttle_by_default():
+    from django.conf import settings
+
+    assert settings.REST_FRAMEWORK['DEFAULT_THROTTLE_CLASSES'] == ['core.throttling.VisitorUserRateThrottle']
+
+
+@pytest.mark.django_db
+def test_moderation_logs_store_the_visitor_not_a_forged_entry():
+    """The logs used to take the first X-Forwarded-For entry, which the client writes."""
+    from trophies.models import ModerationLog, ReviewModerationLog
+    from tests.factories import CommentFactory, ReviewFactory
+
+    moderator = UserFactory(is_staff=True)
+    request = _request(xff=f'{FORGED}, {VISITOR}')
+
+    CommentFactory().soft_delete(moderator=moderator, reason='spam', request=request)
+    ReviewFactory().soft_delete(moderator=moderator, reason='spam', request=request)
+
+    assert ModerationLog.objects.latest('pk').ip_address == VISITOR
+    assert ReviewModerationLog.objects.latest('pk').ip_address == VISITOR
 
 
 # ── the staff check page ────────────────────────────────────────────────────────────────────

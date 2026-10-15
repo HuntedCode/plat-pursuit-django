@@ -18,6 +18,8 @@ from django.db.models import Q
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from django.utils.decorators import method_decorator
+from django.views.decorators.cache import never_cache
 from django.urls import reverse_lazy
 from django.views.generic import TemplateView, View
 
@@ -478,6 +480,7 @@ class LiftRestrictionView(StaffRequiredMixin, PostActionMixin, View):
         return reverse_lazy('admin_restrictions')
 
 
+@method_decorator(never_cache, name='dispatch')
 class RequestIpView(StaffRequiredMixin, View):
     """What the proxy chain hands this request, and the visitor IP `client_ip()` reads from it.
 

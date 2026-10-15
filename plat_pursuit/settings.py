@@ -438,7 +438,8 @@ else:
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': ['rest_framework.authentication.TokenAuthentication',],
     'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.IsAuthenticated',],
-    'DEFAULT_THROTTLE_CLASSES': ['rest_framework.throttling.UserRateThrottle',],
+    # Not DRF's UserRateThrottle: its anonymous key is the raw X-Forwarded-For (core/throttling.py).
+    'DEFAULT_THROTTLE_CLASSES': ['core.throttling.VisitorUserRateThrottle',],
     'DEFAULT_THROTTLE_RATES': {'user': '60/min',},
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 10,
