@@ -122,7 +122,7 @@ class Migration(migrations.Migration):
         migrations.AddConstraint(
             model_name="roadmapnote",
             constraint=models.CheckConstraint(
-                check=(
+                condition=(
                     models.Q(
                         ("target_kind", "guide"),
                         ("target_step__isnull", True),

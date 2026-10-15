@@ -25,7 +25,6 @@ Key Django settings, third-party integrations, and constants files used across P
 | Stripe | `STRIPE_MODE`, `STRIPE_*_PUBLISHABLE_KEY`, `STRIPE_*_SECRET_KEY`, `STRIPE_*_WEBHOOK_SECRET` | `stripe`, `dj-stripe` |
 | PayPal | `PAYPAL_MODE`, `PAYPAL_*_CLIENT_ID`, `PAYPAL_*_CLIENT_SECRET`, `PAYPAL_*_WEBHOOK_ID` | Custom service |
 | SendGrid | `SENDGRID_API_KEY` | `django-sendgrid-v5` |
-| Sentry | Auto-configured | `sentry-sdk` |
 | AWS S3 | `AWS_STORAGE_BUCKET_NAME`, `AWS_S3_ACCESS_KEY_ID`, `AWS_S3_SECRET_ACCESS_KEY` | `django-storages`, `boto3` |
 | Discord | `BOT_API_URL`, `BOT_API_KEY`, `DISCORD_*_WEBHOOK_URL` (incl. `DISCORD_CONTRACTS_WEBHOOK_URL`, which falls back to `DISCORD_PLATINUM_WEBHOOK_URL`), `DISCORD_*_ROLE` | Custom service |
 | CORS | `CORS_ALLOWED_ORIGINS` | `django-cors-headers` (no current consumer; see mobile-app.md) |
