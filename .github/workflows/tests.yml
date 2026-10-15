@@ -45,9 +45,9 @@ jobs:
       TEST_REDIS_URL: redis://localhost:6379/15
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -58,7 +58,7 @@ jobs:
       # passed while a button silently did nothing in the browser. See eslint.config.mjs.
       # Node 22 (LTS), matching local. 20 is deprecated on GitHub's runners as of 2025-09.
       # `cache: npm` keys on package-lock.json, which is committed -- it hard fails without one.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: npm
@@ -110,7 +110,7 @@ jobs:
 
       - name: Cache Playwright browsers
         id: playwright-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-playwright-${{ steps.playwright-version.outputs.version }}

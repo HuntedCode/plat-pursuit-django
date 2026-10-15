@@ -135,9 +135,13 @@ An npm advisory is therefore a build-machine concern (crafted input to a build t
 |------|---------|
 | Security updates | On (repository settings). A PR opens as soon as an advisory affects a pinned version |
 | Version updates | `.github/dependabot.yml`: on the 1st of each month, one grouped PR each for pip, npm and GitHub Actions with every minor and patch update (date-versioned pip packages like `certifi` and `tzdata` go in a second pip group, whatever the version jump). Each major update opens its own PR, up to 10 open at once for pip. The first round opens as soon as the config reaches `main`, not on the 1st |
-| Monthly review | On the 2nd, a scheduled Claude routine opens a summary issue covering the open Dependabot PRs and their CI results across PlatPursuit, PlatBot, Portfolio and Glimmlings |
+| Monthly review | On the 2nd, a scheduled Claude routine opens a "Dependency review: <Month YYYY>" issue in this repo covering the open Dependabot PRs and their CI results across PlatPursuit, PlatBot, Portfolio and Glimmlings. It cannot read Dependabot alerts, so check each repo's Security tab alongside it |
+| Held back on purpose | Django majors (see below), pycountry majors (psnawp pins it below 25). Ignored with `update-types`, so their security PRs still come |
+| Upgraded as pairs, outside the group | `dj-stripe` with `stripe` (payments: test with a test-mode checkout) and `psnawp` with `pyrate-limiter` (psnawp 3.0.1+ needs pyrate-limiter 4, whose API `trophies/token_keeper.py` uses). Each pair gets its own branch |
 
 Reviewing a Dependabot PR: CI green means the tests, the audit and the pin check passed. For a Python bump, also skim the changelog of anything on the request path (Django, DRF, allauth, Pillow, nh3). A major update gets the same care as a hand-made upgrade: its own branch if it needs code changes. An npm bump only touches the build, but **CI does not rebuild the CSS**, so green does not cover it: check out the branch, run `npm run build`, and if `static/css/output.css` changed, commit it to the PR before merging.
+
+**Django: LTS to LTS.** The site stays on Django 5.2 LTS (security fixes until April 2028) and skips 6.0 and 6.1. Plan the hop to **6.2 LTS** once it ships (about April 2027) and the packages here support it, leaving roughly a year before 5.2's support ends. Known work for that upgrade: Django 6.0 removed `CheckConstraint(check=...)` (renamed `condition=`, available since 5.1), which models and migrations here still use; the 6.1 run failed on it before any test ran.
 
 ### 2026-10 triage
 
