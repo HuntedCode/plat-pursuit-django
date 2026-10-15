@@ -1,12 +1,10 @@
 import json
 import re
-from random import choice
 import time
 import threading
 import logging
 import os
 import atexit
-from pyrate_limiter import Duration, Rate, Limiter, InMemoryBucket
 import requests
 from typing import Dict
 from dataclasses import dataclass
@@ -14,9 +12,6 @@ from datetime import datetime, timedelta
 from django.utils import timezone
 from django.db import connection, transaction, OperationalError
 from django.db.models import F
-from psnawp_api import PSNAWP as BasePSNAWP
-from psnawp_api.core.request_builder import RequestBuilder as BaseRequestBuilder
-from psnawp_api.core.authenticator import Authenticator as BaseAuthenticator
 from psnawp_api.core.psnawp_exceptions import PSNAWPForbiddenError, PSNAWPServerError
 from psnawp_api.models.trophies.trophy_constants import PlatformType
 from requests import HTTPError
@@ -25,6 +20,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 from .models import Profile, Game, Concept, TitleID, TrophyGroup, ProfileGame, EarnedTrophy, ScoutAccount
 from .services.psn_api_service import PsnApiService, psn_trophy_total
 from .psn_manager import PSNManager
+from .psn_client import ProxiedPSNAWP
 from trophies.util_modules.cache import redis_client, log_api_call
 from trophies.util_modules.constants import TITLE_ID_BLACKLIST, TITLE_STATS_SUPPORTED_PLATFORMS
 from trophies.util_modules.language import detect_asian_language
@@ -44,71 +40,6 @@ class PSNOutageError(Exception):
     """Raised when PSN API returns a 5xx gateway error or the circuit breaker is open."""
     pass
 
-
-class ProxiedRequestBuilder(BaseRequestBuilder):
-    def __init__(self, common_headers, rate_limit, proxy_url=None):
-        # DO NOT call super().__init__() - it creates an SQLite bucket which causes
-        # "database is locked" errors in multi-threaded environments.
-        # Instead, replicate initialization with thread-safe in-memory bucket.
-
-        from typing import cast
-        self.common_headers = cast("dict[str, str]", common_headers)
-
-        # Create thread-safe limiter with in-memory bucket (not SQLite)
-        bucket = InMemoryBucket([rate_limit])
-        self.limiter = Limiter(bucket, raise_when_fail=False, max_delay=Duration.SECOND * 3)
-
-        # Initialize session (same as base class)
-        self.session = requests.Session()
-        self.session.headers.update(self.common_headers)
-
-        # Add proxy support
-        if proxy_url:
-            self.session.proxies = {'http': proxy_url, 'https': proxy_url}
-
-class ProxiedAuthenticator(BaseAuthenticator):
-    def __init__(self, npsso_cookie, common_headers, rate_limit, proxy_url=None):
-        # DO NOT call super().__init__() - it creates a RequestBuilder with an SQLite
-        # bucket that spawns a Leaker daemon thread. That thread persists even after we
-        # replace request_builder, causing "database is locked" errors.
-        # Instead, replicate the parent's initialization with our proxied builder.
-        import uuid
-        self.npsso_cookie = npsso_cookie
-        self.common_headers = common_headers
-        self.request_builder = ProxiedRequestBuilder(common_headers, rate_limit, proxy_url=proxy_url)
-        self.token_response = None
-        self.cid = str(uuid.UUID(int=uuid.getnode()))
-
-class ProxiedPSNAWP(BasePSNAWP):
-    def __init__(self, npsso_cookie, headers=None, rate_limit=None, proxy_url=None):
-        random_ua = [
-            "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/55.0.6598.1817 Mobile Safari/537.36",
-            "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Mobile Safari/537.36",
-            "Mozilla/5.0 (Linux; Android 5.0; SM-G900P Build/LRX21T) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/39.0.5707.1741 Mobile Safari/537.36",
-            "Mozilla/5.0 (Android 14; Mobile; rv:137.0) Gecko/137.0 Firefox/137.0",
-            "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 "
-            "(KHTML, like Gecko) Chrome/55.0.9318.1385 Mobile Safari/537.36",
-            "Mozilla/5.0 (iPhone; CPU iPhone OS 18_3_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/135.0.7049.83 Mobile/15E148 Safari/604.1",
-            "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1",
-            "Mozilla/5.0 (iPhone; CPU iPhone OS 11_0 like Mac OS X) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/44.0.2469.1901 Mobile Safari/537.36",
-            "Mozilla/5.0 (iPhone; CPU iPhone OS 18_3_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.3.1 Mobile/15E148 Safari/604.1",
-            "Mozilla/5.0 (iPhone; CPU iPhone OS 18_3_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.3.1 Mobile/15E148 Safari/604.1",
-        ]
-        default_headers = {
-            "User-Agent": choice(random_ua),
-            "Accept-Language": "en-US,en;q=0.9",
-            "Country": "US",
-        }
-
-        if rate_limit is None:
-            rate_limit = Rate(1, Duration.SECOND * 3)
-
-        self.authenticator = ProxiedAuthenticator(
-            npsso_cookie=npsso_cookie,
-            common_headers=default_headers,
-            rate_limit=rate_limit,
-            proxy_url=proxy_url
-        )
 
 @dataclass
 class TokenInstance:

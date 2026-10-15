@@ -70,6 +70,7 @@ User triggers sync (web UI, cron, admin)
 | File | Purpose |
 |------|---------|
 | `trophies/token_keeper.py` | Core engine: singleton, token pool, worker threads, all job implementations (~1,846 lines) |
+| `trophies/psn_client.py` | `ProxiedPSNAWP` and its builder/authenticator: psnawp's client with an in-memory rate limiter and a proxy. Kept apart from `token_keeper.py`, which starts the TokenKeeper on import |
 | `trophies/psn_manager.py` | Public facade for queuing jobs into Redis. All external code calls PSNManager, never TokenKeeper directly (~135 lines) |
 | `trophies/services/psn_api_service.py` | Data layer: transforms PSN API responses into Django model creates/updates (~657 lines) |
 | `trophies/sync_utils.py` | Thread-local context manager to suppress EarnedTrophy pre_save signals during sync (~42 lines) |
@@ -208,7 +209,7 @@ bulk_priority_jobs   (lowest priority)
 
 Rate limiting operates at two levels:
 
-1. **Per-request**: `pyrate_limiter` with `InMemoryBucket` enforces a 1-request-per-3-seconds rate at the HTTP session level (configured in `ProxiedPSNAWP`).
+1. **Per-request**: `pyrate_limiter` with `InMemoryBucket` enforces a 1-request-per-3-seconds rate at the HTTP session level (configured in `ProxiedPSNAWP`, `trophies/psn_client.py`).
 2. **Per-token rolling window**: A Redis sorted set `token:{token}:{machine_id}:timestamps` tracks API call timestamps. `_get_calls_in_window()` counts calls within the configurable window (default: 300 calls per 900 seconds). Instance selection prioritizes tokens with fewer recent calls.
 3. **Rollback on error**: When an API call fails with `HTTPError` or `PSNAWPForbiddenError`, `_rollback_call()` removes the most recent timestamp entry so the failed call does not count against the rate limit budget.
 4. **429 handling**: `_handle_rate_limit()` parks the affected instance for 60 seconds by setting `last_health = 0` (making it ineligible for selection) and then restoring it.
@@ -337,6 +338,8 @@ Detects PSN infrastructure outages (502/503/504 errors) and prevents profiles fr
 ### SQLite Bucket in psnawp
 
 `ProxiedRequestBuilder` and `ProxiedAuthenticator` intentionally **do NOT call `super().__init__()`**. The base classes create an SQLite-backed rate limiter bucket which spawns a daemon Leaker thread. In a multi-threaded environment, this causes "database is locked" errors. The proxied subclasses replicate the parent initialization manually with `InMemoryBucket` instead.
+
+Because they copy psnawp's `__init__`s instead of calling them, **every psnawp or pyrate-limiter upgrade must re-check them** against psnawp's own `RequestBuilder`, `Authenticator` and `PSNAWP`. A mismatch fails silently until a client is built: psnawp 3.0.1 moved to pyrate-limiter 4, whose `Limiter` rejects the old `raise_when_fail`/`max_delay` arguments, so every client build would have raised `TypeError` and stopped all syncs while CI stayed green. `tests/engine/test_psn_client_init.py` now builds real clients (no network), compares their attributes with psnawp's classes and checks the limiter still paces calls across threads. Still run a real local sync after any upgrade.
 
 ### psnawp Exception Hierarchy vs requests
 
