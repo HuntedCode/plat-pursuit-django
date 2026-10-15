@@ -2,11 +2,19 @@
 
 DRF's default `get_ident` returns the raw X-Forwarded-For header for anonymous callers, which the
 caller writes: a fresh value per request is a fresh bucket, so the anonymous API had no throttle.
+
+The Discord bot gets its own, much higher ceiling (`DEFAULT_THROTTLE_RATES['bot']`). It calls
+PlatPursuit for every Discord member through its one account, so the per-user 60 a minute made all of
+them share one bucket: on a busy minute every member's commands failed together. It is not exempt
+outright, because this is the bot's only hard limit (django-ratelimit already skips it, through
+`api.views.bot_exempt_rate`): a leaked BOT_API_KEY or a retry loop in PlatBot must still be capped,
+since endpoints like generate-code and refresh start PSN syncs.
 """
 import ipaddress
 
 from rest_framework.throttling import UserRateThrottle
 
+from core.bot_auth import is_discord_bot
 from core.client_ip import client_ip
 
 #: IPv6 visitors are throttled by network, not address: a home connection is handed a whole /64
@@ -27,8 +35,20 @@ def throttle_key(ip):
     return ip
 
 
+#: The bot's own throttle scope: its rate is DEFAULT_THROTTLE_RATES['bot'] and its bucket is its own.
+BOT_SCOPE = 'bot'
+
+
 class VisitorUserRateThrottle(UserRateThrottle):
-    """`UserRateThrottle` (signed-in callers by user id), with anonymous callers by real IP."""
+    """`UserRateThrottle` (signed-in callers by user id), with anonymous callers by real IP, and the
+    Discord bot on its own, higher ceiling."""
+
+    def allow_request(self, request, view):
+        if is_discord_bot(request):
+            self.scope = BOT_SCOPE
+            self.rate = self.get_rate()
+            self.num_requests, self.duration = self.parse_rate(self.rate)
+        return super().allow_request(request, view)
 
     def get_ident(self, request):
         return throttle_key(client_ip(request))

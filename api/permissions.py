@@ -2,7 +2,8 @@
 Custom DRF permission classes for API views.
 """
 from rest_framework.permissions import BasePermission
-from django.conf import settings
+
+from core.bot_auth import is_discord_bot
 
 
 class IsDiscordBot(BasePermission):
@@ -16,9 +17,7 @@ class IsDiscordBot(BasePermission):
     message = "Bot authentication required."
 
     def has_permission(self, request, view):
-        if not request.auth or not hasattr(request.auth, 'key'):
-            return False
-        return request.auth.key == settings.BOT_API_KEY
+        return is_discord_bot(request)
 
 
 class IsRoadmapAuthor(BasePermission):

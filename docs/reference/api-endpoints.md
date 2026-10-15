@@ -7,7 +7,7 @@ All API endpoints live under `/api/v1/` and are defined in `api/urls.py`. The we
 | Pattern | Usage |
 |---------|-------|
 | Session + CSRF | Web app (the default) |
-| Token auth | PlatBot endpoints (`/api/v1/verify/`, `/sync-roles/`, `/recheck-badges/`, ...) |
+| Token auth | PlatBot endpoints (`/api/v1/verify/`, `/sync-roles/`, `/recheck-badges/`, ...): "Bot token" below means the request must carry `BOT_API_KEY` (`api.permissions.IsDiscordBot`). The bot skips django-ratelimit and has its own DRF throttle bucket (`DEFAULT_THROTTLE_RATES['bot']`); see `docs/guides/security.md` (Rate Limiting) |
 | Login required | Most write operations |
 | Staff required | Admin endpoints, game family management, roadmap editor, subscription admin |
 | No auth | Some read-only endpoints (recent reviews feed, review list/detail/replies, profile card image rendering) |
@@ -18,15 +18,15 @@ All API endpoints live under `/api/v1/` and are defined in `api/urls.py`. The we
 
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
-| POST | `/api/v1/generate-code/` | Login | Generate PSN verification code |
-| POST | `/api/v1/verify/` | Login | Verify PSN account |
-| GET | `/api/v1/check-linked/` | Login | Check if account is linked |
-| POST | `/api/v1/unlink/` | Login | Unlink PSN account |
-| POST | `/api/v1/sync-roles/` | Login | Sync Discord roles |
-| POST | `/api/v1/recheck-badges/` | Login | Force badge re-evaluation |
-| POST | `/api/v1/refresh/` | Login | Trigger profile sync |
-| GET | `/api/v1/summary/` | Login | Profile summary data |
-| POST | `/api/v1/trophy-case/` | Login | Update trophy case selections |
+| POST | `/api/v1/generate-code/` | Bot token | Generate PSN verification code |
+| POST | `/api/v1/verify/` | Bot token | Verify PSN account |
+| GET | `/api/v1/check-linked/` | Bot token | Check if account is linked |
+| POST | `/api/v1/unlink/` | Bot token | Unlink PSN account |
+| POST | `/api/v1/sync-roles/` | Bot token | Sync Discord roles |
+| POST | `/api/v1/recheck-badges/` | Bot token | Force badge re-evaluation |
+| POST | `/api/v1/refresh/` | Bot token | Trigger profile sync |
+| GET | `/api/v1/summary/` | Bot token | Profile summary data |
+| GET | `/api/v1/trophy-case/` | Bot token | One page of a hunter's platinums (`discord_id`, `page`, `per_page`) |
 | POST | `/api/v1/projects/accept/` | Login (linked) | Accept a claimable Project (`{slug}`) or all (`{all:true}`); banks XP. `{all:true}` banks every claimable on a LIVE contract with jobs (`contract_service.claimable_contracts`). Returns `{granted, accepted[], claimable_count, claim}` (`claimable_count` from the same source, so it matches the banner, tab and nav badge; `claim` is the ceremony payload) |
 
 **Verifying a PSN profile** happens in two places: `/api/v1/verify/` (the Discord bot) and `/api/profile-verify/` (the website's link page polls it). Both refuse a profile whose Gaming History is private once its sync finishes (`psn_history_public` is False), with `PRIVATE_HISTORY_MESSAGE` from `trophies/services/verification_service.py`: the bot gets a 403 carrying `message`, the website a 400 carrying `error`. The code stays valid, and each attempt clears a sync error the last one left and starts a fresh sync (`VerificationService.start_verification_sync`), so making Gaming History public and verifying again works. The bot's verify answers 409 only for `DiscordAlreadyLinkedError`, and a Discord role push that fails after the link has committed is logged rather than returned (`/sync-roles` reconciles it). Tests: `tests/engine/test_psn_verification.py`.

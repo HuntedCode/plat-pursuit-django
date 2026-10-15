@@ -440,7 +440,9 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.IsAuthenticated',],
     # Not DRF's UserRateThrottle: its anonymous key is the raw X-Forwarded-For (core/throttling.py).
     'DEFAULT_THROTTLE_CLASSES': ['core.throttling.VisitorUserRateThrottle',],
-    'DEFAULT_THROTTLE_RATES': {'user': '60/min',},
+    # 'bot': PlatBot, for every Discord member at once; a ceiling for a leaked key or a retry loop,
+    # far above real use (core/throttling.py).
+    'DEFAULT_THROTTLE_RATES': {'user': '60/min', 'bot': '600/min'},
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 10,
 }
