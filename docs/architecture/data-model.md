@@ -523,7 +523,7 @@ only delivery surface today is My Lists' "Following" scope; there is no notifica
 Tracks the shovelware reputation of IGDB developers. Keyed by `Company` (OneToOne). A concept's shovelware standing keys off its **median** platinum earn rate across versions (robust to a single inflated low-population version). `is_blacklisted` is True when **more than 50%** of the company's platinum-bearing, primary-developed concepts are independently shovelware (median >= threshold, 3-concept floor); when a concept's primary developer is blacklisted, the whole concept is auto-flagged unless its median is below the shield threshold (40%). `is_whitelisted` is an admin full exemption (wins over blacklist): a whitelisted developer's primary-developed concepts are never auto-flagged. The blacklist proportion is **derived live** via `qualifying_concepts_for(company)` (numerator, median computed in Postgres with `percentile_cont`) and `primary_developed_concepts(company)` (denominator); only `is_whitelisted` is stored. Hysteresis lives in the numerator rate: enter at the 80% bar, leave when the proportion drops to <= 50% at the 70% bar. See [docs/reference/shovelware-detection.md](../reference/shovelware-detection.md).
 
 ### APIAuditLog
-Logs PSN API calls for token monitoring: endpoint, status code, response time, remaining quota.
+Logs PSN API calls for token monitoring: endpoint, status code, response time, remaining quota, and the error message on a failed call. `token_id` is the token's SHA-256, never the token.
 
 ---
 
