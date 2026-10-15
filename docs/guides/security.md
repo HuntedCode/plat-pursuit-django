@@ -58,7 +58,7 @@ Two systems are in play:
 - **`ACCOUNT_RATE_LIMITS`** (allauth) handles the auth-flow endpoints (signup, login, password reset, email confirm). Configured in `plat_pursuit/settings.py`.
 - **DRF's throttle** (`core.throttling.VisitorUserRateThrottle`, `DEFAULT_THROTTLE_RATES['user']`, 60/min) covers every DRF view: signed-in callers by user, anonymous ones by visitor IP.
 
-**The Discord bot is exempt from both limits that apply to it** (django-ratelimit through `api.views.bot_exempt_rate`, the DRF throttle through `VisitorUserRateThrottle.allow_request`). It calls PlatPursuit for every Discord member through one account, so a per-user limit made them all share one bucket: on a busy minute every member's commands failed together. Its endpoints are bot-only, and its own commands carry per-member cooldowns. `api.permissions.is_discord_bot` is the single answer to "is this the bot?" for the permission, both exemptions and anything new.
+**The Discord bot** calls PlatPursuit for every Discord member through one account, so a per-user limit made them all share one bucket: on a busy minute every member's commands failed together. django-ratelimit skips it (`api.views.bot_exempt_rate`), and the DRF throttle gives it its own bucket at `DEFAULT_THROTTLE_RATES['bot']` (600/min, ten times the user rate). That ceiling stays on purpose: it is the bot's only hard limit, and the bot token is accepted across most of the API, including generate-code and refresh, which start PSN syncs. A leaked BOT_API_KEY or a retry loop in PlatBot must still be capped. `core.bot_auth.is_discord_bot` is the single answer to "is this the bot?" for the permission, the exemption, the ceiling and anything new.
 
 ### Client IP (who "per IP" means)
 

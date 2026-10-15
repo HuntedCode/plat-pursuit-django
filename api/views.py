@@ -3,7 +3,8 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.authentication import SessionAuthentication, TokenAuthentication
-from api.permissions import IsDiscordBot, is_discord_bot
+from api.permissions import IsDiscordBot
+from core.bot_auth import is_discord_bot
 from .serializers import GenerateCodeSerializer, VerifySerializer, ProfileSerializer, TrophyCaseSerializer, CommentSerializer, CommentCreateSerializer
 from trophies.models import Profile, Comment, Concept, DiscordAlreadyLinkedError
 from trophies.services.verification_service import PRIVATE_HISTORY_MESSAGE, VerificationService

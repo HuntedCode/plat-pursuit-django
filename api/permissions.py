@@ -1,22 +1,9 @@
 """
 Custom DRF permission classes for API views.
 """
-import hmac
-
 from rest_framework.permissions import BasePermission
-from django.conf import settings
 
-
-def is_discord_bot(request) -> bool:
-    """Whether the request carries the Discord bot's DRF token (BOT_API_KEY).
-
-    The one answer to "is this the bot?", shared by `IsDiscordBot`, the django-ratelimit exemption
-    (`api.views.bot_exempt_rate`) and the DRF throttle (`core.throttling`). Never true when
-    BOT_API_KEY is unset.
-    """
-    key = getattr(getattr(request, 'auth', None), 'key', None)
-    expected = settings.BOT_API_KEY
-    return bool(key and expected) and hmac.compare_digest(str(key), str(expected))
+from core.bot_auth import is_discord_bot
 
 
 class IsDiscordBot(BasePermission):
