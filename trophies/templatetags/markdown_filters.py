@@ -121,8 +121,8 @@ def render_markdown(text, icon_set='ps4'):
         return ''
 
     # SAFETY: ChecklistService.process_markdown() runs text through markdown2.markdown()
-    # then bleach.clean() with a restrictive allowlist of tags/attributes/protocols.
-    # mark_safe() is valid here because bleach strips all non-allowlisted HTML.
+    # then nh3.clean() with a restrictive allowlist of tags/attributes/protocols.
+    # mark_safe() is valid here because nh3 strips all non-allowlisted HTML.
     html = ChecklistService.process_markdown(text, icon_set=icon_set)
     return mark_safe(html)
 
@@ -161,7 +161,7 @@ def render_roadmap_refs(html, refs):
       * ``[[section:<key>]]`` — top-level section anchor (`tips`, `steps`,
         `collectibles`)
 
-    Chains after :func:`render_roadmap_markdown` so markdown + bleach
+    Chains after :func:`render_roadmap_markdown` so markdown + sanitizing (nh3)
     have already run; we inject our own trusted span / anchor markup on
     top. The regex restricts keys to ``[a-z0-9-]`` so values are safe
     to interpolate. Display fields come from author-authored content

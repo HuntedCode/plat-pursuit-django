@@ -137,8 +137,8 @@ def _clean_text(raw, *, field, max_length):
     """Sanitize and validate one hunter-written string.
 
     Runs `CommentService.sanitize_text` TO A FIXPOINT, which is the part that matters. That function
-    bleaches and then `html.unescape()`s its own output, so it is NOT idempotent: `&lt;script&gt;`
-    survives the bleach (it is text, not a tag) and the unescape turns it back into a live
+    sanitizes (nh3) and then `html.unescape()`s its own output, so it is NOT idempotent: `&lt;script&gt;`
+    survives sanitizing (it is text, not a tag) and the unescape turns it back into a live
     `<script>`. Verified by running it, not assumed. A single pass therefore stores raw markup for
     entity-encoded input, which is safe only under Django auto-escaping -- and list names are headed
     for `og:title` and the Playwright share cards, neither of which is a `{{ }}` context.

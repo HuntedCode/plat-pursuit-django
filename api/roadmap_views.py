@@ -458,7 +458,7 @@ class RoadmapPreviewView(APIView):
     """POST: Render a snippet of roadmap markdown to HTML for in-editor preview.
 
     Mirrors the reader's render pipeline 1:1 (same `process_markdown` +
-    bleach allowlist + `[[slug]]` pill substitution) so the preview is
+    nh3 allowlist + `[[slug]]` pill substitution) so the preview is
     exactly what readers will see after publish. Used by the editor's
     per-textarea Preview toggle.
 
@@ -525,7 +525,7 @@ class RoadmapPreviewView(APIView):
         from trophies.templatetags.markdown_filters import render_roadmap_refs
 
         # Same pipeline as the reader's `render_roadmap_markdown` filter:
-        # markdown2 + bleach + spoilers, then ref substitution (covers
+        # markdown2 + nh3 + spoilers, then ref substitution (covers
         # collectible pills + step/area/section refs). Empty input
         # renders as empty so the editor can show "(nothing to preview)"
         # without a special branch on this side.

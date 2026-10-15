@@ -6,14 +6,21 @@ Follows the RatingService pattern for consistency.
 """
 import html
 import logging
-import bleach
 import re
+
+import nh3
 from django.db import transaction
 from django.db.models import F
 from django.core.cache import cache
 from django.utils import timezone
 
 logger = logging.getLogger('psn_api')
+
+# A '<' that starts a tag no later '>' ever closes ("hold <R2 then press X", "a<b"). An HTML
+# parser reads it as an unfinished tag and nh3 drops everything after it; bleach kept the text,
+# and gamers type these. Escaping just those keeps them as text (the unescape in sanitize_text
+# turns them back into '<'), while anything with a closing '>' is still parsed and stripped.
+_UNCLOSED_TAG_START = re.compile(r'<(?=[A-Za-z/])(?![^>]*>)')
 
 
 class CommentService:
@@ -23,10 +30,10 @@ class CommentService:
     MAX_COMMENT_LENGTH = 2000
     MAX_DEPTH = 10  # Limit nesting depth
 
-    # Bleach configuration - allow no HTML tags at all for comments
-    ALLOWED_TAGS = []  # No HTML tags allowed
+    # Sanitizer (nh3) configuration: no HTML tags at all in comments. nh3 always
+    # strips disallowed tags rather than escaping them.
+    ALLOWED_TAGS = set()  # No HTML tags allowed
     ALLOWED_ATTRIBUTES = {}  # No attributes allowed
-    STRIP_TAGS = True  # Strip all tags rather than escape them
 
     @staticmethod
     def sanitize_text(text):
@@ -45,12 +52,11 @@ class CommentService:
         if not text:
             return ""
 
-        # Strip all HTML tags and attributes
-        clean_text = bleach.clean(
-            text,
+        # Strip all HTML tags and attributes (<script>/<style> go with their content)
+        clean_text = nh3.clean(
+            _UNCLOSED_TAG_START.sub('&lt;', text),
             tags=CommentService.ALLOWED_TAGS,
             attributes=CommentService.ALLOWED_ATTRIBUTES,
-            strip=CommentService.STRIP_TAGS
         )
 
         # Unescape HTML entities (& -> &, etc.) since we're storing plain text

@@ -5,8 +5,8 @@
 # used by review_views.py and markdown_filters.py (not checklist-specific).
 import re
 
-import bleach
 import markdown2
+import nh3
 
 from trophies.util_modules.controller_icons import render_shortcodes
 
@@ -17,12 +17,12 @@ MARKDOWN_EXTRAS = [
     'break-on-newline',
     # GFM-style pipe tables. Authors can use `|:--|` etc. on the separator
     # row for column alignment; markdown2 emits `style="text-align:..."` for
-    # those cases, which we convert to Tailwind utility classes pre-bleach
-    # so 'style' can stay off the attribute allowlist.
+    # those cases, which we convert to Tailwind utility classes before
+    # sanitizing so 'style' can stay off the attribute allowlist.
     'tables',
 ]
 
-ALLOWED_HTML_TAGS = [
+ALLOWED_HTML_TAGS = {
     'p', 'br', 'strong', 'em', 'u', 'del', 's',
     'ul', 'ol', 'li', 'blockquote', 'code', 'pre',
     'a', 'img',
@@ -36,21 +36,24 @@ ALLOWED_HTML_TAGS = [
     # Pipe-table family. thead/tbody are emitted by markdown2's tables extra
     # and would be silently stripped without explicit allowlisting.
     'table', 'thead', 'tbody', 'tr', 'th', 'td',
-]
-
-ALLOWED_HTML_ATTRS = {
-    '*': ['class'],
-    'a': ['href', 'title', 'rel', 'target', 'class'],
-    'img': ['src', 'alt', 'title', 'loading', 'class'],
 }
+
+# '*' applies to every allowed tag. `rel` and `target` are deliberately absent: the link pass in
+# process_markdown sets target="_blank" rel="noopener noreferrer" on every external link, and an
+# author's own copy would come first and win (rel="opener" would allow reverse tabnabbing).
+ALLOWED_HTML_ATTRS = {
+    '*': {'class'},
+    'a': {'href', 'title'},
+    'img': {'src', 'alt', 'title', 'loading'},
+}
+
+# Applies to href and src. Relative URLs (`/games/123/`) are always kept, and so are
+# protocol-relative ones (`//host/path`), which can point at any site, as they could under bleach.
+ALLOWED_URL_SCHEMES = {'http', 'https'}
 
 
 class ChecklistService:
     """Retained only for process_markdown (used by reviews and template filters)."""
-
-    MARKDOWN_EXTRAS = MARKDOWN_EXTRAS
-    ALLOWED_HTML_TAGS = ALLOWED_HTML_TAGS
-    ALLOWED_HTML_ATTRS = ALLOWED_HTML_ATTRS
 
     @staticmethod
     def process_markdown(text, icon_set='ps4', enable_spoilers=False):
@@ -80,9 +83,9 @@ class ChecklistService:
 
             # markdown2's tables extra emits inline `style="text-align:..."`
             # for `:--`/`--:`/`:--:` alignment markers. Allowing the `style`
-            # attribute through bleach would open up a broad XSS surface, so
-            # convert to Tailwind utility classes (which are already allowed
-            # via the wildcard `*: ['class']` rule) before sanitization.
+            # attribute through the sanitizer would open up a broad XSS surface,
+            # so convert to Tailwind utility classes (which are already allowed
+            # via the wildcard `'*': {'class'}` rule) before sanitization.
             html_output = re.sub(
                 r'<(t[hd]) style="text-align:\s*(left|right|center);?">',
                 r'<\1 class="text-\2">',
@@ -90,12 +93,16 @@ class ChecklistService:
                 flags=re.IGNORECASE,
             )
 
-            clean_html = bleach.clean(
+            # nh3 removes disallowed tags (keeping their text) and drops
+            # <script>/<style> along with their content. link_rel=None stops
+            # nh3 adding its own rel to every link: the link pass below adds
+            # rel to external links only, and two rels would be invalid.
+            clean_html = nh3.clean(
                 html_output,
                 tags=ALLOWED_HTML_TAGS,
                 attributes=ALLOWED_HTML_ATTRS,
-                protocols=['http', 'https'],
-                strip=True
+                url_schemes=ALLOWED_URL_SCHEMES,
+                link_rel=None,
             )
 
             # Loose-list fix: markdown2 wraps every item of a list in <p> when
@@ -181,8 +188,8 @@ class ChecklistService:
 # lines if an author breaks the content across them.
 _SPOILER_RE = re.compile(r'\|\|(.+?)\|\|', re.DOTALL)
 # Split on code/pre regions so literal ``||`` inside a fenced block stays raw.
-# bleach has already balanced these tags, so a simple non-greedy alternation is
-# sufficient.
+# The sanitizer (nh3) re-serializes the HTML with every tag balanced, so a simple
+# non-greedy alternation is sufficient.
 _CODE_REGION_RE = re.compile(
     r'(<(?:code|pre)\b[^>]*>.*?</(?:code|pre)>)',
     re.DOTALL | re.IGNORECASE,
@@ -311,7 +318,7 @@ def _build_spoiler(match):
 def _apply_spoilers(html):
     """Wrap ``||text||`` runs in spoiler spans, leaving code blocks alone.
 
-    Runs after bleach so we don't have to add ``span`` to the allowlist (which
+    Runs after sanitizing so we don't have to add ``span`` to the allowlist (which
     would let authors hand-write their own spans). The transform splits the
     document on code/pre regions and only rewrites the parts in between, so
     fenced code containing literal ``||`` survives unchanged.
