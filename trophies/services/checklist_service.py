@@ -38,14 +38,27 @@ ALLOWED_HTML_TAGS = {
     'table', 'thead', 'tbody', 'tr', 'th', 'td',
 }
 
-# '*' applies to every allowed tag. `rel` and `target` are deliberately absent: the link pass in
-# process_markdown sets target="_blank" rel="noopener noreferrer" on every external link, and an
-# author's own copy would come first and win (rel="opener" would allow reverse tabnabbing).
+# `rel` and `target` are deliberately absent: the link pass in process_markdown sets
+# target="_blank" rel="noopener noreferrer" on every external link, and an author's own copy
+# would come first and win (rel="opener" would allow reverse tabnabbing). `class` is absent too:
+# ALLOWED_CLASSES below decides which class values survive (nh3 panics if both name it).
 ALLOWED_HTML_ATTRS = {
-    '*': {'class'},
     'a': {'href', 'title'},
     'img': {'src', 'alt', 'title', 'loading'},
 }
+
+# The only classes that reach the sanitizer legitimately: controller-icon shortcodes, and the
+# table alignment this module rewrites from `style` before sanitizing. Every other class is an
+# author's, and the site's Tailwind classes would let one restyle the page (a link dressed as a
+# button, a `fixed inset-0 z-50` element covering everything with fake content). The styling
+# passes after sanitizing add the site's own classes, so they are not listed here.
+TABLE_ALIGN_CLASSES = {'text-left', 'text-right', 'text-center'}
+ALLOWED_CLASSES = {
+    'img': {'ps-icon'},
+    'th': TABLE_ALIGN_CLASSES,
+    'td': TABLE_ALIGN_CLASSES,
+}
+_EMPTY_CLASS_RE = re.compile(r'(<[a-z][a-z0-9]*\b[^>]*?) class=""')
 
 # Applies to href and src. Relative URLs (`/games/123/`) are always kept, and so are
 # protocol-relative ones (`//host/path`), which can point at any site, as they could under bleach.
@@ -84,8 +97,8 @@ class ChecklistService:
             # markdown2's tables extra emits inline `style="text-align:..."`
             # for `:--`/`--:`/`:--:` alignment markers. Allowing the `style`
             # attribute through the sanitizer would open up a broad XSS surface,
-            # so convert to Tailwind utility classes (which are already allowed
-            # via the wildcard `'*': {'class'}` rule) before sanitization.
+            # so convert to Tailwind utility classes (allowed on cells by
+            # ALLOWED_CLASSES) before sanitization.
             html_output = re.sub(
                 r'<(t[hd]) style="text-align:\s*(left|right|center);?">',
                 r'<\1 class="text-\2">',
@@ -101,9 +114,15 @@ class ChecklistService:
                 html_output,
                 tags=ALLOWED_HTML_TAGS,
                 attributes=ALLOWED_HTML_ATTRS,
+                allowed_classes=ALLOWED_CLASSES,
                 url_schemes=ALLOWED_URL_SCHEMES,
                 link_rel=None,
             )
+            # A tag whose classes were all disallowed keeps an empty `class=""`,
+            # which would make the image pass below skip the site's styling.
+            # Matched inside tags only: nh3 escapes every `<` in text, so this
+            # cannot touch a literal ` class=""` an author wrote in a code block.
+            clean_html = _EMPTY_CLASS_RE.sub(r'\1', clean_html)
 
             # Loose-list fix: markdown2 wraps every item of a list in <p> when
             # any blank line appears between items. With list-inside styling +
