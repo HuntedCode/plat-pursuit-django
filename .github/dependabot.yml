@@ -15,6 +15,15 @@ updates:
     # Room for every pending major to have its own PR (the default is 5). Security PRs have a
     # separate limit and are unaffected.
     open-pull-requests-limit: 10
+    # Version updates only: an ignore with update-types never blocks a security PR.
+    ignore:
+      # On the Django 5.2 LTS (security fixes to April 2028) until the 6.2 LTS hop; see
+      # docs/guides/security.md (Dependabot). Minor and patch 5.2 releases still come.
+      - dependency-name: django
+        update-types: [version-update:semver-major]
+      # psnawp pins pycountry below 25. Revisit when a psnawp release allows it.
+      - dependency-name: pycountry
+        update-types: [version-update:semver-major]
     groups:
       # Date-versioned packages look like a major update every year. certifi (the CA bundle) and
       # tzdata matter, so they ride the monthly group whatever the version jump. A package matches
@@ -23,6 +32,10 @@ updates:
         patterns: [certifi, tzdata, pytz, packaging, pycountry]
       pip-monthly:
         patterns: ['*']
+        # Pairs that upgrade together on their own branch, never inside a 40-package group:
+        # payments (dj-stripe follows the stripe SDK; test with a test-mode checkout), and the PSN
+        # client (psnawp 3.0.1+ needs pyrate-limiter 4, whose API trophies/token_keeper.py uses).
+        exclude-patterns: [dj-stripe, stripe, psnawp, pyrate-limiter]
         update-types: [minor, patch]
     commit-message:
       prefix: chore(deps)
