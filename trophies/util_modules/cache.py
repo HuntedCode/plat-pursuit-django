@@ -201,6 +201,7 @@ def log_api_call(endpoint, token, profile_id, status_code, response_time, error_
         # was a constant. The cap comes from the same env var the keeper reads, so changing it there
         # does not silently make this lie again.
         calls_remaining=max(0, _max_calls() - _calls_in_window(token)),
+        error_message=error_message or '',
     )
 
     try:
