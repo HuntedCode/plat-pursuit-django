@@ -31,7 +31,7 @@ updates:
       # the first group that fits, so this one comes first.
       pip-date-versioned:
         patterns: [certifi, tzdata, pytz, packaging, pycountry]
-      # Pairs that must upgrade together, kept out of the 40-package group. A group only combines
+      # Pairs that must upgrade together, kept out of the monthly group. A group only combines
       # the updates that land in the same run: when one half has an update and the other does
       # not, that half still arrives alone (as a one-package group PR), and can pass CI alone.
       # Never merge one half by itself: upgrade each pair on a branch, payments with a test-mode
