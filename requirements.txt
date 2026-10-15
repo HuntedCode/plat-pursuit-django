@@ -1,7 +1,7 @@
 asgiref==3.10.0
 boto3==1.42.17
 botocore==1.42.17
-certifi==2025.10.5
+certifi==2026.7.22
 cffi==2.0.0
 charset-normalizer==3.4.4
 click==8.3.0
@@ -40,7 +40,7 @@ markdown2==2.4.12
 MarkupSafe==3.0.3
 nh3==0.3.7
 numpy==2.3.5
-packaging==25.0
+packaging==26.3
 pillow==12.3.0
 playwright==1.64.0
 prometheus_client==0.23.1
@@ -48,7 +48,7 @@ prompt_toolkit==3.0.52
 psnawp==3.0.0
 psycopg==3.2.10
 psycopg-binary==3.2.10
-pycountry==24.6.1
+pycountry==26.2.16
 pycparser==3.11
 pyee==14.0.0
 pykakasi==2.3.0
@@ -57,7 +57,7 @@ pyrate-limiter==3.9.0
 python-dateutil==2.9.0.post0
 python-dotenv==1.2.2
 python-http-client==3.3.7
-pytz==2025.2
+pytz==2026.5
 redis==6.4.0
 requests==2.33.0
 s3transfer==0.16.0
@@ -69,7 +69,7 @@ sqlparse==0.6.0
 stripe==14.1.0
 tenacity==9.1.2
 typing_extensions==4.15.0
-tzdata==2025.2
+tzdata==2026.5
 urllib3==2.8.0
 wcwidth==0.2.14
 Werkzeug==3.1.9
