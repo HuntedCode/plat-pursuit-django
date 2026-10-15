@@ -12,7 +12,7 @@ colorama==0.4.6
 cryptography==50.0.2
 deprecated==3.0.0
 dj-database-url==3.1.2
-dj-stripe==2.10.3
+dj-stripe==2.11.0
 Django==5.2.18
 django-htmx==1.29.0
 django-allauth==65.19.7
@@ -63,7 +63,7 @@ scipy==1.18.1
 sendgrid==6.12.5
 six==1.17.0
 sqlparse==0.6.0
-stripe==14.1.0
+stripe==16.0.0
 tenacity==9.2.1
 typing_extensions==4.16.0
 tzdata==2026.5
