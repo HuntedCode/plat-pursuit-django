@@ -1,10 +1,21 @@
 from allauth.account.adapter import DefaultAccountAdapter
 from django.conf import settings
+from django.core.exceptions import PermissionDenied
 import logging
+
+from core.client_ip import client_ip
 
 logger = logging.getLogger('psn_api')
 
 class CustomAccountAdapter(DefaultAccountAdapter):
+    def get_client_ip(self, request):
+        # The IP allauth's rate limits key on. Its default reads REMOTE_ADDR, which behind
+        # Render is the proxy: every visitor would share one bucket (core/client_ip.py).
+        ip = client_ip(request)
+        if not ip:
+            raise PermissionDenied('Unable to determine client IP address')
+        return ip
+
     def confirm_email(self, request, email_address):
         logger.debug(f"Confirming email: {email_address.email} for user {email_address.user}")
         # The RETURN is load-bearing and was missing for the override's whole life: allauth

@@ -15,11 +15,15 @@ import logging
 from datetime import timedelta
 
 from django.db.models import Q
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from django.utils.decorators import method_decorator
+from django.views.decorators.cache import never_cache
 from django.urls import reverse_lazy
 from django.views.generic import TemplateView, View
 
+from core.client_ip import client_ip
 from core.models import AdminAction
 from fundraiser.models import DonationBadgeClaim
 from users.models import CustomUser, UserRestriction
@@ -475,3 +479,20 @@ class LiftRestrictionView(StaffRequiredMixin, PostActionMixin, View):
     def default_redirect(self):
         return reverse_lazy('admin_restrictions')
 
+
+@method_decorator(never_cache, name='dispatch')
+class RequestIpView(StaffRequiredMixin, View):
+    """What the proxy chain hands this request, and the visitor IP `client_ip()` reads from it.
+
+    For checking core/client_ip.py against the real chain after a deploy or a hosting change:
+    open it on production (through Cloudflare) and on beta, and the resolved IP should be yours.
+    """
+
+    def get(self, request):
+        return JsonResponse({
+            'client_ip': client_ip(request),
+            'remote_addr': request.META.get('REMOTE_ADDR', ''),
+            'x_forwarded_for': request.META.get('HTTP_X_FORWARDED_FOR', ''),
+            'cf_connecting_ip': request.META.get('HTTP_CF_CONNECTING_IP', ''),
+            'cf_ray': request.META.get('HTTP_CF_RAY', ''),
+        })

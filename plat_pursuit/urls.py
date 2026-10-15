@@ -50,7 +50,7 @@ from gamelists.views import (AddConceptView, AssignItemView, BrowseListsView, Cr
                             ReorderSectionsView, ReportListView, ToggleFollowView,
                             ToggleLikeView, UpdateListView)
 from core.staff_views import (AdminHubView, DecisionLogView, HideTakeView, LiftRestrictionView,
-                              PeopleSearchView, PersonView, RestrictionListView, RestrictView,
+                              PeopleSearchView, PersonView, RequestIpView, RestrictionListView, RestrictView,
                               ReverseDecisionView)
 from core.views import AdsTxtView, RobotsTxtView, PrivacyPolicyView, TermsOfServiceView, AboutView, ContactView, HomeView, DesignLabView, PursuerCardRanksPreviewView, WhatsNewView
 from core.sitemaps import (
@@ -687,6 +687,7 @@ urlpatterns = [
     # `is_staff` only, which the CustomUser.save() lockstep keeps FALSE for a moderator: /mod/ is the
     # moderators-and-admins surface, /staff/ is admins.
     path('staff/', AdminHubView.as_view(), name='admin_hub'),
+    path('staff/request-ip/', RequestIpView.as_view(), name='admin_request_ip'),
     # The decision log, and the one power the Mod Center does not have: taking a decision
     # back. NOT under `staff/moderation/` -- that path is a pinned 404 from the 2026-08
     # strip-down and `test_staff_design_strip.py` asserts it stays one.
