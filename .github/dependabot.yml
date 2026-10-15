@@ -30,12 +30,17 @@ updates:
       # the first group that fits, so this one comes first.
       pip-date-versioned:
         patterns: [certifi, tzdata, pytz, packaging, pycountry]
+      # Pairs that upgrade together, each as one PR on its own, never inside a 40-package group.
+      # Every update type: a major in either half has to move with the other. Upgrade them on a
+      # branch: payments with a test-mode checkout (dj-stripe follows the stripe SDK), the PSN
+      # client with a sync run (psnawp 3.0.1+ needs pyrate-limiter 4, whose API
+      # trophies/token_keeper.py uses directly).
+      payments:
+        patterns: [dj-stripe, stripe]
+      psn-client:
+        patterns: [psnawp, pyrate-limiter]
       pip-monthly:
         patterns: ['*']
-        # Pairs that upgrade together on their own branch, never inside a 40-package group:
-        # payments (dj-stripe follows the stripe SDK; test with a test-mode checkout), and the PSN
-        # client (psnawp 3.0.1+ needs pyrate-limiter 4, whose API trophies/token_keeper.py uses).
-        exclude-patterns: [dj-stripe, stripe, psnawp, pyrate-limiter]
         update-types: [minor, patch]
     commit-message:
       prefix: chore(deps)

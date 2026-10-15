@@ -30,6 +30,8 @@ Services:
 - **db**: PostgreSQL 15 on port 5432 (data persisted in `postgres_data` volume)
 - **redis**: Redis 7 on port 6379
 
+**Rebuild after `requirements.txt` changes:** `docker compose build web worker`, then `docker compose up -d web worker`. The code is mounted into the containers, so a `git pull` reaches them at once, but the Python packages are baked into the image when it is built. New code on an old image fails at startup with `ModuleNotFoundError` (in October 2026, `No module named 'nh3'` after the bleach to nh3 swap). The database volume is not touched by a rebuild.
+
 ## Manual Setup (Without Docker)
 
 ### 1. Clone and Install Dependencies
@@ -140,8 +142,11 @@ python manage.py start_token_keeper
 ### 8. Build Tailwind CSS
 
 ```bash
-npx tailwindcss -i ./static/css/input.css -o ./static/css/output.css --watch
+npm run watch    # rebuilds static/css/output.css on every template or CSS change
+npm run build    # one minified build; commit output.css with the change that needs it
 ```
+
+Outside a terminal (an IDE task, a background job), Tailwind 4's watch mode exits as soon as its input stream closes; add `--watch=always` there.
 
 ## Environment Variable Reference
 

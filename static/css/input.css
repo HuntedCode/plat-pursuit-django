@@ -1,4 +1,7 @@
 @import "tailwindcss";
+/* Tailwind scans the whole repo for class names. .github holds YAML (dependabot.yml's
+   `[version-update:semver-major]`) that reads as an arbitrary property and adds a junk rule. */
+@source not "../../.github";
 @import "./components/chips.css";
 @import "./components/buttons.css";
 @import "./components/chrome.css";
