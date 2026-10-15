@@ -138,6 +138,16 @@ def _egress_ip():
     return ip
 
 
+def token_fingerprint(token):
+    """A stable, one-way stand-in for an NPSSO token: its SHA-256 hex digest.
+
+    Use it wherever a token has to be identified (log lines, Redis keys, `APIAuditLog.token_id`) so
+    the token itself, a working PSN login, is never printed or stored. The first 12 characters are
+    plenty to tell tokens apart in a log line.
+    """
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
 def log_api_call(endpoint, token, profile_id, status_code, response_time, error_message=""):
     """
     Log API call details to APIAuditLog for monitoring and rate limiting.
@@ -172,7 +182,7 @@ def log_api_call(endpoint, token, profile_id, status_code, response_time, error_
         logger.warning("log_api_call: could not validate profile_id %s", profile_id)
 
     try:
-        token_id = hashlib.sha256(token.encode()).hexdigest()[:64]
+        token_id = token_fingerprint(token)
     except Exception:
         token_id = ''      # a None/bytes token must not cost the call that is being logged
 
