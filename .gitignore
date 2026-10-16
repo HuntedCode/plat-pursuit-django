@@ -16,5 +16,8 @@ profile_sigs/
 docs/minigames/DEVELOPMENT_GUIDE.md
 .claude
 
+# The Stripe CLI binary (about 30 MB; install it per docs/guides/local-setup.md)
+stripe-cli/
+
 # Local design-concept scratch files (not part of the app)
 puzzle-event-demo*.html

@@ -25,6 +25,10 @@ updates:
       # psnawp pins pycountry below 25. Revisit when a psnawp release allows it.
       - dependency-name: pycountry
         update-types: [version-update:semver-major]
+      # dj-stripe 2.11 requires stripe below 16 (stripe 16.0.0 cannot install with it). Revisit
+      # when a dj-stripe release allows it, and upgrade the pair together on a branch.
+      - dependency-name: stripe
+        update-types: [version-update:semver-major]
     groups:
       # Date-versioned packages look like a major update every year. certifi (the CA bundle) and
       # tzdata matter, so they ride the monthly group whatever the version jump. A package matches
