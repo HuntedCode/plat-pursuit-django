@@ -510,6 +510,10 @@ historical pass after Phase 3's rematch run.
   finished; `&&` guarantees the audit runs only if the sync exited 0. If the sync fails, the audit
   does not run at all, which is the correct outcome -- a skipped audit costs a week, a wrong one
   costs a subscriber.
+- **Since dj-stripe 2.11 (2026-10) the sync exits non-zero if ANY object fails to sync.** Before, it
+  logged the failure and exited 0. So a partial sync failure now skips that week's audit too. That is
+  deliberate and the `&&` stays: a partly refreshed mirror is exactly the stale mirror described
+  above. If the audit email does not arrive on a Tuesday, check this job's log first.
 - **Why that slot**: clear of the entire 02:00-06:00 daily block, and clear of both weekend
   `enrich_from_igdb` runs (Sat 09:00 for up to 60 min, Sun 07:00 for up to 90 min), which are the
   only other long jobs. 14:00 UTC is mid-morning US Eastern, so the run report lands on a working
