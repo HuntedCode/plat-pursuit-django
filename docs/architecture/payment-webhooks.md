@@ -104,7 +104,7 @@ This is the most critical architectural detail. Both webhook endpoints use a "do
 **Stripe (`stripe_webhook()`):**
 ```
 1. Verify signature using DJSTRIPE_WEBHOOK_SECRET
-2. Process event through djstripe (DJStripeEvent.process)
+2. Process event through djstripe (DJStripeEvent.process), passing the verified JSON payload
 3. IF checkout.session.completed AND metadata.type == 'fundraiser_donation':
      -> DonationService.handle_stripe_payment_completed()
      -> RETURN 200 (skip subscription handling entirely)
@@ -189,6 +189,39 @@ When a subscription becomes active (any provider, any event), `activate_subscrip
 | **djstripe** | Stripe events are processed through `DJStripeEvent.process()` for record-keeping. `Subscription`, `Customer`, and `Price` models from djstripe are used for querying Stripe state. |
 
 ## Gotchas and Pitfalls
+
+### Stripe SDK Objects Are Not Dicts (stripe-python 15+)
+
+Since stripe-python 15.0.0, `StripeObject` no longer inherits from `dict`. Three consequences, all
+found during the dj-stripe 2.11 / stripe 15.6.1 upgrade (2026-10):
+
+- **dj-stripe must get JSON, not the SDK's Event.** `DJStripeEvent.process()` reads `request` with an
+  `isinstance(dict)` check. Handed the SDK object, it wrote the whole request object as text into the
+  50-character `request_id` and the webhook 500'd: 14 of 16 events in a test-mode checkout failed,
+  including `customer.subscription.created` and the cancellation's `customer.subscription.updated`.
+  `stripe_webhook` now passes `json.loads(payload)` (the payload `construct_event` just verified), as
+  dj-stripe's own webhook view does.
+- **Our `.get()` calls on live SDK objects depend on dj-stripe.** stripe 15 removed `.get`, `.items`,
+  `.keys` and friends; dj-stripe 2.11 patches them back onto `StripeObject` when Django starts
+  (`djstripe/_stripe_compat.py`). About a dozen handler call sites rely on that, and so do two
+  management commands (`migrate_legacy_tiers`, `bootstrap_support_skus`); the patch applies in
+  dj-stripe's `AppConfig.ready()`, which commands run too. If a dj-stripe upgrade drops the patch,
+  `tests/engine/test_stripe_webhook_real_event.py` fails first.
+- **`isinstance(x, dict)` is False for SDK objects.** Code that branches on it (the helpers in
+  `SubscriptionService` that read subscription items) only ever receives dj-stripe's `stripe_data`,
+  which is a plain dict loaded from the database. Do not pass them a live SDK object.
+
+The webhook tests that patch `construct_event` and dj-stripe's `Event` cannot see any of this.
+`test_stripe_webhook_real_event.py` signs a real payload and runs verification, dj-stripe creating
+its Event row, our view's routing, the real `invoice.payment_failed` handler and the donation
+hand-off on the SDK objects. It stubs only what calls Stripe's API: dj-stripe's account lookup and
+its per-type handlers, which re-fetch the object (a test-mode checkout through the Stripe CLI is the
+check for those).
+
+**API versions:** our own requests use the version stripe-python pins (`2026-08-26.dahlia` at 15.6.1;
+nothing overrides it). Webhook payloads come at the version set on the Stripe account and endpoint
+(`2025-12-15.clover` as of 2026-10), so the two can differ. Read fields through the
+`SubscriptionService` helpers, which accept both shapes.
 
 ### PayPal Double-Email Guard
 

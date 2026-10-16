@@ -1059,7 +1059,11 @@ def stripe_webhook(request):
     if DJStripeEvent.objects.filter(id=event.id).exists():
         logger.info(f"Stripe webhook duplicate skipped: {event.id}")
         return HttpResponse(status=200)
-    DJStripeEvent.process(event)
+    # The verified JSON, not the SDK's Event: since stripe-python 15 a StripeObject is no longer a
+    # dict, and dj-stripe's Event.process reads `request` with an isinstance(dict) check. Handed the
+    # SDK object it stored the whole request object as text in the 50-character request_id and
+    # every webhook carrying one 500'd. dj-stripe's own webhook view passes parsed JSON too.
+    DJStripeEvent.process(json.loads(payload))
 
     # Route one-time donation payments before subscription handling
     if event.type == 'checkout.session.completed':
