@@ -9,6 +9,7 @@ How to get PlatPursuit running locally for development. The stack is Django 5.2.
 - Redis 7+
 - Node.js (for Tailwind CSS builds)
 - Playwright Chromium (for share card rendering, optional)
+- Stripe CLI (for testing payments locally, optional; see [Testing payments locally](#testing-payments-locally-stripe-cli))
 
 ## Quick Start (Docker)
 
@@ -190,6 +191,30 @@ Outside a terminal (an IDE task, a background job), Tailwind 4's watch mode exit
 | `PAYPAL_SANDBOX_WEBHOOK_ID` | PayPal sandbox webhook ID |
 | `PP_LAUNCH_DATE` | Cutover instant, ISO 8601 (`2026-09-01T00:00:00+00:00`, or date-only for midnight UTC). UNSET locally: the 1.0 greeting stays dormant and `send_launch_announcement` refuses to run. A malformed value fails boot on every service. |
 | `LAUNCH_ANNOUNCEMENT_SEND_ENABLED` | `True` to let `send_launch_announcement --send` fire. Default False; leave unset locally. |
+
+### Testing payments locally (Stripe CLI)
+
+Stripe cannot reach `localhost`, so a local checkout only completes its webhooks through the
+[Stripe CLI](https://docs.stripe.com/stripe-cli). It is not in the repo (it was until 2026-10; the
+binary is about 30 MB). Install it from that page, or put `stripe.exe` from the
+[releases](https://github.com/stripe/stripe-cli/releases) in `stripe-cli/`, which is gitignored.
+
+1. Authenticate with the TEST key: `stripe login` once, or set `STRIPE_API_KEY` to
+   `STRIPE_TEST_SECRET_KEY` for the session.
+2. `stripe listen --forward-to localhost:8000/stripe/webhook/`
+3. `STRIPE_TEST_WEBHOOK_SECRET` must equal what `stripe listen --print-secret` prints (it is stable
+   for your CLI and account), or every webhook fails signature verification.
+4. Check out with card `4242 4242 4242 4242`, any future expiry, any CVC. Every
+   `POST /stripe/webhook/` in the web log should be a 200.
+5. To re-run an event after a fix: `stripe events resend <evt_id>`. That only re-runs our handlers
+   if the event was never recorded (it failed before dj-stripe stored it, like a 500 or a bad
+   signature). A recorded event is skipped as a duplicate and still answers 200, even if our
+   handler raised the first time. To re-run one of those, delete its row first
+   (`djstripe.models.Event.objects.filter(id='evt_...').delete()` in `manage.py shell`) or do a
+   fresh checkout.
+
+Do this for any payments change and for every dj-stripe or stripe upgrade: the webhook tests stub
+Stripe's API, so only a real checkout exercises dj-stripe's per-event handlers.
 
 ## Production Deployment (Render)
 
