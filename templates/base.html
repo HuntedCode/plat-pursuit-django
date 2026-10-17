@@ -126,6 +126,28 @@
     <script src="{% static 'js/main.js' %}"></script>
     <script src="{% static 'js/navbar-search.js' %}"></script>
     <script src="{% static 'js/easter-eggs.js' %}"></script>
+    {% comment %}THE BROWSER'S TIMEZONE, once, for an account still on the untouched UTC default (owner, 2026-10-17):
+    accounts made before signup detected a zone read every date in UTC. Rendered ONLY for those accounts, so
+    everyone else pays nothing. The server decides (`adopt_detected_timezone`: one conditional UPDATE, never
+    stamped as confirmed, so the Recap prompt still asks); this browser remembers it asked FOR THIS ACCOUNT (a
+    shared computer's second account still gets asked), so a hunter who really is in UTC is not asked on every
+    page.{% endcomment %}
+    {% if user.is_authenticated and user.user_timezone == 'UTC' and not user.timezone_confirmed_at %}
+    <script>
+        (function () {
+            var KEY = 'pp-tz-detect-asked:{{ user.pk }}';
+            var mark = function () { try { window.localStorage.setItem(KEY, '1'); } catch (e) { /* storage blocked */ } };
+            try { if (window.localStorage.getItem(KEY)) { return; } } catch (e) { /* storage blocked: ask anyway */ }
+            var zone = '';
+            try { zone = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e) { return; }
+            if (!zone || zone === 'UTC') { mark(); return; }
+            var PP = window.PlatPursuit;
+            if (!PP || !PP.API) { return; }
+            // Asked again on a later page only if this request FAILED (offline, a blip); any answer is final.
+            PP.API.post('{% url "api:user-timezone-detect" %}', { timezone: zone }).then(mark, function () {});
+        })();
+    </script>
+    {% endif %}
     {% block js_scripts %}{% endblock %}
   </body>
 </html>

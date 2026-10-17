@@ -32,6 +32,9 @@
                         <label for="id_website">Website (leave blank)</label>
                         <input type="text" name="website" id="id_website" tabindex="-1" autocomplete="off" value="">
                     </div>
+                    {% comment %}THE BROWSER'S TIMEZONE, so the account starts on the hunter's own clock rather than UTC
+                    (`CustomUserCreationForm.browser_timezone`). Filled below; left empty it changes nothing.{% endcomment %}
+                    <input type="hidden" name="browser_timezone" id="id_browser_timezone" value="">
 
                     <div class="form-control">
                         <label class="text-xs font-semibold text-base-content/60 mb-1" for="id_email">Email</label>
@@ -143,4 +146,11 @@
 
 {% block js_scripts %}
 <script src="{% static 'js/auth-forms.js' %}"></script>
+<script>
+    (function () {
+        var input = document.getElementById('id_browser_timezone');
+        if (!input) { return; }
+        try { input.value = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e) { /* stays UTC */ }
+    })();
+</script>
 {% endblock %}
