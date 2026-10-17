@@ -284,7 +284,11 @@ def test_the_pages_own_query_cost_is_exact(rf):
     svc.start(profile, CHALLENGE_TYPE_JOBS)
     # Two cards go ACTIVE: `resumable_run` short-circuits on each, so one query fewer apiece. The
     # remaining types stay empty and keep their three.
-    assert cost() == 3 * n_types + 3 + calendar_rung + one_run_lookup - 2
+    # PLUS THE OPTIMIZER DOOR, which only renders once there is a run to plan: its status line reads the
+    # saved plan (one row). A member's weekly allowance is answered from the profile in hand, so no second
+    # read here (a free hunter pays one more; `test_challenge_optimizer_dates` pins that).
+    optimizer_door = 1
+    assert cost() == 3 * n_types + 3 + calendar_rung + one_run_lookup - 2 + optimizer_door
 
     for i in range(12):
         Challenge.objects.create(
@@ -293,7 +297,7 @@ def test_the_pages_own_query_cost_is_exact(rf):
     # AND IT DOES NOT GROW WITH DATA, which is the distinction that matters: the history is one count plus
     # one bounded slice however many runs exist, and the owed-XP read is one `values().annotate()` however
     # many runs owe. Twelve more completed runs cost nothing.
-    assert cost() == 3 * n_types + 3 + calendar_rung + one_run_lookup - 2
+    assert cost() == 3 * n_types + 3 + calendar_rung + one_run_lookup - 2 + optimizer_door
 
 
 # ── the beta gate, rendered rather than redirected ───────────────────────────────────────────────
