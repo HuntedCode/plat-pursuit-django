@@ -638,10 +638,6 @@
     gap: 1rem;
 }
 .land-close__ctas { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.75rem; margin-top: 0.5rem; }
-/* The star emitter's host recipe (fundraiser's fnd-cta--rise, on a pp-cta): the clip box, the
-   star colour, and the label riding above the stars. */
-.land-rise { position: relative; overflow: hidden; --sup-t: var(--pp-primary); }
-.land-rise__lbl { position: relative; }
 
 /* ── The no-PSN hero's three-step strip (home/_hero_no_psn.html) ─────────────
    Stacked at 375px, 3-across at md. The warn strip follows .land-search__status's

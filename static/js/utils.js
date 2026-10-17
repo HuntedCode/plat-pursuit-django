@@ -244,6 +244,47 @@ const TimeFormatter = {
         const m = Math.floor((totalSeconds % 3600) / 60).toString().padStart(2, '0');
         const s = Math.floor(totalSeconds % 60).toString().padStart(2, '0');
         return `${h}:${m}:${s}`;
+    },
+
+    /**
+     * A moment as "Thu, Oct 23 at 8:12 PM EDT" ("20:12 EDT" with `hour24`), the server's `when_label` shape, in
+     * `timeZone` when one is given and the device's own zone otherwise. '' for a value that is not a date, or a
+     * zone this browser does not know, so a caller keeps its own text (never quietly the wrong zone).
+     * @param {string|Date} timestamp
+     * @param {{timeZone?: string|null, hour24?: boolean}} options
+     * @returns {string}
+     */
+    when(timestamp, { timeZone = null, hour24 = false } = {}) {
+        const date = new Date(timestamp);
+        if (!timestamp || isNaN(date.getTime())) return '';
+        const render = (zone) => {
+            const tz = zone ? { timeZone: zone } : {};
+            const day = new Intl.DateTimeFormat('en-US', { weekday: 'short', month: 'short', day: 'numeric', ...tz }).format(date);
+            const time = new Intl.DateTimeFormat('en-US', {
+                hour: 'numeric', minute: '2-digit', hourCycle: hour24 ? 'h23' : 'h12', timeZoneName: 'short', ...tz,
+            }).format(date);
+            return `${day} at ${time}`;
+        };
+        try {
+            return render(timeZone);
+        } catch (e) {
+            return '';
+        }
+    },
+
+    /**
+     * Re-render every `<time data-pp-when>` under `root` with `when`: its zone is `data-tz` (empty means the
+     * device's own, for a hunter who never chose one) and its clock `data-clock` ("24" or "12"). The server's
+     * text stays wherever the date cannot be read. See `templates/challenges/partials/_when.html`.
+     * @param {ParentNode} root
+     */
+    localizeWhen(root = document) {
+        root.querySelectorAll('time[data-pp-when]').forEach((el) => {
+            const text = TimeFormatter.when(el.getAttribute('datetime'), {
+                timeZone: el.dataset.tz || null, hour24: el.dataset.clock === '24',
+            });
+            if (text) el.textContent = text;
+        });
     }
 };
 

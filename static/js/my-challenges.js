@@ -24,6 +24,10 @@
     var API = PP.API;
     var Toast = PP.ToastManager;
 
+    // The optimizer door's dates, on the hunter's clock (`partials/_when.html`). Guarded: a cached older
+    // utils.js without it leaves the server's text, which is still right in the saved zone.
+    if (PP.TimeFormatter && PP.TimeFormatter.localizeWhen) { PP.TimeFormatter.localizeWhen(document); }
+
     /**
      * Hide one run.
      *
