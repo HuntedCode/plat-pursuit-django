@@ -801,6 +801,30 @@ Marker twice, so promising it would be false. A hunter holding the whole ladder 
 
 ---
 
+### The board's three square states
+
+A run page's squares read apart at a glance (owner, 2026-10-17, after a hunter found finished and in-progress
+squares hard to tell apart):
+
+| State | Treatment |
+|---|---|
+| Finished | the success border and check, plus a **platinum foil** (`partials/_square_foil.html`): a still prismatic wash and fine holo grain on `screen`, and a platinum ring inside the edge, above the scrim and below the name |
+| In progress | the primary border, plus a **state tag** in the check's corner: a half-filled disc, with "In progress" beside it from `lg:` (at 109px the words would run into the key chip) |
+| Empty | the dashed well with the square's own key |
+
+The foil follows the trading-card idiom's holo treatment (`visual-identity.md`) and the motion rules: it is
+STILL, and its gleam crosses once as the board arrives (after each square's own entrance, off `--rev`) and once
+when a square completes in place (the live board re-renders it from the same partial, marked `pp-csq--fresh`;
+a claim's re-render does not replay it, because the board is `is-settled` by then). Never on hover: a finished
+square is not interactive. Nothing loops and only `transform` animates. **It must read at a glance**: the first
+cut used a faint `overlay` wash, which vanishes on dark covers (most covers are dark), so the wash is on
+`screen` (it can only lighten) and the ring carries it at thumbnail size. The share card's squares (`shareables/partials/_challenge_card_square.html`) do not wear it yet.
+
+**Preview it with `?preview=challenge-states`** on an A-Z or Job Coverage run page (staff or moderator): the
+board is redrawn as a fixed mix (square N takes done / in progress / empty by N mod 3), borrowing real catalogue
+covers for the squares the run left empty (`slot_render.preview_state_groups`, one bounded query). It writes
+nothing, and the board is read-only while it shows, since its squares no longer match the run behind them.
+
 ## The two public pages
 
 Two surfaces, one feature, split on a single question: **is the run finished?**
