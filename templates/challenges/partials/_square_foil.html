@@ -1,8 +1,9 @@
 {% comment %}THE FOIL on a finished square (owner, 2026-10-17), the trading-card idiom's holo treatment
 (`visual-identity.md`: "modern execution, no skeumorphism") applied to a challenge square: a still prismatic
 platinum finish with a platinum ring inside the edge, and a gleam that crosses ONCE as the board arrives (and
-once when a square completes in place, since the live board re-renders it from this partial). Nothing loops,
-and nothing answers hover: a finished square is not interactive.
+once when a square completes in place, since the live board re-renders it from this partial). Nothing loops.
+On a fine pointer the square tilts toward the cursor and a shine follows it (`challenge-detail.js`
+`wireFoilTilt`, the `::after` layer): inspect-only, the trading-card exception to the board's hover rule.
 
 Above the scrim and below the name (`z-index: 1` against the body's 2); see `challenges.css` for why it has to
 cover the whole square to read, and why the name keeps its contrast.{% endcomment %}<span class="pp-csq__foil" aria-hidden="true"><span class="pp-csq__gleam"></span></span>

@@ -71,12 +71,12 @@ def _rule(selector):
     return CSS[start:CSS.index('}', start)]
 
 
-def test_the_foil_moves_only_once_and_never_on_hover():
+def test_the_foils_own_motion_plays_once_and_has_no_hover_rule():
     block = CSS[CSS.index('THE FOIL: a finished square'):CSS.index('IN PROGRESS: the state tag')]
     assert 'infinite' not in block and 'filter:' not in block.replace('mix-blend', '')
     motion = block[block.index('@media (prefers-reduced-motion: no-preference) {'):]
     assert 'animation-delay: calc(0.5s + min(var(--rev, 0), 12) * 0.035s);' in motion   # after the square lands
-    # A finished square is not interactive: nothing answers the cursor (owner, 2026-10-17; the house rule).
+    # No hover SPARKLE: the only thing that answers the cursor is the inspect-only tilt, driven from script.
     assert ':hover' not in block
     keyframes = block[block.index('@keyframes ppCsqGleam'):]
     keyframes = keyframes[:keyframes.index('}\n}') + 3]
@@ -324,3 +324,53 @@ def test_the_png_url_joins_its_theme_onto_an_existing_query():
     png = png[:png.index('\n    }\n')]
     assert "var join = current.pngUrl.indexOf('?') === -1 ? '?' : '&';" in png
     assert "join + 'theme=' + encodeURIComponent(choice.value)" in png
+
+
+# --- the foil under the pointer (owner, 2026-10-17) -------------------------------------------------------
+
+def test_the_tilt_is_for_fine_pointers_only_and_never_under_reduced_motion():
+    js = Path('static/js/challenge-detail.js').read_text(encoding='utf-8')
+    tilt = js[js.index('function wireFoilTilt(board) {'):js.index('function boot(first) {')]
+    assert "!window.matchMedia('(prefers-reduced-motion: reduce)').matches" in tilt
+    assert "window.matchMedia('(any-hover: hover) and (any-pointer: fine)').matches" in tilt
+    # Touch never drives it, even on a device that also has a mouse.
+    assert "if (e.pointerType && e.pointerType !== 'mouse' && e.pointerType !== 'pen') { return; }" in tilt
+
+
+def test_one_listener_on_the_board_writes_at_most_once_a_frame():
+    js = Path('static/js/challenge-detail.js').read_text(encoding='utf-8')
+    tilt = js[js.index('function wireFoilTilt(board) {'):js.index('function boot(first) {')]
+    assert "board.addEventListener('pointermove'," in tilt and "board.addEventListener('pointerleave', release);" in tilt
+    assert "e.target.closest('.pp-csq--done')" in tilt                     # finished squares only
+    assert 'if (!frame) { frame = window.requestAnimationFrame(paint); }' in tilt
+    # Measured off the square's CELL, which never moves (the square shrinks while arriving and rotates while
+    # tilting), and in the frame callback, so a scroll under a resting pointer is corrected on the next move.
+    paint = tilt[tilt.index('function paint() {'):tilt.index("board.addEventListener('pointermove',")]
+    assert 'var cell = (current.parentElement || current).getBoundingClientRect();' in paint
+    assert 'square.getBoundingClientRect()' not in tilt
+    # A square still arriving does not tilt (its entrance owns `transform`), and release leaves the position, so
+    # the shine fades where it was.
+    assert 'if (square && arriving(square)) { square = null; }' in tilt
+    release = tilt[tilt.index('function release() {'):tilt.index('function paint() {')]
+    assert "removeProperty('--px')" not in release
+    boot = js[js.index('function boot(first) {'):]
+    # Every viewer gets it (a visitor admiring a finished run too), before the picker's owner-only guard.
+    assert boot.index('wireFoilTilt(settling);') < boot.index("if (!dialog || !grid || !dialog.showModal")
+
+
+def test_the_tilt_is_subtle_and_inspect_only():
+    tilting = _rule('.pp-csq.pp-csq--done.is-tilting {')
+    # ~8 degrees each way (a 16deg span), not the medallion's 15: these sit tight in a grid.
+    assert 'rotateX(calc((0.5 - var(--py, 0.5)) * 16deg))' in tilting
+    assert 'rotateY(calc((var(--px, 0.5) - 0.5) * 16deg))' in tilting
+    # Inspect-only: no lift, no shadow change, no pointer cursor on a finished square.
+    block = CSS[CSS.index('THE FOIL UNDER THE POINTER'):CSS.index('@keyframes ppCsqGleam')]
+    rules = re.sub(r'/\*.*?\*/', '', block, flags=re.S)   # declarations only, never the prose about them
+    assert 'box-shadow:' not in rules and 'cursor:' not in rules
+    assert '.pp-csq--done.is-tilting .pp-csq__foil::after { opacity: 1; }' in CSS
+
+
+def test_the_shine_follows_the_pointer():
+    shine = _rule('.pp-csq__foil::after {')
+    assert 'radial-gradient(circle at calc(var(--px, 0.5) * 100%) calc(var(--py, 0.5) * 100%)' in ' '.join(shine.split())
+    assert 'opacity: 0;' in shine

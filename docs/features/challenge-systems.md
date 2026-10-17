@@ -815,8 +815,12 @@ squares hard to tell apart):
 The foil follows the trading-card idiom's holo treatment (`visual-identity.md`) and the motion rules: it is
 STILL, and its gleam crosses once as the board arrives (after each square's own entrance, off `--rev`) and once
 when a square completes in place (the live board re-renders it from the same partial, marked `pp-csq--fresh`;
-a claim's re-render does not replay it, because the board is `is-settled` by then). Never on hover: a finished
-square is not interactive. Nothing loops and only `transform` animates. **It must read at a glance**: the first
+a claim's re-render does not replay it, because the board is `is-settled` by then). Nothing loops. **On a fine
+pointer a finished square tilts toward the cursor (~8 degrees) and a holo shine follows it** (`challenge-detail.js`
+`wireFoilTilt`, one delegated listener, one write per frame, only the square under the pointer moves): the
+badge medallion's gesture, and the ONE documented exception to the board's rule that a square which does nothing
+never reacts to the cursor. It is inspect-only: arrow cursor, no lift, no shadow change. Phones and reduced
+motion keep the still foil. **It must read at a glance**: the first
 cut used a faint `overlay` wash, which vanishes on dark covers (most covers are dark), so the wash is on
 `screen` (it can only lighten) and the ring carries it at thumbnail size. **The share card wears it too** (`shareables/partials/_challenge_card_square.html`): the same recipe written
 inline, since the card renders with no stylesheet (a test pins the two copies' stops together), still like the

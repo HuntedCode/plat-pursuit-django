@@ -492,6 +492,69 @@
         });
     }
 
+    /**
+     * THE FOIL CARD UNDER THE POINTER (owner, 2026-10-17): a finished square leans toward the cursor and its holo
+     * shine follows it, the way you tilt a foil trading card under a light -- the badge medallion's gesture
+     * (`medallion.js`), scaled for a board of 25 or 26.
+     *
+     * AN INSPECT-ONLY EXCEPTION to the board's rule that a square which does nothing never reacts to the cursor
+     * (`challenges.css`): the cursor stays an arrow and nothing lifts, so it reads as "look at this", not
+     * "click this". FINE POINTERS ONLY and off under reduced motion, the medallion's own gate; a phone keeps the
+     * still foil and its one arrival sweep.
+     *
+     * ONE DELEGATED LISTENER on the board, not 26, writing the CSS variables at most once a frame. Only the square
+     * under the pointer animates.
+     *
+     * MEASURED OFF THE SQUARE'S GRID CELL (its `<li>`), never the square: the square itself moves (its entrance
+     * animation shrinks and offsets it, and a tilt or its spring-back rotates it), so a box read off it skews the
+     * mapping for the whole hover. The cell never moves, and is read in the frame callback from the latest pointer
+     * position, so a scroll under a resting pointer is corrected on the next move.
+     *
+     * A SQUARE STILL ARRIVING DOES NOT TILT: its entrance animation owns `transform` until it ends, so a tilt would
+     * be overridden and then snap in. And the position is LEFT in place on release, so the shine fades out where
+     * it was rather than jumping to the centre mid-fade.
+     */
+    function wireFoilTilt(board) {
+        var canTilt = window.matchMedia && !window.matchMedia('(prefers-reduced-motion: reduce)').matches
+            && window.matchMedia('(any-hover: hover) and (any-pointer: fine)').matches;
+        if (!board || !canTilt) { return; }
+        var current = null, frame = 0, clientX = 0, clientY = 0;
+
+        function arriving(square) {
+            return !!(square.getAnimations && square.getAnimations().some(function (a) { return a.playState === 'running'; }));
+        }
+        function release() {
+            if (!current) { return; }
+            current.classList.remove('is-tilting');
+            current = null;
+        }
+        function paint() {
+            frame = 0;
+            if (!current) { return; }
+            var cell = (current.parentElement || current).getBoundingClientRect();
+            if (!cell.width || !cell.height) { return; }
+            var px = Math.min(1, Math.max(0, (clientX - cell.left) / cell.width));
+            var py = Math.min(1, Math.max(0, (clientY - cell.top) / cell.height));
+            current.style.setProperty('--px', px.toFixed(3));
+            current.style.setProperty('--py', py.toFixed(3));
+        }
+        board.addEventListener('pointermove', function (e) {
+            if (e.pointerType && e.pointerType !== 'mouse' && e.pointerType !== 'pen') { return; }
+            var square = e.target.closest ? e.target.closest('.pp-csq--done') : null;
+            if (square && arriving(square)) { square = null; }
+            if (square !== current) {
+                release();
+                if (!square) { return; }
+                current = square;
+                square.classList.add('is-tilting');
+            }
+            clientX = e.clientX;
+            clientY = e.clientY;
+            if (!frame) { frame = window.requestAnimationFrame(paint); }
+        });
+        board.addEventListener('pointerleave', release);
+    }
+
     function boot(first) {
         // EVERY VIEWER, before the guard below sends a visitor home -- but ONCE.
         //
@@ -519,6 +582,7 @@
         var settling = document.querySelector('.pp-csq-board');
         var settleSoon = function () { window.setTimeout(function () { settling.classList.add('is-settled'); }, 2500); };
         if (first && settling) {
+            wireFoilTilt(settling);
             if (!document.hidden) { settleSoon(); } else {
                 var onShow = function () {
                     if (document.hidden) { return; }

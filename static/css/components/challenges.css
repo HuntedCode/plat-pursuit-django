@@ -457,9 +457,10 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
  *
  * STILL BY DEFAULT, which is the restraint half. Light only MOVES when something happened: once as the board
  * arrives (staggered off the square's own `--rev`, after its entrance) and once when a square completes in
- * place. NOT on hover (owner, 2026-10-17): a finished square is not interactive, and the house keeps hover
- * responses off squares that do nothing (`visual-identity.md` names "sparkles on hover states" an
- * anti-pattern). A run page is 25 or 26 of these, so nothing loops and only `transform` animates.
+ * place. No hover SPARKLE (owner, 2026-10-17: `visual-identity.md` names "sparkles on hover states" an
+ * anti-pattern), but the pointer may TILT a finished square and drag its shine across it, the inspect-only
+ * exception below. A run page is 25 or 26 of these, so nothing loops and only the square under the pointer
+ * moves.
  *
  * ONE RECIPE, TWO COPIES: the share card's squares wear this foil too, written inline in
  * `shareables/partials/_challenge_card_square.html` because the card renders with no stylesheet. Change one,
@@ -519,6 +520,46 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
         animation-delay: calc(0.5s + min(var(--rev, 0), 12) * 0.035s);
     }
 }
+/* ── THE FOIL UNDER THE POINTER (owner, 2026-10-17): tilt + a holo shine that follows the cursor ──
+ *
+ * THE ONE EXCEPTION to "a square that does nothing never reacts to the cursor" (the hover rules above): a foil
+ * card is inspected by tilting it under a light, which is the trading-card idiom's own gesture (the badge
+ * medallion does it, `visual-identity.md` names a gleam as the Frame's hover language). It is INSPECT-ONLY: the
+ * cursor stays an arrow (`div.pp-csq`), nothing lifts, no shadow changes, so it never reads as clickable.
+ * `challenge-detail.js` (`wireFoilTilt`) adds `is-tilting` and writes `--px`/`--py` (0-1 across the square) on fine
+ * pointers only, never under reduced motion.
+ *
+ * ~8 DEGREES, not the medallion's 15: these sit tight in a grid, and a bold lean would cross into its neighbours.
+ * The tilt eases in fast and settles back on a spring when the pointer leaves. */
+.pp-csq.pp-csq--done {
+    transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.pp-csq.pp-csq--done.is-tilting {
+    transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.08s linear;
+    transform: perspective(700px)
+        rotateX(calc((0.5 - var(--py, 0.5)) * 16deg))
+        rotateY(calc((var(--px, 0.5) - 0.5) * 16deg));
+}
+/* THE SHINE: a soft glare under the pointer and a rainbow band that slides across with it, on its own layer over
+   the still foil, faded in only while tilting. Positions ride the variables, so one paint per frame, one square. */
+.pp-csq__foil::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    transition: opacity 0.25s ease;
+    background:
+        radial-gradient(circle at calc(var(--px, 0.5) * 100%) calc(var(--py, 0.5) * 100%),
+            rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0) 45%),
+        linear-gradient(115deg,
+            rgba(255, 255, 255, 0) calc(var(--px, 0.5) * 100% - 38%),
+            rgba(255, 150, 214, 0.38) calc(var(--px, 0.5) * 100% - 16%),
+            rgba(150, 236, 255, 0.42) calc(var(--px, 0.5) * 100%),
+            rgba(255, 228, 140, 0.36) calc(var(--px, 0.5) * 100% + 16%),
+            rgba(255, 255, 255, 0) calc(var(--px, 0.5) * 100% + 38%));
+}
+.pp-csq--done.is-tilting .pp-csq__foil::after { opacity: 1; }
+
 /* Parked off the left, crosses once, parks off the right; the 0%/16% hold is the anticipation beat, so the
    light reads as catching the surface rather than sliding about. */
 @keyframes ppCsqGleam {
