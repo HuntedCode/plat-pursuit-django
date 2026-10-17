@@ -27,10 +27,11 @@ ONE RULE PER QUESTION, all borrowed:
 - "uncleared badge stage": the badge engine itself (`badge_orchestrator.evaluate_with_catalog`)
 - "hatch open": `eligibility.hatch_open_keys`, parity-pinned against `hatch_is_open`
 
-BADGE STAGES ARE A BONUS, NEVER A RULE. The badge bar (base list at 100%) is not the contract bar
-(platinum or 100%), so a stage line reads "also counts toward", and stages only ever choose between plans
-that fill the same squares with the same number of games (`plan_solver`'s tier order). The pool is ranked in
-the solver's own tier order (stages, then progress, then name), so pruning keeps what the solver would pick.
+BADGE STAGES NEVER COST A FILLED SQUARE. The badge bar (base list at 100%) is not the contract bar (platinum or
+100%), so a plan line lists the stages a game counts toward. Under Bonus, badge games only choose between plans that
+fill the same squares with the same number of games; under Priority they fill as many squares as they can before
+the fewest games decide (`plan_solver`'s tier order). The pool is ranked badge games first (most stages first),
+then progress, then name, so pruning keeps what the solver would pick.
 """
 import hashlib
 import json
@@ -59,9 +60,9 @@ SOURCE_NEW = 'new'
 SOURCE_BOTH = 'both'
 SOURCES = (SOURCE_BOTH, SOURCE_BACKLOG, SOURCE_NEW)
 
-#: How badge stages weigh against the challenges (the hunter's choice). BONUS: stages only choose between plans
-#: that fill the same squares with the same number of games. PRIORITY: a game that clears more stages wins even
-#: if the plan needs an extra game for it (never at the cost of a filled square). See `plan_solver`'s tiers.
+#: How badge stages weigh against the challenges (the hunter's choice). BONUS: badge games only choose between plans
+#: that fill the same squares with the same number of games. PRIORITY: badge games fill as many squares as they can,
+#: even when that takes an extra game (never at the cost of a filled square). See `plan_solver`'s tiers.
 #: ONLY (owner, 2026-10-16): the plan is built from badge games alone, so a square no badge game fits stays open;
 #: Bonus and Priority fill those with any game. Must-haves still beat it, like every other filter. Ranked as
 #: Priority, since every candidate is a badge game.

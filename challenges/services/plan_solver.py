@@ -10,12 +10,20 @@ A run holds a contract once. Choose at most one contract per square so that, in 
     3. (swap mode) unfinished squares keep their current game, so one is replaced only when that serves a
        higher tier: a pin, a filled square, or a saved game
     4. games the hunter asked to see less of ("Show me different games") are avoided
-    5. the most uncleared badge stages are advanced
-    With `stages_first` (the hunter's "Priority" badge weight) the order after 1 becomes 4, 5, 2, 3: avoided games
-    and badge stages both rank above using fewer games, so stages may cost a double (never a filled square), a
-    reroll still finds different games, and an unfinished square may be offered a stage-clearing swap.
-    6. (backlog preference) games the hunter has progress in are preferred
-    7. earlier candidates are preferred (the caller orders them)
+    5. the most squares are filled by BADGE GAMES (a game that advances at least one uncleared stage)
+    6. the most badge stages are advanced, as a sum of each chosen game's count (a tie-break between badge games)
+    With `stages_first` (the hunter's "Priority" badge weight) the order after 1 becomes 4, 5, 2, 3, 6 (owner,
+    2026-10-17): badge games fill as many squares as they can, and only then do the fewest games decide. So badge
+    doubles are used first, and where they run out a badge game that takes one square beats a double without a badge.
+    Under Bonus the fewest games decide first, so badge games win only where they cost no extra game.
+    7. (backlog preference) games the hunter has progress in are preferred
+    8. earlier candidates are preferred (the caller orders them)
+
+WHY BADGE SQUARES, NOT STAGE COUNTS, ABOVE GAMES. Priority used to rank the stage COUNT above fewer games, so any
+new stage was worth an extra game: on "All badges", where nearly every game clears something, it split every double
+and used one game per square. A yes/no per game keeps the doubles (a badge double fills two squares with one game),
+and it keeps every tier linear in the assignment, so it costs one more quick tier, not a harder solve. Counting each stage once per
+plan instead was tried and measured: it made a coverage problem HiGHS could not settle inside the time budget.
 
 LEXICOGRAPHIC, SOLVED IN SEQUENCE. Each tier is one small exact MILP, and its optimum is then fixed as a
 constraint for the next. The alternative, one solve with big-M weights per tier, needs weights near 1e10 for
@@ -24,7 +32,7 @@ two. Every tier also runs with `mip_rel_gap=0` for the same reason: the tie tier
 figures at full size, where the default gap could stop short of the optimum. Tiers whose objective is all zero
 are skipped.
 
-TIER 7 IS A PREFERENCE, NOT A STRICT ORDER. It minimises the sum of the chosen games' positions, so {1st, 4th}
+TIER 8 IS A PREFERENCE, NOT A STRICT ORDER. It minimises the sum of the chosen games' positions, so {1st, 4th}
 and {2nd, 3rd} tie, and it does not decide which of two squares one game lands on. HiGHS settles whatever is
 left, and it is deterministic for identical input.
 
@@ -33,7 +41,7 @@ infeasible: the solver places as many as it can and reports the rest in `unplace
 turns into a reason the hunter can read.
 
 TIMING, measured with a scratch script on the dev laptop (2026-10-16), not by a test: 26 letters + 25 jobs with
-1,040 candidates (~3,070 pairs) took 0.1-0.3s per tier, ~1s for five tiers. Pool size is the lever, and
+1,040 candidates (~3,070 pairs) took 0.1-0.3s per tier, ~1s for five tiers (a badge plan adds one or two). Pool size is the lever, and
 keeping it small is the planner's job (`planner._prune`).
 
 WHAT THIS MODULE ENFORCES vs WHAT IT TRUSTS. It enforces the structural rules: one game per square, one
@@ -221,12 +229,14 @@ def _tiers(problem, pairs, u_index, placeable_ids, by_id, order, n):
     def zeros():
         return np.zeros(n)
 
-    pins, fill, games, keep, avoid, stages, progress, ties = (zeros() for _ in range(8))
+    pins, fill, games, keep, avoid, badge, stages, progress, ties = (zeros() for _ in range(9))
     for cid in problem.pins:
         if cid in u_index:
             pins[u_index[cid]] = 1
     for i, (cid, square) in enumerate(pairs):
         fill[i] = 1
+        if by_id[cid].stages:
+            badge[i] = 1
         if problem.square_pins.get(square) == cid:
             pins[i] = 1
         if problem.occupants.get(square) == cid:
@@ -241,9 +251,13 @@ def _tiers(problem, pairs, u_index, placeable_ids, by_id, order, n):
             progress[u] = int(by_id[cid].progress)
         ties[u] = len(order) - order[cid]
 
-    # PRIORITY moves "avoid" up WITH stages, not just stages: otherwise "Different games" would keep returning
-    # the same stage-heavy games. "keep" stays below stages, so an unfinished square may be OFFERED a swap for a
-    # stage-clearing game (a swap is always opt-in).
-    order = ((pins, fill, avoid, stages, games, keep, progress, ties) if problem.stages_first
-             else (pins, fill, games, keep, avoid, stages, progress, ties))
+    # PRIORITY moves "avoid" up WITH the badge tier: otherwise "Different games" would keep returning the same
+    # badge games. "keep" stays below it, so an unfinished square may be OFFERED a swap for a badge game (a swap is
+    # always opt-in).
+    # WHEN EVERY PLACEABLE GAME IS A BADGE GAME ("Badges only", or nearly all of "All badges") the badge tier IS the
+    # fill tier, already settled above it: dropped, so it does not spend the shared time budget proving nothing.
+    if np.array_equal(badge, fill):
+        badge = zeros()
+    order = ((pins, fill, avoid, badge, games, keep, stages, progress, ties) if problem.stages_first
+             else (pins, fill, games, keep, avoid, badge, stages, progress, ties))
     return [t for t in order if t.any()]

@@ -69,13 +69,12 @@ document.addEventListener('DOMContentLoaded', function() {
         const handleScroll = () => {
             clearTimeout(scrollTimeout);
             scrollTimeout = setTimeout(() => {
-                if (window.scrollY > 300) {
-                    backToTop.classList.remove('opacity-0');
-                    backToTop.classList.add('opacity-100');
-                } else {
-                    backToTop.classList.remove('opacity-100');
-                    backToTop.classList.add('opacity-0');
-                }
+                // Faded out is not enough: an invisible button still takes the click meant for whatever is
+                // under it (the optimizer's Next sat exactly there), so a hidden one lets clicks through.
+                const shown = window.scrollY > 300;
+                backToTop.classList.toggle('opacity-100', shown);
+                backToTop.classList.toggle('opacity-0', !shown);
+                backToTop.classList.toggle('pointer-events-none', !shown);
             }, 100);
         };
 

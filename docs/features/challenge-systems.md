@@ -403,11 +403,14 @@ adjusts and applies. The Plat Calendar is left out: it fills itself and has no s
 
 **What "best" means**, in priority order: the most pins honoured, the most squares filled, the **fewest
 games** (one game in a letter AND a job counts once, which is the whole point), swaps only when they save a
-game, avoid "Different games" penalties, the most uncleared badge stages, backlog progress, then name order.
+game, avoid "Different games" penalties, the most squares filled by **badge games** (a game that advances at
+least one uncleared stage), the most stages (a tie-break between badge games), backlog progress, then name order.
 With the hunter's **Priority** badge weight (`Problem.stages_first`) the order after "most squares filled"
-becomes: avoid "Different games" penalties, badge stages, fewest games, keep unfinished squares. So a
-stage-clearing game may cost a double (never a filled square), a reroll still finds different games, and an
-unfinished square may be OFFERED a stage-clearing swap (swaps are opt-in).
+becomes (owner, 2026-10-17): avoid "Different games" penalties, the most squares filled by badge games, fewest
+games, keep unfinished squares, the most stages. So badge doubles go first, and where they run out a badge game
+that takes one square beats a double with no badge; under Bonus the fewest games decide first, so a badge game
+wins only where it costs no extra game. A filled square is never traded, a reroll still finds different games, and
+an unfinished square may be OFFERED a swap for a badge game (swaps are opt-in).
 Each tier is its own exact solve with the previous optimum fixed, because one big-M objective needs weights
 near 1e10 and HiGHS's default gap would drop the lower tiers.
 
@@ -485,7 +488,10 @@ button (`aria-pressed`) beside the medallion, because the medallion's `<div>`s m
 button.
 
 **Badge stages are a bonus by default, never a rule.** The badge bar (base list at 100%) is not the contract bar
-(platinum or 100%), so a line says "Counts toward Stage N of X". Stages come from the badge engine's own
+(platinum or 100%), so a line lists the stages it counts toward, **one row per badge** (owner, 2026-10-17): the
+badge and its editions once, then "Stages 17, 18, 19, 20", each stage's title on hover and read out after its
+number. Rows group by badge, editions and route (`stageList`): a stage reached only through a bundle keeps its own
+"Part of stage N" row, and two stages of one badge that gate different editions show as two rows. Stages come from the badge engine's own
 evaluation of the selected editions. **The read shape is the caller's intent**, as `badge_orchestrator` asks: a
 broad source ("All badges", a whole type) reads through subqueries (`build_catalog(whole_catalogue=True)`,
 measured ~60x faster at catalogue size); started editions and picks are a handful and inline their ids (faster
@@ -547,7 +553,10 @@ preview: it fills the team member's own runs, as it would for a free hunter.
 change: the wizard folds (180ms, ease-in) and the summary, stats and first five groups settle in; the page stays
 BUSY until that reveal lands, or a second Plan it would start a second solve. A re-solve is not: its lines glide
 to their new places (one `lineFlip`, shared with the Letter/Job sort) and the stats tick from their old values.
-Lock toggles in place. Failures on the review are toasts, and the sticky bar says what the review is doing. Both
+Lock toggles in place. Failures on the review are toasts, and the sticky bar says what the review is doing.
+**The wizard's Back/Next and the review's bar are both DOCKS** (`.pp-cplan__dock`, sticky above the tab bar), and the
+site's back-to-top button is lifted above whichever is showing: `watchDocks` measures it into `--pp-cplan-dock-h`
+and an unlayered `html:has([data-cplan]) #back-to-top` rule uses it (it sat exactly on Next and Apply). Both
 dialogs close on their own exit (`closeDialog`); callbacks queue and run on the real `close` event, a closing
 dialog takes no second tap, and focus after an Other options pick waits for the sheet to be really closed.
 
@@ -1259,6 +1268,13 @@ agreeing with its flag); `challenges/models.py` Meta is the full set.
 ---
 
 ## Gotchas and Pitfalls
+
+**Priority ranks BADGE SQUARES above fewer games, never the stage COUNT.** Ranking the count above games made any new
+stage worth an extra game, so with a broad badge source (where nearly every game clears something) Priority split
+every double and used one game per square (the 2026-10-17 report). A yes/no per game keeps the doubles and keeps the
+solve linear. Counting each stage once per plan was tried and measured: it turns the stage tier into a coverage
+problem HiGHS could not settle inside the time budget when games share stages. Stage counts only break ties.
+Pinned in `test_challenge_plan_solver.py`.
 
 **The optimizer's cached pool must be JSON-safe.** Production's cache serializes to JSON, so an int-keyed dict
 comes back string-keyed; tests use LocMem, which pickles and hides it. The pool is stored as lists of pairs and

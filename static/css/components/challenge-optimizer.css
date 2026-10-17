@@ -157,7 +157,7 @@
 .pp-cplan__results .pp-cpick__row { flex-direction: row; align-items: center; gap: 10px; }
 .pp-cplan__results .pp-cpick__row-art { width: 56px; flex: none; }
 
-.pp-cplan__nav { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+.pp-cplan__nav { justify-content: flex-end; margin-top: 16px; }
 .pp-cplan__nav [data-cplan-back] { margin-right: auto; }
 
 .pp-cplan__status { min-height: 1.2em; margin: 6px 0 0; font-size: 0.8rem; color: var(--pp-text-mute); }
@@ -225,10 +225,27 @@ button.pp-cplan__sq:focus-visible { outline: 2px solid var(--disc); outline-offs
 .pp-cplan__meta { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
 .pp-cplan__note { font-size: 12px; font-weight: 600; color: var(--pp-text-mute); }
 .pp-cplan__note + .pp-cplan__note::before { content: '\00b7'; margin-right: 5px; color: var(--pp-text-dim); }
-.pp-cplan__note--badge { color: var(--pp-metal-gold); }
 .pp-cplan__note--progress { color: var(--pp-info); }
 .pp-cplan__note--pin { color: var(--pp-primary); }
 .pp-cplan__note--warn { color: var(--pp-warning); }
+/* A game's badge stages, one row per badge: the badge in gold, its editions dimmer, the numbers in body text. The
+   row wraps its numbers under the name on a phone rather than truncating them. */
+.pp-cplan__stages { display: grid; gap: 3px; }
+.pp-cplan__stage {
+    display: flex; align-items: flex-start; gap: 6px;
+    font-size: 12px; font-weight: 600; line-height: 1.35; color: var(--pp-text-mute);
+}
+/* 1.35 x 12px = a 16px line: the 2px drop centres the 13px mark on the first line, wrapped or not. */
+.pp-cplan__stage svg { width: 13px; height: 13px; flex: none; margin-top: 2px; color: var(--pp-metal-gold); }
+.pp-cplan__stage-body { display: flex; flex-wrap: wrap; gap: 1px 6px; min-width: 0; }
+.pp-cplan__stage-name { color: var(--pp-metal-gold); overflow-wrap: anywhere; }
+.pp-cplan__stage-ed { font-weight: 500; color: var(--pp-text-dim); }
+.pp-cplan__stage-nums { font-variant-numeric: tabular-nums; }
+.pp-cplan__stage-n { color: var(--pp-text); }
+/* A titled stage says so where hovering can answer it. */
+@media (hover: hover) {
+    .pp-cplan__stage-n[title] { text-decoration: underline dotted; text-underline-offset: 3px; cursor: help; }
+}
 /* The picker's 12px floor for anything read to choose a game, applied to the same tags and chips here. */
 .pp-cplan__meta .bd-meta-tag { font-size: 12px; padding: 1px 6px; }
 .pp-cplan__meta .bd-chip { font-size: 12px; }
@@ -251,20 +268,33 @@ button.pp-cplan__sq:focus-visible { outline: 2px solid var(--disc); outline-offs
 .pp-cplan__notes ul { display: grid; gap: 6px; margin-top: 6px; }
 .pp-cplan__note-item { font-size: 0.8rem; color: var(--pp-text-mute); }
 
-/* ── the sticky action bar ─────────────────────────────────────────────────────────────────── */
-/* Sticky, not fixed: it rides `#page-recede` like the rest of the content. Below `lg` it clears the fixed
-   mobile tab bar (56px + the safe area). */
-.pp-cplan__bar {
+/* ── the docks: the wizard's Back/Next and the review's action bar ─────────────────────────── */
+/* Sticky, not fixed: each rides `#page-recede` like the rest of the content, and stays in view only while its own
+   card or review does. Below `lg` it clears the fixed mobile tab bar (56px + the safe area). */
+.pp-cplan__dock {
     position: sticky; z-index: 20; bottom: calc(56px + env(safe-area-inset-bottom, 0px) + 8px);
-    display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; padding: 10px;
+    display: flex; gap: 8px; padding: 10px;
     background: color-mix(in oklab, var(--pp-bg-1) 94%, transparent);
     border: 1px solid var(--pp-border); border-radius: var(--pp-radius-lg);
     box-shadow: 0 8px 24px -12px rgba(0, 0, 0, 0.6);
 }
+@media (min-width: 1024px) { .pp-cplan__dock { bottom: 12px; } }
+
+/* BACK-TO-TOP, LIFTED ABOVE THE DOCK (owner, 2026-10-17): the site's button is fixed at the bottom right, exactly
+   where Next and Apply sit. The script measures the showing dock into `--pp-cplan-dock-h` (0 when none shows), and
+   the `max()` keeps the button's own default height whenever that is already clear. Unlayered, so it outranks
+   `#back-to-top` in input.css's `@layer base` whatever the specificity. */
+html:has([data-cplan]) #back-to-top {
+    bottom: max(6rem, calc(56px + env(safe-area-inset-bottom, 0px) + 16px + var(--pp-cplan-dock-h, 0px)));
+}
+@media (min-width: 1024px) {
+    html:has([data-cplan]) #back-to-top { bottom: max(2rem, calc(24px + var(--pp-cplan-dock-h, 0px))); }
+}
+
+.pp-cplan__bar { justify-content: flex-end; margin-top: 8px; }
 .pp-cplan__bar .pp-cta { flex: 1; justify-content: center; }
 .pp-cplan__bar svg { width: 15px; height: 15px; }
 @media (min-width: 768px) { .pp-cplan__bar .pp-cta { flex: 0 0 auto; } }
-@media (min-width: 1024px) { .pp-cplan__bar { bottom: 12px; } }
 
 .pp-cplan__done .pp-cplan__actions { margin: 8px 0; }
 /* THE APPLY RESULT reads as a result, not a section label: sentence case at body size, its check traced in. */

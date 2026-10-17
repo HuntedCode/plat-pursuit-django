@@ -260,7 +260,9 @@ reload, and its squares need the glyphs from then on.{% endcomment %}
                 <ul class="pp-cpick__rows pp-cplan__results" role="list" data-cplan-pin-results></ul>
             </section>
 
-            <div class="pp-cplan__nav">
+            {% comment %}DOCKED, like the review's bar: a long step (the badge gallery) never sends Next off screen, and
+            the page's back-to-top button is lifted above whichever dock is showing (`challenge-optimizer.js`).{% endcomment %}
+            <div class="pp-cplan__nav pp-cplan__dock" data-cplan-dock>
                 <button type="button" class="pp-cta pp-cta--ghost" data-cplan-back hidden>Back</button>
                 <button type="button" class="pp-cta" data-cplan-next>Next</button>
             </div>
@@ -303,7 +305,7 @@ reload, and its squares need the glyphs from then on.{% endcomment %}
             </div>
         </div>
         <div data-cplan-sections></div>
-        <div class="pp-cplan__bar">
+        <div class="pp-cplan__bar pp-cplan__dock" data-cplan-dock>
             {% comment %}What the review is doing, where the review's buttons are (always in view). Visual only: the
             page's status line is the announcer.{% endcomment %}
             <span class="pp-cplan__bar-status" data-cplan-bar-status aria-hidden="true"></span>
