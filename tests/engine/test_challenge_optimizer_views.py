@@ -365,13 +365,50 @@ def test_alternatives_flag_games_that_also_fit_the_lines_other_square(client):
     svc.start(profile, JOBS)
     _plan(client)
 
-    body = _body(_post(client, 'challenge_optimizer_alternatives',
-                       {'types': [AZ, JOBS], 'badge_started': False, 'type': AZ, 'key': 'A',
-                        'partners': [{'type': JOBS, 'key': job.slug}]}))
+    ask = {'types': [AZ, JOBS], 'badge_started': False, 'type': AZ, 'key': 'A',
+           'partners': [{'type': JOBS, 'key': job.slug}]}
+    body = _body(_post(client, 'challenge_optimizer_alternatives', ask))
 
-    assert [(r['slug'], r['both']) for r in body['rows']] == [(double.slug, True), (single.slug, False)]
+    # The default tab is "covers both" when it has games, and the counts say what each tab holds.
+    assert body['group'] == 'both' and body['counts'] == {'both': 1, 'rest': 1, 'partner': 0}
+    assert [r['slug'] for r in body['rows']] == [double.slug]
     assert body['rows'][0]['also'] == []   # the partner is the line's own square, never "also"
-    assert body['rows'][0]['platforms']    # the sheet's cards carry platforms
+    rest = _body(_post(client, 'challenge_optimizer_alternatives', {**ask, 'group': 'rest'}))
+    assert rest['group'] == 'rest' and [r['slug'] for r in rest['rows']] == [single.slug]
+
+
+def test_the_partner_tab_and_the_badge_filter_reach_the_sheet(client):
+    profile = _hunter(client)
+    job = Job.objects.order_by('slug').first()
+    job_only = _contract('7 Days', jobs=[job])   # a digit takes no letter
+    svc.start(profile, AZ)
+    svc.start(profile, JOBS)
+    _plan(client)
+    ask = {'types': [AZ, JOBS], 'badge_started': False, 'type': AZ, 'key': 'A',
+           'partners': [{'type': JOBS, 'key': job.slug}]}
+
+    body = _body(_post(client, 'challenge_optimizer_alternatives', ask))
+    assert body['group'] == 'partner' and [r['slug'] for r in body['rows']] == [job_only.slug]
+    # No badge counts here, so the filter leaves nothing; a value other than true is ignored.
+    assert _body(_post(client, 'challenge_optimizer_alternatives', {**ask, 'badge_only': True}))['counts'] == {
+        'both': 0, 'rest': 0, 'partner': 0}
+    assert _body(_post(client, 'challenge_optimizer_alternatives', {**ask, 'badge_only': 'yes'}))['counts'] == {
+        'both': 0, 'rest': 0, 'partner': 1}
+
+
+def test_fallback_moves_off_an_asked_for_tab_that_is_empty(client):
+    profile = _hunter(client)
+    job = Job.objects.order_by('slug').first()
+    job_only = _contract('7 Days', jobs=[job])
+    svc.start(profile, AZ)
+    svc.start(profile, JOBS)
+    _plan(client)
+    ask = {'types': [AZ, JOBS], 'badge_started': False, 'type': AZ, 'key': 'A',
+           'partners': [{'type': JOBS, 'key': job.slug}], 'group': 'both'}
+    assert _body(_post(client, 'challenge_optimizer_alternatives', ask))['group'] == 'both'   # asked: kept
+    moved = _body(_post(client, 'challenge_optimizer_alternatives', {**ask, 'fallback': True}))
+    assert moved['group'] == 'partner' and [r['slug'] for r in moved['rows']] == [job_only.slug]
+    assert _body(_post(client, 'challenge_optimizer_alternatives', {**ask, 'fallback': 'yes'}))['group'] == 'both'
 
 
 def test_a_game_replacing_a_game_in_each_challenge_is_one_swap_card(client):
@@ -413,6 +450,64 @@ def test_a_swap_card_never_claims_a_square_the_game_already_holds(client):
     assert swap['also'] == []
 
 
+# --- leave open and the Job view (owner, 2026-10-17) --------------------------------------------------------
+
+def test_a_square_left_open_comes_back_as_left_open_not_planned(client):
+    profile = _hunter(client)
+    _contract('Apex')
+    svc.start(profile, AZ)
+    body = _body(_plan(client, types=[AZ], tweaks={'left_open': [{'type': AZ, 'key': 'A'}]}))
+    assert [s['key'] for s in body['left_open']] == ['A']
+    assert all(sq['key'] != 'A' for line in body['lines'] for sq in line['squares'])
+    assert all(s['key'] != 'A' for s in body['empty'])
+
+
+def test_the_saved_plan_keeps_only_squares_still_open(client):
+    from challenges.models import OptimizerDraft
+    profile = _hunter(client)
+    run = svc.start(profile, AZ)
+    svc.assign(run, profile, 'B', _contract('Bastion'))   # filled by hand since it was left open
+    _plan(client, types=[AZ], tweaks={'left_open': [{'type': AZ, 'key': 'A'}, {'type': AZ, 'key': 'B'}]})
+    assert OptimizerDraft.objects.get(profile=profile).tweaks['left_open'] == [{'type': AZ, 'key': 'A'}]
+
+
+@pytest.mark.parametrize('left_open', ['A', {'type': AZ}, 5])
+def test_a_crafted_left_open_list_is_a_400_not_a_500(client, left_open):
+    profile = _hunter(client)
+    svc.start(profile, AZ)
+    assert _plan(client, types=[AZ], tweaks={'left_open': left_open}).status_code == 400
+
+
+def test_junk_left_open_entries_are_dropped(client):
+    profile = _hunter(client)
+    svc.start(profile, AZ)
+    resp = _plan(client, types=[AZ], tweaks={'left_open': [None, 'A', {'type': AZ}, {'type': AZ, 'key': ['A']}]})
+    assert resp.status_code == 200 and _body(resp)['left_open'] == []
+
+
+def test_the_job_groups_follow_the_run_pages_discipline_order(client):
+    profile = _hunter(client)
+    svc.start(profile, AZ)
+    run = svc.start(profile, JOBS)
+    body = _body(_plan(client))
+
+    from challenges.services.slot_render import slot_groups
+    expected = [(g['slug'], [c['key'] for c in g['cards']]) for g in slot_groups(run)]
+    assert [(g['slug'], g['keys']) for g in body['job_groups']] == expected
+    assert all(g['label'] for g in body['job_groups'])
+
+
+def test_an_a_z_only_plan_has_no_job_groups(client):
+    profile = _hunter(client)
+    svc.start(profile, AZ)
+    assert _body(_plan(client, types=[AZ]))['job_groups'] == []
+
+
+def test_discipline_sequence_puts_the_radar_five_first_then_others_then_the_unknown():
+    from challenges.services.slot_render import discipline_sequence
+    assert discipline_sequence(['', 'mind', 'zz', 'combat', 'mind', 'aa']) == ['combat', 'mind', 'zz', 'aa', '']
+
+
 def _covering_setup(client):
     """Both runs, and a game that fits A and the first job: a valid partner would flag it `both`."""
     profile = _hunter(client)
@@ -432,11 +527,99 @@ def _alternatives(client, **extra):
 @pytest.mark.parametrize('partners', ['jobs', [['jobs', 'x']], [{'type': ['jobs'], 'key': 'x'}], [None], {'a': 1},
                                       [{'type': JOBS, 'key': ['x']}]])
 def test_crafted_partners_are_dropped_not_a_500(client, partners):
-    # The game below WOULD be flagged by a valid partner, so `both` False proves the crafted one was dropped.
+    # The game below WOULD cover both with a valid partner, so finding it only in "rest" proves the crafted one
+    # was dropped.
     _covering_setup(client)
     resp = _alternatives(client, partners=partners)
     assert resp.status_code == 200
-    assert [r['both'] for r in _body(resp)['rows']] == [False]
+    assert _body(resp)['counts'] == {'both': 0, 'rest': 1, 'partner': 0}
+
+
+def test_every_alternative_is_reachable_a_page_at_a_time(client, monkeypatch):
+    # Owner, 2026-10-17: no cap. A tab pages through ALL of its games; `more` and `offset` say where the next
+    # page starts, counted on the page taken.
+    from challenges import optimizer_views
+    monkeypatch.setattr(optimizer_views, 'ALTERNATIVES_PAGE', 2)
+    profile = _hunter(client)
+    games = [_contract(f'Apex {i}') for i in range(5)]
+    svc.start(profile, AZ)
+    _plan(client, types=[AZ])
+    ask = {'types': [AZ], 'badge_started': False, 'type': AZ, 'key': 'A'}
+
+    seen, offset, more, pages = [], 0, True, 0
+    while more:
+        body = _body(_post(client, 'challenge_optimizer_alternatives', {**ask, 'offset': offset}))
+        assert body['group'] == 'rest' and body['counts'] == {'both': 0, 'rest': 5, 'partner': 0}
+        assert len(body['rows']) <= 2   # one page, never the whole tab
+        seen += [r['slug'] for r in body['rows']]
+        offset, more, pages = body['offset'] + body['showing'], body['more'], pages + 1
+    assert pages == 3 and sorted(seen) == sorted(g.slug for g in games)
+    assert all(r['platforms'] for r in body['rows'])   # the sheet's cards carry platforms
+
+
+def test_other_options_never_spends_the_solve_bucket(client, monkeypatch):
+    # Every page and tab of the sheet spends its own bucket: more Other options calls than the solve budget allows
+    # (40 a minute) still leave the next re-solve answered.
+    from challenges import optimizer_views
+    monkeypatch.setattr(optimizer_views, 'SHEET_RATE', '100/m')
+    profile = _hunter(client)
+    _contract('Apex')
+    svc.start(profile, AZ)
+    ask = {'types': [AZ], 'badge_started': False, 'type': AZ, 'key': 'A'}
+    for i in range(41):
+        assert _post(client, 'challenge_optimizer_alternatives', {**ask, 'offset': i % 2}).status_code == 200
+    assert _plan(client, types=[AZ]).status_code == 200
+
+
+def test_other_options_has_its_own_bucket_for_every_page_and_tab(client, monkeypatch):
+    from challenges import optimizer_views
+    monkeypatch.setattr(optimizer_views, 'SHEET_RATE', '2/m')
+    profile = _hunter(client)
+    svc.start(profile, AZ)
+    ask = {'types': [AZ], 'badge_started': False, 'type': AZ, 'key': 'A'}
+    assert _post(client, 'challenge_optimizer_alternatives', ask).status_code == 200
+    assert _post(client, 'challenge_optimizer_alternatives', {**ask, 'offset': 24}).status_code == 200
+    resp = _post(client, 'challenge_optimizer_alternatives', {**ask, 'group': 'rest'})
+    assert resp.status_code == 429 and _body(resp)['error']
+
+
+@pytest.mark.parametrize('extra', [{'group': 'nope'}, {'group': ['both']}, {'offset': -3}, {'offset': '2'},
+                                   {'offset': True}, {'offset': 1.5}])
+def test_a_crafted_tab_or_offset_falls_back_not_a_500(client, extra):
+    _covering_setup(client)
+    resp = _alternatives(client, **extra)
+    # No partner here, so the fallback tab is "rest", from the start.
+    assert resp.status_code == 200 and _body(resp)['offset'] == 0 and _body(resp)['group'] == 'rest'
+
+
+def test_a_square_left_open_is_never_also_covered_in_the_sheet(client):
+    job, double = _covering_setup(client)
+    body = _body(_alternatives(client, tweaks={'left_open': [{'type': JOBS, 'key': job.slug}]}))
+    assert [(r['slug'], r['also']) for r in body['rows']] == [(double.slug, [])]
+    assert [s['key'] for s in _body(_alternatives(client))['rows'][0]['also']] == [job.slug]
+
+
+def test_an_unobtainable_must_have_outside_the_platforms_is_still_called_outside_your_filters(client):
+    profile = _hunter(client)
+    gone = _contract('Apex', platforms=('PS4',))
+    from trophies.models import Game
+    Game.objects.filter(concept__igdb_match__igdb_id=gone.igdb_id).update(is_obtainable=False)
+    svc.start(profile, AZ)
+    body = _body(_plan(client, types=[AZ], platforms=['PS5'], tweaks={'pins': [gone.slug]}))
+    [line] = body['lines']
+    assert line['slug'] == gone.slug and line['outside_filters'] is True
+
+
+def test_an_unobtainable_must_have_is_not_called_outside_your_filters(client):
+    profile = _hunter(client)
+    gone = _contract('Apex')
+    from trophies.models import Game
+    Game.objects.filter(concept__igdb_match__igdb_id=gone.igdb_id).update(is_obtainable=False)
+    svc.start(profile, AZ)
+    body = _body(_plan(client, types=[AZ], tweaks={'pins': [gone.slug]}))
+    [line] = body['lines']
+    assert line['slug'] == gone.slug and line['outside_filters'] is False
+    assert line['availability'] == ['unobtainable']
 
 
 def test_the_lines_own_game_is_left_out_of_the_sheet(client):

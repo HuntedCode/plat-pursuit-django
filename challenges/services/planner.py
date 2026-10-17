@@ -43,7 +43,7 @@ from django.db.models.functions import Lower
 
 from challenges.models import CHALLENGE_TYPE_AZ, CHALLENGE_TYPE_JOBS
 from challenges.services import challenge_service as svc
-from challenges.services import build_line, eligibility
+from challenges.services import build_line, eligibility, picker
 from challenges.services.plan_solver import Candidate, Problem, solve
 from trophies.models import (
     BadgeSeries, Contract, EarnedContract, GroupBadge, PlatformGroup, SeriesBadgeStanding, UserGroupBadge,
@@ -82,8 +82,9 @@ MAX_PICKED_BADGES = 60
 #: new progress shows up on the next visit.
 POOL_TTL = 15 * 60
 POOL_CACHE_PREFIX = 'planner:pool'
-#: Bumped whenever the cached payload's shape changes, so a deploy never reads an old-shape pool.
-POOL_SCHEMA = 4
+#: Bumped whenever the cached payload's shape, or what it may hold, changes, so a deploy never reads an old pool
+#: (5: unobtainable contracts left out, 2026-10-17).
+POOL_SCHEMA = 5
 
 #: Pruning before the solve: how many candidates each open square keeps, in pool order, unpenalized first.
 #: Doubles (a game that fits an open square in BOTH runs) are what the optimisation is about, so they get the
@@ -94,15 +95,13 @@ POOL_SCHEMA = 4
 KEEP_DOUBLES = 20
 KEEP_SINGLES = 4
 
-#: How many games "Other options" offers for one square.
-ALTERNATIVES_LIMIT = 8
-
 UNPLACED_FINISHED = 'finished'       # the hunter has completed it
 UNPLACED_GONE = 'gone'               # no longer on the Job Board
 UNPLACED_NO_SQUARE = 'no_square'     # fits no open square (or not the square it was pinned to)
 UNPLACED_IN_RUN = 'in_run'           # the only open squares it fits are in runs that already hold it
 UNPLACED_CONFLICT = 'conflict'       # fits, but other pins or better uses took its squares
 UNPLACED_SQUARE_CLOSED = 'square_closed'   # pinned to a square that is no longer open or unfinished
+UNPLACED_LEFT_OPEN = 'left_open'     # the only open squares it fits are ones the hunter is leaving open
 
 
 @dataclass(frozen=True)
@@ -159,11 +158,13 @@ class PlannerOptions:
 
 @dataclass(frozen=True)
 class Tweaks:
-    """The review-step adjustments. All are contract ids, except `square_pins` ({(type, key): id})."""
+    """The review-step adjustments. All are contract ids, except `square_pins` ({(type, key): id}) and
+    `left_open` ({(type, key)}): squares the hunter is leaving open to fill themselves (owner, 2026-10-17)."""
     pins: frozenset = frozenset()
     square_pins: dict = field(default_factory=dict)
     excluded: frozenset = frozenset()
     penalized: frozenset = frozenset()
+    left_open: frozenset = frozenset()
 
 
 @dataclass
@@ -189,6 +190,8 @@ class Plan:
     unplaced_pins: dict
     #: Open squares the plan leaves empty: nothing on the hunter's terms is left for them.
     empty: list
+    #: Open squares the hunter is leaving open (`Tweaks.left_open`) that are still open today.
+    left_open: list
     #: {type: [keys]} open squares where the <=3 hatch is open (notes, never auto-applied).
     hatch_keys: dict
     #: Whether the A-Z history importer could fill something (a note, never auto-applied).
@@ -221,7 +224,8 @@ def get_pool(profile, options, *, build_if_missing=True, line_ticket=None, join_
 
 def build_pool(profile, options, line_ticket=None, join_line=True):
     """The STORED form: {'candidates': [[id, progress, fits]] in preference order, 'stages': [[id, [stage ref]]],
-    'stage_names': {key: [series, series name, number, title]}}.
+    'stage_names': {key: [series, series name, number, title]}, 'unobtainable': [id]} (the unobtainable contracts
+    that passed the filters and were left out, so the plan can tell them from ones outside the filters).
 
     The stage map is kept whole beside the list so a pin from outside the pool gets its stages without a
     second badge evaluation, which is the expensive half of a build.
@@ -238,6 +242,12 @@ def build_pool(profile, options, line_ticket=None, join_line=True):
 def _build_pool(profile, options):
     stages = _badge_stages(profile, options)
     rows = _candidates(_rows(_filtered_contracts(profile, options.platforms, options.source)), options.types)
+    # NEVER SUGGEST AN UNOBTAINABLE CONTRACT (owner, 2026-10-17): no game can finish it. Delisted ones stay. A
+    # hunter may still name one as a must-have (`pin_candidates` reads outside the pool).
+    unobtainable = picker.unobtainable_contract_ids()
+    # Remembered, so a must-have among them is not called "outside your filters": it passed them.
+    dropped = [c['id'] for c in rows if c['id'] in unobtainable]
+    rows = [c for c in rows if c['id'] not in unobtainable]
     rows = _rank(rows, stages, options.source)
     # COMPACT: "All badges" hands nearly every contract some stages, and each stage's names repeat across all of
     # its games. Names go in `stage_names` once; a contract stores [key, part, editions] per stage.
@@ -249,7 +259,8 @@ def _build_pool(profile, options):
             names[key] = [st['series'], st['series_name'], st['stage'], st['title']]
             row.append([key, st['part'], st['editions']])
         refs.append([cid, row])
-    return {'candidates': [[c['id'], c['progress'], c['fits']] for c in rows], 'stages': refs, 'stage_names': names}
+    return {'candidates': [[c['id'], c['progress'], c['fits']] for c in rows], 'stages': refs, 'stage_names': names,
+            'unobtainable': dropped}
 
 
 def _hydrate(stored):
@@ -265,7 +276,7 @@ def _hydrate(stored):
     stages = {int(cid): [expand(ref) for ref in refs] for cid, refs in stored['stages']}
     candidates = [{'id': cid, 'progress': progress, 'fits': fits, 'stages': stages.get(cid, [])}
                   for cid, progress, fits in stored['candidates']]
-    return {'candidates': candidates, 'stages': stages}
+    return {'candidates': candidates, 'stages': stages, 'unobtainable': set(stored.get('unobtainable', ()))}
 
 
 def pin_candidates(profile, options, pool, ids):
@@ -491,9 +502,19 @@ def make_plan(profile, options, pool, states, tweaks=Tweaks()):
     occupants = {(t, k): cid for t, s in states.items() for k, cid in s.unfinished.items()}
     open_squares = [(t, k) for t, s in states.items() for k in s.open_keys]
     plannable = set(open_squares) | set(occupants)
+    # LEFT OPEN (owner, 2026-10-17): the hunter will fill these themselves, so neither solve touches them. It
+    # beats a square pin on the same square (the latest word wins, as with "not this one"). Only an OPEN square
+    # can be left open: once the hunter fills it by hand it is theirs, planned like any unfinished square, and
+    # the entry is forgotten (the plan door saves only what `Plan.left_open` returns).
+    open_set = set(open_squares)
+    left_open = [sq for sq in sorted(tweaks.left_open) if sq in open_set]
+    skipped = set(left_open)
+    open_squares = [sq for sq in open_squares if sq not in skipped]
 
     square_pins, closed = {}, set()
     for square, cid in tweaks.square_pins.items():
+        if square in skipped:
+            continue
         if square not in plannable:
             closed.add(cid)
         elif occupants.get(square) != cid:
@@ -531,7 +552,8 @@ def make_plan(profile, options, pool, states, tweaks=Tweaks()):
         pruned = _prune(candidates, swap_squares, all_pins | set(held.values()), tweaks.penalized, in_run, held)
         swap = solve(Problem(
             squares=tuple(swap_squares),
-            candidates=_with_occupants(pruned, occupants, by_id),
+            candidates=_with_occupants(pruned, occupants, {**by_id, **_occupants_outside(profile, options, pool,
+                                                                                         occupants, by_id)}),
             pins=pins, square_pins=held, in_run=in_run, occupants=occupants,
             penalized=frozenset(tweaks.penalized), prefer_progress=prefer, stages_first=stages_first,
         ))
@@ -541,7 +563,7 @@ def make_plan(profile, options, pool, states, tweaks=Tweaks()):
                 also = [other for other, placed in swap.assignments.items() if placed == new and other != sq]
                 swaps[sq] = (cid, new, also)
 
-    unplaced = {cid: _why_unplaced(cid, by_id, states, square_pins) for cid in primary.unplaced_pins}
+    unplaced = {cid: _why_unplaced(cid, by_id, states, square_pins, skipped) for cid in primary.unplaced_pins}
     unplaced.update(_missing_reasons(profile, [cid for cid in unplaced if cid not in by_id]))
     placed = set(primary.assignments.values())
     unplaced.update({cid: UNPLACED_SQUARE_CLOSED for cid in closed if cid not in placed})
@@ -553,6 +575,7 @@ def make_plan(profile, options, pool, states, tweaks=Tweaks()):
         unplaced_pins=unplaced,
         # A pinned unfinished square the pin could not take still holds its game, so it is not "empty".
         empty=[sq for sq in open_squares if sq not in primary.assignments and sq not in pinned_unfinished],
+        left_open=left_open,
         hatch_keys={t: sorted(eligibility.hatch_open_keys(profile, s.challenge, s.open_keys))
                     for t, s in states.items() if s.open_keys},
         importer_note=_importer_note(profile, states),
@@ -566,16 +589,21 @@ def _allowed(cand, options):
     return bool(cand['stages']) or not options.badges_only
 
 
-def alternatives(pool, states, square, excluded=frozenset(), limit=ALTERNATIVES_LIMIT, options=None, partners=()):
-    """[(candidate dict, [open squares it also fits in the OTHER run], covers every partner)] for one square.
-    Reads only the cached pool and the run state: the "Other options" sheet costs no pool scan.
+def alternatives(pool, states, square, excluded=frozenset(), options=None, partners=(), left_open=frozenset(),
+                 badge_only=False):
+    """{'both': [...], 'rest': [...], 'partner': [...]} of (candidate dict, [open squares it also fits in the
+    OTHER run]) for one square and its line, EVERY one of them (owner, 2026-10-17: the sheet shows everything,
+    paged by its door). Reads only the cached pool and the run state: the "Other options" sheet costs no pool scan.
 
-    PARTNERS are the other squares of the plan line the hunter opened it from (owner, 2026-10-17): a game that
-    fits them all can take the whole line (the sheet pins it to every square of it), so those come first, up to
-    `limit` of them, then up to `limit` of the rest. The covering half keeps pool order (its other fits are moot: the
-    pick pins it to the partner); the rest lists doubles first, then pool order. A partner is
-    never repeated in `also`, and it may be an unfinished square (an accepted swap), so it is matched on fit, not
-    on being open. Pass the line's own game in `excluded`: it fits every partner and would take a place.
+    PARTNERS are the other squares of the plan line the hunter opened it from (owner, 2026-10-17), one at most (a
+    line holds one square per run). `both`: games that fit the square AND the partner (the sheet pins one to the
+    whole line). `rest`: games for the square alone (all of them when there is no partner). `partner`: games for
+    the partner alone, that the square cannot take (the sheet pins one to the partner). `both` keeps pool order (its
+    other fits are moot); the other two list doubles first, then pool order. A partner is never repeated in `also`,
+    and it may be an unfinished square (an accepted swap), so it is matched on fit, not on being open. Pass the
+    line's own game in `excluded` (it fits every partner). A square the hunter is leaving open (`left_open`) is never
+    "also": the plan will not fill it. `badge_only` (the sheet's "Counts toward your badges") keeps only games that
+    clear a stage of the hunter's badges.
 
     A game already in a run is never offered for that run's squares, here or in `also` (it cannot be placed
     there twice); excluded games are not offered at all, because the hunter said "not this one". With badge
@@ -583,22 +611,39 @@ def alternatives(pool, states, square, excluded=frozenset(), limit=ALTERNATIVES_
     run_type, key = square
     state = states.get(run_type)
     if state is None:
-        return []
+        return {'both': [], 'rest': [], 'partner': []}
     partners = [(t, k) for t, k in partners if t in states and t != run_type]
+
+    def offered(cand):
+        return (cand['id'] not in excluded and (options is None or _allowed(cand, options))
+                and (not badge_only or cand['stages']))
+
+    def also_of(cand, own_run, skip):
+        return [(t, k) for t, s in states.items() if t != own_run and cand['id'] not in s.in_run
+                for k in s.open_keys
+                if k in cand['fits'].get(t, ()) and (t, k) not in skip and (t, k) not in left_open]
+
     found = []
     for cand in pool['candidates']:
-        if cand['id'] in excluded or cand['id'] in state.in_run or key not in cand['fits'].get(run_type, ()):
-            continue
-        if options is not None and not _allowed(cand, options):
+        if cand['id'] in state.in_run or key not in cand['fits'].get(run_type, ()) or not offered(cand):
             continue
         covers = bool(partners) and all(k in cand['fits'].get(t, ()) and cand['id'] not in states[t].in_run
                                         for t, k in partners)
-        also = [(t, k) for t, s in states.items() if t != run_type and cand['id'] not in s.in_run
-                for k in s.open_keys if k in cand['fits'].get(t, ()) and (t, k) not in partners]
-        found.append((cand, also, covers))
-    covering = [row for row in found if row[2]]
-    rest = sorted((row for row in found if not row[2]), key=lambda row: not row[1])   # stable: doubles first
-    return covering[:limit] + rest[:limit]
+        found.append((cand, also_of(cand, run_type, partners), covers))
+    rest = sorted(((c, a) for c, a, covers in found if not covers), key=lambda row: not row[1])   # doubles first
+
+    partner_only = []
+    if len(partners) == 1:
+        (p_run, p_key), = partners
+        taken = {c['id'] for c, _, _ in found}
+        p_state = states[p_run]
+        for cand in pool['candidates']:
+            if (cand['id'] in taken or cand['id'] in p_state.in_run or p_key not in cand['fits'].get(p_run, ())
+                    or not offered(cand)):
+                continue
+            partner_only.append((cand, also_of(cand, p_run, {square})))
+        partner_only.sort(key=lambda row: not row[1])   # doubles first
+    return {'both': [(c, a) for c, a, covers in found if covers], 'rest': rest, 'partner': partner_only}
 
 
 def _prune(pool, squares, pins, penalized, in_run, square_pins):
@@ -641,6 +686,14 @@ def _as_candidate(cand):
                      stages=len(cand['stages']), progress=cand['progress'])
 
 
+def _occupants_outside(profile, options, pool, occupants, by_id):
+    """{id: candidate dict} for occupants the pool does not hold (filtered out, or unobtainable and so never
+    suggested), read the way a pin is, so the swap solve still knows their badge stages and progress. Without
+    it they arrived with neither, and under Priority a hunter's own badge game looked worth swapping out."""
+    missing = set(occupants.values()) - set(by_id)
+    return {c['id']: c for c in pin_candidates(profile, options, pool, missing)} if missing else {}
+
+
 def _with_occupants(pruned, occupants, by_id):
     """`pruned` with every occupant present and able to stay on its own square.
 
@@ -668,21 +721,28 @@ def _with_occupants(pruned, occupants, by_id):
     return tuple(out)
 
 
-def _why_unplaced(contract_id, by_id, states, square_pins):
+def _why_unplaced(contract_id, by_id, states, square_pins, left_open=frozenset()):
     """Why a pin the solver held did not land. A contract absent from `by_id` is answered by
-    `_missing_reasons` instead (it never reached the solver)."""
+    `_missing_reasons` instead (it never reached the solver). A square the hunter is leaving open is not one it
+    could have taken, so a pin whose only open squares are those says so rather than blaming other picks."""
     cand = by_id.get(contract_id)
     if cand is None:
         return UNPLACED_NO_SQUARE
     for (t, k), cid in square_pins.items():
         if cid == contract_id and k not in cand['fits'].get(t, ()):
             return UNPLACED_NO_SQUARE
-    fits_somewhere = False
+    fits_somewhere = fits_left_open = False
     for t, state in states.items():
-        if set(cand['fits'].get(t, ())) & set(state.open_keys):
+        keys = set(cand['fits'].get(t, ())) & set(state.open_keys)
+        plannable = {k for k in keys if (t, k) not in left_open}
+        if plannable:
             if contract_id not in state.in_run:
                 return UNPLACED_CONFLICT
             fits_somewhere = True
+        elif keys and contract_id not in state.in_run:
+            fits_left_open = True
+    if fits_left_open:
+        return UNPLACED_LEFT_OPEN
     return UNPLACED_IN_RUN if fits_somewhere else UNPLACED_NO_SQUARE
 
 

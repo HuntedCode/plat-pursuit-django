@@ -258,11 +258,8 @@ def _board_groups(challenge_type, squares):
         slug = (square['job'] or {}).get('disc_slug') or ''
         by_discipline.setdefault(slug, []).append(square)
 
-    leftovers = [slug for slug in by_discipline if slug and slug not in DISCIPLINE_LABELS]
     groups = []
-    for slug in list(DISCIPLINE_LABELS) + leftovers + ['']:
-        if slug not in by_discipline:
-            continue
+    for slug in discipline_sequence(by_discipline):
         groups.append({
             'label': _discipline_label(slug),
             'slug': slug,
@@ -297,6 +294,20 @@ def card_for(slot):
     # depends on a `forloop` being absent to get that answer.
     card['index'] = 0
     return card
+
+
+def discipline_sequence(slugs):
+    """The disciplines present in `slugs`, in the order a jobs board draws them: the canonical radar five
+    (`DISCIPLINE_LABELS`), then any other in the order it first appears, then '' (a square whose `Job` is gone).
+    ONE ORDER for the run page (`slot_groups`) and the Challenge Optimizer's Job view, so the two never disagree."""
+    present = list(dict.fromkeys(slugs))
+    leftovers = [s for s in present if s and s not in DISCIPLINE_LABELS]
+    return [s for s in list(DISCIPLINE_LABELS) + leftovers + [''] if s in present]
+
+
+def discipline_head(slug):
+    """A discipline group's heading facts, as `slot_groups` draws them: its label, slug and glyph."""
+    return {'label': _discipline_label(slug), 'slug': slug, 'icon': DISCIPLINE_ICON.get(slug, '')}
 
 
 def slot_groups(challenge):
@@ -360,11 +371,8 @@ def slot_groups(challenge):
     #
     # Canonical order first, then whatever is left in the order it arrived -- which is `position` order, so
     # an unlabelled discipline lands where the run froze it.
-    leftovers = [s for s in by_discipline if s and s not in DISCIPLINE_LABELS]
     groups = []
-    for slug in list(DISCIPLINE_LABELS) + leftovers + ['']:
-        if slug not in by_discipline:
-            continue
+    for slug in discipline_sequence(by_discipline):
         members = by_discipline[slug]
         groups.append({
             'label': _discipline_label(slug),

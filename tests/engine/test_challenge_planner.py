@@ -821,9 +821,13 @@ def test_alternatives_never_offer_a_double_into_a_run_that_already_holds_the_gam
     options = _options()
     pool, _ = planner.get_pool(profile, options)
 
-    [(cand, also, _)] = planner.alternatives(pool, planner.run_states(profile, options.types), (AZ, 'A'))
+    halves = planner.alternatives(pool, planner.run_states(profile, options.types), (AZ, 'A'))
 
-    assert cand['id'] == held.id and also == []
+    assert halves['both'] == [] and [(c['id'], also) for c, also in halves['rest']] == [(held.id, [])]
+
+
+def _ids_by_half(halves):
+    return {half: [c['id'] for c, _ in rows] for half, rows in halves.items()}
 
 
 def _two_run_pool(profile):
@@ -842,12 +846,11 @@ def test_alternatives_put_games_that_fit_the_lines_other_square_first():
     covers = _contract('Astro Bot', jobs=[job_a, job_b])
     pool, states = _two_run_pool(profile)
 
-    found = planner.alternatives(pool, states, (AZ, 'A'), partners=[(JOBS, job_a.slug)])
+    halves = planner.alternatives(pool, states, (AZ, 'A'), partners=[(JOBS, job_a.slug)])
 
-    assert [(c['id'], both) for c, _, both in found] == [(covers.id, True), (other_double.id, False),
-                                                         (single.id, False)]
+    assert _ids_by_half(halves) == {'both': [covers.id], 'rest': [other_double.id, single.id], 'partner': []}
     # The partner square is the line's own, so "also covers" names only the OTHER squares a game fits.
-    assert [also for _, also, _ in found] == [[(JOBS, job_b.slug)], [(JOBS, job_b.slug)], []]
+    assert [also for _, also in halves['both'] + halves['rest']] == [[(JOBS, job_b.slug)], [(JOBS, job_b.slug)], []]
 
 
 def test_alternatives_without_partners_flag_nothing_and_keep_doubles_first():
@@ -857,23 +860,139 @@ def test_alternatives_without_partners_flag_nothing_and_keep_doubles_first():
     double = _contract('Astro Bot', jobs=[job_a])
     pool, states = _two_run_pool(profile)
 
-    found = planner.alternatives(pool, states, (AZ, 'A'))
+    halves = planner.alternatives(pool, states, (AZ, 'A'))
 
-    assert [(c['id'], both) for c, _, both in found] == [(double.id, False), (single.id, False)]
+    assert _ids_by_half(halves) == {'both': [], 'rest': [double.id, single.id], 'partner': []}
 
 
-def test_each_half_of_the_alternatives_gets_its_own_limit():
-    # Otherwise a long run of games that cover both would push every "only this square" game off the sheet.
+def test_alternatives_list_games_for_the_partner_alone_that_the_square_cannot_take():
+    # Opened on A from an A + job_a line: "job_a only" holds games for the job that cannot take A (another
+    # letter, or already in the A-Z run), each noting the other open squares it fits.
     profile = _member()
     job_a, _ = _two_jobs()
-    covering = [_contract(f'Alpha {i}', jobs=[job_a]) for i in range(3)]
-    singles = [_contract(f'Apex {i}') for i in range(3)]
+    both = _contract('Astro Bot', jobs=[job_a])
+    job_only = _contract('Bloodborne', jobs=[job_a])
+    letter_only = _contract('Apex')
     pool, states = _two_run_pool(profile)
 
-    found = planner.alternatives(pool, states, (AZ, 'A'), limit=2, partners=[(JOBS, job_a.slug)])
+    halves = planner.alternatives(pool, states, (AZ, 'A'), partners=[(JOBS, job_a.slug)])
 
-    assert [both for _, _, both in found] == [True, True, False, False]
-    assert {c['id'] for c, _, _ in found} <= {c.id for c in covering + singles}
+    assert _ids_by_half(halves) == {'both': [both.id], 'rest': [letter_only.id], 'partner': [job_only.id]}
+    assert halves['partner'][0][1] == [(AZ, 'B')]   # Bloodborne also fits B
+
+
+def test_a_game_already_in_the_squares_run_is_offered_for_the_partner_alone():
+    profile = _member()
+    job_a, _ = _two_jobs()
+    placed = _contract('Astro Bot', jobs=[job_a])
+    az_run, _ = _runs(profile, AZ, JOBS)
+    svc.assign(az_run, profile, 'B', _contract('Bastion'))
+    svc.assign(az_run, profile, 'C', _contract('Celeste'))
+    from challenges.models import ChallengeSlot
+    ChallengeSlot.objects.filter(challenge=az_run, key='D').update(contract=placed, contract_slug=placed.slug)
+    options = _options()
+    pool, _ = planner.get_pool(profile, options)
+    halves = planner.alternatives(pool, planner.run_states(profile, options.types), (AZ, 'A'),
+                                  partners=[(JOBS, job_a.slug)])
+    assert placed.id not in _ids_by_half(halves)['both'] and placed.id in _ids_by_half(halves)['partner']
+
+
+def test_counts_toward_your_badges_keeps_only_stage_games_in_every_tab():
+    profile = _member()
+    job_a, _ = _two_jobs()
+    staged = _contract('Astro Bot', jobs=[job_a])
+    _contract('Alto', jobs=[job_a])
+    plain_job = _contract('Bloodborne', jobs=[job_a])
+    staged_job = _contract('Brothers', jobs=[job_a])
+    staged_letter = _contract('Apex')
+    plain_letter = _contract('Abzu')
+    series = _badge(staged, staged_job, staged_letter)
+    _runs(profile, AZ, JOBS)
+    options = _options(badge_picks=(series.edition.id,))
+    pool, _ = planner.get_pool(profile, options)
+    states = planner.run_states(profile, options.types)
+
+    halves = planner.alternatives(pool, states, (AZ, 'A'), partners=[(JOBS, job_a.slug)], badge_only=True)
+
+    assert _ids_by_half(halves) == {'both': [staged.id], 'rest': [staged_letter.id], 'partner': [staged_job.id]}
+    unfiltered = _ids_by_half(planner.alternatives(pool, states, (AZ, 'A'), partners=[(JOBS, job_a.slug)]))
+    assert plain_job.id in unfiltered['partner'] and plain_letter.id in unfiltered['rest']
+
+
+def test_alternatives_return_every_game_never_a_capped_few():
+    # Owner, 2026-10-17: the sheet shows everything (its door pages it). Nothing here may cut the list short.
+    profile = _member()
+    job_a, _ = _two_jobs()
+    covering = [_contract(f'Alpha {i}', jobs=[job_a]) for i in range(12)]
+    singles = [_contract(f'Apex {i}') for i in range(12)]
+    pool, states = _two_run_pool(profile)
+
+    halves = planner.alternatives(pool, states, (AZ, 'A'), partners=[(JOBS, job_a.slug)])
+
+    assert sorted(_ids_by_half(halves)['both']) == sorted(c.id for c in covering)
+    assert sorted(_ids_by_half(halves)['rest']) == sorted(c.id for c in singles)
+
+
+def test_a_square_left_open_is_never_also_covered():
+    profile = _member()
+    job_a, job_b = _two_jobs()
+    _contract('Astro Bot', jobs=[job_a, job_b])
+    pool, states = _two_run_pool(profile)
+
+    halves = planner.alternatives(pool, states, (AZ, 'A'), left_open=frozenset({(JOBS, job_b.slug)}))
+
+    assert [also for _, also in halves['rest']] == [[(JOBS, job_a.slug)]]
+
+
+# --- leave a square open (owner, 2026-10-17) ----------------------------------------------------------------
+
+def test_a_square_left_open_is_never_planned():
+    profile = _member()
+    apex = _contract('Apex')
+    _runs(profile, AZ)
+    options = _options(types=(AZ,))
+    plan = _plan(profile, options, tweaks=planner.Tweaks(left_open=frozenset({(AZ, 'A')})))
+    assert (AZ, 'A') not in plan.assignments
+    assert plan.left_open == [(AZ, 'A')] and (AZ, 'A') not in plan.empty
+    assert apex.id not in plan.candidates
+
+
+def test_leaving_a_square_open_beats_a_lock_on_it_and_reports_nothing_unplaced():
+    profile = _member()
+    apex = _contract('Apex')
+    _runs(profile, AZ)
+    tweaks = planner.Tweaks(square_pins={(AZ, 'A'): apex.id}, left_open=frozenset({(AZ, 'A')}))
+    plan = _plan(profile, _options(types=(AZ,)), tweaks=tweaks)
+    assert plan.assignments == {} and plan.unplaced_pins == {}
+
+
+def test_a_square_left_open_then_filled_by_hand_is_forgotten_and_planned_as_usual():
+    # Once the hunter fills it themselves it is theirs: no longer "left open", and its swap is offered as for
+    # any unfinished square.
+    profile = _member()
+    job, _ = _two_jobs()
+    single = _contract('Bastion')
+    _contract('Bloodborne', jobs=[job])
+    az_run, _ = _runs(profile, AZ, JOBS)
+    svc.assign(az_run, profile, 'B', single)
+    plan = _plan(profile, _options(), tweaks=planner.Tweaks(left_open=frozenset({(AZ, 'B')})))
+    assert plan.left_open == [] and (AZ, 'B') in plan.swaps
+
+
+def test_a_must_have_whose_only_square_is_left_open_says_so():
+    profile = _member()
+    apex = _contract('Apex')
+    _runs(profile, AZ)
+    tweaks = planner.Tweaks(pins=frozenset({apex.id}), left_open=frozenset({(AZ, 'A')}))
+    plan = _plan(profile, _options(types=(AZ,)), tweaks=tweaks)
+    assert plan.unplaced_pins == {apex.id: planner.UNPLACED_LEFT_OPEN}
+
+
+def test_a_left_open_square_that_is_no_longer_plannable_is_forgotten():
+    profile = _member()
+    _runs(profile, AZ)
+    plan = _plan(profile, _options(types=(AZ,)), tweaks=planner.Tweaks(left_open=frozenset({(JOBS, 'archer')})))
+    assert plan.left_open == []
 
 
 def test_the_covering_half_keeps_pool_order():
@@ -885,9 +1004,9 @@ def test_the_covering_half_keeps_pool_order():
     astro = _contract('Astro Bot', jobs=[job_a, job_b])
     pool, states = _two_run_pool(profile)
 
-    found = planner.alternatives(pool, states, (AZ, 'A'), partners=[(JOBS, job_a.slug)])
+    halves = planner.alternatives(pool, states, (AZ, 'A'), partners=[(JOBS, job_a.slug)])
 
-    assert [c['id'] for c, _, both in found if both] == [alpha.id, astro.id]
+    assert _ids_by_half(halves)['both'] == [alpha.id, astro.id]
 
 
 def test_an_unfinished_partner_square_is_matched_on_fit():
@@ -903,9 +1022,9 @@ def test_an_unfinished_partner_square_is_matched_on_fit():
     states = planner.run_states(profile, options.types)
     assert job_a.slug not in states[JOBS].open_keys
 
-    found = planner.alternatives(pool, states, (AZ, 'A'), partners=[(JOBS, job_a.slug)])
+    halves = planner.alternatives(pool, states, (AZ, 'A'), partners=[(JOBS, job_a.slug)])
 
-    assert [(c['id'], both) for c, _, both in found] == [(covers.id, True)]
+    assert _ids_by_half(halves) == {'both': [covers.id], 'rest': [], 'partner': []}
 
 
 def test_a_partner_in_a_run_already_holding_the_game_is_not_covered():
@@ -917,10 +1036,10 @@ def test_a_partner_in_a_run_already_holding_the_game_is_not_covered():
     options = _options()
     pool, _ = planner.get_pool(profile, options)
 
-    [(cand, _, both)] = planner.alternatives(pool, planner.run_states(profile, options.types), (AZ, 'A'),
-                                             partners=[(JOBS, job_a.slug)])
+    halves = planner.alternatives(pool, planner.run_states(profile, options.types), (AZ, 'A'),
+                                  partners=[(JOBS, job_a.slug)])
 
-    assert cand['id'] == held.id and both is False
+    assert _ids_by_half(halves) == {'both': [], 'rest': [held.id], 'partner': []}
 
 
 def test_all_badges_covers_started_and_types_in_the_cache_key():
@@ -988,8 +1107,8 @@ def test_other_options_under_only_offer_badge_games_alone():
     pool, _ = planner.get_pool(profile, options)
     states = planner.run_states(profile, options.types)
 
-    assert [c['id'] for c, _, _ in planner.alternatives(pool, states, (AZ, 'A'), options=options)] == [badge_game.id]
-    assert len(planner.alternatives(pool, states, (AZ, 'A'))) == 2   # without the answers: every game
+    assert _ids_by_half(planner.alternatives(pool, states, (AZ, 'A'), options=options))['rest'] == [badge_game.id]
+    assert len(planner.alternatives(pool, states, (AZ, 'A'))['rest']) == 2   # without the answers: every game
 
 
 def test_the_weight_is_not_part_of_the_pool_key():
@@ -1015,3 +1134,85 @@ def test_with_no_badges_a_priority_plan_is_solved_as_bonus(monkeypatch):
     monkeypatch.setattr(planner, 'solve', lambda problem: (seen.append(problem.stages_first), real(problem))[1])
     _plan(profile, _options(types=(AZ,), badge_weight=planner.WEIGHT_PRIORITY))
     assert seen and not any(seen)
+
+
+# --- unobtainable contracts are never suggested (owner, 2026-10-17) -----------------------------------------
+
+def test_an_unobtainable_contract_never_reaches_the_pool_but_a_delisted_one_does():
+    profile = _member()
+    gone = _contract('Apex')
+    gone.game.is_obtainable = False
+    gone.game.save(update_fields=['is_obtainable'])
+    delisted = _contract('Astro Bot')
+    delisted.game.is_delisted = True
+    delisted.game.save(update_fields=['is_delisted'])
+    kept = _contract('Alto')
+    _runs(profile, AZ)
+
+    ids = _ids(planner._hydrate(planner._build_pool(profile, _options(types=(AZ,)))))
+
+    assert gone.id not in ids and delisted.id in ids and kept.id in ids
+
+
+def test_an_unobtainable_contract_can_still_be_a_must_have():
+    # The hunter named it: they mean it, and the line carries the Unobtainable chip.
+    profile = _member()
+    gone = _contract('Apex')
+    gone.game.is_obtainable = False
+    gone.game.save(update_fields=['is_obtainable'])
+    _runs(profile, AZ)
+    plan = _plan(profile, _options(types=(AZ,)), tweaks=planner.Tweaks(pins=frozenset({gone.id})))
+    assert plan.assignments == {(AZ, 'A'): gone.id}
+
+
+def test_the_unobtainable_set_is_cached_site_wide():
+    from django.core.cache import cache
+    from challenges.services import picker
+    gone = _contract('Apex')
+    gone.game.is_obtainable = False
+    gone.game.save(update_fields=['is_obtainable'])
+    assert picker.unobtainable_contract_ids() == {gone.id}
+    assert cache.get(picker.UNOBTAINABLE_CACHE_KEY) == [gone.id]
+
+
+def test_the_unobtainable_set_matches_the_pickers_own_flag():
+    # Parity with the chip (`picker._decorations`), across the shapes that differ: no games at all, mixed stacks,
+    # all unobtainable.
+    from challenges.services import picker
+    no_games = _contract('Apex')
+    no_games.game.delete()
+    mixed = _contract('Astro Bot')
+    mixed.game.is_obtainable = False
+    mixed.game.save(update_fields=['is_obtainable'])
+    GameFactory(concept=mixed.concept, title_platform=['PS4'], is_obtainable=True)
+    gone = _contract('Alto')
+    gone.game.is_obtainable = False
+    gone.game.save(update_fields=['is_obtainable'])
+    contracts = [no_games, mixed, gone]
+    flagged = {cid for cid, row in picker.contract_rows(contracts).items() if 'unobtainable' in row['availability']}
+    assert flagged == {gone.id}
+    assert picker.unobtainable_contract_ids() & {c.id for c in contracts} == flagged
+
+
+def test_an_unfinished_game_the_pool_leaves_out_keeps_its_stages_in_the_swap_solve():
+    # A held game outside the pool (here: off the chosen platforms) reaches the swap solve through the pin read,
+    # with its badge stages. Without them, Priority took a hunter's own badge game for a plain one and offered to
+    # swap it for another badge game.
+    profile = _member()
+    held = _contract('Bastion', platforms=('PS4',))
+    rival = _contract('Bloodborne')
+    series = _badge(held, rival)
+    az_run, = _runs(profile, AZ)
+    svc.assign(az_run, profile, 'B', held)
+    options = _options(types=(AZ,), platforms=('PS5',), badge_picks=(series.edition.id,),
+                       badge_weight=planner.WEIGHT_PRIORITY)
+    assert _plan(profile, options).swaps == {}
+
+
+def test_a_contract_with_one_obtainable_way_through_is_not_unobtainable():
+    from challenges.services import picker
+    contract = _contract('Apex')
+    contract.game.is_obtainable = False
+    contract.game.save(update_fields=['is_obtainable'])
+    GameFactory(concept=contract.concept, title_platform=['PS5'], is_obtainable=True)   # another stack, obtainable
+    assert contract.id not in picker.unobtainable_contract_ids()
