@@ -520,7 +520,7 @@ urlpatterns = [
     path('my-challenges/start/<str:challenge_type>/', StartChallengeView.as_view(),
          name='challenge_start'),
     # THE CHALLENGE OPTIMIZER: one page and six JSON doors, owner-only like everything under this prefix. Its own
-    # module (`challenges/optimizer_views.py`); see its docstring for the two rate-limit budgets.
+    # module (`challenges/optimizer_views.py`); see its docstring for the three rate-limit budgets.
     path('my-challenges/optimizer/', OptimizerView.as_view(), name='challenge_optimizer'),
     path('my-challenges/optimizer/plan/', OptimizerPlanView.as_view(), name='challenge_optimizer_plan'),
     path('my-challenges/optimizer/alternatives/', OptimizerAlternativesView.as_view(),

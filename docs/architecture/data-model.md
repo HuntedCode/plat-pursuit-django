@@ -266,6 +266,22 @@ has no `ChallengeSlot` rows.
   enforces the nesting
 - `earned_on` is a local DATE (not an instant), `plat_count` a live tally, `filled_at` the write time
 
+### challenges.OptimizerAllowance
+A free hunter's one optimized plan a week: which answers it was spent on, and when. One row per hunter,
+overwritten on each spend; members never get one. See `services/allowance.py`.
+
+- `profile` OneToOne to `Profile` (CASCADE, `related_name='optimizer_allowance'`)
+- `used_at`, `digest` (`PlannerOptions.digest()`, the digest the pool cache keys on), `answers` (the plan door's body shape)
+
+### challenges.OptimizerDraft
+The hunter's latest optimizer plan, autosaved so Open my plan can rebuild it. Keeps the answers and the tweaks
+(in slugs), never the plan itself. One row per hunter. See `services/optimizer_drafts.py`.
+
+- `profile` OneToOne to `Profile` (CASCADE, `related_name='optimizer_draft'`)
+- `answers`, `tweaks` (JSON), `updated_at`
+
+Neither relates to `Concept` (contracts are named by slug), so `Concept.absorb()` needs no branch for them.
+
 ### ArchivedAZChallenge (trophies app)
 Frozen A-Z challenge progress, preserved when the old system was retired. One row per archived A-Z
 challenge, keyed on stable PSN ids (`psn_username` + per-slot `np_communication_id` inside the `slots`

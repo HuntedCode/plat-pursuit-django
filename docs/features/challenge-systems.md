@@ -402,8 +402,8 @@ adjusts and applies. The Plat Calendar is left out: it fills itself and has no s
 | Page | `optimizer.html`, `static/js/challenge-optimizer.js`, `components/challenge-optimizer.css` | Wizard, review, the Other options sheet (the picker's own `.pp-cpick` dialog) |
 
 **What "best" means**, in priority order: the most pins honoured, the most squares filled, the **fewest
-games** (one game in a letter AND a job counts once, which is the whole point), swaps only when they save a
-game, avoid "Different games" penalties, the most squares filled by **badge games** (a game that advances at
+games** (one game in a letter AND a job counts once, which is the whole point), an unfinished square keeps its game unless swapping it serves a
+higher tier (a pin, a filled square or a saved game), avoid "Different games" penalties, the most squares filled by **badge games** (a game that advances at
 least one uncleared stage), the most stages (a tie-break between badge games), backlog progress, then name order.
 With the hunter's **Priority** badge weight (`Problem.stages_first`) the order after "most squares filled"
 becomes (owner, 2026-10-17): avoid "Different games" penalties, the most squares filled by badge games, fewest
@@ -421,35 +421,41 @@ snapshot slug, `''` for an open square); a square that changed since planning is
 history importer and the hatch appear as notes that link to the run, whose picker asks first.
 
 **Review tools:** Lock (holds a line's squares through re-solves), Not this one (exclude), Other options
-(per square, doubles first; picking one pins it. Opened from a line that holds two squares, the sheet sends the
-line's other square as `partners` (and the line's own game as `current`, left out), its title names both squares,
-and it splits into three tabs that say which square each game takes: "C + Gunslinger" (pinned to the whole line),
-"C only" and "Gunslinger only" (games for the job that cannot take C, pinned to the job), with their counts, an
-empty tab saying so. A "Counts toward your badges" chip (off on every open, hidden when no badges count) narrows
-every tab to games that clear a stage of the hunter's badges (`badge_only`). EVERY game is reachable (owner,
-2026-10-17): the door pages a tab `ALTERNATIVES_PAGE` at a time (`group`, `offset`; `counts`, `more`, `showing`
-back) and the sheet loads the next page as the hunter scrolls (the run picker's Show more). A covering pick is pinned to
-every square of the line, so a locked or swapped line cannot keep its old game on the other square. Every card
-carries its platforms, owner 2026-10-17), must-haves (pins, which beat the platform and source
-filters and are reported with a reason when they cannot fit), Different games (accumulating penalties), and
-opt-in swaps for unfinished squares. A swap is solved on top of the plan, so it never contradicts a line; once
+(per square, below), must-haves (pins, which beat the platform and source filters and are reported with a reason
+when they cannot fit), Different games (accumulating penalties), and opt-in swaps for unfinished squares.
+
+**Other options** lists every other game for one square, doubles first; picking one pins it. Opened from a line that holds two
+squares, the sheet sends the line's other square as `partners` (and the line's own game as `current`, left out),
+its title names both squares, and it splits into three tabs that say which square each game takes: "C +
+Gunslinger" (pinned to the whole line, so a locked or swapped line cannot keep its old game on the other square),
+"C only", and "Gunslinger only" (games for the job that cannot take C, pinned to the job), with their counts, an
+empty tab saying so. A "Counts toward your badges" chip narrows every tab, and its count, to games that clear a
+stage of the hunter's badges (`badge_only`). It is off on every open, and hidden when no badges count or under
+Badges only (where every game already does). EVERY game is reachable (owner, 2026-10-17): the door pages a tab
+`ALTERNATIVES_PAGE` at a time (`group`, `offset`; `counts`, `more`, `showing` back) and the sheet loads the next
+page as the hunter scrolls (the run picker's Show more). Every chip toggle asks with `fallback`, so a tab the chip
+empties lands on the first tab that has games. Every card carries its platforms (owner, 2026-10-17), and the sheet's foot
+offers Leave C open (below).
+
+**Swaps** are opt-in, for unfinished squares. A swap is solved on top of the plan, so it never contradicts a line; once
 accepted, the game's line says what it replaces and offers Undo swap. **One card per suggested game** (owner,
 2026-10-17): the planner suggests per square, so a game that would replace a game in each challenge arrives as two
 swaps, and `_plan_json` merges them into one card that names both replacements with a Both / Only A / Only
 Gunslinger switch. A half left out is DECLINED for that plan (`tweaks.declined`, page-only, never sent), or the
 next re-solve would offer it straight back; Undo swap clears it. Every pin a pick or swap makes goes through
 `pinGame`, which first clears the game's other pins in the same runs (the solver keeps one square pin per game per
-run). Edit answers hides the plan until the
-wizard is submitted again (tweaks reset, must-haves carry over), and after Apply a Plan again button re-plans
+run).
+
+Edit answers hides the plan until the wizard is submitted again (tweaks reset, must-haves carry over), and after Apply a Plan again button re-plans
 the same answers. Every tweak that re-solves rolls back if the request fails, and a tweak made while a request
-is in flight is queued, never dropped. By Letter (the default) the list is grouped Covers both / A-Z only / Job
+is in flight is queued, never dropped. By Letter (the default) the list is grouped Covers both boards / A-Z only / Job
 Coverage only, each in board order (each line carries its square's position on each board it fills, `sort`); By
 Job is described below. The choice is remembered per browser and the games glide to their new places (`flipGrid`).
 
 **Every built plan is autosaved** (owner, 2026-10-16; model `OptimizerDraft`, `services/optimizer_drafts.py`), for
 members and free hunters alike, so coming back never means applying first. One row per hunter keeps what
 REBUILDS the plan, not the plan: the answers and the tweaks in the wire's slugs (must-haves, locks / swaps,
-"not this one", rerolls). **Open my plan** restores both and re-solves, so it reflects the runs as they are now.
+"not this one", rerolls, left-open squares). **Open my plan** restores both and re-solves, so it reflects the runs as they are now.
 Members get a "Pick up where you left off" card (hidden while a plan is on screen, back on Edit answers); a free
 hunter's lives in the allowance banner. A free hunter whose week is in use reopens the SPENT answers, borrowing
 the draft's tweaks only when it is the same plan. **Apply keeps the draft**, minus the applied games' must-haves
@@ -1303,7 +1309,17 @@ stage worth an extra game, so with a broad badge source (where nearly every game
 every double and used one game per square (the 2026-10-17 report). A yes/no per game keeps the doubles and keeps the
 solve linear. Counting each stage once per plan was tried and measured: it turns the stage tier into a coverage
 problem HiGHS could not settle inside the time budget when games share stages. Stage counts only break ties.
-Pinned in `test_challenge_plan_solver.py`.
+Pinned in `test_challenge_plan_solver.py`. The badge tier is skipped when it would equal the fill tier (every game in the
+solve is a badge game, as under Badges only with no non-badge must-have or occupant): the same solve twice.
+
+**An unobtainable must-have is not "outside your filters".** The pool drops unobtainable contracts AFTER the
+filters, so it keeps the ids it dropped (`pool['unobtainable']`) and `_plan_json` counts them as passing. Without
+that, a must-have the hunter named would be labelled as outside filters it met.
+
+**The unobtainable set can lag a staff edit.** `picker.unobtainable_contract_ids()` is cached for an hour and
+never invalidated (an obtainable flag is a rare staff edit, never urgent here), and each cached pool (15m) holds
+its own filtered copy. A newly unobtainable game can be suggested for up to about 75 minutes. `cache.delete(picker.UNOBTAINABLE_CACHE_KEY)`
+refreshes the set for the next pool build; pools already cached keep their copy for up to 15 minutes.
 
 **The optimizer's cached pool must be JSON-safe.** Production's cache serializes to JSON, so an int-keyed dict
 comes back string-keyed; tests use LocMem, which pickles and hides it. The pool is stored as lists of pairs and
@@ -1491,11 +1507,13 @@ prod first.
 | `challenges/models.py` | `Challenge`, `ChallengeSlot`, and every constant and constraint of this app (the two XP-grant guards live on `ContractXPGrant` in `trophies/models.py`) |
 | `challenges/services/challenge_service.py` | **every write**, and every gate |
 | `challenges/services/eligibility.py` | the pools, the hatch count, the importer's date |
-| `challenges/services/picker.py` | the three panels — read-only, decides nothing |
+| `challenges/services/picker.py` | the three panels: read-only, decides nothing. Also `unobtainable_contract_ids()`, the cached set the optimizer never suggests |
 | `challenges/services/plan_solver.py` + `challenges/services/planner.py` | the optimizer's pure solver, and its data (pool, badge stages, plan). See [The optimizer](#the-optimizer) |
+| `challenges/services/allowance.py` | the optimizer's weekly allowance (`OptimizerAllowance`): one free plan a week, members any time |
+| `challenges/services/build_line.py` | the optimizer's first-come line for whole-catalogue pool builds (raw Redis) |
 | `challenges/services/optimizer_drafts.py` | the optimizer's autosaved plan (`OptimizerDraft`): save, forget applied games, what Open my plan reopens |
 | `challenges/optimizer_views.py` + `templates/challenges/optimizer.html` + `static/js/challenge-optimizer.js` | the optimizer page and its JSON doors; partials `_optimizer_run_option.html`, `_optimizer_badge_card(s).html`, and the shared `_type_card_summary.html` / `_type_card_reward.html` |
-| `challenges/services/slot_render.py` | the A-Z and Job Coverage board: squares, discipline shelves, covers |
+| `challenges/services/slot_render.py` | the A-Z and Job Coverage board: squares, discipline shelves, covers. `discipline_sequence` orders the shelves for the board and the optimizer's Job view alike; `discipline_head` gives the Job view the board's own heading (label, slug, icon) |
 | `challenges/services/calendar_fill.py` | the Plat Calendar's fill predicate (shovelware-free platinums, with `in_all` kept as the comparison count), the backfill writer, the reconciling sweep scope, and the sync-path refresh |
 | `challenges/services/calendar_render.py` | the Plat Calendar board: twelve month groups plus the year totals for the detail page, one 365-day board for the hero. Separate from `slot_render` because a day shares no fields with a contract-backed square |
 | `templates/challenges/partials/_calendar_board.html` | the Calendar's detail board: the crest switcher, twelve month panels and the year overview |

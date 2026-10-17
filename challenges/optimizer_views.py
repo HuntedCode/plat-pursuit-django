@@ -334,7 +334,7 @@ class OptimizerView(LoginRequiredMixin, _LinkedProfileRequired, TemplateView):
 
 
 class _OptimizerJsonView(_ChallengeJsonView):
-    """Body parsing and the metered pool, shared by the three POST doors."""
+    """Body parsing and the metered pool, shared by the optimizer's JSON doors except Start."""
 
     def body(self, request):
         try:
