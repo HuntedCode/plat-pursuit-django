@@ -26,6 +26,7 @@ no services and no templates with it; the few lessons worth carrying forward are
 | Share cards, all three types | **built.** Minting one as a Hall of Fame cover was **CUT**; see [The Hall of Fame draws heroes](#the-hall-of-fame-draws-heroes-not-cards) |
 | Tutorials (system intro + one per type) | **built.** See [The tutorials](#the-tutorials) |
 | Beta gate (`CHALLENGES_BETA_MEMBERS_ONLY`) | **built, and on by default** |
+| The Challenge Optimizer (A-Z + Job Coverage together) | **built** (2026-10). See [The optimizer](#the-optimizer) |
 | Beta release audit (chunk 12) | **done.** See [Beta hardening](#beta-hardening) |
 | Badge + holo award | **deferred to a follow-up branch**, post-beta. Completions are recorded from day one so badges backfill |
 
@@ -381,6 +382,188 @@ cannot make.
 Ordering by a detection stamp would not help. Those record when *we noticed*, and a first-run hunter's
 first sync notices a 2019 platinum and last week's within minutes of each other — useless as a proxy for
 exactly the population the importer serves.
+
+---
+
+## The optimizer
+
+The **Challenge Optimizer** (`/my-challenges/optimizer/`, renamed from "planner" before release, owner 2026-10-16)
+plans a hunter's open A-Z and Job Coverage squares **together** into one optimal plan. Its copy is written for
+"your challenges", not two named ones, so a future plannable type slots in. The service modules keep the name
+`planner` (`services/planner.py`, `services/plan_solver.py`): planning is what they compute.
+It is a five-step wizard (which runs, platforms, backlog/new/both, badges, must-haves), then a plan the hunter
+adjusts and applies. The Plat Calendar is left out: it fills itself and has no squares to choose.
+
+| Piece | Where | What it owns |
+|---|---|---|
+| Solver | `services/plan_solver.py` | Pure, no ORM. Lexicographic MILP (`scipy.optimize.milp`), one tier at a time |
+| Data | `services/planner.py` | The cached pool, badge stages, run state, pruning, the plan's shape. Read-only |
+| Doors | `optimizer_views.py` | Page + `plan`, `alternatives`, `search`, `badges`, `start`, `apply` (JSON) |
+| Page | `optimizer.html`, `static/js/challenge-optimizer.js`, `components/challenge-optimizer.css` | Wizard, review, the Other options sheet (the picker's own `.pp-cpick` dialog) |
+
+**What "best" means**, in priority order: the most pins honoured, the most squares filled, the **fewest
+games** (one game in a letter AND a job counts once, which is the whole point), swaps only when they save a
+game, avoid "Different games" penalties, the most uncleared badge stages, backlog progress, then name order.
+With the hunter's **Priority** badge weight (`Problem.stages_first`) the order after "most squares filled"
+becomes: avoid "Different games" penalties, badge stages, fewest games, keep unfinished squares. So a
+stage-clearing game may cost a double (never a filled square), a reroll still finds different games, and an
+unfinished square may be OFFERED a stage-clearing swap (swaps are opt-in).
+Each tier is its own exact solve with the previous optimum fixed, because one big-M objective needs weights
+near 1e10 and HiGHS's default gap would drop the lower tiers.
+
+**Apply goes through `challenge_service.assign`, one line at a time**, so every existing guard still holds
+and a stale plan can only produce a refusal. Each line says what it expects to replace (the slot's own
+snapshot slug, `''` for an open square); a square that changed since planning is skipped, never overwritten.
+**It never places a game that would complete and lock a square** (`acknowledge_lock` is always False). The
+history importer and the hatch appear as notes that link to the run, whose picker asks first.
+
+**Review tools:** Lock (holds a line's squares through re-solves), Not this one (exclude), Other options
+(per square, doubles first; picking one pins it), must-haves (pins, which beat the platform and source
+filters and are reported with a reason when they cannot fit), Different games (accumulating penalties), and
+opt-in swaps for unfinished squares. A swap is solved on top of the plan, so it never contradicts a line; once
+accepted, the game's line says what it replaces and offers Undo swap. Edit answers hides the plan until the
+wizard is submitted again (tweaks reset, must-haves carry over), and after Apply a Plan again button re-plans
+the same answers. Every tweak that re-solves rolls back if the request fails, and a tweak made while a request
+is in flight is queued, never dropped. The list is grouped (Covers both / A-Z only / Job Coverage only), and
+"Covers both boards" can be ordered **by Letter (default) or by Job** (owner, 2026-10-16): each line carries its
+square's position on each board it fills (`sort`). Only that group has a choice (an A-Z-only game has no job, a
+Job-only game no letter), so the switch sits beside its heading, only with two games or more, the games glide to
+their new places (`flipGrid`), and the choice is remembered per browser.
+
+**Every built plan is autosaved** (owner, 2026-10-16; model `OptimizerDraft`, `services/optimizer_drafts.py`), for
+members and free hunters alike, so coming back never means applying first. One row per hunter keeps what
+REBUILDS the plan, not the plan: the answers and the tweaks in the wire's slugs (must-haves, locks / swaps,
+"not this one", rerolls). **Open my plan** restores both and re-solves, so it reflects the runs as they are now.
+Members get a "Pick up where you left off" card (hidden while a plan is on screen, back on Edit answers); a free
+hunter's lives in the allowance banner. A free hunter whose week is in use reopens the SPENT answers, borrowing
+the draft's tweaks only when it is the same plan. **Apply keeps the draft**, minus the applied games' must-haves
+and locks (they are on the board now). The autosave runs after the spend and never fails a plan.
+
+**Doors in:** a "Challenge Optimizer" FEATURE card on My Challenges (when an A-Z or Job Coverage run is active:
+primary edge, the star button `pp-cta--rise`, three ticks, a "New" chip until `views.OPTIMIZER_NEW_UNTIL`, and a
+status line from `optimizer_drafts.door_status`: a saved plan to pick up, or where a free week stands) and a
+"Optimize" button in a run page's owner row (editable A-Z / Job Coverage runs only). The page itself
+never dead-ends: step 1 always shows both types as **My Challenges' own cards** (`MyChallengesView.card_for` +
+the shared `partials/_type_card_summary.html` / `_type_card_reward.html`, so the pages cannot describe a run
+differently), each running one with an "Include" toggle, and a type with no run gets a Start (or Resume, for a
+hidden one) right there. **Start happens in place**: the script posts to `challenge_optimizer_start` (JSON, the
+same `views.start_from_request` rules and write bucket as the form door) and swaps in the server-rendered card
+from the reply (`partials/_optimizer_run_option.html`, the partial the page itself uses). Without JavaScript the
+form posts to the same `challenge_start` door with `return_to=optimizer`, a NAME from
+`views.START_RETURN_PAGES` and never a URL, so it cannot be turned into an open redirect; the beta gate is the
+door's own. A free hunter during the beta with nothing hidden gets no door, only the beta note (both entry
+points need an active run, so they only arrive by URL). Like My Challenges' own Start form, the optimizer's
+does not carry `?preview=`, so the team preview does not survive a Start; carrying it would also make the
+preview refusal block a Resume, which its own comment says it must not, so decide that before changing either.
+
+**Badges count by EDITION, from a union of sources** (owner, 2026-10-16), any mix of:
+
+| Source | What it adds | Platform-scoped? |
+|---|---|---|
+| Badges I've started | live editions with 0 < cleared < gating in `SeriesBadgeStanding.group_progress`, minus editions the hunter holds (the read-model can go stale once held). Per edition: the series-level `progress_bp` is the BEST edition's and hid an unfinished Ultra HD behind a finished Legacy HD | yes |
+| A whole badge type | every live edition of Series, Franchises, Collections, Mega Mixes, Developers, Community or Events | yes |
+| All badges | every live edition | yes |
+| Picked by hand | up to `MAX_PICKED_BADGES` editions from the step's gallery | **no**: a pick is meant, like a must-have |
+
+None on means badges play no part, and a **None** chip says so outright (owner, 2026-10-17): it greys every source,
+the weight and the picker (ticks kept, as "All badges" does; the block is `inert`) and the request carries no source,
+so the server needs no flag. A game that happens to clear a stage can still be chosen; it gets no boost. Saved answers
+with no source reopen as None. Platforms that no edition covers (PSVR alone) do not scope, rather than
+quietly scoping every broad source to nothing. The **weight** is the hunter's: Bonus (default, stages only break
+ties), Priority (above), or **Badges only** (owner, 2026-10-16): the plan is built from badge games alone, so a square no
+badge game fits stays open. Bonus and Priority fill those with any game (badges never restrict them). Only ranks
+as Priority, applies to Other options too, and means nothing with no badge source on (`badges_only`); must-haves
+and a square's own occupant still stay, and a must-have that clears no stage is tagged "outside your filters".
+"Still open" names the squares Only left open (`notes.badge_blocked`: some other game fits them), never one no
+game fits. The weight is not in the pool's cache key or the allowance's "same plan"; it changes ranking.
+
+**The gallery** (`OptimizerBadgesView`) pages medallion cards filtered by `badge_list_service.live_editions`, the
+Browse Gallery's own filter body, lifted out so both filter alike. Cards come from `build_list_cards` (art,
+edition, per-edition progress, two bulk queries) with the medallion state set by the Collection's
+`edition_display_state`. Editions default to step 2's platforms on first open. A card is a STRETCHED toggle
+button (`aria-pressed`) beside the medallion, because the medallion's `<div>`s may not sit inside a label or a
+button.
+
+**Badge stages are a bonus by default, never a rule.** The badge bar (base list at 100%) is not the contract bar
+(platinum or 100%), so a line says "Counts toward Stage N of X". Stages come from the badge engine's own
+evaluation of the selected editions. **The read shape is the caller's intent**, as `badge_orchestrator` asks: a
+broad source ("All badges", a whole type) reads through subqueries (`build_catalog(whole_catalogue=True)`,
+measured ~60x faster at catalogue size); started editions and picks are a handful and inline their ids (faster
+there). Both shapes are pinned to give the same answer. **A broad build takes one of `build_line.SLOTS` site-wide**,
+because the per-hunter build limit does not bound concurrency between hunters and this is the one build whose
+memory grows with the catalogue. **Past the cap a plan request WAITS IN LINE rather than being refused** (owner,
+2026-10-16; `services/build_line.py`): the plan door answers **202 `queued`** with a ticket, a place and an
+estimate, the page says "You're 3rd in line, ready in about 8 seconds" (announced only when it changes) and
+re-asks every 2s with `line_ticket`. A fair first-come line in raw Redis: a ticket may build when fewer are ahead
+of it than there are free slots, so nobody overtakes and two freed slots admit the first two. Each running build
+holds a LEASE that lapses by age (`LEASE_SECONDS`), so a build killed mid-run frees its slot even under load; a
+ticket not re-asked for `HEARTBEAT` seconds drops out. Tickets are bound to the user. **The WHOLE broad build
+runs in the slot** (`build_pool`), not just its badge half, and every broad build takes one even if its selection
+turns out empty. A waiting re-ask is not charged against the build limit (its build was counted when it joined),
+but only for the hunter's OWN ticket on a whole-catalogue question; anything else is charged and a crafted or
+borrowed ticket joins the back. **One ticket buys one build:** admission CLAIMS the ticket by removing it from
+the line, so of parallel re-asks with one ticket only one builds and the rest (`TicketLost`) are charged as
+newcomers. An answer that turns out cached, or a refusal while waiting, takes the ticket out of line. The page
+offers **Stop waiting** (which rolls back the change it abandons, like a failure) and gives up after 3 minutes.
+**Other options does not join the line** (a one-off with nobody to re-ask would stall everyone behind it): it
+answers 429 while the slots are full, which only happens when its cached plan expired, and is not charged a
+build for it (`build_line.has_room` is asked first). If Redis fails the build goes ahead without the line, and a
+lease taken just before the failure is given back rather than left holding a slot. Measured on prod (2026-10-16), a whale's
+whole-catalogue build is about 1.6s of data work (280 editions, 1,241 stage concepts, 8,067 live contracts), so a
+wait is seconds: an in-page line, not a background job. Raise `SLOTS` once its memory has been measured too. The catalogue prefetches concepts as ids only (every reader uses
+`id` and `.games`). The cached pool stores each stage's names once (`stage_names`) and contracts refer to stages
+by key.
+
+**Known simplification:** stage credit is per game, not per plan. Two planned games advancing the same stage
+both count toward it, so on a tie the solver may prefer two games on one stage over two games on two stages.
+
+**The weekly allowance** (owner, 2026-10-16; `services/allowance.py`, model `OptimizerAllowance`): premium is a
+dial, so everyone can optimize and the dial is how often. A free hunter gets **one plan per rolling 7 days**, and a
+plan is ONE SET OF ANSWERS (`PlannerOptions.digest()`, the pool's own key): every tweak, reroll ("Different
+games"), Other options, swap, Apply and Plan again that keeps those answers is free all week, and the page reopens
+it ("Open my plan" restores that plan, with its tweaks when the autosave is the same plan). Changing an answer is a new plan. Members are unlimited (only the
+optimizer's build and solve rate limits). "The same answers" is judged against what still exists: challenges cut
+to the runs active now, badge types to the types with live badges now, on both sides (`allowance.same_plan`,
+mirrored by the script's `answersKey`), so a run finishing mid-week cannot lock a hunter out of their own plan.
+**The spend happens only after the plan is built**: a busy site, a rate limit or an error never costs the week.
+Dates carry the time ("Thu, Oct 23 at 8:12 PM", the hunter's own clock), because the window is rolling. The page says so before anything is spent (a banner), asks before the week's plan is used (a
+`.gl-dialog`), and the server enforces both: an unconfirmed spend answers **409 `needs_confirmation`**, other
+answers in the week **403 `plan_locked`** with the next date; Other options is refused outside the week's plan.
+The spend locks the profile row and re-decides, so two tabs cannot spend twice. One row per hunter, overwritten.
+
+**Team preview doors** (`core.previews`: staff or moderator, nothing real written or spent), for states a team
+account never sees: `?preview=optimizer-free` (an unused free week: banner, the pop-up, then a real plan; the week
+then behaves as spent until reload), `?preview=optimizer-free-used` (a week in use, on the saved plan's answers or
+the wizard's defaults), and `?preview=optimizer-line` (a pretend line from the wizard's Plan it, 3rd to 1st with
+Stop waiting, then the real plan; the real line is never touched). The page carries the door on the plan and Other
+options doors (`preview_qs`). The pretend week lives in the team member's SESSION (`optimizer_preview_week`), never
+an `OptimizerAllowance` row, and restarts on each page load; previews skip the autosave. The line door's tickets are
+`preview-N` only: a real ticket (the real line was full when the pretend one ended) passes through to the real
+line, and the line door uses the team member's real allowance (only the free doors pretend a week). Apply is real in every
+preview: it fills the team member's own runs, as it would for a free hunter.
+
+**Motion (the Google/Apple pass, owner 2026-10-17)** uses the house primitives only (`flipGrid`, `countUp`,
+`animatePanel`, `staggerReveal`, `igniteTab`, `.pp-draw-in`, the `ppRevealIn` settle). A fresh plan is a scene
+change: the wizard folds (180ms, ease-in) and the summary, stats and first five groups settle in; the page stays
+BUSY until that reveal lands, or a second Plan it would start a second solve. A re-solve is not: its lines glide
+to their new places (one `lineFlip`, shared with the Letter/Job sort) and the stats tick from their old values.
+Lock toggles in place. Failures on the review are toasts, and the sticky bar says what the review is doing. Both
+dialogs close on their own exit (`closeDialog`); callbacks queue and run on the real `close` event, a closing
+dialog takes no second tap, and focus after an Other options pick waits for the sheet to be really closed.
+
+**Dates are on the hunter's clock and highlighted** (owner, 2026-10-17): every optimizer date (next free plan, "use
+it until", "saved") renders through `partials/_when.html` as a `.pp-when` `<time>`. The server writes the text in
+the SAVED zone with its abbreviation (`allowance.when_label`); `allowance.display_zone` marks which zone the page
+re-renders it in: the saved one when the hunter ever chose it (or it is anything but the untouched UTC default),
+else `''`, the device's own, because signup does not save a zone and an untouched account reads as UTC. Replies
+carry `next_free_at` beside `next_free_label` for the same reason.
+
+**Length / effort is NOT an input yet** (owner, 2026-10-16): there is not enough community rating data for
+it to rank well. When it is, IGDB time-to-beat plus community hours and difficulty are the obvious signals.
+
+**Cost.** A pool build (every live contract the hunter has not finished, with progress and fits, plus the
+badge evaluation) is cached per (profile, answers) for 15 minutes; re-solves skip it but still re-read run
+state and the hatch counts and take ~1s to solve at full size. Two rate limits: builds 6/min, solves 40/min.
 
 ---
 
@@ -1046,6 +1229,18 @@ agreeing with its flag); `challenges/models.py` Meta is the full set.
 
 ## Gotchas and Pitfalls
 
+**The optimizer's cached pool must be JSON-safe.** Production's cache serializes to JSON, so an int-keyed dict
+comes back string-keyed; tests use LocMem, which pickles and hides it. The pool is stored as lists of pairs and
+rebuilt by `planner._hydrate`, and its key carries `POOL_SCHEMA`: bump it whenever the stored shape changes.
+
+**The pool is ranked in the solver's tier order (stages, then progress), and pruning depends on it.** Pruning
+keeps a few candidates per square in pool order; rank differently and the solver never sees the game it would
+have picked. A job square keeps at least as many games as the run has open squares (a game fits up to six
+jobs), and games already in a run, or square-pinned within it, never use that run's budgets.
+
+**An optimizer Apply line compares against the slot's SNAPSHOT slug**, not the contract's live slug. A staff
+rename leaves the snapshot stale; comparing the live slug would skip that square's swap forever.
+
 **`MAX_OFFSET` ends a picker list, it never clamps one.** Clamping `offset=5024` back to 5000 re-served that
 page with `more: true`, and a scrolling sheet appended it forever. The square and search slices stop at the
 ceiling and `more` is false past it. History needs no ceiling: its keyset never walks past rows to reach a page.
@@ -1221,6 +1416,9 @@ prod first.
 | `challenges/services/challenge_service.py` | **every write**, and every gate |
 | `challenges/services/eligibility.py` | the pools, the hatch count, the importer's date |
 | `challenges/services/picker.py` | the three panels — read-only, decides nothing |
+| `challenges/services/plan_solver.py` + `challenges/services/planner.py` | the optimizer's pure solver, and its data (pool, badge stages, plan). See [The optimizer](#the-optimizer) |
+| `challenges/services/optimizer_drafts.py` | the optimizer's autosaved plan (`OptimizerDraft`): save, forget applied games, what Open my plan reopens |
+| `challenges/optimizer_views.py` + `templates/challenges/optimizer.html` + `static/js/challenge-optimizer.js` | the optimizer page and its JSON doors; partials `_optimizer_run_option.html`, `_optimizer_badge_card(s).html`, and the shared `_type_card_summary.html` / `_type_card_reward.html` |
 | `challenges/services/slot_render.py` | the A-Z and Job Coverage board: squares, discipline shelves, covers |
 | `challenges/services/calendar_fill.py` | the Plat Calendar's fill predicate (shovelware-free platinums, with `in_all` kept as the comparison count), the backfill writer, the reconciling sweep scope, and the sync-path refresh |
 | `challenges/services/calendar_render.py` | the Plat Calendar board: twelve month groups plus the year totals for the detail page, one 365-day board for the hero. Separate from `slot_render` because a day shares no fields with a contract-backed square |

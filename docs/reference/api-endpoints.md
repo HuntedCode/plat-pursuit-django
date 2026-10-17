@@ -304,7 +304,7 @@ signed out is a JSON 401, an unlinked account a JSON 403. Detail in
 | `/community/challenges/<id>/` | `challenge_detail` | GET -- the run's page (public; a hidden run is owner-only) |
 | `/community/challenges/<id>/day/<month>/<day>/` | `challenge_calendar_day` | GET -- a Calendar day's games, an HTML fragment |
 | `/my-challenges/` | `my_challenges` | GET -- login and a linked PSN account |
-| `/my-challenges/start/<type>/` | `challenge_start` | POST (form) -- start or resume; members-only during the beta |
+| `/my-challenges/start/<type>/` | `challenge_start` | POST (form) -- start or resume; members-only during the beta. Optional `return_to=optimizer` (a name from `START_RETURN_PAGES`, never a URL) redirects back to the optimizer |
 | `/my-challenges/<id>/slot/<key>/` | `challenge_slot` | GET -- what fits this square. `?q=`, `?offset=` (paging), `?badge=1`, `?platform=` (repeatable) |
 | `/my-challenges/<id>/search/` | `challenge_search` | GET -- contract-first search. `?q=`, `?offset=`, `?badge=1`, `?platform=` |
 | `/my-challenges/<id>/history/` | `challenge_history` | GET -- the first-run importer's offers. `?q=`, `?cursor=` (paging: a keyset, the reply's `cursor`), `?badge=1`, `?platform=` |
@@ -316,10 +316,20 @@ signed out is a JSON 401, an unlinked account a JSON 403. Detail in
 | `/my-challenges/<id>/opening-seen/` | `challenge_opening_seen` | POST -- the Calendar ceremony's dismissal |
 | `/my-challenges/<id>/card/` | `challenge_card_html` | GET -- share card preview (owner only) |
 | `/my-challenges/<id>/card.png` | `challenge_card_png` | GET -- share card download (owner only) |
+| `/my-challenges/optimizer/` | `challenge_optimizer` | GET -- the Challenge Optimizer page. Team preview doors: `?preview=optimizer-free`, `optimizer-free-used`, `optimizer-line` (carried onto the plan and alternatives doors) |
+| `/my-challenges/optimizer/plan/` | `challenge_optimizer_plan` | POST (JSON body: `types`, `platforms`, `source`, `badge_started`, `badge_all`, `badge_types`, `badge_picks`, `badge_weight` (`bonus` / `priority` / `only`), `tweaks`, and optionally `use_free_plan`, `line_ticket`, `from_wizard`) -- build or re-solve a plan; a built plan is autosaved for Open my plan. Each line carries `sort: {type: board position}`; `notes.badge_blocked` lists the open squares badge-games-only left open. **202 `{queued, ticket, position, eta_seconds}`** while the whole-catalogue build slots are full (re-ask with `line_ticket`; a ticket is bound to the user who got it); 409 `needs_confirmation` / 403 `plan_locked` from the weekly allowance |
+| `/my-challenges/optimizer/alternatives/` | `challenge_optimizer_alternatives` | POST (the plan body + `type`, `key`) -- Other options for one square. Never joins the build line: 429 `{error}` when its pool must be rebuilt while the whole-catalogue slots are full |
+| `/my-challenges/optimizer/search/` | `challenge_optimizer_search` | GET -- must-have search across the active runs. `?q=`, `?type=` (repeatable) |
+| `/my-challenges/optimizer/badges/` | `challenge_optimizer_badges` | GET -- step 4's badge gallery: `{html, more, total, page}`. `?q=`, `?type=`, `?group=` (repeatable), `?page=`. The picker's read bucket |
+| `/my-challenges/optimizer/start/<type>/` | `challenge_optimizer_start` | POST -- start or resume from the optimizer without a reload: `{type, outcome, open, message, html}` (the server-rendered step-1 card). Same rules and write bucket as `challenge_start`; JSON 400 on a refusal, 404 for a type the optimizer does not plan (the Calendar), 429 when rate-limited |
+| `/my-challenges/optimizer/apply/` | `challenge_optimizer_apply` | POST (`lines: [{type, key, contract, replacing}]`) -- one `assign` per line; per-line results, fresh run counts, and step 1's cards re-rendered (`cards: {type: html}`). The applied games leave the autosaved plan's must-haves and locks |
 
 A tripped limit on the picker, write and redeem doors answers **429 with an `error`** the page shows; the Start
 form shows the same message on the page. The share-card doors still answer the HTML 403. The anonymous GETs (browse, Hall of Fame, a Calendar day) are limited by IP and the
-picker, share and write doors by user, all metering HEAD as well as GET where they are GETs.
+picker, share and write doors by user, all metering HEAD as well as GET where they are GETs. The optimizer has
+two budgets of its own: every plan / alternatives call spends `challenges:optimizer-solve` (40/min), and one
+that misses the pool cache must also pass `challenges:optimizer-build` (6/min). Its search shares the picker's
+read bucket and Apply the write bucket.
 
 ### Game Families (Staff Only)
 

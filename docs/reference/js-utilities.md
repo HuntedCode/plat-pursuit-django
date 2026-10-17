@@ -64,6 +64,8 @@ Format timestamps for display.
 | `relative(timestamp)` | string\|Date | string | "5m ago", "2h ago", "3d ago", etc. |
 | `absolute(timestamp, options)` | string\|Date, Intl options | string | Locale-formatted date/time |
 | `countdown(totalSeconds)` | number | string | "HH:MM:SS" format |
+| `when(timestamp, {timeZone, hour24})` | string\|Date, options | string | "Thu, Oct 23 at 8:12 PM EDT", the server `allowance.when_label` shape, in `timeZone` or the device's own zone (an unknown zone falls back to the device's). `''` for a non-date |
+| `localizeWhen(root)` | ParentNode | void | Re-renders every `<time data-pp-when>` (`challenges/partials/_when.html`) in its `data-tz` (empty = the device's) and `data-clock`; keeps the server's text when the date cannot be read. Callers guard on it (`PP.TimeFormatter.localizeWhen &&`), so a cached older utils.js leaves the server text |
 
 ### PlatPursuit.API
 

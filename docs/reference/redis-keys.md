@@ -136,6 +136,23 @@ Incrementally updated via signals, fully rebuilt by `update_leaderboards` cron e
 
 **Files**: none -- all three (`redis_leaderboard_service.py`, `xp_service.py`, and the gamification signals) were deleted in badge cutover 5b.4.
 
+### Challenge Optimizer build line
+
+A fair first-come line for whole-catalogue badge builds ("All badges", a whole type), at most `build_line.SLOTS`
+at once across the site. Raw Redis because the Django cache API has no sorted sets. Nothing here needs a TTL to
+stay correct: every member is cleared by AGE on the next look (`_prune`), so a crashed build or a hunter who
+closed the tab cannot hold anything for long however busy the line is.
+
+| Key Pattern | Type | Purpose |
+|-------------|------|---------|
+| `planner:catalogue-holders` | Sorted set | The builds running now, one lease each, scored by start time. A lease older than `LEASE_SECONDS` (120s) is cleared on the next look, freeing the slot of a build that died mid-run |
+| `planner:catalogue-line` | Sorted set | Waiting tickets scored by ARRIVAL, so rank is place in line |
+| `planner:catalogue-seen` | Sorted set | The same tickets scored by LAST RE-ASK. One not seen for `HEARTBEAT` (20s) drops out of line (the page re-asks every 2s) |
+| `planner:catalogue-owners` | Hash | ticket -> user id, so a ticket only speaks for the hunter it was issued to |
+| `planner:catalogue-build-seconds` | String, 1d TTL | Moving average of recent SUCCESSFUL build times, for the "ready in about N seconds" estimate |
+
+**Files**: `challenges/services/build_line.py`
+
 ---
 
 ## Django Cache Keys
@@ -253,6 +270,22 @@ mistake into a silently wrong "already on this list" flag rather than a loud fai
 `page_key` is internal — `ListGameSearchView` strips it before serializing.
 
 **Files**: `gamelists/services/game_search.py`
+
+### Challenge Optimizer
+
+| Key Pattern | TTL | Purpose |
+|-------------|-----|---------|
+| `planner:pool:v{POOL_SCHEMA}:{profile_id}:{options digest}` | 900s (15m) | One hunter's candidate pool for one set of wizard answers: `{candidates: [[id, progress, fits]], stages: [[id, [[stage key, part, editions]]]], stage_names: {stage key: [series, series name, number, title]}}` |
+
+Per hunter AND per answers, because the pool is the hunter's uncompleted contracts on their platforms with
+their progress and their uncleared badge stages. It does not depend on the runs' state, so filling a square
+never invalidates it. **Stored as lists of pairs** because the production cache serializes to JSON (int dict
+keys would come back as strings); `planner._hydrate` rebuilds it. Bump `POOL_SCHEMA` when the shape changes.
+
+The build line that guards a whole-catalogue pool build lives in raw Redis: see
+[Challenge Optimizer build line](#challenge-optimizer-build-line).
+
+**Files**: `challenges/services/planner.py`
 
 ### Notifications
 
