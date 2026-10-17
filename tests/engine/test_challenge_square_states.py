@@ -350,7 +350,10 @@ def test_one_listener_on_the_board_writes_at_most_once_a_frame():
     assert 'square.getBoundingClientRect()' not in tilt
     # A square still arriving does not tilt (its entrance owns `transform`), and release leaves the position, so
     # the shine fades where it was.
-    assert 'if (square && arriving(square)) { square = null; }' in tilt
+    assert 'if (square && square !== current && arriving(square)) { square = null; }' in tilt
+    # ... and "arriving" means the ENTRANCE ANIMATION only: CSS transitions (the tilt's own) must not count, or every
+    # tilt cancels itself on the next move.
+    assert "return a.playState === 'running' && a.animationName;" in tilt
     release = tilt[tilt.index('function release() {'):tilt.index('function paint() {')]
     assert "removeProperty('--px')" not in release
     boot = js[js.index('function boot(first) {'):]

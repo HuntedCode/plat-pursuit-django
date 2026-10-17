@@ -520,8 +520,13 @@
         if (!board || !canTilt) { return; }
         var current = null, frame = 0, clientX = 0, clientY = 0;
 
+        // THE ENTRANCE ONLY: `getAnimations()` also returns CSS TRANSITIONS, and the tilt itself starts a transform
+        // transition, so counting those made every tilt cancel itself on the next move (a flicker loop, caught in a
+        // real browser). A CSS animation has an `animationName`; a transition has none.
         function arriving(square) {
-            return !!(square.getAnimations && square.getAnimations().some(function (a) { return a.playState === 'running'; }));
+            return !!(square.getAnimations && square.getAnimations().some(function (a) {
+                return a.playState === 'running' && a.animationName;
+            }));
         }
         function release() {
             if (!current) { return; }
@@ -541,7 +546,8 @@
         board.addEventListener('pointermove', function (e) {
             if (e.pointerType && e.pointerType !== 'mouse' && e.pointerType !== 'pen') { return; }
             var square = e.target.closest ? e.target.closest('.pp-csq--done') : null;
-            if (square && arriving(square)) { square = null; }
+            // Asked only when the pointer REACHES a square: a square already tilting is past its entrance.
+            if (square && square !== current && arriving(square)) { square = null; }
             if (square !== current) {
                 release();
                 if (!square) { return; }
