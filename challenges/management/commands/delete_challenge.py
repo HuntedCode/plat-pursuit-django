@@ -18,9 +18,10 @@ paid XP and titles STAY, and owed XP is lost. The job-XP ledger is append-only (
 removed), the titles were earned, and a run's deletion is not the hunter un-earning them. The grants then name a
 square that no longer exists (`source_id` is the slot id), which is the trade `--force` says out loud.
 
-A FINISHED RUN CARRIES ONE MORE CONSEQUENCE: completion titles are counted by the hunter's finished runs of a type,
-so deleting one makes their next finish count as the earlier one (the kept first-finish title moves onto it rather
-than a second-finish title being granted). The report says so; it is part of what `--force` accepts.
+A FINISHED A-Z OR JOB COVERAGE RUN CARRIES ONE MORE CONSEQUENCE: their completion titles go by how many runs of
+the type the hunter has finished (first finish, second finish), so deleting one lowers that count and changes which
+title their next finish earns. The report says so; it is part of what `--force` accepts. (The Calendar has no such
+ordinal titles: `rewards.TYPES_WITHOUT_ORDINAL_TITLES`.)
 
 An unfinished run with nothing earned, the case this exists for, deletes cleanly.
 
@@ -33,7 +34,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from django.db.models import Sum
 
-from challenges.models import CHALLENGE_TYPE_CHOICES, CHALLENGE_TYPE_JOBS, Challenge
+from challenges.models import CHALLENGE_TYPE_CHOICES, Challenge
 from challenges.services import rewards
 from trophies.models import ContractXPGrant, Profile, UserTitle
 
@@ -51,7 +52,7 @@ class Command(BaseCommand):
         parser.add_argument('--type', choices=TYPE_KEYS, dest='run_type', help='The run type, with --user.')
         parser.add_argument('--confirm', action='store_true', help='Actually delete. Without it nothing changes.')
         parser.add_argument('--force', action='store_true',
-                            help='Allow a run that paid job XP or granted a title. They are KEPT.')
+                            help='Allow a run with rewards on it: paid job XP and titles are KEPT, owed job XP is lost.')
 
     def handle(self, *args, run_id=None, user=None, run_type=None, confirm=False, force=False, **options):
         challenge = self._find(run_id, user, run_type)
@@ -84,7 +85,7 @@ class Command(BaseCommand):
 
         logger.warning('delete_challenge: run %s (%s, %s) of profile %s deleted%s', challenge.pk,
                        challenge.challenge_type, challenge.name, challenge.profile_id,
-                       ' with --force (rewards kept)' if force else '')
+                       ' with --force (paid rewards kept, owed XP lost)' if force and self._rewarded(report) else '')
         kept = ''
         if force and self._rewarded(report):
             kept = (' Kept: %d job XP grant(s) worth %d XP and %d title(s); %d owed square(s) lost.'
@@ -135,9 +136,10 @@ class Command(BaseCommand):
             'grants': grants.count(),
             'xp': grants.aggregate(total=Sum('amount'))['total'] or 0,
             'titles': UserTitle.objects.filter(source_type=rewards.TITLE_SOURCE, source_id=challenge.pk).count(),
-            # FINISHED BUT UNCLAIMED job XP: no grant exists yet, so only the square says it is owed. A-Z pays none.
-            'owed': (challenge.slots.filter(is_completed=True, xp_redeemed_at__isnull=True).count()
-                     if challenge.challenge_type == CHALLENGE_TYPE_JOBS else 0),
+            # FINISHED BUT UNCLAIMED job XP: no grant exists yet, so only the square says it is owed. The payout
+            # door's own query (`rewards._owed()`, which the nav pill and the page share), not a copy of its terms:
+            # it is empty for non-jobs runs and skips a square whose job left the catalogue, which can never pay.
+            'owed': rewards.redeemable_slots(challenge).count(),
         }
 
     @staticmethod
@@ -164,6 +166,6 @@ class Command(BaseCommand):
         if report['owed']:
             self.stdout.write('  Owed: %d finished square(s) with job XP not yet claimed (lost if deleted).'
                               % report['owed'])
-        if challenge.is_complete:
-            self.stdout.write('  Finished: deleting it makes the hunter\'s next finish of this type count as this '
-                              'one did, for completion titles.')
+        if challenge.is_complete and challenge.challenge_type not in rewards.TYPES_WITHOUT_ORDINAL_TITLES:
+            self.stdout.write('  Finished: deleting it lowers how many of this type the hunter has finished, which '
+                              'decides the title their next finish earns.')

@@ -167,7 +167,28 @@ def test_a_finished_run_warns_about_later_completion_titles():
     profile = _hunter()
     run = svc.start(profile, CHALLENGE_TYPE_AZ)
     Challenge.objects.filter(pk=run.pk).update(is_complete=True, completed_at=timezone.now())
-    assert "next finish of this type count as this one did" in _run([str(run.pk)])
+    assert 'decides the title their next finish earns' in _run([str(run.pk)])
+
+
+def test_a_finished_calendar_carries_no_title_order_warning():
+    # The Calendar has no first/second-finish titles (`rewards.TYPES_WITHOUT_ORDINAL_TITLES`).
+    from challenges.models import CHALLENGE_TYPE_CALENDAR
+    profile = _hunter()
+    run = Challenge.objects.create(profile=profile, challenge_type=CHALLENGE_TYPE_CALENDAR, name='Plat Calendar',
+                                   total_slots=365, is_complete=True, completed_at=timezone.now())
+    assert 'decides the title' not in _run([str(run.pk)])
+
+
+def test_a_square_whose_job_left_the_catalogue_is_not_counted_as_owed():
+    # It can never be paid, so it is no reason to need --force (the payout door's own rule).
+    run = svc.start(_hunter(), CHALLENGE_TYPE_JOBS)
+    slot = run.slots.first()
+    ChallengeSlot.objects.filter(pk=slot.pk).update(
+        is_completed=True, contract_name='Astro Bot', contract_slug='astro-bot',
+        completed_at=timezone.now(), completed_via=COMPLETED_VIA_LIVE)
+    Job.objects.filter(slug=slot.key).delete()
+    _run([str(run.pk)], confirm=True)
+    assert not Challenge.objects.filter(pk=run.pk).exists()
 
 
 def test_a_reward_landing_between_the_report_and_the_delete_stops_it(monkeypatch):
