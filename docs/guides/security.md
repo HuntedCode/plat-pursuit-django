@@ -99,7 +99,8 @@ All user-facing POST/DELETE endpoints should have rate limits. Current coverage:
 | Reviews | create, vote, report, replies | 10/m, 30/m, 5/h, 10/m |
 | Game flags | submit | 5/h |
 | Roadmap editor | step CRUD, image upload | 30/m, 10/m |
-| Challenges | create (all types) | 30/h |
+| Challenges | writes (start, assign, clear, hide, opening-seen), picker reads, XP redeems | 30/m, 90/m, 60/m |
+| Challenge Optimizer | plan, Other options, pool build | 40/m, 120/m, 6/m |
 | Device tokens | register, delete | 10/m |
 | Titles | equip | 15/m |
 | Fundraiser | donate | 5/m |

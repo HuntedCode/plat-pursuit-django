@@ -275,7 +275,8 @@ mistake into a silently wrong "already on this list" flag rather than a loud fai
 
 | Key Pattern | TTL | Purpose |
 |-------------|-----|---------|
-| `planner:pool:v{POOL_SCHEMA}:{profile_id}:{options digest}` | 900s (15m) | One hunter's candidate pool for one set of wizard answers: `{candidates: [[id, progress, fits]], stages: [[id, [[stage key, part, editions]]]], stage_names: {stage key: [series, series name, number, title]}}` |
+| `planner:pool:v{POOL_SCHEMA}:{profile_id}:{options digest}` | 900s (15m) | One hunter's candidate pool for one set of wizard answers: `{candidates: [[id, progress, fits]], stages: [[id, [[stage key, part, editions]]]], stage_names: {stage key: [series, series name, number, title]}, unobtainable: [id]}` (`unobtainable`: the ids that passed the filters but were dropped, so a must-have among them is not called "outside your filters") |
+| `challenges:unobtainable-contracts:v1` | 3600s (1h) | Site-wide JSON list of live contract ids no obtainable game can finish (`picker.unobtainable_contract_ids()`). The optimizer never suggests one. Never invalidated: a staff `is_obtainable` edit shows within about 75 minutes (the set's hour plus a cached pool's 15m) |
 
 Per hunter AND per answers, because the pool is the hunter's uncompleted contracts on their platforms with
 their progress and their uncleared badge stages. It does not depend on the runs' state, so filling a square
@@ -285,7 +286,7 @@ keys would come back as strings); `planner._hydrate` rebuilds it. Bump `POOL_SCH
 The build line that guards a whole-catalogue pool build lives in raw Redis: see
 [Challenge Optimizer build line](#challenge-optimizer-build-line).
 
-**Files**: `challenges/services/planner.py`
+**Files**: `challenges/services/planner.py`, `challenges/services/picker.py`
 
 ### Notifications
 

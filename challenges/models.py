@@ -939,8 +939,8 @@ class OptimizerDraft(models.Model):
 
     AUTOSAVED: every plan the plan door builds overwrites it, for members and free hunters alike, so nothing has
     to be applied (or saved by hand) to come back to it later or on another device. What is kept is what REBUILDS
-    the plan: the answers and the review step's tweaks (must-haves, locks, swaps, "not this one", rerolls). The
-    plan itself is never stored; reopening re-solves, so it reflects the runs as they are now.
+    the plan: the answers and the review step's tweaks (must-haves, locks, swaps, "not this one", rerolls, left-open
+    squares). The plan itself is never stored; reopening re-solves, so it reflects the runs as they are now.
 
     ONE ROW PER HUNTER: only the latest plan is ever reopened. `answers` is `allowance.answers_of`'s shape and
     `tweaks` the plan door's own tweak shape, in slugs (`services.optimizer_drafts`), so the page restores both

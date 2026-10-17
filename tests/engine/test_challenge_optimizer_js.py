@@ -662,6 +662,11 @@ def test_a_resort_glides_and_keeps_the_switchs_focus():
     assert "key: function (el) { var f = el.querySelector('[data-focus]');" in change
 
 
+def test_the_view_switch_sits_on_the_right():
+    rule = CSS[CSS.index('.pp-cplan__sortbar {'):]
+    assert 'justify-content: flex-end;' in rule[:rule.index('}')]
+
+
 def test_the_sort_chips_say_letter_and_job():
     html = open('templates/challenges/optimizer.html', encoding='utf-8').read()
     bar = html[html.index('data-cplan-sortbar'):html.index('<div data-cplan-sections>')]

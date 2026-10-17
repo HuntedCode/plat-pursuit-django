@@ -419,7 +419,8 @@ html:has([data-cplan]) #back-to-top {
 .pp-cplan__statusrow .pp-cplan__status { flex: 1 1 16rem; }
 
 /* ── the review's Letter / Job view switch, above the plan ── */
-.pp-cplan__sortbar { display: flex; align-items: center; gap: 8px; margin: 4px 0 14px; }
+/* Right-aligned, where the site's view switches sit (owner, 2026-10-17). */
+.pp-cplan__sortbar { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin: 4px 0 14px; }
 .pp-cplan__sort-label { font-size: 0.75rem; color: var(--pp-text-mute); }
 
 /* ── the free banner's actions: Open my plan and the members door side by side, under the text on a
