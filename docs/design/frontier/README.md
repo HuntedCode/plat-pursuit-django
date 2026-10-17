@@ -59,7 +59,9 @@ A Pursuer-0 account grinds the main road to endgame on base progress alone. Trop
   with depicted rooms or physical space. This is the constraint that drifts most often (it was
   re-stated three times in the source conversation), so check every proposal against it before
   costing it. **Atmosphere lives in copy and state, not pixels:** what the page says, what
-  changed since last time, and what the character is currently doing.
+  changed since last time, and what the character is currently doing. The character itself
+  does have a drawn figure (the [Pursuer Avatar](../pursuer-avatar/README.md), [D63](decisions.md#d63-the-pursuer-avatar-is-the-frontier-character)),
+  but it is a portrait, not a world: no rooms, maps or tiles follow from it.
 - **Nothing in the past is broken.** No repair, restoration, rescue, or damaged-goods mechanic.
   Two separate proposals died on this (decay as premise, restoration as crafting). Nostalgia
   requires the past to be good; the only thing missing is that the player doesn't have it yet.
@@ -102,3 +104,5 @@ A Pursuer-0 account grinds the main road to endgame on base progress alone. Trop
 - [Gamification Architecture](../../architecture/gamification.md): what actually shipped.
 - [Visual Identity](../visual-identity.md): the six adjectives. The game surface gets more
   latitude than the site (see vision.md), but it still has to feel like ours.
+- [Pursuer Avatar](../pursuer-avatar/README.md): the code-drawn character this game's Pursuer
+  wears, designed on the site side ([D63](decisions.md#d63-the-pursuer-avatar-is-the-frontier-character)).

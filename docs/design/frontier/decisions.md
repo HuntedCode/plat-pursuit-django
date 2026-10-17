@@ -363,6 +363,13 @@ shift flavour text**, not in the modifiers.
 **Numbers:** 4 to 8 concurrent shifts, 12 to 20 companions at launch, so a maxed player fields
 **8 of 20**. A bench, not a lineup. Early the scarce thing is **workers**; later it is **slots**.
 
+### D63. The Pursuer avatar is the Frontier character
+Decided 2026-10-17. The code-drawn avatar in [Pursuer Avatar](../pursuer-avatar/README.md) is this game's character: one
+character, built on the site and carried into the Frontier. It is a **figure, not a world**. It appears
+as a portrait and status figure (the return screen, the status line, what it is wearing), never walking
+through depicted space, so the menu-game rule in the [README](README.md) stands. Whether equipped gear
+is drawn on the figure is open; see the avatar doc's open questions.
+
 ---
 
 ## Rejected

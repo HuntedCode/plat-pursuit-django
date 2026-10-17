@@ -72,7 +72,7 @@ The identity deep-dive page. The most data-rich gamification surface in Phase 1.
 
 Structure:
 
-- **Hero**: framed avatar (basic frame for v1; customization is post-v1) + Pursuer Name + Pursuer Level + active title + total badges earned
+- **Hero**: framed avatar (basic frame for v1; customization is post-v1; the 2026-10 direction for that customization is the [Pursuer Avatar](pursuer-avatar/README.md)) + Pursuer Name + Pursuer Level + active title + total badges earned
 - **Job grid**: all jobs sorted by level (highest first), with level + XP progress bar + most recent stage that contributed
 - **Job category radar**: derived radar chart visualization
 - **Active Badges**: badges the user is closest to upgrading a tier on (with progress and "1 stage from Silver" cues)

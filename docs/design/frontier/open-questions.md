@@ -82,6 +82,8 @@ Probably yes, via the Hall tier, but whether that is surfaced as a number is und
 ### What is the Pursuer's verb?
 The character now *does* something, which was the original gap. But the fiction of what they
 are (explorer, collector, archivist, curator) is not settled, and it determines a lot of copy.
+The [Pursuer Avatar](../pursuer-avatar/README.md) mockups dress the character as an explorer
+(helmet, suit, pack), which leans one way without deciding it.
 
 ---
 
@@ -96,6 +98,10 @@ Decided already: **packs are never purchasable with money.** Everything else is 
 ### Does the game layer produce anything visible on the main site?
 Profile integration, showcases, the Career page. A village nobody outside the game can see is
 a weaker "place worth visiting" than one linked from a profile.
+
+**Partial answer (2026-10-17):** the [Pursuer Avatar](../pursuer-avatar/README.md) is the same
+character on the site and in the game ([D63](decisions.md#d63-the-pursuer-avatar-is-the-frontier-character)),
+so it can be the visible thread. Whether gear found here is drawn on it is still open.
 
 ---
 
