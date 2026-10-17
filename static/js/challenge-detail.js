@@ -246,9 +246,15 @@
             }
             // THE SQUARES THAT CHANGED lose their pips. Server markup again, from the same partial the page
             // rendered, so a swapped square cannot look different from one that was there on load.
+            // A CLAIM IS NOT A COMPLETION: the board counts as arrived from here, and a square that only just
+            // completed loses its `pp-csq--fresh` mark, so the re-rendered foil does not replay its sweep.
+            board.classList.add('is-settled');
             (data.squares || []).forEach(function (square) {
                 var cell = board.querySelector('[data-key="' + cssEscape(square.key) + '"]');
-                if (cell && square.html) { cell.innerHTML = square.html; }
+                if (cell && square.html) {
+                    cell.classList.remove('pp-csq--fresh');
+                    cell.innerHTML = square.html;
+                }
             });
             // AND THE NAV MARKER, which is markup the claim changed and the reply does NOT carry. The server
             // clears its cached answer, but the navbar and the tab bar were rendered before the claim and this
@@ -504,6 +510,24 @@
         // lives on `document`, so binding it twice would send two requests per press -- one of which would
         // then be refused as already-redeemed, turning a successful claim into an error toast.
         if (first) { wireRewards(); }
+
+        // THE BOARD HAS ARRIVED once its entrance is over (the last square lands by ~0.9s and its foil's sweep
+        // ends by ~1.8s): from then on a finished square's sweep plays only when it has JUST completed
+        // (`pp-csq--fresh`), never again when a claim re-renders it. Every viewer, so a visitor's page settles too.
+        // COUNTED FROM WHEN THE PAGE IS SEEN: a tab opened in the background runs its timers but not its CSS
+        // animations, so a clock started at load would settle the board before anyone saw it arrive.
+        var settling = document.querySelector('.pp-csq-board');
+        var settleSoon = function () { window.setTimeout(function () { settling.classList.add('is-settled'); }, 2500); };
+        if (first && settling) {
+            if (!document.hidden) { settleSoon(); } else {
+                var onShow = function () {
+                    if (document.hidden) { return; }
+                    document.removeEventListener('visibilitychange', onShow);
+                    settleSoon();
+                };
+                document.addEventListener('visibilitychange', onShow);
+            }
+        }
 
         var dialog = document.getElementById('cpick');
         // THE BOARD, not a grid. A jobs run draws one grid per discipline, so `querySelector` on
@@ -1893,6 +1917,12 @@
                 square.classList.toggle('pp-csq--filled', slot.is_filled && !slot.is_completed);
                 square.classList.toggle('pp-csq--empty', !slot.is_filled);
                 square.classList.toggle('pp-csq--done', slot.is_completed);
+                // A SQUARE THAT JUST COMPLETED gets its one sweep, the "stamp of completion"; the mark comes off
+                // once it has played, so a later claim re-rendering this square does not replay it.
+                if (slot.is_completed) {
+                    square.classList.add('pp-csq--fresh');
+                    window.setTimeout(function () { square.classList.remove('pp-csq--fresh'); }, 2500);
+                }
                 // A COMPLETED SQUARE STOPS BEING PRESSABLE. It stays a `<button>` rather than becoming the
                 // `<div>` a fresh render would produce -- swapping the tag would mean rebuilding the element
                 // and losing focus with it -- so it is disabled and loses its open hook instead. `:disabled`

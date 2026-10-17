@@ -435,6 +435,130 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
 }
 .pp-csq__check svg { width: 11px; height: 11px; }
 
+/* ── THE FOIL: a finished square's platinum finish (owner, 2026-10-17) ─────────────────────────────────────
+ *
+ * WHY: a finished square used to differ from an in-progress one by a green border, a 1px ring and an 18px
+ * check, which a hunter reported (fairly) as hard to read across a full grid. The trading-card idiom already
+ * has the answer, `visual-identity.md`'s holo/foil treatment: a gleam, "modern execution, no skeumorphism".
+ *
+ * IT HAS TO READ AT A GLANCE, and the first cut did not: an `overlay` wash at 10-26% barely changes DARK art
+ * (overlay darkens darks and lightens lights, so a near-black cover shows nothing), and most covers are dark.
+ * Measured by screenshot, the finished and in-progress squares were indistinguishable but for the border. So:
+ *
+ * - a PRISMATIC WASH (platinum, violet, rose, mint) in diagonal bands on `screen`, which can only LIGHTEN, so it
+ *   shows on dark art and light art alike, over a fine diagonal grain;
+ * - a PLATINUM RING inside the square's edge (a masked conic gradient), which reads as foil even at thumbnail
+ *   size, where the wash is a few pixels of colour;
+ * - ABOVE THE SCRIM (`z-index: 1`) and below the name (`z-index: 2`), so it covers the whole square instead of
+ *   only the art the scrim leaves bright. The name keeps its contrast: `screen` at these strengths lifts the
+ *   scrim's near-black to a dark tint, and white bold text over a dark tint stays well past AA.
+ *
+ * STILL BY DEFAULT, which is the restraint half. Light only MOVES when something happened: once as the board
+ * arrives (staggered off the square's own `--rev`, after its entrance) and once when a square completes in
+ * place. NOT on hover (owner, 2026-10-17): a finished square is not interactive, and the house keeps hover
+ * responses off squares that do nothing (`visual-identity.md` names "sparkles on hover states" an
+ * anti-pattern). A run page is 25 or 26 of these, so nothing loops and only `transform` animates.
+ *
+ * COLOUR: the brand's own platinum (`--pp-metal-platinum`, #8fd2ea) as the dominant hue; the prism around it is
+ * light, not brand colour, so it is raw rgba, as the house's other sheens are (`.pp-chero__title::after`,
+ * `.claim-banner::after`). Nothing here is mixed inside a keyframe (lightningcss drops those frames). */
+.pp-csq__foil {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    overflow: hidden;
+    border-radius: inherit;
+    pointer-events: none;
+    background:
+        repeating-linear-gradient(115deg, rgba(255, 255, 255, 0.07) 0 1px, transparent 1px 3px),
+        linear-gradient(120deg,
+            rgba(143, 210, 234, 0) 0%,
+            rgba(143, 210, 234, 0.34) 16%,
+            rgba(196, 172, 255, 0.28) 34%,
+            rgba(255, 186, 228, 0.22) 50%,
+            rgba(168, 255, 222, 0.26) 66%,
+            rgba(143, 210, 234, 0.34) 84%,
+            rgba(143, 210, 234, 0) 100%);
+    mix-blend-mode: screen;
+}
+/* THE RING: a conic platinum gradient masked down to a 2px band just inside the edge. */
+.pp-csq__foil::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    padding: 2px;
+    border-radius: inherit;
+    background: conic-gradient(from 210deg, #eaf8ff, #8fd2ea, #c7b6ff, #ffffff, #9fe6d6, #8fd2ea, #eaf8ff);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+}
+/* The square's own radius, so the ring follows its corners (the foil inherits it from here). */
+/* THE JOB LINE ON A FINISHED SQUARE is lifted toward white: the foil's `screen` brightens the scrim behind it, and
+   the house 42% discipline tint at 12px would then fall under AA over a light cover. The white name is fine. */
+.pp-csq--done .pp-csq__job { color: color-mix(in oklab, var(--disc, var(--pp-primary)) 24%, #fff); }
+.pp-csq--done { isolation: isolate; }
+.pp-csq--done .pp-csq__foil { border-radius: 10px; }
+/* Over the no-art field there is nothing to screen against but the dark field: the same finish, a touch softer. */
+.pp-csq__noart + .pp-csq__foil { opacity: 0.8; }
+.pp-csq__gleam {
+    position: absolute;
+    inset: -10% -40%;
+    background: linear-gradient(115deg, transparent 42%, rgba(255, 255, 255, 0.5) 50%, transparent 58%);
+    transform: translateX(-110%);
+}
+@media (prefers-reduced-motion: no-preference) {
+    /* ONCE, AFTER THE SQUARE HAS LANDED: its own entrance is `--rev` x 35ms (capped at 12), 0.42s long. Only
+       while the board is ARRIVING, or on a square that has JUST completed (`pp-csq--fresh`): a claim
+       re-renders every finished square it pays from this partial, and without the gate Claim all would replay
+       up to 25 sweeps under its own ceremony. `challenge-detail.js` sets `is-settled` once the entrance is
+       over; without the script the board is never settled, which is the harmless direction (one sweep). */
+    .pp-csq-board:not(.is-settled) .pp-csq__gleam,
+    .pp-csq--fresh .pp-csq__gleam {
+        animation: ppCsqGleam 0.9s cubic-bezier(0.3, 0, 0.5, 1) backwards;
+        animation-delay: calc(0.5s + min(var(--rev, 0), 12) * 0.035s);
+    }
+}
+/* Parked off the left, crosses once, parks off the right; the 0%/16% hold is the anticipation beat, so the
+   light reads as catching the surface rather than sliding about. */
+@keyframes ppCsqGleam {
+    0%, 16% { transform: translateX(-110%); }
+    100%    { transform: translateX(110%); }
+}
+
+/* ── IN PROGRESS: the state tag in the check's corner ── */
+.pp-csq__tag {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    z-index: 3;
+    height: 18px;
+    min-width: 18px;
+    padding: 0 3px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    line-height: 1;
+    color: color-mix(in oklab, var(--pp-primary) 70%, #fff);
+    background: color-mix(in oklab, var(--pp-bg-0) 88%, #000);
+    border: 1px solid color-mix(in oklab, var(--pp-primary) 45%, transparent);
+    box-shadow: 0 2px 8px -2px rgba(0, 0, 0, 0.6);
+}
+.pp-csq__tag svg { width: 11px; height: 11px; flex: none; }
+.pp-csq__tag-lbl { display: none; }
+/* THE WORDS FROM `xl:`, where a square is wide enough to hold them clear of the key chip: at `lg:` (~131px)
+   they came within 2px of a job icon, and the chip's own 62% cap (for a deleted job's long name) would run
+   into them. Where they show, the chip yields the room. */
+@media (min-width: 1280px) {
+    .pp-csq__tag { padding: 0 7px 0 4px; }
+    .pp-csq__tag-lbl { display: inline; }
+    .pp-csq--filled .pp-csq__key { max-width: calc(100% - 112px); }
+}
+
 /* THE KEY, centred, on an empty square: the letter, or the job's icon, set large. It is better than a
    `+` for the reason the whole grid is a grid -- an empty square that says `A` is answering the
    question the hunter is scanning for, and a `+` answers a different one.
