@@ -557,3 +557,46 @@ def key_atoms(challenge):
     if challenge.challenge_type == CHALLENGE_TYPE_AZ:
         return {}
     return {job.slug: job_atom(job) for job in Job.objects.all()}
+
+
+#: The team preview's board (`views.PREVIEW_SLOT_STATES`): square N takes state N mod 3, so every row of every
+#: layout mixes all three side by side, which is the comparison the preview exists for.
+PREVIEW_STATE_CYCLE = ('done', 'progress', 'empty')
+
+
+def preview_state_groups(groups):
+    """`groups` (from `slot_groups`) redrawn as a fixed mix of finished, in-progress and empty squares, for the
+    team's `?preview=challenge-states` door: a fresh dev database has almost nothing finished to look at.
+
+    WRITES NOTHING and keeps every key the template reads. A square the mix fills but the run left empty borrows
+    a real catalogue cover (`_sample_covers`, ONE bounded query); a square the run filled keeps its own. Shelf
+    counts are recomputed from what the preview shows, and no square carries unclaimed XP (that is a real reward
+    pip, and a pretend one would point at a reward panel with no such row)."""
+    cards = [card for group in groups for card in group['cards']]
+    needing = sum(1 for card in cards
+                  if PREVIEW_STATE_CYCLE[card['index'] % 3] != 'empty' and not card['is_filled'])
+    samples = iter(_sample_covers(needing))
+    for card in cards:
+        state = PREVIEW_STATE_CYCLE[card['index'] % 3]
+        if state == 'empty':
+            card.update(is_filled=False, is_completed=False, cover=None, game_name='', xp_pending=False)
+            continue
+        if not card['is_filled']:
+            game = next(samples, None)
+            card['cover'] = game
+            card['game_name'] = (game.concept.unified_title if game and game.concept_id else None) or (
+                game.title_name if game else 'A game')
+        card.update(is_filled=True, is_completed=state == 'done', xp_pending=False)
+    for group in groups:
+        group['done'] = sum(1 for card in group['cards'] if card['is_completed'])
+    return groups
+
+
+def _sample_covers(count):
+    """Up to `count` real games to dress the preview's borrowed squares: the newest, with the cover chain's
+    joins (and without the ~30KB IGDB blob it never reads, per the image conventions)."""
+    if count <= 0:
+        return []
+    from trophies.models import Game
+    return list(Game.objects.select_related('concept', 'concept__igdb_match')
+                .defer('concept__igdb_match__raw_response').order_by('-pk')[:count])
