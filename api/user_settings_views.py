@@ -13,12 +13,14 @@ from rest_framework.authentication import SessionAuthentication
 
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
+from django.utils.decorators import method_decorator
+from django_ratelimit.decorators import ratelimit
 
 from challenges.services import tutorials as challenge_tutorials
 from core import whats_new
 from trophies.services import new_contracts_modal
 from trophies.services.profile_stats_service import update_profile_trophy_counts
-from users.services.timezone_service import set_user_timezone
+from users.services.timezone_service import adopt_detected_timezone, set_user_timezone
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +62,26 @@ class UpdateTimezoneAPIView(APIView):
             'recaps_reset': recaps_reset,
             'changed': changed,
         })
+
+
+class DetectTimezoneAPIView(APIView):
+    """
+    POST /api/v1/user/timezone/detect/
+    Body: {"timezone": "America/New_York"}
+
+    The browser's zone for an account still on the untouched UTC default (owner, 2026-10-17): sent once,
+    silently, by the base page's script for those accounts only. `adopt_detected_timezone` makes the
+    decision and the write in one conditional UPDATE, so a zone the hunter chose is never overwritten and
+    nothing is ever stamped as confirmed. Answers 200 either way (`adopted` says which), because the script
+    has nothing to show a hunter and only wants to know it may stop asking.
+    """
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [SessionAuthentication]
+
+    @method_decorator(ratelimit(key='user', rate='10/m', method='POST', block=True))
+    def post(self, request):
+        adopted = adopt_detected_timezone(request.user, (request.data.get('timezone') or '').strip())
+        return Response({'adopted': adopted, 'timezone': request.user.user_timezone})
 
 
 class UpdateQuickSettingsAPIView(APIView):

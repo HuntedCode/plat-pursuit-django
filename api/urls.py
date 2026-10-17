@@ -32,7 +32,7 @@ from .game_picker_views import GameBackgroundSearchView, ConceptBannerImagesView
 from .subscription_admin_views import SubscriptionAdminActionView, SubscriptionAdminUserDetailView
 from .fundraiser_views import CreateDonationView, ClaimBadgeView, UpdateClaimStatusView
 from .title_views import EquipTitleAPIView
-from .user_settings_views import UpdateTimezoneAPIView, UpdateQuickSettingsAPIView
+from .user_settings_views import DetectTimezoneAPIView, UpdateTimezoneAPIView, UpdateQuickSettingsAPIView
 from .game_player_views import GamePlayersAPIView
 from .game_flag_views import GameFlagView, GameFlagVersionsView
 from .rating_views import GroupRatingView, WizardQueueView, TrophyListView, BlurbReportView
@@ -169,6 +169,7 @@ urlpatterns = [
 
     # User settings endpoints
     path('user/timezone/', UpdateTimezoneAPIView.as_view(), name='user-timezone-update'),
+    path('user/timezone/detect/', DetectTimezoneAPIView.as_view(), name='user-timezone-detect'),
     path('user/quick-settings/', UpdateQuickSettingsAPIView.as_view(), name='user-quick-settings'),
 
     # Profile Card endpoints
