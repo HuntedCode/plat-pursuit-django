@@ -909,3 +909,50 @@ class CalendarDay(models.Model):
 
     def __str__(self):
         return '%02d-%02d' % (self.month, self.day)
+
+
+class OptimizerAllowance(models.Model):
+    """A free hunter's ONE optimized plan a week (owner, 2026-10-16): which set of answers it was spent on, and when.
+
+    PREMIUM IS A DIAL, NOT A DOOR, and this is the dial: everyone can optimize; a free hunter gets one plan (one
+    SET OF ANSWERS) per rolling seven days, members as many as they like. Inside that week everything that keeps
+    the answers is free: every tweak and reroll, Apply, Plan again, coming back later (the answers are kept here so
+    the page can reopen the plan). Changing an answer is a new plan.
+
+    ONE ROW PER HUNTER, overwritten on each spend: only the latest use decides anything, so history would be a
+    table nothing reads. Members never get a row. `answers` is the wizard's answers in the plan door's own body
+    shape, so the page can restore them and re-post them unchanged; `digest` is `PlannerOptions.digest()`, the
+    same key the pool cache uses, so "the same plan" means exactly what it means everywhere else.
+    """
+
+    profile = models.OneToOneField(Profile, on_delete=models.CASCADE, related_name='optimizer_allowance')
+    used_at = models.DateTimeField()
+    digest = models.CharField(max_length=32)
+    answers = models.JSONField(default=dict)
+
+    def __str__(self):
+        return f'{self.profile_id} @ {self.used_at:%Y-%m-%d}'
+
+
+class OptimizerDraft(models.Model):
+    """A hunter's latest Challenge Optimizer plan, so "Open my plan" can bring it back (owner, 2026-10-16).
+
+    AUTOSAVED: every plan the plan door builds overwrites it, for members and free hunters alike, so nothing has
+    to be applied (or saved by hand) to come back to it later or on another device. What is kept is what REBUILDS
+    the plan: the answers and the review step's tweaks (must-haves, locks, swaps, "not this one", rerolls). The
+    plan itself is never stored; reopening re-solves, so it reflects the runs as they are now.
+
+    ONE ROW PER HUNTER: only the latest plan is ever reopened. `answers` is `allowance.answers_of`'s shape and
+    `tweaks` the plan door's own tweak shape, in slugs (`services.optimizer_drafts`), so the page restores both
+    and posts them back unchanged. Applying keeps the row (owner's choice): the applied games leave its must-haves
+    and locks, since they are on the board now. No Concept relation: contracts are named by slug, and a slug that
+    stops resolving is dropped on read.
+    """
+
+    profile = models.OneToOneField(Profile, on_delete=models.CASCADE, related_name='optimizer_draft')
+    answers = models.JSONField(default=dict)
+    tweaks = models.JSONField(default=dict)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f'{self.profile_id} @ {self.updated_at:%Y-%m-%d %H:%M}'
