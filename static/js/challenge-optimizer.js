@@ -32,7 +32,8 @@
         no_square: "It doesn't fit an open square.",
         in_run: 'It is already in the run it fits.',
         conflict: 'Other picks took the squares it fits.',
-        square_closed: "That square isn't open any more."
+        square_closed: "That square isn't open any more.",
+        left_open: "You're leaving the square it fits open."
     };
     var AVAILABILITY_LABELS = { delisted: 'Delisted', unobtainable: 'Unobtainable' };
     //: Mirrors the server's ceiling on "Different games" (`optimizer_views.MAX_EXCLUDED`).
@@ -168,7 +169,8 @@
          *  re-plan (the Letter/Job sort) rebuilds every card and must not quietly reset an "Only A" to Both; a
          *  fresh plan starts every card on Both again. */
         function freshTweaks() {
-            return { squarePins: {}, excluded: new Set(), penalized: new Set(), declined: new Set(), choices: {} };
+            return { squarePins: {}, excluded: new Set(), penalized: new Set(), leftOpen: new Set(),
+                     declined: new Set(), choices: {} };
         }
 
         // ── answers ──────────────────────────────────────────────────────────────────────────────
@@ -214,7 +216,11 @@
                         return { type: parts[0], key: parts[1], contract: tweaks.squarePins[sq] };
                     }),
                     excluded: Array.from(tweaks.excluded),
-                    penalized: Array.from(tweaks.penalized)
+                    penalized: Array.from(tweaks.penalized),
+                    left_open: Array.from(tweaks.leftOpen).map(function (sq) {
+                        var parts = sq.split('|');
+                        return { type: parts[0], key: parts[1] };
+                    })
                 }
             };
         }
@@ -713,7 +719,7 @@
         function snapshot() {
             return { pins: pins.slice(), squarePins: Object.assign({}, tweaks.squarePins),
                      excluded: new Set(tweaks.excluded), penalized: new Set(tweaks.penalized),
-                     declined: new Set(tweaks.declined) };
+                     leftOpen: new Set(tweaks.leftOpen), declined: new Set(tweaks.declined) };
         }
 
         function restore(s) {
@@ -721,6 +727,7 @@
             tweaks.squarePins = s.squarePins;
             tweaks.excluded = s.excluded;
             tweaks.penalized = s.penalized;
+            tweaks.leftOpen = s.leftOpen;
             tweaks.declined = s.declined;
             renderPinned();
         }
@@ -734,6 +741,13 @@
                 if (tweaks.squarePins[k] === slug && runs.indexOf(k.split('|')[0]) >= 0) { delete tweaks.squarePins[k]; }
             });
             squares.forEach(function (s) { tweaks.squarePins[sqKey(s)] = slug; });
+        }
+
+        /** LEAVE A SQUARE OPEN (owner, 2026-10-17): the hunter will fill it themselves, so the plan stops filling it
+         *  and Apply never touches it. Beats a lock on that square, which is dropped with it. */
+        function leaveOpen(sq) {
+            tweaks.leftOpen.add(sqKey(sq));
+            delete tweaks.squarePins[sqKey(sq)];
         }
 
         /** Apply a tweak and re-solve; the tweak is rolled back if the re-solve fails. */
@@ -856,8 +870,9 @@
             renderPinned();
             var squarePins = {};
             (t.square_pins || []).forEach(function (e) { squarePins[e.type + '|' + e.key] = e.contract; });
+            var leftOpen = new Set((t.left_open || []).map(function (e) { return e.type + '|' + e.key; }));
             return { squarePins: squarePins, excluded: new Set(t.excluded || []), penalized: new Set(t.penalized || []),
-                     declined: new Set(), choices: {} };
+                     leftOpen: leftOpen, declined: new Set(), choices: {} };
         }
 
         function sortedStrings(list) { return (list || []).map(String).sort(); }
@@ -1011,7 +1026,8 @@
             // `submitted` holds by the time a reply that waited in line lands.
             var sentAnswers = submitted;
             var sentTweaks = { pins: pins.slice(), square_pins: body.tweaks.square_pins,
-                               excluded: body.tweaks.excluded, penalized: body.tweaks.penalized };
+                               excluded: body.tweaks.excluded, penalized: body.tweaks.penalized,
+                               left_open: body.tweaks.left_open };
             // ONLY the request the hunter just confirmed carries the spend; nothing else can spend their plan.
             if (opts.useFreePlan) { body.use_free_plan = true; }
             // Said so the team's line preview (`?preview=optimizer-line`) queues a Plan it, never a tweak.
@@ -1063,12 +1079,16 @@
                 // its own, not this page's load time.
                 if (data.allowance && data.allowance.spent) { markSpent(sentAnswers, nextFrom(data.allowance)); }
                 // THE SERVER AUTOSAVED IT: so does this page, for Open my plan after Edit answers.
+                // The server's word on what is left open, not what was sent (a square filled by hand drops out).
+                sentTweaks.left_open = (data.left_open || []).map(function (sq) { return { type: sq.type, key: sq.key }; });
                 rememberPlan(sentAnswers, sentTweaks);
                 // A RE-SOLVE KEEPS ITS PLACE: lines that stay glide to where the new plan puts them, new ones settle
                 // in, so the hunter sees what their tweak changed instead of a hard cut of the whole list.
                 var glide = onReview && lineFlip;
                 if (glide) { lineFlip.measure(); }
                 plan = data;
+                // THE SERVER'S WORD on what is left open: a square the hunter has since filled by hand drops out.
+                tweaks.leftOpen = new Set((plan.left_open || []).map(sqKey));
                 // RETURNED, so the page stays BUSY through the wizard's fold: a second Plan it (or Open my plan)
                 // pressed in those 180ms would otherwise start a second solve and replay the whole reveal.
                 return new Promise(function (resolve) {
@@ -1233,8 +1253,11 @@
                 dialog.addEventListener('close', function () { restoreFocus(key, scroll); }, { once: true });
                 return;
             }
-            var target = key && window.CSS && CSS.escape
-                && els.sections.querySelector('[data-focus="' + CSS.escape(key) + '"]');
+            // 'square:type|key' LANDS ON THAT SQUARE wherever the re-plan put it: the chip of the line that now holds
+            // it, or its Plan it button while it is left open.
+            var target = key && window.CSS && CSS.escape && (key.indexOf('square:') === 0
+                ? els.sections.querySelector('[data-square="' + CSS.escape(key.slice(7)) + '"]')
+                : els.sections.querySelector('[data-focus="' + CSS.escape(key) + '"]'));
             if (!target && els.reviewHead) { target = els.reviewHead; }
             if (!target) { return; }
             target.focus({ preventScroll: true });
@@ -1246,12 +1269,12 @@
 
         // ── rendering the plan ───────────────────────────────────────────────────────────────────
 
-        // ── the order of the review list ────────────────────────────────────────────────────────
+        // ── the view: by letter or by job ───────────────────────────────────────────────────────
         //
-        // By letter (the default) or by job (owner, 2026-10-16). Only "Covers both boards" has a choice to make:
-        // an A-Z-only game has no job and a Job Coverage-only game no letter, so those groups keep their one
-        // order either way. The switch therefore sits beside THAT group's heading, only when it has two games or
-        // more to order, and its games glide to their new places (`flipGrid`). Remembered per browser.
+        // By letter (the default; owner, 2026-10-16) or by job, which regroups the whole plan into the run page's
+        // discipline shelves (owner, 2026-10-17). The switch sits above the plan when both boards are planned and
+        // there is more than one game, games glide to their new places (`flipGrid`), and the choice is remembered
+        // per browser.
 
         var SORT_KEY = 'pp-cplan-sort';
         var sortBar = root.querySelector('[data-cplan-sortbar]');
@@ -1267,7 +1290,7 @@
                 if (lineFlip) { lineFlip.measure(); }
                 render();
                 if (lineFlip) { lineFlip.play(); }
-                // Re-rendering re-hosts the switch, which drops its focus: hand it back.
+                // Kept on the switch the hunter just used, whatever the re-render did around it.
                 input.focus({ preventScroll: true });
             });
         });
@@ -1291,40 +1314,123 @@
             return (sortRank(a, sortMode) - sortRank(b, sortMode)) || (sortRank(a, other) - sortRank(b, other));
         }
 
-        /** The sort switch beside the "Covers both boards" heading (never inside the h2), when it has a choice. */
-        function hostSortBar(wrap, count) {
-            if (!sortBar) { return; }
-            sortBar.hidden = !(wrap && count > 1);
-            if (sortBar.hidden) { return; }
-            var head = wrap.querySelector('.pp-cplan__section-head');
-            var top = document.createElement('div');
-            top.className = 'pp-cplan__section-top';
-            wrap.insertBefore(top, head);
-            top.appendChild(head);
-            top.appendChild(sortBar);
+        /** THE VIEW SWITCH (Letter / Job) sits above the whole plan, because Job regroups all of it (owner,
+         *  2026-10-17). Shown only when both boards are planned and there is more than one game to arrange. */
+        function placeSortBar() {
+            if (sortBar) { sortBar.hidden = !canSwitchView(); }
+        }
+
+        function canSwitchView() { return !!(plan.runs.az && plan.runs.jobs && plan.lines.length > 1); }
+
+        /** THE JOB VIEW: chosen with the switch (only while the switch is there to switch back: a remembered "Job"
+         *  never strands a hunter whose plan has no switch), and always when Job Coverage is the one board planned. */
+        function jobView() {
+            return (plan.job_groups || []).length > 0 && (!plan.runs.az || (canSwitchView() && sortMode === 'jobs'));
         }
 
         function render() {
             renderStats();
             els.sections.textContent = '';
+            placeSortBar();
+            if (jobView()) { renderByJob(); } else { renderByLetter(); }
+            section('Swaps worth a look', "Replace a game you haven't finished with one that covers more.",
+                    plan.swaps.map(offeredSwap).filter(Boolean), swapRow);
+            section("Couldn't place", null, plan.unplaced, unplacedRow);
+            // The Job view draws its job squares in their disciplines, so only the letters are left for this.
+            emptySection(jobView() ? 'az' : null);
+            if (!plan.lines.length && !plan.swaps.length && !plan.empty.length && !(plan.left_open || []).length) {
+                nothingToPlan();
+            }
+            notesSection();
+            var n = squareCount();
+            els.apply.textContent = n ? 'Apply ' + plural(n, 'square', 'squares') : 'Nothing to apply';
+            syncBar();
+        }
+
+        function renderByLetter() {
             var both = [], az = [], jobs = [];
             plan.lines.forEach(function (line) {
                 var types = new Set(line.squares.map(function (s) { return s.type; }));
                 (types.size > 1 ? both : types.has('az') ? az : jobs).push(line);
             });
             [both, az, jobs].forEach(function (group) { group.sort(byChosenOrder); });
-            hostSortBar(section('Covers both boards', 'One game, two squares.', both, lineRow), both.length);
+            section('Covers both boards', 'One game, two squares.', both, lineRow);
             section('A-Z only', null, az, lineRow);
             section('Job Coverage only', null, jobs, lineRow);
-            section('Swaps worth a look', "Replace a game you haven't finished with one that covers more.",
-                    plan.swaps.map(offeredSwap).filter(Boolean), swapRow);
-            section("Couldn't place", null, plan.unplaced, unplacedRow);
-            emptySection();
-            if (!plan.lines.length && !plan.swaps.length && !plan.empty.length) { nothingToPlan(); }
-            notesSection();
-            var n = squareCount();
-            els.apply.textContent = n ? 'Apply ' + plural(n, 'square', 'squares') : 'Nothing to apply';
-            syncBar();
+        }
+
+        /** BY JOB (owner, 2026-10-17): the run page's own discipline groups, in its own order (`job_groups`, from
+         *  `slot_render.discipline_sequence`), each job in board order with the game that fills it, its job chip
+         *  first. A job the plan could not fill, or that the hunter is leaving open, keeps its place as a slim row,
+         *  so each discipline reads like its shelf on the run page. Games with no job follow as "A-Z only". */
+        function renderByJob() {
+            var byJob = {}, azOnly = [];
+            plan.lines.forEach(function (line) {
+                var job = line.squares.filter(function (s) { return s.type === 'jobs'; })[0];
+                if (job) { byJob[job.key] = line; } else { azOnly.push(line); }
+            });
+            var empty = squaresByKey(plan.empty, 'jobs');
+            var blocked = squaresByKey(plan.notes.badge_blocked, 'jobs');
+            var left = squaresByKey(plan.left_open, 'jobs');
+            plan.job_groups.forEach(function (group) {
+                var rows = [];
+                group.keys.forEach(function (key) {
+                    if (byJob[key]) { rows.push(lineRow(byJob[key], 'jobs')); }
+                    // WHY IT IS EMPTY, said on the row (Still open says it for the letters): only "Badges only"
+                    // kept a game out, or nothing on the hunter's terms fits at all.
+                    else if (empty[key]) {
+                        rows.push(slotRow(empty[key], blocked[key] ? 'No badge game fits' : 'Nothing on your terms fits'));
+                    }
+                    else if (left[key]) { rows.push(slotRow(left[key], 'Leaving open', true)); }
+                });
+                if (!rows.length) { return; }
+                var filled = group.keys.filter(function (key) { return byJob[key]; }).length;
+                var wrap = sectionShell(group.label || 'Other jobs', filled);
+                wrap.classList.add('pp-cplan__section--disc');
+                if (/^[a-z-]+$/.test(group.slug || '')) {
+                    wrap.style.setProperty('--disc', 'var(--disc-' + group.slug + ', var(--pp-primary))');
+                }
+                if (group.icon) {
+                    wrap.querySelector('.pp-cplan__section-head').prepend(jobIcon(group.icon));
+                }
+                var list = document.createElement('ul');
+                list.className = 'pp-cplan__lines';
+                list.setAttribute('role', 'list');
+                rows.forEach(function (row) { list.appendChild(row); });
+                wrap.appendChild(list);
+                els.sections.appendChild(wrap);
+            });
+            azOnly.sort(byChosenOrder);
+            section('A-Z only', null, azOnly, lineRow);
+        }
+
+        function squaresByKey(squares, type) {
+            var out = {};
+            (squares || []).forEach(function (sq) { if (sq.type === type) { out[sq.key] = sq; } });
+            return out;
+        }
+
+        /** A job's place when no game fills it: its chip, what is going on, and (left open) the way back. */
+        function slotRow(sq, text, isLeftOpen) {
+            var li = document.createElement('li');
+            li.className = 'pp-cplan__line pp-cplan__line--slot';
+            li.appendChild(squareChip(sq, false));
+            var note = document.createElement('span');
+            note.className = 'pp-cplan__slot-note';
+            note.textContent = text;
+            // The flip's identity for this row (it has no game).
+            note.setAttribute('data-focus', 'slot:' + sqKey(sq));
+            li.appendChild(note);
+            if (isLeftOpen) { li.appendChild(planItAction(sq)); }
+            return li;
+        }
+
+        function planItAction(sq) {
+            var btn = action('Plan it', function () {
+                change(function () { tweaks.leftOpen.delete(sqKey(sq)); }, 'square:' + sqKey(sq));
+            }, { aria: 'Plan ' + sq.label + ' again' });
+            btn.setAttribute('data-square', sqKey(sq));
+            return btn;
         }
 
         //: The stats as last shown, so a re-solve ticks each one from its old value. Null: count up from zero.
@@ -1367,10 +1473,10 @@
             });
         }
 
-        function sectionShell(title, count, level) {
+        function sectionShell(title, count) {
             var wrap = document.createElement('section');
             wrap.className = 'pp-cplan__section';
-            var head = document.createElement(level || 'h2');
+            var head = document.createElement('h2');
             head.className = 'pp-cplan__section-head';
             head.appendChild(document.createTextNode(title));
             if (count !== undefined) {
@@ -1415,7 +1521,8 @@
             return line.squares.every(function (sq) { return tweaks.squarePins[sqKey(sq)] === line.slug; });
         }
 
-        function lineRow(line) {
+        /** `lead`: the board whose chip comes first (the Job view leads with the job). */
+        function lineRow(line, lead) {
             var li = document.createElement('li');
             li.className = 'pp-cplan__line';
             var swapped = (line.replaces || []).length > 0;
@@ -1435,8 +1542,12 @@
 
             var squares = document.createElement('div');
             squares.className = 'pp-cplan__squares';
-            line.squares.forEach(function (sq) {
+            var ordered = lead === 'jobs' ? line.squares.slice().sort(function (a, b) {
+                return (b.type === lead) - (a.type === lead);
+            }) : line.squares;
+            ordered.forEach(function (sq) {
                 var btn = squareChip(sq, true);
+                btn.setAttribute('data-square', sqKey(sq));
                 btn.setAttribute('aria-label', 'Other options for ' + sq.label);
                 btn.addEventListener('click', function () { openAlternatives(sq, line); });
                 squares.appendChild(btn);
@@ -1625,7 +1736,7 @@
                 });
             }, { aria: 'Not this one: ' + line.name }));
             row.appendChild(action('Other options', function () { openAlternatives(line.squares[0], line); },
-                                   { aria: 'Other options for ' + line.squares[0].label }));
+                                   { aria: 'Other options for ' + line.squares.map(function (s) { return s.label; }).join(' and ') }));
             return row;
         }
 
@@ -1778,19 +1889,38 @@
             return li;
         }
 
-        function emptySection() {
-            if (!plan.empty.length) { return; }
-            var wrap = sectionShell('Still open', plan.empty.length);
-            var blocked = (plan.notes.badge_blocked || []).length;
-            wrap.appendChild(hint(blocked === plan.empty.length
-                ? 'No badge game fits these. Switch badges to Bonus or Priority to fill them with any game, or pick by hand from the run.'
-                : blocked
-                    ? 'Nothing on your terms is left for these. ' + plural(blocked, 'square', 'squares') + ' would fill with Bonus or Priority instead of Badges only.'
-                    : 'Nothing on your terms is left for these. Widen the platforms, or pick by hand from the run.'));
-            var row = document.createElement('div');
-            row.className = 'pp-cplan__squares';
-            plan.empty.forEach(function (sq) { row.appendChild(squareChip(sq, false)); });
-            wrap.appendChild(row);
+        /** `onlyType`: just that board's squares (the Job view draws the job ones in their disciplines). */
+        function emptySection(onlyType) {
+            var mine = function (sq) { return !onlyType || sq.type === onlyType; };
+            var empty = plan.empty.filter(mine);
+            var left = (plan.left_open || []).filter(mine);
+            if (!empty.length && !left.length) { return; }
+            var wrap = sectionShell('Still open', empty.length + left.length);
+            if (empty.length) {
+                var blocked = (plan.notes.badge_blocked || []).filter(mine).length;
+                wrap.appendChild(hint(blocked === empty.length
+                    ? 'No badge game fits these. Switch badges to Bonus or Priority to fill them with any game, or pick by hand from the run.'
+                    : blocked
+                        ? 'Nothing on your terms is left for these. ' + plural(blocked, 'square', 'squares') + ' would fill with Bonus or Priority instead of Badges only.'
+                        : 'Nothing on your terms is left for these. Widen the platforms, or pick by hand from the run.'));
+                var row = document.createElement('div');
+                row.className = 'pp-cplan__squares';
+                empty.forEach(function (sq) { row.appendChild(squareChip(sq, false)); });
+                wrap.appendChild(row);
+            }
+            if (left.length) {
+                wrap.appendChild(hint("You're leaving these open to fill yourself."));
+                var list = document.createElement('div');
+                list.className = 'pp-cplan__left-open';
+                left.forEach(function (sq) {
+                    var item = document.createElement('div');
+                    item.className = 'pp-cplan__left-open-item';
+                    item.appendChild(squareChip(sq, false));
+                    item.appendChild(planItAction(sq));
+                    list.appendChild(item);
+                });
+                wrap.appendChild(list);
+            }
             els.sections.appendChild(wrap);
         }
 
@@ -1937,6 +2067,13 @@
             sub: dialog.querySelector('[data-cplan-alt-sub]'),
             status: dialog.querySelector('[data-cplan-alt-status]'),
             rows: dialog.querySelector('[data-cplan-alt-rows]'),
+            tabs: dialog.querySelector('[data-cplan-alt-tabs]'),
+            filters: dialog.querySelector('[data-cplan-alt-filters]'),
+            badge: dialog.querySelector('[data-cplan-alt-badge]'),
+            more: dialog.querySelector('[data-cplan-alt-more]'),
+            moreBtn: dialog.querySelector('[data-cplan-alt-more-btn]'),
+            body: dialog.querySelector('.pp-cpick__body'),
+            foot: dialog.querySelector('[data-cplan-alt-foot]'),
             closeBtn: dialog.querySelector('[data-cplan-alt-close]')
         } : null;
         var altSeq = 0;
@@ -1989,48 +2126,240 @@
 
         function openAlternatives(square, line) {
             if (!dialog || busy) { return; }
-            var mine = ++altSeq;
-            alt.title.textContent = 'Other options for ' + square.label;
+            // THE LINE'S OTHER SQUARES (owner, 2026-10-17): the sheet is about the whole line, so its title names
+            // every square it holds and its tabs say which square each game takes ("C + Gunslinger", "C only",
+            // "Gunslinger only"). `current` is the line's own game, which fits both by definition: left out
+            // server-side. EVERY game is reachable: each tab pages in as the hunter scrolls.
+            var partners = line.squares.filter(function (s) { return s.type !== square.type || s.key !== square.key; });
+            alt.title.textContent = 'Other options for '
+                + [square].concat(partners).map(function (s) { return s.label; }).join(' and ');
             alt.sub.textContent = 'Pick one and the plan rebuilds around it.';
             alt.rows.textContent = '';
+            if (alt.tabs) { alt.tabs.hidden = true; alt.tabs.textContent = ''; }
+            // "COUNTS TOWARD YOUR BADGES" resets to off on every open, like the run picker's filters, and is offered
+            // only when the plan counts badges at all.
+            if (alt.badge) { alt.badge.checked = false; }
+            // Under "Badges only" every game already counts, so the chip would do nothing there.
+            if (alt.filters) { alt.filters.hidden = !badgesCounted(submitted) || submitted.badge_weight === 'only'; }
             dialog.showModal();
             dialog.focus();
-            window.setTimeout(function () { if (mine === altSeq) { altSay('Loading…'); } }, 0);
-            // THE LINE'S OTHER SQUARES (owner, 2026-10-17): a game that fits them too can take the whole line, so
-            // the server returns those as their own half (`both`) and the sheet heads them apart. `current` is the
-            // line's own game, which fits both by definition: left out server-side, so it never costs that half a place.
-            var partners = line.squares.filter(function (s) { return s.type !== square.type || s.key !== square.key; });
+            renderAltFoot(square, partners, line);
+            altView = { square: square, line: line, partners: partners, group: null, wanted: null, next: 0,
+                        more: false, loading: false, list: null, tabs: null, badgeOnly: false };
+            loadAlternatives(altView, null, false);
+        }
+
+        //: The sheet as it stands: which square and tab, and where the next page starts. Replaced on every open.
+        var altView = null;
+
+        /** Whether these answers count badges at all (any source on). */
+        function badgesCounted(a) {
+            return !!(a && (a.badge_started || a.badge_all || (a.badge_types || []).length || (a.badge_picks || []).length));
+        }
+
+        /** The sheet's tabs, in the server's order: [group, label, what an empty tab says]. */
+        function altTabs(view) {
+            var sq = view.square.label;
+            var other = view.partners.map(function (s) { return s.label; }).join(' and ');
+            return [['both', sq + ' + ' + other, 'Nothing else covers ' + sq + ' and ' + other + '.'],
+                    ['rest', sq + ' only', 'Nothing else fits only ' + sq + '.'],
+                    ['partner', other + ' only', 'Nothing else fits only ' + other + '.']];
+        }
+        //: How close (px) the Show more control may come to the sheet's bottom before the next page loads itself.
+        var ALT_MORE_MARGIN = 240;
+
+        /** One page of one tab. `group` null asks the server for its default tab; `append` adds to the list.
+         *  `opts.badgeOnly` asks with the badge filter changed, `opts.fallback` lets the server move to the first
+         *  tab with games when the asked one is empty. NOTHING ABOUT THE VIEW CHANGES UNTIL THE REPLY LANDS (the
+         *  tab, the filter): a failed reload leaves the sheet agreeing with the list on screen, so the next page
+         *  is asked for under the same tab and filter as the pages already drawn. */
+        function loadAlternatives(view, group, append, opts) {
+            opts = opts || {};
+            // A TAB OR FILTER LOAD asks with the chip as it reads NOW (a tab picked while a toggle is still loading
+            // must not drop it); a next PAGE asks with the filter already drawn, so it matches the pages above it.
+            var badgeOnly = opts.badgeOnly !== undefined ? opts.badgeOnly
+                : (!append && alt.badge ? alt.badge.checked : view.badgeOnly);
+            var mine = ++altSeq;
+            view.loading = true;
+            // The tab the hunter last ASKED for, so a filter toggled while a tab switch loads keeps that switch.
+            if (!append) { view.wanted = group; }
+            syncAltMore();
+            if (!append) { window.setTimeout(function () { if (mine === altSeq) { altSay('Loading…'); } }, 0); }
             var body = payload();
-            body.type = square.type;
-            body.key = square.key;
-            body.partners = partners.map(function (s) { return { type: s.type, key: s.key }; });
-            body.current = line.slug;
+            body.type = view.square.type;
+            body.key = view.square.key;
+            body.partners = view.partners.map(function (s) { return { type: s.type, key: s.key }; });
+            body.current = view.line.slug;
+            if (group) { body.group = group; }
+            if (opts.fallback) { body.fallback = true; }
+            body.offset = append ? view.next : 0;
+            if (badgeOnly) { body.badge_only = true; }
             PP.API.post(urls.alt, body).then(function (data) {
-                if (mine !== altSeq) { return; }
-                var rows = data.rows.filter(function (r) { return r.slug !== line.slug; });
-                if (!rows.length) { altSay('Nothing else on your terms fits ' + square.label + '.'); return; }
-                altSay('');
-                var pick = function (row) {
-                    // THE SHEET PLAYS ITS EXIT while the re-plan starts at once; `restoreFocus` waits for the
-                    // dialog to be really closed (the page is inert until then), so focus still lands.
-                    closeSheet();
-                    // A "covers both" pick TAKES THE WHOLE LINE: pinned to every square of it, or a locked line (or an
-                    // accepted swap) would keep its old game on the other square.
-                    change(function () { pinGame(row.slug, row.both ? [square].concat(partners) : [square]); },
-                           'line:' + row.slug);
-                };
-                if (!partners.length) { alt.rows.appendChild(altList(rows, pick, true)); return; }
-                var all = [square].concat(partners).map(function (s) { return s.label; }).join(' and ');
-                // AN EMPTY HALF STAYS, with a line saying so (owner, 2026-10-17): "nothing covers both" is an answer.
-                // The covering half drops "Also covers": its heading already says which squares a game takes.
-                alt.rows.appendChild(altGroup('Covers ' + all, rows.filter(function (r) { return r.both; }),
-                                              'Nothing else covers both.', pick, false));
-                alt.rows.appendChild(altGroup('Only ' + square.label, rows.filter(function (r) { return !r.both; }),
-                                              'Nothing else fits only ' + square.label + '.', pick, true));
+                if (mine !== altSeq || altView !== view) { return; }
+                view.loading = false;
+                view.badgeOnly = badgeOnly;
+                if (alt.badge) { alt.badge.checked = badgeOnly; }
+                view.wanted = null;
+                view.group = data.group;
+                view.next = data.offset + data.showing;
+                view.more = !!data.more;
+                if (!append) {
+                    if (!data.counts.both && !data.counts.rest && !data.counts.partner) {
+                        alt.rows.textContent = '';
+                        if (alt.tabs) { alt.tabs.hidden = true; }
+                        // The badge chip stays, so a filtered empty sheet can be widened again.
+                        altSay(view.badgeOnly ? 'No game here counts toward your badges.'
+                            : 'Nothing else on your terms fits '
+                              + [view.square].concat(view.partners).map(function (s) { return s.label; }).join(' or ') + '.');
+                        syncAltMore();
+                        return;
+                    }
+                    altSay('');
+                    renderAltTabs(view, data.counts);
+                    alt.rows.textContent = '';
+                    view.list = altList([], function () {}, false);
+                    alt.rows.appendChild(view.list);
+                    if (!data.rows.length) {
+                        var none = document.createElement('p');
+                        none.className = 'pp-cplan__alt-none';
+                        var tab = altTabs(view).filter(function (t) { return t[0] === view.group; })[0];
+                        none.textContent = tab ? tab[2] : 'Nothing else fits ' + view.square.label + '.';
+                        alt.rows.appendChild(none);
+                    }
+                }
+                appendAlternatives(view, data.rows.filter(function (r) { return r.slug !== view.line.slug; }));
+                syncAltMore();
+                keepAltFilling();
             }).catch(function (err) {
-                if (mine !== altSeq) { return; }
+                if (mine !== altSeq || altView !== view) { return; }
+                view.loading = false;
+                view.wanted = null;
+                // A FAILED TAB SWITCH OR FILTER TOGGLE puts the tabs and the chip back on what is still showing, so
+                // Show more pages what is drawn.
+                syncAltTabs(view);
+                if (alt.badge) { alt.badge.checked = view.badgeOnly; }
+                syncAltMore();
                 failureText(err, 'Other options did not load.').then(function (msg) { altSay(msg, true); });
             });
+        }
+
+        function appendAlternatives(view, rows) {
+            var both = view.group === 'both';
+            // A "C + Gunslinger" card drops "Also covers": its tab already says which squares it takes.
+            var withAlso = !both;
+            // WHERE A PICK GOES, by tab: the whole line (pinned to every square of it, or a locked line or an
+            // accepted swap would keep its old game on the other square), the opened square, or the partner alone.
+            var squares = both ? [view.square].concat(view.partners)
+                : view.group === 'partner' ? view.partners : [view.square];
+            var pick = function (row) {
+                // THE SHEET PLAYS ITS EXIT while the re-plan starts at once; `restoreFocus` waits for the dialog to be
+                // really closed (the page is inert until then), so focus still lands.
+                closeSheet();
+                change(function () { pinGame(row.slug, squares); }, 'line:' + row.slug);
+            };
+            rows.forEach(function (row) {
+                var also = withAlso ? (row.also || []).map(function (s) { return s.label; }) : [];
+                view.list.appendChild(offerRow(row, also.length ? 'Also covers ' + also.join(', ') : '', pick));
+            });
+        }
+
+        /** THE TABS (the house segmented switch, radio backed), only when the line holds two squares: "C +
+         *  Gunslinger", "C only" and "Gunslinger only", each with its full count. Switching loads that tab's first
+         *  page.
+         *
+         *  BUILT ONCE PER OPEN, then only re-checked and re-counted: rebuilding on every reply removed the radio a
+         *  keyboard hunter had just moved to (an arrow key changes the radio, and fires `change`), so focus fell to
+         *  the page and the group could not be walked. */
+        function renderAltTabs(view, counts) {
+            if (!alt.tabs) { return; }
+            alt.tabs.hidden = !view.partners.length;
+            if (!view.partners.length) { return; }
+            if (view.tabs) {
+                Object.keys(view.tabs).forEach(function (g) { view.tabs[g].count.textContent = String(counts[g]); });
+                syncAltTabs(view);
+                return;
+            }
+            alt.tabs.textContent = '';
+            view.tabs = {};
+            altTabs(view).forEach(function (tab) {
+                var chip = document.createElement('label');
+                chip.className = 'pp-switch__chip';
+                var input = document.createElement('input');
+                input.type = 'radio';
+                input.name = 'cplan_alt_tab';
+                input.value = tab[0];
+                input.className = 'sr-only';
+                input.checked = view.group === tab[0];
+                input.addEventListener('change', function () {
+                    if (input.checked && altView === view) { loadAlternatives(view, tab[0], false); }
+                });
+                var text = document.createElement('span');
+                text.className = 'pp-switch__lbl';
+                text.textContent = tab[1];
+                var n = document.createElement('span');
+                n.className = 'pp-cplan__chip-n';
+                n.textContent = String(counts[tab[0]]);
+                chip.appendChild(input);
+                chip.appendChild(text);
+                chip.appendChild(n);
+                alt.tabs.appendChild(chip);
+                view.tabs[tab[0]] = { input: input, count: n };
+            });
+        }
+
+        /** The tabs agree with the tab on screen (`view.group`). */
+        function syncAltTabs(view) {
+            if (!view.tabs) { return; }
+            Object.keys(view.tabs).forEach(function (g) { view.tabs[g].input.checked = g === view.group; });
+        }
+
+        /** The Show more control matches the tab: shown while there is more, saying so while a page loads. */
+        function syncAltMore() {
+            if (!alt.more) { return; }
+            alt.more.hidden = !(altView && altView.more);
+            if (alt.moreBtn) {
+                var loading = !!(altView && altView.loading);
+                alt.moreBtn.setAttribute('aria-disabled', loading ? 'true' : 'false');
+                alt.moreBtn.textContent = loading ? 'Loading…' : 'Show more';
+            }
+        }
+
+        function loadMoreAlternatives() {
+            var view = altView;
+            if (!view || !view.more || view.loading || !dialog.open) { return; }
+            loadAlternatives(view, view.group, true);
+        }
+
+        /** THE OBSERVER'S BLIND SPOT (the run picker's own fix): it reports a CHANGE in visibility, so a Show more
+         *  that never left the view (a short page) would never ask again. Checked after every page. */
+        function keepAltFilling() {
+            if (!altView || !altView.more || altView.loading || !alt.more || alt.more.hidden || !alt.body) { return; }
+            var view = alt.body.getBoundingClientRect();
+            var spot = alt.more.getBoundingClientRect();
+            if (spot.top - view.bottom < ALT_MORE_MARGIN) { window.requestAnimationFrame(loadMoreAlternatives); }
+        }
+
+        /** LEAVE IT OPEN, from the sheet (owner, 2026-10-17): one button per OPEN square of the line (both on a
+         *  C + Gunslinger line), for "none of these, I'll fill it myself". An unfinished square is left out: its
+         *  game is already there, and Undo swap is how it goes back. */
+        function renderAltFoot(square, partners, line) {
+            if (!alt.foot) { return; }
+            alt.foot.textContent = '';
+            var replaced = (line.replaces || []).map(sqKey);
+            [square].concat(partners).forEach(function (sq) {
+                if (replaced.indexOf(sqKey(sq)) >= 0) { return; }
+                var btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'pp-cta pp-cta--ghost';
+                btn.textContent = 'Leave ' + sq.label + ' open';
+                btn.addEventListener('click', function () {
+                    if (busy) { return; }
+                    closeSheet();
+                    change(function () { leaveOpen(sq); }, 'square:' + sqKey(sq));
+                });
+                alt.foot.appendChild(btn);
+            });
+            alt.foot.hidden = !alt.foot.childNodes.length;
         }
 
         function altList(rows, pick, withAlso) {
@@ -2044,23 +2373,25 @@
             return list;
         }
 
-        /** One headed half of the sheet: the review's own section shell, an `<h3>` under the sheet's title. */
-        function altGroup(title, rows, emptyText, pick, withAlso) {
-            var group = sectionShell(title, rows.length, 'h3');
-            group.classList.add('pp-cplan__alt-group');
-            if (rows.length) {
-                group.appendChild(altList(rows, pick, withAlso));
-            } else {
-                var none = document.createElement('p');
-                none.className = 'pp-cplan__alt-none';
-                none.textContent = emptyText;
-                group.appendChild(none);
-            }
-            return group;
-        }
-
         if (dialog) {
             wireDialogClose(dialog);
+            if (alt.badge) {
+                alt.badge.addEventListener('change', function () {
+                    if (!altView) { return; }
+                    // The tab asked for (a switch may still be loading), and if the filter empties it, the first tab
+                    // that still has games rather than an empty one.
+                    loadAlternatives(altView, altView.wanted || altView.group, false,
+                                     { badgeOnly: alt.badge.checked, fallback: true });
+                });
+            }
+            // SHOW MORE, pressed or reached: the button is there for a keyboard and for a reader who would rather ask;
+            // scrolling near it loads the next page by itself.
+            if (alt.moreBtn) { alt.moreBtn.addEventListener('click', loadMoreAlternatives); }
+            if (alt.more && 'IntersectionObserver' in window) {
+                new IntersectionObserver(function (entries) {
+                    entries.forEach(function (entry) { if (entry.isIntersecting) { loadMoreAlternatives(); } });
+                }, { root: alt.body || null, rootMargin: '0px 0px ' + ALT_MORE_MARGIN + 'px 0px' }).observe(alt.more);
+            }
             alt.closeBtn.addEventListener('click', closeSheet);
             // ESCAPE GETS THE SAME EXIT AS THE CLOSE BUTTON, not the browser's instant one.
             dialog.addEventListener('cancel', function (e) { e.preventDefault(); closeSheet(); });

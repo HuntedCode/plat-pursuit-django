@@ -4,7 +4,7 @@ See `OptimizerDraft` for what is kept and why. Three jobs here: SAVE what a buil
 games an Apply put on the board, and say what the page should REOPEN.
 
 TWEAKS ARE KEPT IN SLUGS, the plan door's own wire shape: `{pins: [slug], square_pins: [{type, key, contract}],
-excluded: [slug], penalized: [slug]}`. The page posts them back unchanged and the door re-resolves them, so a
+excluded: [slug], penalized: [slug], left_open: [{type, key}]}`. The page posts them back unchanged and the door re-resolves them, so a
 contract that went away since is simply dropped there, as it would be from any request.
 """
 from django.db import transaction
@@ -15,6 +15,7 @@ from trophies.models import Contract
 
 TWEAK_LISTS = ('pins', 'excluded', 'penalized')
 SQUARE_PIN_FIELDS = ('type', 'key', 'contract')
+SQUARE_FIELDS = ('type', 'key')
 
 
 def save(profile, options, tweaks):
@@ -78,6 +79,8 @@ def _clean(raw):
     out = {f: [s for s in _list(raw.get(f)) if isinstance(s, str)] for f in TWEAK_LISTS}
     out['square_pins'] = [{k: e[k] for k in SQUARE_PIN_FIELDS} for e in _list(raw.get('square_pins'))
                           if isinstance(e, dict) and all(isinstance(e.get(k), str) for k in SQUARE_PIN_FIELDS)]
+    out['left_open'] = [{k: e[k] for k in SQUARE_FIELDS} for e in _list(raw.get('left_open'))
+                        if isinstance(e, dict) and all(isinstance(e.get(k), str) for k in SQUARE_FIELDS)]
     return out
 
 

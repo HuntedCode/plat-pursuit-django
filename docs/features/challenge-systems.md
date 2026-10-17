@@ -422,8 +422,13 @@ history importer and the hatch appear as notes that link to the run, whose picke
 
 **Review tools:** Lock (holds a line's squares through re-solves), Not this one (exclude), Other options
 (per square, doubles first; picking one pins it. Opened from a line that holds two squares, the sheet sends the
-line's other square as `partners` (and the line's own game as `current`, left out) and splits into "Covers C and
-Gunslinger" and "Only C", up to `ALTERNATIVES_LIMIT` each, an empty half saying so. A covering pick is pinned to
+line's other square as `partners` (and the line's own game as `current`, left out), its title names both squares,
+and it splits into three tabs that say which square each game takes: "C + Gunslinger" (pinned to the whole line),
+"C only" and "Gunslinger only" (games for the job that cannot take C, pinned to the job), with their counts, an
+empty tab saying so. A "Counts toward your badges" chip (off on every open, hidden when no badges count) narrows
+every tab to games that clear a stage of the hunter's badges (`badge_only`). EVERY game is reachable (owner,
+2026-10-17): the door pages a tab `ALTERNATIVES_PAGE` at a time (`group`, `offset`; `counts`, `more`, `showing`
+back) and the sheet loads the next page as the hunter scrolls (the run picker's Show more). A covering pick is pinned to
 every square of the line, so a locked or swapped line cannot keep its old game on the other square. Every card
 carries its platforms, owner 2026-10-17), must-haves (pins, which beat the platform and source
 filters and are reported with a reason when they cannot fit), Different games (accumulating penalties), and
@@ -437,11 +442,9 @@ next re-solve would offer it straight back; Undo swap clears it. Every pin a pic
 run). Edit answers hides the plan until the
 wizard is submitted again (tweaks reset, must-haves carry over), and after Apply a Plan again button re-plans
 the same answers. Every tweak that re-solves rolls back if the request fails, and a tweak made while a request
-is in flight is queued, never dropped. The list is grouped (Covers both / A-Z only / Job Coverage only), and
-"Covers both boards" can be ordered **by Letter (default) or by Job** (owner, 2026-10-16): each line carries its
-square's position on each board it fills (`sort`). Only that group has a choice (an A-Z-only game has no job, a
-Job-only game no letter), so the switch sits beside its heading, only with two games or more, the games glide to
-their new places (`flipGrid`), and the choice is remembered per browser.
+is in flight is queued, never dropped. By Letter (the default) the list is grouped Covers both / A-Z only / Job
+Coverage only, each in board order (each line carries its square's position on each board it fills, `sort`); By
+Job is described below. The choice is remembered per browser and the games glide to their new places (`flipGrid`).
 
 **Every built plan is autosaved** (owner, 2026-10-16; model `OptimizerDraft`, `services/optimizer_drafts.py`), for
 members and free hunters alike, so coming back never means applying first. One row per hunter keeps what
@@ -521,6 +524,11 @@ borrowed ticket joins the back. **One ticket buys one build:** admission CLAIMS 
 the line, so of parallel re-asks with one ticket only one builds and the rest (`TicketLost`) are charged as
 newcomers. An answer that turns out cached, or a refusal while waiting, takes the ticket out of line. The page
 offers **Stop waiting** (which rolls back the change it abandons, like a failure) and gives up after 3 minutes.
+**The pool never holds an UNOBTAINABLE contract** (owner, 2026-10-17; delisted ones stay): `_build_pool` drops
+`picker.unobtainable_contract_ids()`, the picker's own "can this still be finished" rule over each game's
+obtainable flag, computed for the catalogue and cached site-wide for an hour. So no plan, Other options or swap
+suggests one; a hunter may still name one as a must-have, where its line carries the Unobtainable chip.
+
 **Other options does not join the line** (a one-off with nobody to re-ask would stall everyone behind it): it
 answers 429 while the slots are full, which only happens when its cached plan expired, and is not charged a
 build for it (`build_line.has_room` is asked first). If Redis fails the build goes ahead without the line, and a
@@ -562,13 +570,23 @@ preview: it fills the team member's own runs, as it would for a free hunter.
 `animatePanel`, `staggerReveal`, `igniteTab`, `.pp-draw-in`, the `ppRevealIn` settle). A fresh plan is a scene
 change: the wizard folds (180ms, ease-in) and the summary, stats and first five groups settle in; the page stays
 BUSY until that reveal lands, or a second Plan it would start a second solve. A re-solve is not: its lines glide
-to their new places (one `lineFlip`, shared with the Letter/Job sort) and the stats tick from their old values.
-Lock toggles in place. Failures on the review are toasts, and the sticky bar says what the review is doing.
-**The wizard's Back/Next and the review's bar are both DOCKS** (`.pp-cplan__dock`, sticky above the tab bar), and the
-site's back-to-top button is lifted above whichever is showing: `watchDocks` measures it into `--pp-cplan-dock-h`
-and an unlayered `html:has([data-cplan]) #back-to-top` rule uses it (it sat exactly on Next and Apply). Both
-dialogs close on their own exit (`closeDialog`); callbacks queue and run on the real `close` event, a closing
-dialog takes no second tap, and focus after an Other options pick waits for the sheet to be really closed.
+to their new places (one `lineFlip`, shared with the Letter/Job view switch) and the stats tick from their old values.
+
+**Leave a square open** (owner, 2026-10-17): the Other options sheet's foot offers "Leave C open" for each OPEN
+square of the line (both on a C + Gunslinger line; an unfinished square is left out, Undo swap is its way back).
+It is a tweak, `left_open: [{type, key}]`, autosaved with the rest: `make_plan` keeps it out of both solves, it
+beats a square pin on the same square, and the plan returns it as `left_open`, drawn with **Plan it** (under Still
+open, or in its discipline shelf in the Job view). Only an OPEN square can be left open: one the hunter has since
+filled by hand drops out (the door saves only what the plan returns), and a must-have whose only open squares are
+left open is unplaced as `left_open`.
+
+**The Letter / Job view** (owner, 2026-10-17): the switch sits above the plan, shown when both boards are planned
+and there is more than one game, because Job regroups ALL of it (a remembered Job never applies while the switch is
+hidden, so it cannot strand anyone). Job uses the run page's discipline shelves: the plan sends `job_groups` (the
+jobs run's keys bucketed by discipline in `slot_render.discipline_sequence` order, the same helper `slot_groups` and
+`_board_groups` use, so the pages cannot disagree), each card leads with its job chip, and a job with no game keeps
+its place as a slim row saying why ("No badge game fits" under Badges only, else "Nothing on your terms fits") or
+"Leaving open" with Plan it. Games with no job follow as "A-Z only". A Job Coverage only plan always uses it.
 
 **Dates are on the hunter's clock and highlighted** (owner, 2026-10-17): every optimizer date (next free plan, "use
 it until", "saved") renders through `partials/_when.html` as a `.pp-when` `<time>`. The server writes the text in
@@ -582,7 +600,8 @@ it to rank well. When it is, IGDB time-to-beat plus community hours and difficul
 
 **Cost.** A pool build (every live contract the hunter has not finished, with progress and fits, plus the
 badge evaluation) is cached per (profile, answers) for 15 minutes; re-solves skip it but still re-read run
-state and the hatch counts and take ~1s to solve at full size. Two rate limits: builds 6/min, solves 40/min.
+state and the hatch counts and take ~1s to solve at full size. Three rate limits: builds 6/min, solves 40/min,
+and Other options 120/min (its own bucket: it pages as the hunter scrolls and never solves).
 
 ---
 

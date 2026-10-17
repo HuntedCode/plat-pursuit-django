@@ -103,7 +103,7 @@ def test_async_replies_are_guarded_by_identity():
     # A slow reply to an earlier request must not overwrite a newer plan, search or sheet.
     assert JS.count('if (mine !== seq) { return; }') >= 2
     assert 'if (mine !== searchSeq) { return; }' in JS
-    assert 'if (mine !== altSeq) { return; }' in JS
+    assert 'if (mine !== altSeq || altView !== view) { return; }' in JS
 
 
 def test_the_rail_never_becomes_a_sideways_scroll_strip():
@@ -161,30 +161,82 @@ def test_a_pin_change_re_solves_only_while_the_review_is_showing():
 def test_an_other_options_pick_closes_the_sheet_before_re_solving():
     # The sheet plays its exit while the re-plan starts; a re-plan landing inside the exit must not focus a line
     # on a page the open modal makes inert, so focus WAITS for the dialog's real close.
-    block = JS[JS.index('function openAlternatives'):JS.index('if (dialog) {')]
+    block = JS[JS.index('function appendAlternatives'):JS.index('function renderAltTabs')]
     pick = block[block.index('var pick = function (row) {'):]
-    assert pick.index('closeSheet();') < pick.index('change(function () {') < pick.index(
-        'pinGame(row.slug, row.both ? [square].concat(partners) : [square]);')
+    assert pick.index('closeSheet();') < pick.index('change(function () {') < pick.index('pinGame(row.slug, squares);')
     focus = JS[JS.index('function restoreFocus('):JS.index('// ── rendering the plan')]
     assert "dialog.addEventListener('close', function () { restoreFocus(key, scroll); }, { once: true });" in focus
 
 
-def test_other_options_sends_the_lines_other_squares_and_heads_the_two_halves():
-    block = JS[JS.index('function openAlternatives'):JS.index('function altList')]
-    assert 'body.partners = partners.map(' in block
-    assert "altGroup('Covers ' + all," in block and "altGroup('Only ' + square.label," in block
-    # A line with one square keeps one plain list.
-    assert 'if (!partners.length) { alt.rows.appendChild(altList(rows, pick, true)); return; }' in block
-    assert '<div data-cplan-alt-rows></div>' in TEMPLATE
-    # The line's own game rides along so the server leaves it out of the covering half.
-    assert 'body.current = line.slug;' in block
+def test_other_options_shows_every_game_in_tabs_a_page_at_a_time():
+    load = JS[JS.index('function loadAlternatives'):JS.index('function appendAlternatives')]
+    # The line's other squares and its own game ride along; the tab and where the page starts.
+    assert 'body.partners = view.partners.map(' in load and 'body.current = view.line.slug;' in load
+    assert 'if (group) { body.group = group; }' in load and 'body.offset = append ? view.next : 0;' in load
+    # Where the next page starts, from the page the server TOOK.
+    assert 'view.next = data.offset + data.showing;' in load and 'view.more = !!data.more;' in load
+    # A stale reply (an older page, another tab, a closed sheet) never draws.
+    assert 'if (mine !== altSeq || altView !== view) { return; }' in load
+    tabs = JS[JS.index('function renderAltTabs'):JS.index('function syncAltMore')]
+    # Tabs only when the line holds two squares, each with its full count.
+    assert 'alt.tabs.hidden = !view.partners.length;' in tabs
+    assert 'altTabs(view).forEach(function (tab) {' in tabs
+    names = JS[JS.index('function altTabs('):JS.index('function loadAlternatives')]
+    # Each tab names its squares: the line's both, the opened one alone, the partner alone.
+    assert "[['both', sq + ' + ' + other," in names and "['rest', sq + ' only'," in names
+    assert "['partner', other + ' only'," in names
+    assert 'n.textContent = String(counts[tab[0]]);' in tabs
+    assert 'loadAlternatives(view, tab[0], false);' in tabs
+    # Built ONCE per open: later replies only re-check and re-count, so a keyboard hunter keeps their radio.
+    assert 'if (view.tabs) {' in tabs and 'syncAltTabs(view);' in tabs
+    load = JS[JS.index('function loadAlternatives'):JS.index('function appendAlternatives')]
+    catch = load[load.index('}).catch(function (err) {'):]
+    assert 'syncAltTabs(view);' in catch   # a failed switch puts the tabs back on the tab still showing
+    assert 'data-cplan-alt-tabs hidden' in TEMPLATE and 'data-cplan-alt-more hidden' in TEMPLATE
+
+
+def test_the_next_page_loads_itself_as_the_hunter_scrolls():
+    # The run picker's own pattern: an observer on Show more, and the re-check for a page too short to scroll.
+    wire = JS[JS.index('if (dialog) {'):JS.index("alt.closeBtn.addEventListener('click', closeSheet);")]
+    assert "alt.moreBtn.addEventListener('click', loadMoreAlternatives);" in wire
+    assert 'new IntersectionObserver(function (entries) {' in wire and '.observe(alt.more);' in wire
+    more = JS[JS.index('function loadMoreAlternatives'):JS.index('function keepAltFilling')]
+    assert 'if (!view || !view.more || view.loading || !dialog.open) { return; }' in more
+    fill = JS[JS.index('function keepAltFilling'):JS.index('function renderAltFoot')]
+    assert 'if (spot.top - view.bottom < ALT_MORE_MARGIN) { window.requestAnimationFrame(loadMoreAlternatives); }' in fill
+    assert 'keepAltFilling();' in JS[JS.index('function loadAlternatives'):JS.index('function appendAlternatives')]
 
 
 def test_a_covering_pick_takes_every_square_of_the_line():
     # Pinning only the clicked square let a locked line (or an accepted swap) keep its old game on the other one.
-    block = JS[JS.index('function openAlternatives'):JS.index('function altList')]
-    pick = block[block.index('var pick = function (row) {'):block.index("'line:' + row.slug);")]
-    assert 'pinGame(row.slug, row.both ? [square].concat(partners) : [square]);' in pick
+    block = JS[JS.index('function appendAlternatives'):JS.index('function renderAltTabs')]
+    # Where a pick goes, by tab: the whole line, the opened square, or the partner alone.
+    assert "var squares = both ? [view.square].concat(view.partners)" in block
+    assert ": view.group === 'partner' ? view.partners : [view.square];" in block
+    assert 'change(function () { pinGame(row.slug, squares); }' in block
+    assert "var both = view.group === 'both';" in block
+
+
+def test_the_sheet_names_every_square_of_the_line_and_filters_to_your_badges():
+    opener = JS[JS.index('function openAlternatives'):JS.index('//: The sheet as it stands')]
+    assert ".map(function (s) { return s.label; }).join(' and ');" in opener
+    # Off on every open; offered only when badges count.
+    assert 'if (alt.badge) { alt.badge.checked = false; }' in opener
+    assert "if (alt.filters) { alt.filters.hidden = !badgesCounted(submitted) || submitted.badge_weight === 'only'; }" in opener
+    load = JS[JS.index('function loadAlternatives'):JS.index('function appendAlternatives')]
+    assert 'if (badgeOnly) { body.badge_only = true; }' in load
+    # A tab or filter load asks with the chip as it reads now; a next page with the filter already drawn.
+    assert ': (!append && alt.badge ? alt.badge.checked : view.badgeOnly);' in load
+    assert 'if (!append) { view.wanted = group; }' in load
+    assert "'No game here counts toward your badges.'" in load
+    wire = JS[JS.index('if (dialog) {'):JS.index("alt.closeBtn.addEventListener('click', closeSheet);")]
+    # The tab ASKED for (a switch may still be loading), and the first tab with games if the filter empties it.
+    assert 'loadAlternatives(altView, altView.wanted || altView.group, false,' in wire
+    assert '{ badgeOnly: alt.badge.checked, fallback: true });' in wire
+    # The filter and the tab change only when the reply lands; a failure puts the chip back.
+    assert 'view.badgeOnly = badgeOnly;' in load and 'if (alt.badge) { alt.badge.checked = view.badgeOnly; }' in load
+    assert "submitted.badge_weight === 'only'" in opener   # no chip where every game already counts
+    assert 'data-cplan-alt-badge' in TEMPLATE and 'Counts toward your badges' in TEMPLATE
 
 
 def test_a_swap_replacing_a_game_in_each_challenge_offers_both_or_one():
@@ -234,15 +286,71 @@ def test_pinning_a_game_clears_its_other_pins_in_the_same_runs():
     # The solver keeps one square pin per game per run; a second left a square empty and the game "unplaced".
     pin = JS[JS.index('function pinGame'):JS.index('function restoreTweaks')]
     assert "if (tweaks.squarePins[k] === slug && runs.indexOf(k.split('|')[0]) >= 0) { delete tweaks.squarePins[k]; }" in pin
-    block = JS[JS.index('function openAlternatives'):JS.index('function altList')]
-    assert 'pinGame(row.slug, row.both ? [square].concat(partners) : [square]);' in block
+    block = JS[JS.index('function appendAlternatives'):JS.index('function renderAltTabs')]
+    assert 'change(function () { pinGame(row.slug, squares); }' in block
 
 
-def test_the_halves_reuse_the_reviews_section_shell_and_its_spoken_count():
-    group = JS[JS.index('function altGroup'):JS.index('if (dialog) {')]
-    assert "sectionShell(title, rows.length, 'h3')" in group
-    shell = JS[JS.index('function sectionShell'):JS.index('function hint')]
-    assert "document.createElement(level || 'h2')" in shell and "pill.setAttribute('aria-hidden', 'true');" in shell
+def test_the_job_view_groups_by_discipline_and_keeps_every_jobs_place():
+    by_job = JS[JS.index('function renderByJob()'):JS.index('function squaresByKey(')]
+    assert 'plan.job_groups.forEach(function (group) {' in by_job
+    assert "if (byJob[key]) { rows.push(lineRow(byJob[key], 'jobs')); }" in by_job
+    assert "blocked[key] ? 'No badge game fits' : 'Nothing on your terms fits'" in by_job
+    assert "else if (left[key]) { rows.push(slotRow(left[key], 'Leaving open', true)); }" in by_job
+    # The run page's discipline tint, checked as a bare word before it becomes CSS.
+    assert "if (/^[a-z-]+$/.test(group.slug || '')) {" in by_job
+    assert "section('A-Z only', null, azOnly, lineRow);" in by_job
+    # The job's own chip leads each card.
+    row = JS[JS.index('function lineRow(line, lead)'):JS.index("(line.replaces || []).forEach(function (r) {")]
+    assert "var ordered = lead === 'jobs' ? line.squares.slice().sort(" in row
+    # Job squares are drawn in their disciplines, so Still open keeps only the letters there.
+    assert "emptySection(jobView() ? 'az' : null);" in JS
+
+
+def test_a_square_left_open_rides_the_tweaks_everywhere_they_go():
+    fresh = JS[JS.index('function freshTweaks'):JS.index('// ── answers')]
+    assert 'leftOpen: new Set(),' in fresh
+    sent = JS[JS.index('function payload'):JS.index('function summaryLine')]
+    assert 'left_open: Array.from(tweaks.leftOpen).map(function (sq) {' in sent
+    snap = JS[JS.index('function snapshot()'):JS.index('function pinGame')]
+    assert 'leftOpen: new Set(tweaks.leftOpen)' in snap and 'tweaks.leftOpen = s.leftOpen;' in snap
+    restore = JS[JS.index('function restoreTweaks'):JS.index('function sortedStrings')]
+    assert "new Set((t.left_open || []).map(function (e) { return e.type + '|' + e.key; }))" in restore
+    assert 'left_open: body.tweaks.left_open };' in JS   # autosaved with the rest
+    leave = JS[JS.index('function leaveOpen('):JS.index('function restoreTweaks')]
+    # Beats a lock on that square.
+    assert 'tweaks.leftOpen.add(sqKey(sq));' in leave and 'delete tweaks.squarePins[sqKey(sq)];' in leave
+    plan_it = JS[JS.index('function planItAction('):JS.index('//: The stats as last shown')]
+    assert "change(function () { tweaks.leftOpen.delete(sqKey(sq)); }, 'square:' + sqKey(sq));" in plan_it
+    # The server's word on what is left open replaces the page's after every plan, and the page's own copy of the
+    # autosave reads it from the REPLY (the previous plan is null on a first plan, and stale otherwise).
+    assert 'tweaks.leftOpen = new Set((plan.left_open || []).map(sqKey));' in JS
+    assert 'sentTweaks.left_open = (data.left_open || []).map(' in JS
+    assert 'sentTweaks.left_open = (plan.left_open' not in JS
+
+
+def test_focus_after_leave_open_or_plan_it_lands_on_that_square():
+    focus = JS[JS.index('function restoreFocus('):JS.index('// ── rendering the plan')]
+    assert "? els.sections.querySelector('[data-square=\"' + CSS.escape(key.slice(7)) + '\"]')" in focus
+    assert "btn.setAttribute('data-square', sqKey(sq));" in JS[JS.index('function lineRow('):JS.index('function metaList(')]
+    assert "btn.setAttribute('data-square', sqKey(sq));" in JS[JS.index('function planItAction('):JS.index('//: The stats')]
+    foot = JS[JS.index('function renderAltFoot('):JS.index('function altList(')]
+    assert "change(function () { leaveOpen(sq); }, 'square:' + sqKey(sq));" in foot
+
+
+def test_the_sheet_offers_to_leave_each_open_square_of_the_line_open():
+    foot = JS[JS.index('function renderAltFoot('):JS.index('function altList(')]
+    assert '[square].concat(partners).forEach(function (sq) {' in foot
+    assert "btn.textContent = 'Leave ' + sq.label + ' open';" in foot
+    # An unfinished square already holds its game: Undo swap is its way back, not "leave open".
+    assert 'if (replaced.indexOf(sqKey(sq)) >= 0) { return; }' in foot
+    assert 'closeSheet();' in foot and 'change(function () { leaveOpen(sq); }' in foot
+    assert "left_open: \"You're leaving the square it fits open.\"" in JS
+    assert '<div class="pp-cpick__foot" data-cplan-alt-foot hidden></div>' in TEMPLATE
+
+
+def test_a_covering_card_drops_also_covers():
+    block = JS[JS.index('function appendAlternatives'):JS.index('function renderAltTabs')]
+    assert 'var withAlso = !both;' in block
 
 
 def test_every_offered_card_carries_its_platforms():
@@ -418,20 +526,22 @@ def test_the_weight_switch_offers_only_and_explains_it():
     assert "var WEIGHT_TAGS = { priority: ' (priority)', only: ' (badges only)' };" in JS
     empty = JS[JS.index('function emptySection('):JS.index('function nothingToPlan(')]
     # The Only copy is for the squares Only left open, never a square no game fits at all.
-    assert 'var blocked = (plan.notes.badge_blocked || []).length;' in empty
-    assert 'blocked === plan.empty.length' in empty
+    assert 'var blocked = (plan.notes.badge_blocked || []).filter(mine).length;' in empty
+    assert 'blocked === empty.length' in empty
 
 
-def test_the_review_sorts_inside_each_group_by_the_chosen_board():
-    render = JS[JS.index('function render() {'):JS.index('function renderStats()')]
-    assert '[both, az, jobs].forEach(function (group) { group.sort(byChosenOrder); });' in render
-    # Only "Covers both boards" has a choice to make (an A-Z-only game has no job, a Job-only game no letter), so
-    # the switch rides beside THAT heading, and only when it has two games or more to order.
-    assert "hostSortBar(section('Covers both boards', 'One game, two squares.', both, lineRow), both.length);" in render
-    host = JS[JS.index('function hostSortBar('):JS.index('function render() {')]
-    assert 'sortBar.hidden = !(wrap && count > 1);' in host
-    # Beside the h2, never inside it: a radiogroup is not heading content.
-    assert 'top.appendChild(head);' in host and 'top.appendChild(sortBar);' in host and 'head.appendChild(sortBar)' not in host
+def test_the_view_switch_chooses_the_whole_layout():
+    render = JS[JS.index('function render() {'):JS.index('function renderByLetter()')]
+    assert 'if (jobView()) { renderByJob(); } else { renderByLetter(); }' in render
+    letter = JS[JS.index('function renderByLetter()'):JS.index('function renderByJob()')]
+    assert '[both, az, jobs].forEach(function (group) { group.sort(byChosenOrder); });' in letter
+    # Above the whole plan now (Job regroups all of it), only when both boards are planned.
+    place = JS[JS.index('function placeSortBar()'):JS.index('function jobView()')]
+    assert 'if (sortBar) { sortBar.hidden = !canSwitchView(); }' in place
+    assert 'function canSwitchView() { return !!(plan.runs.az && plan.runs.jobs && plan.lines.length > 1); }' in place
+    view = JS[JS.index('function jobView()'):JS.index('function render() {')]
+    # A Job Coverage only plan has nothing to order by letter; a remembered Job never applies without the switch.
+    assert "(!plan.runs.az || (canSwitchView() && sortMode === 'jobs'))" in view
     cmp = JS[JS.index('function byChosenOrder('):JS.index('function render() {')]
     # The chosen board first, then the other: a job-only game has no letter, an A-Z-only game no job.
     assert "var other = sortMode === 'az' ? 'jobs' : 'az';" in cmp

@@ -246,15 +246,26 @@ button.pp-cplan__sq:focus-visible { outline: 2px solid var(--disc); outline-offs
 @media (hover: hover) {
     .pp-cplan__stage-n[title] { text-decoration: underline dotted; text-underline-offset: 3px; cursor: help; }
 }
+/* THE JOB VIEW's discipline sections take the run page's discipline tint (`--disc`) on their heading and glyph. */
+.pp-cplan__section--disc .pp-cplan__section-head { color: var(--disc, var(--pp-text-mute)); }
+.pp-cplan__section--disc .pp-cplan__section-head > svg { width: 16px; height: 16px; flex: none; }
+/* A job with no game keeps its place: a slim, dashed row, not a card. */
+.pp-cplan__line--slot { align-self: start; align-items: center; padding: 8px 10px; background: transparent; border-style: dashed; }
+.pp-cplan__slot-note { flex: 1; min-width: 0; font-size: 0.8rem; color: var(--pp-text-mute); }
+/* Still open's "leaving these open" squares, each with its Plan it. */
+.pp-cplan__left-open { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.pp-cplan__left-open-item { display: inline-flex; align-items: center; gap: 6px; }
+
 /* A swap card's Both / Only A / Only Gunslinger choice: the house switch, hugging its chips (a card's column would
    stretch it) with tighter chips so three fit a phone card on one row more often. */
 .pp-cplan__swap-choice { align-self: flex-start; max-width: 100%; }
 .pp-cplan__swap-choice .pp-switch__chip { padding: 6px 10px; }
-/* Other options, split when the line holds two squares: "Covers C and Gunslinger", then "Only C". The shell is the
-   review's `.pp-cplan__section`, whose bottom margin spaces the two halves. */
-.pp-cplan__alt-group:last-child { margin-bottom: 0; }
-.pp-cplan__alt-group .pp-cpick__rows { margin-top: 8px; }
-.pp-cplan__alt-none { margin-top: 6px; font-size: 0.8rem; color: var(--pp-text-mute); }
+/* Other options' badge filter and tabs ("C + Gunslinger" / "C only" / "Gunslinger only") above the list, and a tab
+   with nothing in it. */
+.pp-cplan__alt-filters { margin-top: 2px; }
+.pp-cplan__alt-tabs { margin-top: 10px; }
+.pp-cplan__alt-tabs .pp-cplan__chip-n { margin-left: 2px; }
+.pp-cplan__alt-none { margin-top: 10px; font-size: 0.8rem; color: var(--pp-text-mute); }
 /* The picker's 12px floor for anything read to choose a game, applied to the same tags and chips here. */
 .pp-cplan__meta .bd-meta-tag { font-size: 12px; padding: 1px 6px; }
 .pp-cplan__meta .bd-chip { font-size: 12px; }
@@ -407,9 +418,8 @@ html:has([data-cplan]) #back-to-top {
 .pp-cplan__statusrow { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .pp-cplan__statusrow .pp-cplan__status { flex: 1 1 16rem; }
 
-/* ── the review's sort toggle, beside the "Covers both boards" heading (the script hosts it there) ── */
-.pp-cplan__section-top { display: flex; align-items: center; justify-content: space-between; gap: 8px 12px; flex-wrap: wrap; }
-.pp-cplan__sortbar { display: flex; align-items: center; gap: 8px; }
+/* ── the review's Letter / Job view switch, above the plan ── */
+.pp-cplan__sortbar { display: flex; align-items: center; gap: 8px; margin: 4px 0 14px; }
 .pp-cplan__sort-label { font-size: 0.75rem; color: var(--pp-text-mute); }
 
 /* ── the free banner's actions: Open my plan and the members door side by side, under the text on a

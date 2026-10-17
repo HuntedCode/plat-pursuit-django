@@ -289,10 +289,11 @@ reload, and its squares need the glyphs from then on.{% endcomment %}
     <div class="pp-cplan__review" data-cplan-review hidden>
         <h2 class="sr-only" tabindex="-1" data-cplan-review-head>Your plan</h2>
         <div class="pp-cplan__stats" data-cplan-stats></div>
-        {% comment %}THE ORDER (owner, 2026-10-16): by letter by default, or by job. Only "Covers both boards" has a
-        choice to make, so the script moves this beside that group's heading when it has two games or more.{% endcomment %}
+        {% comment %}THE VIEW (owner, 2026-10-16; regrouped 2026-10-17): by letter by default, or by job, which
+        regroups the whole plan into the run page's discipline shelves. Shown when both boards are planned and
+        there is more than one game.{% endcomment %}
         <div class="pp-cplan__sortbar" data-cplan-sortbar hidden>
-            <span class="pp-cplan__sort-label" id="cplan-sort-label">Order by</span>
+            <span class="pp-cplan__sort-label" id="cplan-sort-label">View by</span>
             <div class="pp-switch" role="radiogroup" aria-labelledby="cplan-sort-label">
                 <label class="pp-switch__chip">
                     <input type="radio" name="cplan_sort" value="az" class="sr-only" checked data-cplan-sort>
@@ -361,9 +362,26 @@ choreography and `dismissableSheet` wiring with it).{% endcomment %}
     </div>
     <div class="pp-cpick__body">
         <p class="pp-cpick__status" data-cplan-alt-status role="status" aria-live="polite"></p>
-        {% comment %}Drawn by the script: one list, or two headed halves when the line holds two squares.{% endcomment %}
+        {% comment %}EVERY GAME, PAGED (owner, 2026-10-17). Three tabs when the line holds two squares ("C +
+        Gunslinger", "C only", "Gunslinger only"), one list otherwise, each loading its next page as the hunter nears the end (the run picker's own
+        Show more, which is also there to press).{% endcomment %}
+        {% comment %}"Counts toward your badges" (owner, 2026-10-17): games that clear a stage of the badges the
+        hunter chose, on the run picker's own filter chip. Off on every open; hidden when no badges count.{% endcomment %}
+        <div class="pp-cplan__alt-filters" data-cplan-alt-filters hidden>
+            <label class="pp-bgal__chip">
+                <input type="checkbox" data-cplan-alt-badge>
+                <svg class="pp-cpick__fico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></svg>
+                Counts toward your badges
+            </label>
+        </div>
+        <div class="pp-switch pp-cplan__alt-tabs" role="radiogroup" aria-label="Which games" data-cplan-alt-tabs hidden></div>
         <div data-cplan-alt-rows></div>
+        <div class="pp-cpick__more" data-cplan-alt-more hidden>
+            <button type="button" class="pp-cta pp-cta--ghost" data-cplan-alt-more-btn>Show more</button>
+        </div>
     </div>
+    {% comment %}"Leave C open" (and the other square's), drawn by the script per line.{% endcomment %}
+    <div class="pp-cpick__foot" data-cplan-alt-foot hidden></div>
 </dialog>
 {% endblock %}
 

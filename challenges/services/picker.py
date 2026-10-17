@@ -46,6 +46,7 @@ data, so an honest total would mean dating the whole pool. It reports a boolean 
 `HISTORY_SCAN`-sized rather than `PAGE`-sized. An earlier version of this paragraph said "every list here is a
 `PAGE`-sized slice with a DB `COUNT` beside it", which stopped being true when the third panel landed.
 """
+from django.core.cache import cache
 from django.db.models import Q
 from django.db.models.functions import Lower
 
@@ -557,6 +558,41 @@ def _decorations(contracts):
                 flags.append('unobtainable')
         availability[contract_id] = flags
     return covers, plats, availability
+
+
+#: The site-wide set of contracts no obtainable game can finish, cached because it is the same for every hunter and
+#: costs a catalogue-wide read. An hour: a game's obtainable flag is a staff edit, rare and never urgent here.
+UNOBTAINABLE_CACHE_KEY = 'challenges:unobtainable-contracts:v1'
+UNOBTAINABLE_CACHE_SECONDS = 60 * 60
+
+
+def unobtainable_contract_ids():
+    """Every live contract the picker would flag `unobtainable` (`_decorations`' rule, `_finishable` on each
+    game's obtainable flag), for the Challenge Optimizer, which never SUGGESTS one (owner, 2026-10-17; delisted is
+    fine). A hunter may still pick one by hand, where the chip says so.
+
+    Only a concept with an unobtainable game can make a contract unfinishable (a concept with no games, or only
+    obtainable ones, counts as fine), so the game read is ONE query for those concepts' games alone; the membership
+    read is `contract_membership` over the live catalogue (its two queries). A catalogue-wide read, hence cached
+    site-wide (a JSON-safe list of ids); a few workers recomputing at the same expiry is harmless."""
+    cached = cache.get(UNOBTAINABLE_CACHE_KEY)
+    if cached is not None:
+        return set(cached)
+    by_concept = {}
+    for concept_id, obtainable in (Game.objects
+                                   .filter(concept_id__in=Game.objects.filter(is_obtainable=False).values('concept_id'))
+                                   .values_list('concept_id', 'is_obtainable')):
+        by_concept.setdefault(concept_id, []).append((None, None, obtainable))
+    bad_concepts = {cid for cid, games in by_concept.items() if not all(g[2] for g in games)}
+    blocked = []
+    if bad_concepts:
+        contracts = list(eligibility.live_contracts().only('id', 'igdb_id'))
+        for contract_id, m in eligibility.contract_membership(contracts).items():
+            members = m['anchored'].union(*m['bundles'])
+            if members & bad_concepts and not _finishable(m, by_concept, lambda g: g[2]):
+                blocked.append(contract_id)
+    cache.set(UNOBTAINABLE_CACHE_KEY, blocked, UNOBTAINABLE_CACHE_SECONDS)
+    return set(blocked)
 
 
 def _finishable(membership, games_by_concept, ok):

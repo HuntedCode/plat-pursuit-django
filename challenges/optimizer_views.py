@@ -5,9 +5,13 @@ A SEPARATE MODULE from `challenges/views.py` (already ~2,000 lines), built on it
 beside it: `_ChallengeJsonView` (401/403 JSON, never a redirect), `_json_when_limited` (a tripped limit
 answers JSON 429 with an `error`), the shared write bucket, and `creation_is_open`.
 
-TWO BUDGETS, because a plan has a cheap half and an expensive half (`services.planner`'s module docstring):
+THREE BUDGETS, because a plan has a cheap half and an expensive half (`services.planner`'s module docstring), and
+Other options is neither:
 
-- every plan, re-solve and "Other options" call spends the SOLVE bucket (`SOLVE_RATE`);
+- every plan and re-solve spends the SOLVE bucket (`SOLVE_RATE`);
+- every "Other options" call spends the SHEET bucket (`SHEET_RATE`) instead: it never solves, only reads the
+  cached pool, and the sheet asks for pages by itself as the hunter scrolls and switches tabs, so sharing the
+  solve budget would leave their next real change refused;
 - a call that misses the pool cache must ALSO pass the BUILD bucket (`BUILD_RATE`) before it builds one.
 
 So a hunter can tweak a plan freely (lock, exclude, pin, "different games") against a cached pool, and only
@@ -37,10 +41,11 @@ from django_ratelimit.decorators import ratelimit
 from challenges.models import Challenge, short_label_for
 from core.previews import previewing
 from challenges.services import challenge_service as svc
-from challenges.services import allowance, build_line, optimizer_drafts, picker, planner
+from challenges.services import allowance, build_line, optimizer_drafts, picker, planner, slot_render
 from challenges.views import (
     CHALLENGE_READ_RATELIMIT_GROUP,
     CHALLENGE_WRITE_RATELIMIT_GROUP,
+    RATE_LIMITED_MESSAGE,
     MyChallengesView,
     _ChallengeJsonView,
     _LinkedProfileRequired,
@@ -87,6 +92,8 @@ OPTIMIZER_SOLVE_RATELIMIT_GROUP = 'challenges:optimizer-solve'
 OPTIMIZER_BUILD_RATELIMIT_GROUP = 'challenges:optimizer-build'
 #: A review session is a burst of clicks; 40 a minute is far above a hunter adjusting a plan by hand.
 SOLVE_RATE = '40/m'
+OPTIMIZER_SHEET_RATELIMIT_GROUP = 'challenges:optimizer-sheet'
+SHEET_RATE = '120/m'
 #: A build is the pool scan plus the badge evaluation. A hunter changing their answers a few times a
 #: minute is normal; a loop is not.
 BUILD_RATE = '6/m'
@@ -96,6 +103,11 @@ MAX_PINS = 20
 MAX_EXCLUDED = 200
 #: One line per square: 26 letters + 25 jobs, with headroom for a catalogue that gains a job.
 MAX_LINES = 60
+#: One page of an "Other options" tab. Every game is reachable (owner, 2026-10-17); this only bounds how many cards
+#: one request decorates (covers, platforms), the sheet loading the next page as the hunter scrolls.
+ALTERNATIVES_PAGE = 24
+#: The sheet's tabs: the line's both squares, the opened square alone, its partner alone (owner, 2026-10-17).
+ALTERNATIVES_GROUPS = ('both', 'rest', 'partner')
 #: How many started badges step 4 shows as cards before "and N more".
 STARTED_PREVIEW = 8
 #: The badge picker's page, and how deep it may page (the live catalogue is a few hundred editions).
@@ -373,18 +385,27 @@ class _OptimizerJsonView(_ChallengeJsonView):
         for entry in raw_square_pins[:MAX_LINES]:
             if isinstance(entry, dict) and all(isinstance(entry.get(f), str) for f in ('type', 'key', 'contract')):
                 square_pins.append((entry['type'], entry['key'], entry['contract']))
+        raw_left_open = raw.get('left_open') or []
+        if not isinstance(raw_left_open, list):
+            raise PlanRequestError('That request could not be read.')
+        # Deduplicated BEFORE the cap, as the badge picks are, so repeats cannot crowd out real entries.
+        left_open = list(dict.fromkeys(
+            (e['type'], e['key']) for e in raw_left_open
+            if isinstance(e, dict) and isinstance(e.get('type'), str) and isinstance(e.get('key'), str)))[:MAX_LINES]
         ids = _ids_for({*pins, *excluded, *penalized, *(s for _, _, s in square_pins)})
         tweaks = planner.Tweaks(
             pins=frozenset(ids[s] for s in pins if s in ids),
             square_pins={(t, k): ids[s] for t, k, s in square_pins if s in ids},
             excluded=frozenset(ids[s] for s in excluded if s in ids),
             penalized=frozenset(ids[s] for s in penalized if s in ids),
+            left_open=frozenset(left_open),
         )
         slugs = {
             'pins': [s for s in dict.fromkeys(pins) if s in ids],
             'square_pins': [{'type': t, 'key': k, 'contract': s} for t, k, s in square_pins if s in ids],
             'excluded': [s for s in dict.fromkeys(excluded) if s in ids],
             'penalized': [s for s in dict.fromkeys(penalized) if s in ids],
+            'left_open': [{'type': t, 'key': k} for t, k in left_open],
         }
         return tweaks, slugs
 
@@ -531,6 +552,8 @@ class OptimizerPlanView(_OptimizerJsonView):
         if pool is None:
             return JsonResponse({'error': BUILD_LIMITED_MESSAGE}, status=429)
         plan = planner.make_plan(profile, options, pool, states, tweaks)
+        # A square left open that the hunter has since filled by hand is forgotten, not saved for ever.
+        tweak_slugs = {**tweak_slugs, 'left_open': [{'type': t, 'key': k} for t, k in plan.left_open]}
         body = _plan_json(plan, pool, states, tweaks, built, badges_only=options.badges_only)
         if outcome == allowance.SPEND:
             if preview_week(request) is not None:
@@ -562,15 +585,23 @@ def _autosave(profile, options, tweak_slugs):
 
 
 class OptimizerAlternativesView(_OptimizerJsonView):
-    """ "Other options" for one square, from the cached pool."""
+    """ "Other options" for one square, from the cached pool, a page at a time."""
 
-    @method_decorator(ratelimit(group=OPTIMIZER_SOLVE_RATELIMIT_GROUP, key='user', rate=SOLVE_RATE,
-                                method='POST', block=False))
-    @_json_when_limited
     def post(self, request):
         profile = self._profile(request)
         try:
             data = self.body(request)
+        except PlanRequestError as exc:
+            return self.fail(exc)
+        offset = data.get('offset')
+        if not isinstance(offset, int) or isinstance(offset, bool) or offset < 0:
+            offset = 0
+        # THE SHEET BUCKET, every page and tab alike (module docstring). Read at call time, not baked into a
+        # decorator, so the rate is one module constant the tests can turn.
+        if is_ratelimited(request, group=OPTIMIZER_SHEET_RATELIMIT_GROUP, key='user', rate=SHEET_RATE,
+                          method='POST', increment=True):
+            return JsonResponse({'error': RATE_LIMITED_MESSAGE}, status=429)
+        try:
             options = self.options(data)
             tweaks = self.tweaks(data)
         except PlanRequestError as exc:
@@ -593,20 +624,38 @@ class OptimizerAlternativesView(_OptimizerJsonView):
             return JsonResponse({'error': CATALOGUE_BUSY_MESSAGE}, status=429)
         if pool is None:
             return JsonResponse({'error': BUILD_LIMITED_MESSAGE}, status=429)
-        # THE LINE'S OWN GAME is left out like an excluded one: it fits both squares by definition, and in the
-        # covering half it would take one of the places the sheet shows (the sheet never offers it anyway).
+        # THE LINE'S OWN GAME is left out like an excluded one: it fits both squares by definition, and the sheet
+        # never offers it (counted, it would make the "C + Gunslinger" tab read one game more than it can show).
         current = data.get('current')
         skip = set(tweaks.excluded)
         if isinstance(current, str) and current:
             skip.update(Contract.objects.filter(slug=current).values_list('pk', flat=True))
-        found = planner.alternatives(pool, states, square, frozenset(skip), options=options, partners=partners)
-        rows = _rows_by_id({cand['id'] for cand, _, _ in found})
+        halves = planner.alternatives(pool, states, square, frozenset(skip), options=options, partners=partners,
+                                      left_open=tweaks.left_open, badge_only=data.get('badge_only') is True)
+        # THE TAB: the one asked for, else the first with games (both, then the square alone, then the partner
+        # alone), else the square alone. `fallback` (the badge chip) also moves off an asked-for tab the filter
+        # left empty. `offset` pages it.
+        first_with_games = next((g for g in ALTERNATIVES_GROUPS if halves[g]), 'rest')
+        group = data.get('group')
+        if not isinstance(group, str) or group not in ALTERNATIVES_GROUPS:
+            group = first_with_games
+        elif data.get('fallback') is True and not halves[group]:
+            group = first_with_games
+        found = halves[group][offset:offset + ALTERNATIVES_PAGE]
+        rows = _rows_by_id({cand['id'] for cand, _ in found})
         labels = _labels(states)
         return JsonResponse({
             'square': _square(square, labels),
+            'group': group,
+            'counts': {g: len(halves[g]) for g in ALTERNATIVES_GROUPS},
             'rows': [{**rows[cand['id']], 'stages': cand['stages'], 'progress': cand['progress'],
-                      'also': [_square(sq, labels) for sq in also], 'both': covers}
-                     for cand, also, covers in found if cand['id'] in rows],
+                      'also': [_square(sq, labels) for sq in also]}
+                     for cand, also in found if cand['id'] in rows],
+            'offset': offset,
+            # Counted on the page TAKEN, not the rows drawn, so a row whose contract vanished mid-read never
+            # shifts the next page's start.
+            'showing': len(found),
+            'more': offset + len(found) < len(halves[group]),
         })
 
 
@@ -824,8 +873,9 @@ MAX_PARTNER_SQUARES = len(planner.PLANNABLE_TYPES) - 1
 
 def _partner_squares(raw):
     """The other squares of the line Other options was opened from, as (type, key) pairs. Hunter-supplied, so
-    anything malformed is dropped rather than refused: the sheet still answers, just without the "covers both"
-    half. `alternatives` itself ignores a partner in a run with no active run, or in the opened square's own run."""
+    anything malformed is dropped rather than refused: the sheet still answers, just without the tabs about
+    the partner ("C + Gunslinger", "Gunslinger only"). `alternatives` itself ignores a partner in a run with
+    no active run, or in the opened square's own run."""
     if not isinstance(raw, list):
         return []
     pairs = [(p.get('type'), p.get('key')) for p in raw[:MAX_PARTNER_SQUARES] if isinstance(p, dict)]
@@ -843,6 +893,16 @@ def _badge_blocked(plan, pool, states):
     fillable = {(t, k) for c in pool['candidates'] if not c['stages']
                 for t, keys in c['fits'].items() if t in states and c['id'] not in states[t].in_run for k in keys}
     return [sq for sq in plan.empty if sq in fillable]
+
+
+def _job_groups(labels):
+    """The Job view's sections (owner, 2026-10-17): the jobs run's squares bucketed by discipline, in the run
+    page's own order (`slot_render.discipline_sequence`), keys in board order. Empty with no jobs run."""
+    by_discipline = {}
+    for key, info in labels.get(planner.CHALLENGE_TYPE_JOBS, {}).items():
+        by_discipline.setdefault((info['look'] or {}).get('disc_slug') or '', []).append(key)
+    return [{**slot_render.discipline_head(slug), 'keys': by_discipline[slug]}
+            for slug in slot_render.discipline_sequence(by_discipline)]
 
 
 def _square(square, labels):
@@ -864,7 +924,10 @@ def _plan_json(plan, pool, states, tweaks, built, badges_only=False):
     order = _square_order(labels)
     # A game the answers would not have chosen is "outside your filters": not in the pool, or (badge games only)
     # in it but clearing no stage, so a must-have the hunter forced in is tagged either way.
-    pool_ids = {c['id'] for c in pool['candidates'] if c['stages'] or not badges_only}
+    # An UNOBTAINABLE must-have that PASSED the filters is not "outside your filters" either: the pool left it out
+    # for being unfinishable, which its own chip already says (`pool['unobtainable']`, kept by the build).
+    pool_ids = ({c['id'] for c in pool['candidates'] if c['stages'] or not badges_only}
+                | {cid for cid in pool.get('unobtainable', ()) if cid in pool['stages'] or not badges_only})
     pinned = set(tweaks.pins) | set(tweaks.square_pins.values())
     ids = (set(plan.candidates) | {cur for cur, _, _ in plan.swaps.values()} | set(plan.unplaced_pins))
     rows = _rows_by_id(ids)
@@ -931,6 +994,8 @@ def _plan_json(plan, pool, states, tweaks, built, badges_only=False):
         'unplaced': [{**{k: rows.get(cid, {}).get(k, '') for k in ('slug', 'name')}, 'reason': reason}
                      for cid, reason in plan.unplaced_pins.items()],
         'empty': [_square(sq, labels) for sq in sorted(plan.empty, key=order.__getitem__)],
+        'left_open': [_square(sq, labels) for sq in sorted(plan.left_open, key=order.__getitem__)],
+        'job_groups': _job_groups(labels),
         'notes': {
             'hatch': {t: [_square((t, k), labels) for k in keys] for t, keys in plan.hatch_keys.items() if keys},
             'importer': plan.importer_note,

@@ -66,6 +66,15 @@ def test_a_saved_plan_reopens_with_its_answers_and_named_must_haves():
     assert found['tweaks']['excluded'] == ['x'] and found['updated_at'] is not None
 
 
+def test_squares_left_open_reopen_with_the_plan_and_damaged_entries_are_dropped():
+    profile = ProfileFactory()
+    optimizer_drafts.save(profile, _options(), _tweaks(left_open=[{'type': AZ, 'key': 'C'}, {'type': AZ}, 7]))
+    assert optimizer_drafts.to_reopen(profile)['tweaks']['left_open'] == [{'type': AZ, 'key': 'C'}]
+    # An older row from before the field existed reads as none left open, never a 500.
+    OptimizerDraft.objects.filter(profile=profile).update(tweaks=_tweaks())
+    assert optimizer_drafts.to_reopen(profile)['tweaks']['left_open'] == []
+
+
 def test_nothing_to_reopen_without_a_saved_plan():
     assert optimizer_drafts.to_reopen(ProfileFactory()) is None
 
@@ -109,7 +118,7 @@ def test_a_damaged_saved_row_reads_as_empty_tweaks_not_a_500():
     OptimizerDraft.objects.create(profile=profile, answers={'types': [AZ]},
                                   tweaks={'pins': 'oops', 'square_pins': [{'type': AZ}, 7], 'excluded': [1, 'ok']})
     found = optimizer_drafts.to_reopen(profile)
-    assert found['tweaks'] == {'pins': [], 'square_pins': [], 'excluded': ['ok'], 'penalized': []}
+    assert found['tweaks'] == {'pins': [], 'square_pins': [], 'excluded': ['ok'], 'penalized': [], 'left_open': []}
 
 
 def test_a_free_hunters_spent_week_reopens_that_plan_with_the_drafts_tweaks_when_they_match():
@@ -145,13 +154,15 @@ def test_every_built_plan_is_autosaved_with_its_valid_tweaks(client):
 
     resp = _plan(client, platforms=['PS5'], tweaks={
         'pins': [pinned.slug, 'not-a-contract'], 'excluded': [pinned.slug, pinned.slug],
-        'square_pins': [{'type': AZ, 'key': 'A', 'contract': pinned.slug}, {'type': AZ, 'key': 'B', 'contract': 'nope'}]})
+        'square_pins': [{'type': AZ, 'key': 'A', 'contract': pinned.slug}, {'type': AZ, 'key': 'B', 'contract': 'nope'}],
+        'left_open': [{'type': AZ, 'key': 'C'}, {'type': AZ, 'key': 'C'}, {'type': AZ}, 'D']})
 
     assert resp.status_code == 200
     draft = OptimizerDraft.objects.get(profile=profile)
     assert draft.answers['platforms'] == ['PS5']
     assert draft.tweaks == {'pins': [pinned.slug], 'excluded': [pinned.slug], 'penalized': [],
-                            'square_pins': [{'type': AZ, 'key': 'A', 'contract': pinned.slug}]}
+                            'square_pins': [{'type': AZ, 'key': 'A', 'contract': pinned.slug}],
+                            'left_open': [{'type': AZ, 'key': 'C'}]}
 
 
 def test_a_refused_plan_saves_nothing(client):
