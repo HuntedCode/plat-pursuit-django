@@ -1,0 +1,2 @@
+{% comment %}A page of selectable badge cards for the optimizer's picker (`OptimizerBadgesView`).{% endcomment %}
+{% for card in cards %}{% include 'challenges/partials/_optimizer_badge_card.html' with card=card selectable=True %}{% endfor %}

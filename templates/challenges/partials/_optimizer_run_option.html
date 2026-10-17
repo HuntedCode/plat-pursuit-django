@@ -1,0 +1,44 @@
+{% comment %}One challenge type on the optimizer's step 1, as My Challenges draws it (the shared summary + reward partials),
+plus the optimizer's own control: an "Include" toggle for a running challenge, or Start / Resume for one that is not.
+Takes `r` (`optimizer_views.run_option`) and `creation_is_open`. Also rendered by `OptimizerStartView`, whose reply swaps
+it in for the Start card it replaces, so the card a hunter gets without a reload is the card a reload would draw.
+
+THE TOGGLE IS ITS OWN `<label>`, never the whole card: the card holds a heading and paragraphs, which a label may
+not contain, and wrapping them would make the checkbox's accessible name the whole card. "Include A-Z" is both
+what it says and what it is called.{% endcomment %}
+{% if r.run %}
+<div class="pp-cplan__opt pp-cplan__opt--run" data-cplan-run="{{ r.type }}">
+    <div class="pp-cplan__opt-body">
+        {% include 'challenges/partials/_type_card_summary.html' with card=r.card heading='h3' %}
+        {% include 'challenges/partials/_type_card_reward.html' with card=r.card %}
+    </div>
+    <div class="pp-cplan__opt-foot">
+        <span class="pp-cplan__opt-open" data-cplan-open-for="{{ r.type }}">{{ r.open }} open square{{ r.open|pluralize }}</span>
+        <label class="pp-cplan__toggle">
+            <input type="checkbox" name="types" value="{{ r.type }}" checked data-cplan-type>
+            <span class="pp-cplan__check" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+            Include {{ r.label }}
+        </label>
+    </div>
+</div>
+{% else %}
+<div class="pp-cplan__opt {% if r.resumable or creation_is_open %}pp-cplan__opt--start{% else %}pp-cplan__opt--off{% endif %}" data-cplan-run="{{ r.type }}">
+    <div class="pp-cplan__opt-body">
+        {% include 'challenges/partials/_type_card_summary.html' with card=r.card heading='h3' %}
+        {% include 'challenges/partials/_type_card_reward.html' with card=r.card %}
+    </div>
+    {% if r.resumable or creation_is_open %}
+    {% comment %}The same `challenge_start` door My Challenges uses, so the beta gate and resume-before-create are its
+    rules, not a copy. The script posts to `data-start-url` instead and swaps the card in place; without JavaScript
+    the form posts here and `return_to` brings the hunter back to the optimizer.{% endcomment %}
+    <form method="post" action="{% url 'challenge_start' r.type %}" class="pp-cplan__opt-form"
+          data-cplan-start data-start-url="{% url 'challenge_optimizer_start' r.type %}">
+        {% csrf_token %}
+        <input type="hidden" name="return_to" value="optimizer">
+        <button type="submit" class="pp-cta">{% if r.resumable %}Resume{% else %}Start{% endif %} {{ r.label }}</button>
+    </form>
+    {% else %}
+    <p class="pp-cplan__opt-sub">Starting one is in beta for members first.</p>
+    {% endif %}
+</div>
+{% endif %}
