@@ -818,12 +818,15 @@ when a square completes in place (the live board re-renders it from the same par
 a claim's re-render does not replay it, because the board is `is-settled` by then). Never on hover: a finished
 square is not interactive. Nothing loops and only `transform` animates. **It must read at a glance**: the first
 cut used a faint `overlay` wash, which vanishes on dark covers (most covers are dark), so the wash is on
-`screen` (it can only lighten) and the ring carries it at thumbnail size. The share card's squares (`shareables/partials/_challenge_card_square.html`) do not wear it yet.
+`screen` (it can only lighten) and the ring carries it at thumbnail size. **The share card wears it too** (`shareables/partials/_challenge_card_square.html`): the same recipe written
+inline, since the card renders with no stylesheet (a test pins the two copies' stops together), still like the
+whole image. A finished run's card is every square done, so the whole board is foiled.
 
 **Preview it with `?preview=challenge-states`** on an A-Z or Job Coverage run page (staff or moderator): the
 board is redrawn as a fixed mix (square N takes done / in progress / empty by N mod 3), borrowing real catalogue
 covers for the squares the run left empty (`slot_render.preview_state_groups`, one bounded query). It writes
-nothing, and the board is read-only while it shows, since its squares no longer match the run behind them.
+nothing, and the board is read-only while it shows, since its squares no longer match the run behind them. The
+door rides on the share button's two URLs, so the share card's preview and its PNG draw the same mix.
 
 ## The two public pages
 

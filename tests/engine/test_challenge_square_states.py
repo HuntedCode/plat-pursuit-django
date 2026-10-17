@@ -233,3 +233,94 @@ def test_the_preview_takes_the_claim_buttons_away(client):
 
 def test_the_job_line_on_a_finished_square_is_lifted_for_contrast():
     assert '.pp-csq--done .pp-csq__job { color: color-mix(in oklab, var(--disc, var(--pp-primary)) 24%, #fff); }' in CSS
+
+
+# --- the share card wears it too (owner, 2026-10-17) ------------------------------------------------------
+
+CARD_SQUARE = Path('templates/shareables/partials/_challenge_card_square.html').read_text(encoding='utf-8')
+
+
+def _card_square(state, is_complete=False):
+    sq = {'key': 'A', 'state': state, 'cover': 'https://img.example/a.png' if state != 'open' else '',
+          'cover_is_art': True, 'is_job': False, 'glyph': '', 'colour': ''}
+    return render_to_string('shareables/partials/_challenge_card_square.html',
+                            {'sq': sq, 'w': 80, 'h': 107, 'mark_px': 22, 'well_px': 34, 'is_complete': is_complete})
+
+
+def test_a_finished_card_square_wears_the_foil_and_nothing_else_does():
+    done = _card_square('done')
+    assert 'mix-blend-mode: screen' in done and 'conic-gradient(' in done and 'isolation: isolate' in done
+    # Over the scrim, under the mark, as on the page.
+    assert done.index('rgba(5, 8, 12, 0.92)') < done.index('mix-blend-mode: screen') < done.index('>A</span>')
+    assert 'mix-blend-mode' not in _card_square('assigned') and 'mix-blend-mode' not in _card_square('open')
+
+
+def test_a_finished_runs_card_is_the_full_holo_board():
+    # Every square of a finished run is done, so every square is foiled (and the check is the live run's only).
+    html = _card_square('done', is_complete=True)
+    assert 'mix-blend-mode: screen' in html and 'M20 6 9 17l-5-5' not in html
+
+
+def _call(source, name):
+    """The full `name(...)` expression starting at its first occurrence, parentheses matched, whitespace collapsed."""
+    start = source.index(name + '(')
+    depth = 0
+    for i in range(start, len(source)):
+        depth += {'(': 1, ')': -1}.get(source[i], 0)
+        if depth == 0 and source[i] == ')':
+            return ' '.join(source[start:i + 1].split())
+    raise AssertionError('unbalanced ' + name)
+
+
+def test_the_page_and_the_card_share_one_foil_recipe():
+    # Two copies (the card renders with no stylesheet), so the WHOLE recipe is pinned to agree: every stop, angle,
+    # the grain, the ring's gradient, its padding and its mask. Change one copy alone and this fails.
+    foil = CSS[CSS.index('.pp-csq__foil {'):CSS.index('.pp-csq--done { isolation: isolate; }')]
+    card = CARD_SQUARE[CARD_SQUARE.index("{% if sq.state == 'done' %}<div"):]
+    for name in ('repeating-linear-gradient', 'linear-gradient(120deg', 'conic-gradient'):
+        fn = name.split('(')[0]
+        page_expr = _call(foil[foil.index(name):], fn)
+        card_expr = _call(card[card.index(name):], fn)
+        assert page_expr == card_expr, (page_expr, card_expr)
+    for declaration in ('padding: 2px;', 'mix-blend-mode: screen;',
+                        '-webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);',
+                        '-webkit-mask-composite: xor;',
+                        'mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);'):
+        assert declaration in foil and declaration in card, declaration
+
+
+@pytest.mark.django_db
+def test_the_preview_door_reaches_the_share_card(client):
+    profile = _team(client)
+    GameFactory()
+    run = svc.start(profile, CHALLENGE_TYPE_AZ)
+    page = client.get(reverse('challenge_detail', args=[run.id]) + '?preview=challenge-states').content.decode()
+    # The share button carries the door onto BOTH card URLs ...
+    button = page[page.index('data-challenge-share'):]
+    button = button[:button.index('>')]
+    assert button.count('?preview=challenge-states"') == 2
+    html = json_body(client.get(reverse('challenge_card_html', args=[run.id]) + '?preview=challenge-states'))['html']
+    real = json_body(client.get(reverse('challenge_card_html', args=[run.id])))['html']
+    # ... and the card draws the same mix: finished squares foiled, where the real fresh run has none.
+    assert 'mix-blend-mode: screen' in html and 'mix-blend-mode: screen' not in real
+
+
+@pytest.mark.django_db
+def test_the_share_button_carries_no_door_off_the_preview(client):
+    profile = _team(client)
+    run = svc.start(profile, CHALLENGE_TYPE_AZ)
+    page = client.get(reverse('challenge_detail', args=[run.id])).content.decode()
+    assert '?preview=' not in page[page.index('data-challenge-share'):][:400]
+
+
+def json_body(resp):
+    import json
+    return json.loads(resp.content)
+
+
+def test_the_png_url_joins_its_theme_onto_an_existing_query():
+    js = Path('static/js/challenge-share.js').read_text(encoding='utf-8')
+    png = js[js.index('function pngUrl() {'):]
+    png = png[:png.index('\n    }\n')]
+    assert "var join = current.pngUrl.indexOf('?') === -1 ? '?' : '&';" in png
+    assert "join + 'theme=' + encodeURIComponent(choice.value)" in png

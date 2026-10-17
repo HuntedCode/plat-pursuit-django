@@ -668,6 +668,9 @@ class ChallengeDetailView(DetailView):
         # then swap real squares into a pretend board.
         context['claims_open'] = context['is_owner'] and not context.get('preview_slot_states')
         context['can_share'] = context['is_owner'] and share_card.is_shareable(challenge)
+        # The preview door rides on the share button's two URLs, so the card shows the same mix as the board.
+        context['share_preview_qs'] = ('?preview=%s' % PREVIEW_SLOT_STATES
+                                       if context.get('preview_slot_states') else '')
         context['share_themes'] = get_ground_themes() if context['can_share'] else []
         context.update(self._tutorial_context(challenge, context))
         context['progress'] = (
@@ -1460,7 +1463,8 @@ class ChallengeCardHTMLView(_ChallengeCardView):
         challenge = self.card_run(request, challenge_id)
         if challenge is None:
             return self.not_found()
-        context = share_card.build_card_context(challenge)
+        context = share_card.build_card_context(
+            challenge, preview_states=previewing(request, PREVIEW_SLOT_STATES))
         return JsonResponse({
             'html': render_to_string(share_card.CARD_TEMPLATE, context),
             # HERE rather than on the button, so a page listing many runs needs no per-row owner lookup to
@@ -1490,7 +1494,8 @@ class ChallengeCardPNGView(_ChallengeCardView):
         if theme not in dict(get_ground_themes()):
             theme = PLAT_CARD_DEFAULT_THEME
 
-        context = share_card.build_card_context(challenge, cache_images=True)
+        context = share_card.build_card_context(
+            challenge, cache_images=True, preview_states=previewing(request, PREVIEW_SLOT_STATES))
         html = render_to_string(share_card.CARD_TEMPLATE, context)
         try:
             from core.services.playwright_renderer import render_png

@@ -28,7 +28,7 @@ from users.services.marks import mark_style
 from challenges.models import (CALENDAR_MONTH_DAYS, CHALLENGE_TYPE_AZ, CHALLENGE_TYPE_CALENDAR,
                                CHALLENGE_TYPE_JOBS)
 from challenges.services import calendar_render, rewards
-from challenges.services.slot_render import slot_groups
+from challenges.services.slot_render import slot_groups, preview_state_groups
 
 logger = logging.getLogger(__name__)
 
@@ -103,10 +103,12 @@ def is_shareable(challenge):
     return challenge.challenge_type in SHAREABLE_TYPES and not challenge.is_deleted
 
 
-def build_card_context(challenge, *, cache_images=False):
+def build_card_context(challenge, *, cache_images=False, preview_states=False):
     """Everything `challenge_card.html` draws, flat.
 
-    `cache_images=True` for the PNG (see the module docstring).
+    `cache_images=True` for the PNG (see the module docstring). `preview_states=True` is the team's
+    `?preview=challenge-states` door reaching the card: its board is the same fixed mix the run page shows
+    (`slot_render.preview_state_groups`), so the foil can be judged on a fresh dev run. Writes nothing.
 
     ONE SHELL, A BOARD PER TYPE. The header, the brand and the plaque are the same on every card; the board
     is what differs, so the context carries `kind` and exactly one of:
@@ -128,6 +130,8 @@ def build_card_context(challenge, *, cache_images=False):
     if kind == CHALLENGE_TYPE_CALENDAR:
         return _calendar_context(challenge, profile, cache_images=cache_images)
     groups = slot_groups(challenge)
+    if preview_states:
+        groups = preview_state_groups(groups)
     is_jobs = kind == CHALLENGE_TYPE_JOBS
 
     shelves = [{

@@ -459,6 +459,10 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
  * responses off squares that do nothing (`visual-identity.md` names "sparkles on hover states" an
  * anti-pattern). A run page is 25 or 26 of these, so nothing loops and only `transform` animates.
  *
+ * ONE RECIPE, TWO COPIES: the share card's squares wear this foil too, written inline in
+ * `shareables/partials/_challenge_card_square.html` because the card renders with no stylesheet. Change one,
+ * change the other.
+ *
  * COLOUR: the brand's own platinum (`--pp-metal-platinum`, #8fd2ea) as the dominant hue; the prism around it is
  * light, not brand colour, so it is raw rgba, as the house's other sheens are (`.pp-chero__title::after`,
  * `.claim-banner::after`). Nothing here is mixed inside a keyframe (lightningcss drops those frames). */
