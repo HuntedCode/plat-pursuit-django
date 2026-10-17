@@ -156,7 +156,9 @@
 
     function pngUrl() {
         var choice = picked();
-        return current.pngUrl + (choice ? '?theme=' + encodeURIComponent(choice.value) : '');
+        // `&` when the URL already carries a query (the team's preview door rides on it).
+        var join = current.pngUrl.indexOf('?') === -1 ? '?' : '&';
+        return current.pngUrl + (choice ? join + 'theme=' + encodeURIComponent(choice.value) : '');
     }
 
     function boot(first) {

@@ -203,7 +203,9 @@ Gated on the type, because an A-Z run references none of it and an unused sprite
     updating.{% endcomment %}
     {% if rewards.per_square %}
     <section class="scard mb-3 pp-head-cascade" data-cpay-wrap aria-labelledby="cpay-head">
-        {% include 'challenges/partials/_rewards_panel.html' %}
+        {% comment %}`is_owner=claims_open`: the panel's Claim buttons are the owner's, except under the team's
+        `?preview=challenge-states`, which must write nothing.{% endcomment %}
+        {% include 'challenges/partials/_rewards_panel.html' with is_owner=claims_open %}
     </section>
     {% endif %}
 
