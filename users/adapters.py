@@ -16,6 +16,18 @@ class CustomAccountAdapter(DefaultAccountAdapter):
             raise PermissionDenied('Unable to determine client IP address')
         return ip
 
+    def save_user(self, request, user, form, commit=True):
+        """A new account takes its browser's timezone (the signup form's `browser_timezone`, already validated),
+        in the same save, so a hunter who never opens Settings still reads their own clock. Not a confirmation:
+        `timezone_confirmed_at` stays null, and the Recap's prompt still asks them to confirm the guess."""
+        user = super().save_user(request, user, form, commit=False)
+        zone = getattr(form, 'cleaned_data', {}).get('browser_timezone') if form is not None else ''
+        if zone:
+            user.user_timezone = zone
+        if commit:
+            user.save()
+        return user
+
     def confirm_email(self, request, email_address):
         logger.debug(f"Confirming email: {email_address.email} for user {email_address.user}")
         # The RETURN is load-bearing and was missing for the override's whole life: allauth

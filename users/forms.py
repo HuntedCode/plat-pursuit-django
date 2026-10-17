@@ -2,6 +2,7 @@ from django import forms
 from django.contrib.auth.forms import PasswordChangeForm
 from allauth.account.forms import SignupForm
 from .models import CustomUser
+from .services.timezone_service import normalize_zone
 
 
 class CustomUserCreationForm(SignupForm):
@@ -19,9 +20,19 @@ class CustomUserCreationForm(SignupForm):
         label='',
     )
 
+    # THE BROWSER'S ZONE, filled by the signup page's script (owner, 2026-10-17): a new account starts in
+    # its hunter's own timezone instead of UTC. A guess, not an answer, so it never stamps
+    # `timezone_confirmed_at` (`users.services.timezone_service`). Missing or unknown: the UTC default.
+    browser_timezone = forms.CharField(required=False, max_length=64, widget=forms.HiddenInput)
+
     class Meta:
         model = CustomUser
         fields = ("email", "password1", "password2")
+
+    def clean_browser_timezone(self):
+        # The field's own choices (`CustomUser.user_timezone`), an old browser-reported name mapped to its current
+        # one; anything else is dropped, never an error, because a hunter cannot see or fix this input.
+        return normalize_zone(self.cleaned_data.get('browser_timezone'))
 
     def clean_website(self):
         if self.cleaned_data.get('website'):

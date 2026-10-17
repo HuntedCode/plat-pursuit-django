@@ -415,6 +415,7 @@ The tutorial endpoints are not currently routed.
 |--------|------|------|---------|
 | POST | `/api/v1/equip-title/` | Login | Equip/unequip title |
 | POST | `/api/v1/user/timezone/` | Login | Update user timezone |
+| POST | `/api/v1/user/timezone/detect/` | Login | The browser's zone for an account still on the untouched UTC default; `{adopted, timezone}`. Never stamps `timezone_confirmed_at`, never overwrites a chosen zone (one conditional UPDATE). Sent once by `base.html`'s script for those accounts only. 10/min |
 | POST | `/api/v1/tracking/site-event/` | No | Track client-side event |
 | POST | `/api/v1/easter-eggs/roll/` | Login | Server-side easter-egg probability roll |
 | GET | `/api/v1/game-backgrounds/` | Login | Search game backgrounds |

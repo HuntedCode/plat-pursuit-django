@@ -138,6 +138,18 @@ timezone prompt is for. `CustomUser.timezone_confirmed_at` answers that and noth
 answered, and only an explicit save sets it (including a save that picks the same zone back -- confirming
 UTC is an answer).
 
+**The zone is DETECTED before it is confirmed** (owner, 2026-10-17). A new account takes its browser's zone at signup
+(`CustomUserCreationForm.browser_timezone`, saved by `CustomAccountAdapter.save_user`), and an existing account
+still on the untouched UTC default takes it once, silently, on its next visit (`base.html`'s script posts to
+`/api/v1/user/timezone/detect/`, rendered only for those accounts; this browser remembers it asked). Both go
+through `timezone_service`, and NEITHER stamps `timezone_confirmed_at`: a detected zone is a guess, so this prompt
+still opens and asks the hunter to confirm it. `adopt_detected_timezone` is one conditional UPDATE (UTC AND never
+confirmed), so a guess can never overwrite a zone a hunter chose. **Browsers still report some zones by their OLD
+names** (Chrome and Safari give `Asia/Calcutta`, `Europe/Kiev`, `America/Buenos_Aires`...), which are not in the
+field's choices (`pytz.common_timezones`): `timezone_service.normalize_zone` maps those (`LEGACY_ZONE_NAMES`) to
+their current names first; anything else unlisted is dropped and the account stays on UTC. This browser's "already
+asked" mark is per ACCOUNT (`pp-tz-detect-asked:<id>`), so a shared computer's second account is still asked.
+
 It opens by itself only when **both** are true: the server says never confirmed, and this device has not
 dismissed it (`localStorage['pp.tz.prompt.dismissed']`). The two answer different questions, which is why
 both exist -- the server flag is durable and cross-device, the local one is "not right now" and
