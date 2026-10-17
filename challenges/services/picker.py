@@ -645,6 +645,24 @@ def _catchup_offers(profile, challenge, key, *, query, limit, badge_only=False, 
     return lifted, len(candidates) >= limit
 
 
+def contract_rows(contracts):
+    """{contract id: row} with the cover, platforms and availability the picker's own rows carry.
+
+    PUBLIC for the Challenge Optimizer, so a plan line and a picker row are the same card: one `_decorations`
+    read for the whole list, bounded by the list."""
+    covers, plats, avail = _decorations(contracts)
+    return {c.id: _row(c, covers, plats, avail) for c in contracts}
+
+
+def square_labels(challenge):
+    """{key: {'label', 'look'}} for every square of a run: the name the square goes by, and its job glyph and
+    discipline (None for an A-Z letter). One catalogue read for Job Coverage, none for A-Z. PUBLIC for the
+    Challenge Optimizer, which names squares across two runs at once."""
+    atoms = key_atoms(challenge)
+    return {key: {'label': _key_name(atoms, key), 'look': _key_look(atoms[key]) if key in atoms else None}
+            for key in challenge.slots.values_list('key', flat=True)}
+
+
 def _row(contract, covers, plats, avail):
     return {
         'slug': contract.slug,

@@ -1,0 +1,21 @@
+{% load humanize %}{% comment %}A challenge TYPE card's reward line (what finishing the next run is worth). SHARED by My
+Challenges and the Challenge Optimizer. Takes `card` (from `MyChallengesView.card_for`).{% endcomment %}
+{% if card.reward %}
+<p class="pp-cwr">
+    <span class="pp-cwr__label">Reward</span>
+    {% comment %}THE TITLE SPAN IS GATED, not the whole line: past the second completion
+    there is no new title to earn, and the XP is still paid. Gating the line lost both.{% endcomment %}
+    {% if card.reward.title_name %}
+    <span class="pp-cwr__title">{{ card.reward.title_name }}</span>
+    {% endif %}
+    {% comment %}THE CALENDAR'S RUNG, AND WHERE IT SITS: its titles are a ladder climbed during the
+    run, so the line names the next one the hunter can still earn (`rewards.next_calendar_rung`).
+    {% endcomment %}
+    {% if card.reward.at_days %}
+    <span class="pp-cwr__at">at {{ card.reward.at_days }} days</span>
+    {% endif %}
+    {% if card.reward.per_square %}
+    <span class="pp-cwr__xp">+{{ card.reward.per_square|intcomma }} job XP per job</span>
+    {% endif %}
+</p>
+{% endif %}

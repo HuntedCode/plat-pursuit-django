@@ -1,0 +1,369 @@
+{% extends 'base.html' %}
+{% load static job_icons %}
+
+{% block title %}Challenge Optimizer{% endblock %}
+{% comment %}NOINDEX, NOFOLLOW, like My Challenges: a login-gated page about one hunter's own runs.{% endcomment %}
+{% block robots %}noindex, nofollow{% endblock %}
+
+{% block content %}
+{% comment %}THE SPRITE, so plan lines and the Other options sheet can reference job glyphs the way the run page
+does (`challenge-detail.js`'s `jobIcon`). ALWAYS emitted: a Job Coverage run can be started from step 1 without a
+reload, and its squares need the glyphs from then on.{% endcomment %}
+{% job_icon_sprite %}
+
+<div class="pp-gbrowse pp-cplan" data-cplan
+     data-plan-url="{% url 'challenge_optimizer_plan' %}{{ preview_qs }}"
+     data-alt-url="{% url 'challenge_optimizer_alternatives' %}{{ preview_qs }}"
+     data-search-url="{% url 'challenge_optimizer_search' %}"
+     data-apply-url="{% url 'challenge_optimizer_apply' %}"
+     data-max-pins="{{ limits.pins }}" data-max-badges="{{ limits.badges }}"
+     data-allowance="{% if allowance_unlimited %}unlimited{% elif allowance_in_use %}in_use{% else %}available{% endif %}"
+     data-allowance-next="{{ allowance_next_label }}" data-allowance-next-at="{{ allowance_next.iso }}"
+     data-allowance-if-now="{{ allowance_if_used_now_label }}" data-allowance-if-now-at="{{ allowance_if_used_now.iso }}"
+     data-when-tz="{{ when_tz }}" data-when-clock="{% if request.user.use_24hr_clock %}24{% else %}12{% endif %}"
+     data-badges-url="{% url 'challenge_optimizer_badges' %}"{% if preview_door %} data-preview="{{ preview_door }}"{% endif %}>
+    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+
+    <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
+        <div class="card-body p-4 md:p-5 lg:p-6 pp-head-cascade">
+            <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0">
+                    <div class="flex items-center gap-2">
+                        <svg class="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <circle cx="6" cy="19" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/><circle cx="18" cy="5" r="3"/>
+                        </svg>
+                        <h1 class="text-lg md:text-xl lg:text-2xl font-bold">Challenge Optimizer</h1>
+                    </div>
+                    <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1" data-cplan-tagline>
+                        {% if run_count > 1 %}Make every game count twice: one optimized plan for both challenges.{% else %}The best game for every open square, on your terms.{% endif %}
+                    </p>
+                </div>
+                {% comment %}ALWAYS RENDERED, hidden with no runs: starting one from step 1 reveals it without a reload.{% endcomment %}
+                <div class="text-right flex items-baseline gap-1 whitespace-nowrap md:block shrink-0" data-cplan-tally {% if not has_runs %}hidden{% endif %}>
+                    <span class="pp-tally text-primary leading-none font-bold text-sm md:text-3xl" data-cplan-open-total data-countup="{{ open_total }}">{{ open_total }}</span>
+                    <span class="text-xs text-base-content/50 md:mt-1 md:block md:uppercase md:tracking-wider" data-cplan-open-label>open square{{ open_total|pluralize }}</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    {% comment %}THE WEEKLY ALLOWANCE, said up front (owner, 2026-10-16): a free hunter learns they get one optimized
+    plan a week BEFORE they spend it, and what it covers. Members never see a count. The member line is additive
+    ("members optimize any time"), never a lock: nothing here is withheld, the dial is how often.{% endcomment %}
+    {% if not allowance_unlimited %}
+    <section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3" data-cplan-allowance>
+        <div class="card-body p-3 md:p-4 flex-row items-center gap-3 flex-wrap">
+            <svg class="w-5 h-5 text-primary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M13 5v2"/><path d="M13 17v2"/><path d="M13 11v2"/></svg>
+            <div class="min-w-0 flex-1">
+                <h2 class="font-bold text-sm md:text-base" data-cplan-allowance-title>{% if allowance_in_use %}Your optimized plan this week{% else %}One free optimized plan this week{% endif %}</h2>
+                <p class="text-xs md:text-sm text-base-content/60" aria-live="polite" data-cplan-allowance-text>{% if allowance_in_use %}Tweak, reroll and apply it as much as you like. Your next free plan is ready {% include 'challenges/partials/_when.html' with when=allowance_next %}.{% else %}Choose your answers, then press Plan it. Everything you do with that plan is free all week; changing your answers after that waits for next week's.{% endif %}</p>
+            </div>
+            {% comment %}THE MEMBERS DOOR, a real button, but the house GHOST (owner, 2026-10-17; its hover glows the accent): it sits beside the
+            hunter's own task (Open my plan, the wizard's Next) and must not outshout it, and a star emitter running the
+            whole time the wizard is open is motion with no purpose. Additive, never a lock: members optimize any time.{% endcomment %}
+            <div class="pp-cplan__allowance-actions">
+                <button type="button" class="pp-cta" data-cplan-open-saved {% if not saved_plan %}hidden{% endif %}>Open my plan</button>
+                <a class="pp-cta pp-cta--ghost pp-cplan__members" href="{% url 'support_hub' %}">Members optimize any time</a>
+            </div>
+        </div>
+    </section>
+    {% else %}
+    {% comment %}THE SAVED PLAN, for members (owner, 2026-10-16): every plan autosaves, so coming back never means
+    applying first. Hidden while a plan is on screen (the script shows it again on Edit answers). A free hunter's
+    "Open my plan" lives in the allowance banner above instead.{% endcomment %}
+    <section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3" data-cplan-resume {% if not saved_plan %}hidden{% endif %}>
+        <div class="card-body p-3 md:p-4 flex-row items-center gap-3 flex-wrap">
+            <svg class="w-5 h-5 text-primary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/></svg>
+            <div class="min-w-0 flex-1">
+                <h2 class="font-bold text-sm md:text-base">Pick up where you left off</h2>
+                <p class="text-xs md:text-sm text-base-content/60" data-cplan-resume-text>Your last plan is saved with its locks, swaps and must-haves.{% if saved_plan.saved_when %} Saved {% include 'challenges/partials/_when.html' with when=saved_plan.saved_when %}.{% endif %}</p>
+            </div>
+            <div class="pp-cplan__allowance-actions">
+                <button type="button" class="pp-cta" data-cplan-open-saved>Open my plan</button>
+            </div>
+        </div>
+    </section>
+    {% endif %}
+
+    {% comment %}THE WIZARD, a control surface, so it is carded (stacked chrome). One question per step; the
+    rail lets a hunter jump back to any step they have already answered, never ahead.{% endcomment %}
+    <section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3" data-cplan-wizard>
+        <div class="card-body p-3 md:p-5 lg:p-6">
+            <ol class="pp-cplan__rail" role="list" aria-label="Optimizer steps">
+                {% for step in steps %}
+                <li>
+                    <button type="button" class="pp-cplan__rail-step" data-step-jump="{{ step.key }}" {% if not forloop.first %}disabled{% endif %}>
+                        <span class="pp-cplan__rail-num" aria-hidden="true">{{ forloop.counter }}</span>
+                        <span class="pp-cplan__rail-lbl">{{ step.label }}</span>
+                    </button>
+                </li>
+                {% endfor %}
+            </ol>
+
+            {# Step 1: which runs #}
+            <section data-step="runs" aria-labelledby="cplan-q-runs">
+                <h2 class="pp-cplan__q" id="cplan-q-runs">Which challenges are we planning?</h2>
+                <p class="pp-cplan__hint" data-cplan-runs-hint>{% if run_count > 1 %}Plan both and the optimizer hunts for games that count on each board.{% elif has_runs and can_start_any %}Start the other and the optimizer hunts for games that count on both boards.{% elif has_runs %}Plan it and the optimizer lines up a game for every open square.{% elif can_start_any %}Start one to plan it. Start both and the optimizer hunts for games that count on each board.{% else %}Challenges are in beta for members first. Once you have one, the optimizer lines it up here.{% endif %}</p>
+                <div class="pp-cplan__opts pp-cplan__opts--two">
+                    {% for r in runs %}{% include 'challenges/partials/_optimizer_run_option.html' %}{% endfor %}
+                </div>
+            </section>
+
+            {# Step 2: platforms #}
+            <section data-step="platforms" aria-labelledby="cplan-q-plat" hidden>
+                <h2 class="pp-cplan__q" id="cplan-q-plat">Where are you playing?</h2>
+                <p class="pp-cplan__hint">Only games with a version on these make the plan. Leave all off for any platform.</p>
+                <div class="pp-cplan__chips" role="group" aria-labelledby="cplan-q-plat">
+                    {% for p in platforms %}
+                    <label class="pp-bgal__chip">
+                        <input type="checkbox" value="{{ p.code }}" data-label="{{ p.label }}" data-cplan-platform {% if p.checked %}checked{% endif %}>
+                        {{ p.label }}
+                    </label>
+                    {% endfor %}
+                </div>
+            </section>
+
+            {# Step 3: backlog / new #}
+            <section data-step="source" aria-labelledby="cplan-q-src" hidden>
+                <h2 class="pp-cplan__q" id="cplan-q-src">Which games should we reach for?</h2>
+                <div class="pp-cplan__opts" role="radiogroup" aria-labelledby="cplan-q-src">
+                    <label class="pp-cplan__opt">
+                        <input type="radio" name="source" value="both" checked data-cplan-source>
+                        <span class="pp-cplan__opt-title">Both</span>
+                        <span class="pp-cplan__opt-sub">Your started games first, new ones where they fit better.</span>
+                    </label>
+                    <label class="pp-cplan__opt">
+                        <input type="radio" name="source" value="backlog" data-cplan-source>
+                        <span class="pp-cplan__opt-title">Clear my backlog</span>
+                        <span class="pp-cplan__opt-sub">Only games you've already started.</span>
+                    </label>
+                    <label class="pp-cplan__opt">
+                        <input type="radio" name="source" value="new" data-cplan-source>
+                        <span class="pp-cplan__opt-title">Something new</span>
+                        <span class="pp-cplan__opt-sub">Only games you haven't touched yet.</span>
+                    </label>
+                </div>
+            </section>
+
+            {# Step 4: badges #}
+            <section data-step="badges" aria-labelledby="cplan-q-badge" hidden>
+                <h2 class="pp-cplan__q" id="cplan-q-badge">Which badges should count?</h2>
+                <p class="pp-cplan__hint">Mix and match. A game that clears a stage in any of these gets a boost.</p>
+
+                {% comment %}THE SOURCES, a union (owner, 2026-10-16): any mix of started, whole types, everything, and
+                picks. "All badges" covers every type, so it greys the type chips out rather than pretending they still
+                choose anything. NONE (owner, 2026-10-17) says it outright for a hunter who does not care about badges:
+                it greys every source, the weight and the picker the same way (ticks kept, so turning it off restores
+                them) and the plan is made with badges playing no part. A game that happens to clear a stage can still
+                be chosen; it just gets no boost.{% endcomment %}
+                <div class="pp-cplan__chips" role="group" aria-label="Badges that count">
+                    <label class="pp-bgal__chip" data-cplan-none-chip>
+                        <input type="checkbox" data-cplan-badge-none>
+                        None<span class="sr-only">, badges don't count</span>
+                    </label>
+                    <label class="pp-bgal__chip" data-cplan-started-chip>
+                        <input type="checkbox" data-cplan-badge-started {% if started_count %}checked{% endif %}>
+                        Badges I've started <span class="pp-cplan__chip-n">{{ started_count }}<span class="sr-only"> badges</span></span>
+                    </label>
+                    <label class="pp-bgal__chip" data-cplan-all-chip>
+                        <input type="checkbox" data-cplan-badge-all>
+                        All badges <span class="pp-cplan__chip-n">{{ badges_total }}<span class="sr-only"> badges</span></span>
+                    </label>
+                    {% for t in badge_types %}
+                    <label class="pp-bgal__chip" data-cplan-type-chip>
+                        <input type="checkbox" value="{{ t.key }}" data-label="{{ t.label }}" data-cplan-badge-type>
+                        {{ t.label }} <span class="pp-cplan__chip-n">{{ t.count }}<span class="sr-only"> badges</span></span>
+                    </label>
+                    {% endfor %}
+                </div>
+
+                {% comment %}Everything None turns off, in one block the script greys and makes inert.{% endcomment %}
+                <div class="pp-cplan__badge-extras" data-cplan-badge-extras>
+                {% if started_badges %}
+                <div class="pp-cplan__subhead">
+                    <h3>Badges you've started</h3>
+                    {% if started_more %}<span class="pp-cplan__more-note">and {{ started_more }} more</span>{% endif %}
+                </div>
+                <p class="pp-cplan__hint">Only editions on your step 2 platforms count from this list.</p>
+                <ul class="pp-cplan__badges pp-cplan__badges--started" role="list" data-cplan-started>
+                    {% for card in started_badges %}{% include 'challenges/partials/_optimizer_badge_card.html' with card=card selectable=False %}{% endfor %}
+                </ul>
+                {% endif %}
+
+                {% comment %}THE WEIGHT (owner's choice, 2026-10-16). Radios on the house segmented switcher. Bonus and
+                Priority fill any square with any game; Only plans badge games alone.{% endcomment %}
+                <div class="pp-cplan__subhead"><h3 id="cplan-weight-label">How much should badges matter?</h3></div>
+                <div class="pp-switch" role="radiogroup" aria-labelledby="cplan-weight-label" aria-describedby="cplan-weight-hint">
+                    <label class="pp-switch__chip">
+                        <input type="radio" name="badge_weight" value="bonus" class="sr-only" checked data-cplan-weight>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/></svg><span class="pp-switch__lbl">Bonus</span>
+                    </label>
+                    <label class="pp-switch__chip">
+                        <input type="radio" name="badge_weight" value="priority" class="sr-only" data-cplan-weight>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg><span class="pp-switch__lbl">Priority</span>
+                    </label>
+                    <label class="pp-switch__chip">
+                        <input type="radio" name="badge_weight" value="only" class="sr-only" data-cplan-weight>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg><span class="pp-switch__lbl">Badges only</span>
+                    </label>
+                </div>
+                <p class="pp-cplan__hint" id="cplan-weight-hint" aria-live="polite" data-cplan-weight-hint>Badges break ties. Your challenges come first.</p>
+
+                {% comment %}PICK SPECIFIC BADGES: an inline gallery, paged from `OptimizerBadgesView`. Editions default
+                to the ones on step 2's platforms (owner, 2026-10-16); the chips show the rest.{% endcomment %}
+                <div class="pp-cplan__subhead">
+                    <h3>Pick specific badges</h3>
+                    <button type="button" class="pp-cta pp-cta--ghost" data-cplan-pick-toggle aria-expanded="false" aria-controls="cplan-pick">Browse badges</button>
+                </div>
+                <div class="pp-cplan__pick" id="cplan-pick" data-cplan-pick hidden>
+                    <label class="sr-only" for="cplan-badge-q">Search badges</label>
+                    <input id="cplan-badge-q" class="stg-input" type="search" autocomplete="off" placeholder="Search badges" data-cplan-badge-q>
+                    <div class="pp-cplan__chips" role="group" aria-label="Editions">
+                        {% for g in badge_groups %}
+                        <label class="pp-bgal__chip">
+                            <input type="checkbox" value="{{ g.key }}" data-cplan-badge-group data-platforms="{{ g.platforms|join:',' }}">
+                            {{ g.name }}
+                        </label>
+                        {% endfor %}
+                    </div>
+                    <div class="pp-cplan__chips" role="group" aria-label="Badge types">
+                        {% for t in badge_types %}
+                        <label class="pp-bgal__chip">
+                            <input type="checkbox" value="{{ t.key }}" data-cplan-badge-filter>
+                            {{ t.label }}
+                        </label>
+                        {% endfor %}
+                    </div>
+                    <p class="pp-cplan__status" data-cplan-badge-status role="status" aria-live="polite"></p>
+                    <ul class="pp-cplan__badges" role="list" data-cplan-badge-grid></ul>
+                    <div class="pp-cplan__more" data-cplan-badge-more hidden>
+                        <button type="button" class="pp-cta pp-cta--ghost">Show more</button>
+                    </div>
+                </div>
+                </div>
+
+                {% comment %}WHAT COUNTS, said back: the sources in a line, and the hand picks as removable chips.{% endcomment %}
+                <div class="pp-cplan__counting" aria-live="polite">
+                    <p class="pp-cplan__counting-line" data-cplan-counting></p>
+                    <ul class="pp-cplan__pinned" role="list" data-cplan-picked aria-label="Badges you picked"></ul>
+                </div>
+            </section>
+
+            {# Step 5: must-include #}
+            <section data-step="pins" aria-labelledby="cplan-q-pins" hidden>
+                <h2 class="pp-cplan__q" id="cplan-q-pins">Any games you want in? <span class="pp-cplan__optional">Optional</span></h2>
+                <p class="pp-cplan__hint">The optimizer builds around these, on any platform, and tells you if one won't fit.</p>
+                <label class="sr-only" for="cplan-pin-q">Search for a game</label>
+                <input id="cplan-pin-q" class="stg-input" type="search" autocomplete="off" placeholder="Search for a game" data-cplan-pin-q>
+                <p class="pp-cplan__status" data-cplan-pin-status role="status" aria-live="polite"></p>
+                <ul class="pp-cplan__pinned" role="list" data-cplan-pinned aria-label="Games you want in"></ul>
+                <ul class="pp-cpick__rows pp-cplan__results" role="list" data-cplan-pin-results></ul>
+            </section>
+
+            <div class="pp-cplan__nav">
+                <button type="button" class="pp-cta pp-cta--ghost" data-cplan-back hidden>Back</button>
+                <button type="button" class="pp-cta" data-cplan-next>Next</button>
+            </div>
+        </div>
+    </section>
+
+    {% comment %}THE ANSWERS, COLLAPSED, once a plan exists: the wizard folds into this line and Edit answers
+    reopens it at the first step.{% endcomment %}
+    <section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3" data-cplan-summary hidden>
+        <div class="card-body p-3 md:p-4 flex-row items-center justify-between gap-3">
+            <p class="text-xs md:text-sm text-base-content/70 min-w-0" data-cplan-summary-text></p>
+            <button type="button" class="pp-cta pp-cta--ghost shrink-0" data-cplan-edit>Edit answers</button>
+        </div>
+    </section>
+
+    <div class="pp-cplan__statusrow">
+        <p class="pp-cplan__status pp-cplan__status--page" data-cplan-status role="status" aria-live="polite"></p>
+        {% comment %}WAITING IN LINE can always be stopped (the script shows this only while waiting).{% endcomment %}
+        <button type="button" class="pp-cta pp-cta--ghost" data-cplan-line-cancel hidden>Stop waiting</button>
+    </div>
+
+    {% comment %}THE REVIEW: free content below the chrome, never wrapped in an outer card. Every row is drawn
+    by `challenge-optimizer.js` from the plan JSON.{% endcomment %}
+    <div class="pp-cplan__review" data-cplan-review hidden>
+        <h2 class="sr-only" tabindex="-1" data-cplan-review-head>Your plan</h2>
+        <div class="pp-cplan__stats" data-cplan-stats></div>
+        {% comment %}THE ORDER (owner, 2026-10-16): by letter by default, or by job. Only "Covers both boards" has a
+        choice to make, so the script moves this beside that group's heading when it has two games or more.{% endcomment %}
+        <div class="pp-cplan__sortbar" data-cplan-sortbar hidden>
+            <span class="pp-cplan__sort-label" id="cplan-sort-label">Order by</span>
+            <div class="pp-switch" role="radiogroup" aria-labelledby="cplan-sort-label">
+                <label class="pp-switch__chip">
+                    <input type="radio" name="cplan_sort" value="az" class="sr-only" checked data-cplan-sort>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 16 4 4 4-4"/><path d="M7 20V4"/><path d="M20 8h-5"/><path d="M15 10V6.5a2.5 2.5 0 0 1 5 0V10"/><path d="M15 14h5l-5 6h5"/></svg><span class="pp-switch__lbl">Letter</span>
+                </label>
+                <label class="pp-switch__chip">
+                    <input type="radio" name="cplan_sort" value="jobs" class="sr-only" data-cplan-sort>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="14" x="2" y="7" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg><span class="pp-switch__lbl">Job</span>
+                </label>
+            </div>
+        </div>
+        <div data-cplan-sections></div>
+        <div class="pp-cplan__bar">
+            {% comment %}What the review is doing, where the review's buttons are (always in view). Visual only: the
+            page's status line is the announcer.{% endcomment %}
+            <span class="pp-cplan__bar-status" data-cplan-bar-status aria-hidden="true"></span>
+            <button type="button" class="pp-cta pp-cta--ghost" data-cplan-reroll>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>
+                <span>Different games</span>
+            </button>
+            <button type="button" class="pp-cta" data-cplan-apply>Apply</button>
+            <button type="button" class="pp-cta" data-cplan-again hidden>Plan again</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block fixed_overlays %}
+{{ block.super }}
+{% comment %}THE SPEND CONFIRMATION (owner, 2026-10-16): pressing Plan it with this week's free plan unused asks first,
+on the site's own `.gl-dialog`. Only free hunters ever see it; the server refuses a spend nobody confirmed (409).{% endcomment %}
+{% if not allowance_unlimited %}
+<dialog id="cplan-spend" class="gl-dialog" aria-labelledby="cplan-spend-title" aria-describedby="cplan-spend-sub cplan-spend-facts" tabindex="-1">
+    <div class="gl-dialog__head">
+        <div>
+            <h2 class="gl-dialog__title" id="cplan-spend-title">Use your free plan for this week?</h2>
+            <p class="gl-dialog__sub" id="cplan-spend-sub">This is your one free optimized plan until <span data-cplan-spend-until>{% include 'challenges/partials/_when.html' with when=allowance_if_used_now %}</span>.</p>
+        </div>
+        <button type="button" class="gl-dialog__close" data-cplan-spend-cancel aria-label="Close">&times;</button>
+    </div>
+    <div class="gl-dialog__body">
+        <ul class="pp-cplan__spend-facts" role="list" id="cplan-spend-facts">
+            <li>Tweak it, reroll it, apply it and come back to it as often as you like all week.</li>
+            <li>Changing your answers after this waits for next week's plan.</li>
+            <li>Members optimize any time.</li>
+        </ul>
+    </div>
+    <div class="gl-dialog__foot">
+        <button type="button" class="pp-cta pp-cta--ghost" data-cplan-spend-cancel>Not yet</button>
+        <button type="button" class="pp-cta" data-cplan-spend-confirm>Use my free plan</button>
+    </div>
+</dialog>
+{% endif %}
+{% comment %}WHAT "OPEN MY PLAN" REOPENS, for everyone: `{answers, tweaks, saved_label}` or null.{% endcomment %}
+{{ saved_plan|json_script:"cplan-saved" }}
+{% comment %}OTHER OPTIONS FOR ONE SQUARE, on the run page picker's own `<dialog class="pp-cpick">` shell, so the
+two sheets look, open, close and swipe away alike (`challenge-optimizer.js` ports the picker's close
+choreography and `dismissableSheet` wiring with it).{% endcomment %}
+<dialog id="cplan-alt" class="pp-cpick" aria-labelledby="cplan-alt-title" tabindex="-1">
+    <div class="pp-cpick__head">
+        <div class="min-w-0">
+            <h2 class="pp-cpick__title" id="cplan-alt-title" data-cplan-alt-title>Other options</h2>
+            <p class="pp-cpick__sub" data-cplan-alt-sub></p>
+        </div>
+        <button type="button" class="pp-cpick__close" data-cplan-alt-close aria-label="Close">&times;</button>
+    </div>
+    <div class="pp-cpick__body">
+        <p class="pp-cpick__status" data-cplan-alt-status role="status" aria-live="polite"></p>
+        <ul class="pp-cpick__rows" role="list" data-cplan-alt-rows></ul>
+    </div>
+</dialog>
+{% endblock %}
+
+{% block js_scripts %}
+<script src="{% static 'js/challenge-optimizer.js' %}"></script>
+{% endblock %}

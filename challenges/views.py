@@ -25,6 +25,7 @@ nothing else -- no gate is re-implemented here, including the beta gate, which t
 (`creation_is_open_to`) so it can render a disabled button rather than discovering the refusal after a
 POST.
 """
+import datetime
 import functools
 import logging
 
@@ -55,7 +56,9 @@ from challenges.models import (CALENDAR_DAY_MARKERS, CHALLENGE_TYPE_AZ, CHALLENG
                                TYPES_WITH_ONE_RUN,
                                Challenge)
 from challenges.services import calendar_render
+from challenges.services import optimizer_drafts
 from challenges.services import challenge_service as svc
+from challenges.services.planner import PLANNABLE_TYPES
 from challenges.services import rewards
 from challenges.services import picker
 from challenges.services import share_card
@@ -70,6 +73,13 @@ logger = logging.getLogger(__name__)
 #: on runs is structural (one active per type) rather than numeric, but the RATE is not bounded by it:
 #: hiding frees nothing and starting resumes, yet each still writes and each still takes a row lock.
 CHALLENGE_WRITE_RATELIMIT_GROUP = 'challenges:write'
+
+#: Where Start may send a hunter back to, by name: {`return_to` value: url name}. Anything else is My Challenges.
+START_RETURN_PAGES = {'optimizer': 'challenge_optimizer'}
+
+#: The My Challenges optimizer door wears a "New" chip until this day, then drops it by itself: a launch
+#: highlight, not a permanent label (owner, 2026-10-17).
+OPTIMIZER_NEW_UNTIL = datetime.date(2026, 12, 1)
 
 #: What a tripped limit on a JSON door says. The picker and the reward panel show a reply's `error` as written.
 RATE_LIMITED_MESSAGE = 'That was a lot at once. Wait a minute and try again.'
@@ -273,9 +283,16 @@ class MyChallengesView(LoginRequiredMixin, _LinkedProfileRequired, TemplateView)
         # outcome is a refusal -- and before the service gate existed it was worse than that, because the
         # action succeeded and dealt a run with no rules behind it.
         # THE SHORT LABEL on the card: the page is "My Challenges", so "A-Z Challenge" repeated its heading.
-        context['cards'] = [self._card(profile, key, short_label_for(key), owed)
+        context['cards'] = [self.card_for(profile, key, short_label_for(key), owed)
                             for key, _ in CHALLENGE_TYPE_CHOICES
                             if key not in TYPES_NOT_YET_CREATABLE]
+        # The optimizer's door: read off the cards already resolved, so WHETHER to show it costs no query. What it
+        # says about the hunter (a saved plan, the weekly allowance) is two single-row reads, only when shown.
+        context['can_plan'] = any(card['state'] == 'active' and card['type'] in PLANNABLE_TYPES
+                                  for card in context['cards'])
+        if context['can_plan']:
+            context['optimizer'] = optimizer_drafts.door_status(profile, self.request.user)
+            context['optimizer_is_new'] = timezone.localdate() < OPTIMIZER_NEW_UNTIL
         # `completed()` carries its own ordering (newest finish first) and is built on `visible()`, so a
         # run hidden after finishing correctly drops out of the hunter's own history too -- hiding means
         # "off my profile", and this page is the profile's.
@@ -323,8 +340,13 @@ class MyChallengesView(LoginRequiredMixin, _LinkedProfileRequired, TemplateView)
     #: history wants its own page rather than a bigger number here.
     HISTORY_LIMIT = 24
 
-    def _card(self, profile, challenge_type, label, owed_runs):
+    @classmethod
+    def card_for(cls, profile, challenge_type, label, owed_runs=()):
         """One type's state, resolved through the service.
+
+        PUBLIC, and a classmethod, because the Challenge Optimizer's step 1 draws the same card (through the same
+        `_type_card_summary` / `_type_card_reward` partials), so the two pages cannot describe a run differently.
+        The optimizer passes no `owed_runs`: claiming XP is this page's job, not the optimizer's.
 
         `active` is asked first and `resumable` only when there is none, which is a DISPLAY choice
         rather than something the schema guarantees: `challenge_one_active_per_type` is partial on the
@@ -379,11 +401,11 @@ class MyChallengesView(LoginRequiredMixin, _LinkedProfileRequired, TemplateView)
             # constant, so this cannot quote a different number from the run page's panel. The Calendar's
             # line costs ONE `UserTitle` read (`rewards.next_calendar_rung`), because its "next" depends on
             # which rungs the hunter already holds.
-            'reward': self._reward(challenge_type, counts['all'], profile=profile,
+            'reward': cls._reward(challenge_type, counts['all'], profile=profile,
                                    done=run.completed_count if run else 0),
             # WHAT IS WAITING TO BE CLAIMED, which is not NECESSARILY about the run the card is showing --
             # `same_run` is the field that says which. See `_owed`.
-            'owed': self._owed(challenge_type, owed_runs, run),
+            'owed': cls._owed(challenge_type, owed_runs, run),
         }
 
     @staticmethod
@@ -1226,6 +1248,26 @@ def _panel_json(panel):
         } for r in panel['catchup']],
     }
 
+def start_from_request(request, challenge_type):
+    """Start (or resume) a run for this request: (challenge, outcome, None), or (None, None, error message).
+
+    THE ONE PLACE THE DOOR'S RULES LIVE, shared by the form door below and the optimizer's JSON door, so the two
+    cannot disagree about the preview or the beta: whichever a hunter presses, the same thing happens.
+
+    THE PREVIEW REFUSES TOO, so the door opens the whole behaviour rather than half of it. Only for a genuinely
+    new run: previewing must not take away a run you already have, which is the same line the beta gate itself
+    draws.
+    """
+    if previewing(request, PREVIEW_FREE) and svc.active_run(request.user.profile, challenge_type) is None:
+        return None, None, ('Starting a challenge is in beta for members first. '
+                            'Everyone can start one when the beta ends.')
+    try:
+        challenge, outcome = svc.start_reporting(request.user.profile, challenge_type)
+    except svc.ChallengeError as exc:
+        return None, None, str(exc)
+    return challenge, outcome, None
+
+
 class StartChallengeView(LoginRequiredMixin, _LinkedProfileRequired, _ChallengeActionView):
     """Start a run, or bring back the one you hid. A form POST, not JSON.
 
@@ -1254,19 +1296,9 @@ class StartChallengeView(LoginRequiredMixin, _LinkedProfileRequired, _ChallengeA
         if getattr(request, 'limited', False):
             messages.error(request, RATE_LIMITED_MESSAGE)
             return self._back(request)
-        # THE PREVIEW REFUSES TOO, so the door opens the whole behaviour rather than half of it. Only
-        # for a genuinely new run: previewing must not take away a run you already have, which is the
-        # same line the beta gate itself draws.
-        if previewing(request, PREVIEW_FREE) and svc.active_run(
-                request.user.profile, challenge_type) is None:
-            messages.error(request, 'Starting a challenge is in beta for members first. '
-                                    'Everyone can start one when the beta ends.')
-            return self._back(request)
-
-        try:
-            challenge, outcome = svc.start_reporting(request.user.profile, challenge_type)
-        except svc.ChallengeError as exc:
-            messages.error(request, str(exc))
+        challenge, outcome, error = start_from_request(request, challenge_type)
+        if error:
+            messages.error(request, error)
             return self._back(request)
 
         # THE OUTCOME, not `filled_count`. That could not tell a fresh run from an empty resumed one,
@@ -1275,7 +1307,11 @@ class StartChallengeView(LoginRequiredMixin, _LinkedProfileRequired, _ChallengeA
         if outcome == svc.RESUMED:
             messages.success(request, f'{challenge.name} is back where you left it.')
         elif outcome == svc.CREATED:
-            messages.success(request, self._ready_message(challenge))
+            # FROM THE PLANNER the next step is planning, not picking a square, so the line says that instead.
+            if request.POST.get('return_to') == 'optimizer':
+                messages.success(request, f'{challenge.name} is ready to plan.')
+            else:
+                messages.success(request, self._ready_message(challenge))
         # ALREADY_ACTIVE says nothing. For a double submit or a stale tab that is right; for a Continue
         # press it is merely all there is to say until the run has a page to go to.
         return self._back(request)
@@ -1304,8 +1340,11 @@ class StartChallengeView(LoginRequiredMixin, _LinkedProfileRequired, _ChallengeA
         A bare `redirect('my_challenges')` drops it, so previewing the refusal would land you on the
         un-previewed page: the error message from the gated state, above live buttons. Confusing in
         exactly the way a half-open door is.
+
+        `return_to` NAMES a page from `START_RETURN_PAGES`, never carries a URL, so this cannot be turned into
+        an open redirect. The optimizer starts runs from its own step 1 and wants the hunter back there.
         """
-        url = reverse_lazy('my_challenges')
+        url = reverse_lazy(START_RETURN_PAGES.get(request.POST.get('return_to'), 'my_challenges'))
         if previewing(request, PREVIEW_FREE):
             return redirect(f'{url}?preview={PREVIEW_FREE}')
         return redirect(url)

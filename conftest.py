@@ -27,6 +27,16 @@ def _cache_starts_empty():
 
 
 @pytest.fixture(autouse=True)
+def _optimizer_line_is_in_memory(monkeypatch):
+    """The Challenge Optimizer's build line (`challenges.services.build_line`) talks to raw Redis. Every test gets a
+    fresh in-memory fake, so no test reaches a real Redis through it and none inherits another's line or slots."""
+    import fakeredis
+
+    monkeypatch.setattr('challenges.services.build_line.redis_client',
+                        fakeredis.FakeStrictRedis(server=fakeredis.FakeServer()))
+
+
+@pytest.fixture(autouse=True)
 def _ratelimit_clock_is_fixed(monkeypatch):
     """Pin the RATE LIMITER's clock for every test, and nothing else's.
 

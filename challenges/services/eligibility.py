@@ -38,7 +38,7 @@ today and published next month stamps them for everyone who finished it years ag
 sweep in `process_contracts` does the same. So the date comes from trophy data, which records when the
 work actually happened.
 """
-from django.db.models import Exists, Min, OuterRef, Q
+from django.db.models import Count, Exists, Min, OuterRef, Q
 from django.db.models.functions import Substr, Upper
 
 from challenges.models import AZ_LETTERS, CHALLENGE_TYPE_AZ, HATCH_THRESHOLD
@@ -153,11 +153,17 @@ def fitting_keys_for(challenge, contracts):
     `live_contracts()` is the floor in both branches, so an unpublished contract maps to an empty set
     rather than being absent -- callers can then treat "not in the mapping" and "fits nothing" alike.
     """
-    ids = [c.id for c in contracts]
+    return fitting_keys_by_type(challenge.challenge_type, [c.id for c in contracts])
+
+
+def fitting_keys_by_type(challenge_type, ids):
+    """`fitting_keys_for`'s body, keyed on a run TYPE and contract ids. The planner asks before any run is
+    involved (its pool is per type, cached), so it has neither a challenge nor model instances to hand."""
+    ids = list(ids)
     if not ids:
         return {}
 
-    if challenge.challenge_type == CHALLENGE_TYPE_AZ:
+    if challenge_type == CHALLENGE_TYPE_AZ:
         letters = set(AZ_LETTERS)
         initials = dict(
             live_contracts()
@@ -255,7 +261,7 @@ def eligible_contracts(profile, challenge, key):
     complete instantly and the run would finish itself. `hatch_is_open` is what lifts the second when
     supply is too thin to respect it.
     """
-    return _slot_pool(challenge, key).filter(~Exists(_completed_by(profile)))
+    return not_completed_by(profile, _slot_pool(challenge, key))
 
 
 def completed_contracts(profile, challenge, key):
@@ -354,6 +360,12 @@ def _completed_by(profile):
     return EarnedContract.objects.filter(profile=profile, contract=OuterRef('pk'))
 
 
+def not_completed_by(profile, contracts):
+    """`contracts` minus the ones this hunter has completed. The picker's pool exclusion, as a public filter
+    so the planner's pool applies the same rule rather than respelling it."""
+    return contracts.filter(~Exists(_completed_by(profile)))
+
+
 def hatch_is_open(profile, challenge, key):
     """Is this slot's pool down to `HATCH_THRESHOLD` or fewer, lifting the completed-contract rule?
 
@@ -362,6 +374,49 @@ def hatch_is_open(profile, challenge, key):
     render -- that would be 26 counts per view, and the page does not need to know.
     """
     return eligible_contracts(profile, challenge, key).count() <= HATCH_THRESHOLD
+
+
+def hatch_open_keys(profile, challenge, keys):
+    """The subset of `keys` whose square `hatch_is_open` would call open, in at most five queries however
+    many keys: one grouped count and the read of the run's placed slots, then three more about those games
+    when any are placed.
+
+    `hatch_is_open` is one COUNT for one square, deliberately never mapped over a run. The planner needs the
+    answer for every open square at once, so this reaches the same number another way, from the same parts:
+
+    - the SHAPE half is `fitting_keys_for`'s own grouping (`Upper(Substr(name, 1, 1))` for A-Z, which its
+      docstring shows agrees with `_shape`'s `istartswith`; the job slug for Job Coverage), over
+      `not_completed_by(live_contracts())`, counted per key;
+    - the `_slot_pool` exclusion is then subtracted per key: contracts placed in the run's OTHER squares that
+      fit this key and are not completed. A square's own occupant stays in its pool, as `_slot_pool` keeps it.
+
+    Parity with `hatch_is_open` is pinned key by key in the tests, because two routes to one threshold is
+    exactly the drift `_shape`'s docstring warns about.
+    """
+    keys = set(keys)
+    if not keys:
+        return set()
+    pool = not_completed_by(profile, live_contracts())
+    if challenge.challenge_type == CHALLENGE_TYPE_AZ:
+        grouped = (pool.annotate(_initial=Upper(Substr('name', 1, 1)))
+                   .filter(_initial__in=keys).values('_initial').annotate(n=Count('pk')).values_list('_initial', 'n'))
+    else:
+        grouped = (pool.filter(jobs__slug__in=keys)
+                   .values('jobs__slug').annotate(n=Count('pk')).values_list('jobs__slug', 'n'))
+    counts = dict(grouped)
+
+    placed = dict(challenge.slots.filter(contract_id__isnull=False).values_list('key', 'contract_id'))
+    if placed:
+        placed_contracts = list(Contract.objects.filter(pk__in=placed.values()))
+        fits = fitting_keys_for(challenge, placed_contracts)
+        finished = completed_contract_ids(profile, placed_contracts)
+        for own_key, contract_id in placed.items():
+            if contract_id in finished:
+                continue
+            for key in fits.get(contract_id, ()):
+                if key in keys and key != own_key:
+                    counts[key] = counts.get(key, 0) - 1
+    return {key for key in keys if counts.get(key, 0) <= HATCH_THRESHOLD}
 
 
 # ── the importer's date ───────────────────────────────────────────────────────────────────────────

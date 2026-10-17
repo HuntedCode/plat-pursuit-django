@@ -1,0 +1,71 @@
+{% comment %}A challenge TYPE card's summary: the type tile, name, state chip, pitch, progress line and
+Horizon. SHARED by My Challenges and the Challenge Optimizer's step 1, so the two cannot describe a run
+differently. Takes `card` (from `MyChallengesView.card_for`) and an optional `heading` tag (default h2).
+{% endcomment %}
+<div class="flex items-start justify-between gap-2">
+    {% comment %}THE TYPE, said with its glyph as well as its name, so the three cards read as three
+    different things at a glance rather than three identical boxes with different headings. The
+    tile goes quiet on a hidden run, matching the ghost chip.
+
+    THE PITCH IS ALWAYS HERE, not only on an empty card. It used to replace the progress line,
+    so a type's one-line description vanished the moment you started it -- and the Calendar's
+    branch printed Job Coverage's copy, because the template had two branches for three types.
+    {% endcomment %}
+    <div class="flex items-start gap-3 min-w-0 flex-1">
+        <span class="pp-ctype{% if card.state == 'resumable' %} pp-ctype--quiet{% endif %}" aria-hidden="true">
+            {% include 'partials/icons/challenge_type.html' with type=card.type size='' %}
+        </span>
+        <div class="min-w-0 flex-1">
+            {% comment %}THE CHIP SHARES THE TITLE'S ROW, NOT THE PITCH'S. It sat beside the whole text
+            block first, so it narrowed the pitch too and every pitch wrapped with a stranded word
+            ("A to / Z."). In the title row it costs only the title width it actually needs.{% endcomment %}
+            <div class="flex items-start justify-between gap-2">
+                <{{ heading|default:"h2" }} class="text-base md:text-lg font-bold leading-tight min-w-0">{{ card.label }}</{{ heading|default:"h2" }}>
+            {% comment %}The state, said once. `resumable` is the one a hunter would otherwise have
+            no way to tell from having no run at all.
+
+            `.bd-chip`, NOT DaisyUI's `.badge`. `chips.css` says why in its own header: the chip
+            is the strangler replacement for `.badge` as shared atoms convert, and it tints from
+            `--pp-*` where DaisyUI tints from its own theme. These two read as different greens and
+            different blues sitting side by side, which is the whole cost of mixing them.
+
+            `--ghost` for Hidden, NOT `--warning`, and the difference is register rather than
+            colour. A hidden run is not a problem -- it is dormant, and Resume brings it back with
+            every square intact. Warning is the bright yellow this page spends on the beta notice,
+            which would read as "something needs attention" about a state where nothing does.
+
+            Ghost still contrasts with `In progress` above it, which is the only thing the two
+            chips have to do: tell a hunter which of their runs is live.{% endcomment %}
+            {% if card.state == 'active' %}
+            <span class="bd-chip bd-chip--primary shrink-0">In progress</span>
+            {% elif card.state == 'resumable' %}
+            <span class="bd-chip bd-chip--ghost shrink-0">Hidden</span>
+            {% elif card.state == 'finished' %}
+            <span class="bd-chip bd-chip--success shrink-0">Finished</span>
+            {% endif %}
+            </div>
+            <p class="text-xs md:text-sm text-base-content/60 mt-0.5 text-pretty lg:min-h-[2lh]">
+                {{ card.pitch }}
+            </p>
+        </div>
+    </div>
+</div>
+
+{% if card.run %}
+{% comment %}THE HORIZON, the kit's progress primitive, rather than a bespoke bar. Its
+fill is inline because the value is per-run data and cannot be a class.{% endcomment %}
+<p class="text-xs text-base-content/60 mt-3">
+    {{ card.run.completed_count }} of {{ card.run.total_slots }} {{ card.run.unit }} {% if card.type == 'calendar' %}filled{% else %}done{% endif %}{% if card.planned %}, {{ card.planned }} planned{% endif %}{% if card.visible_completed_count and card.state != 'finished' %}<span class="text-base-content/50"> &middot; {{ card.visible_completed_count }} finished before</span>{% endif %}
+</p>
+<div class="mt-2">
+    {% include 'components/horizon.html' with progress=card.progress %}
+</div>
+{% endif %}
+
+{% comment %}"N FINISHED BEFORE" RIDES THE PROGRESS LINE when there is a run, so it does not push one
+card's reward line below its neighbours'; on a card with no run it stands alone.{% endcomment %}
+{% if card.visible_completed_count and not card.run %}
+<p class="text-xs text-base-content/50 mt-3">
+    {{ card.visible_completed_count }} finished before
+</p>
+{% endif %}

@@ -88,3 +88,14 @@
 @media (prefers-reduced-motion: no-preference) {
     .pp-cta:active:not(:disabled):not([aria-disabled="true"]) { transform: translateY(1px); }
 }
+
+/* ── pp-cta--rise: the Support family's star emitter on the house button ──────────────────────────
+   The storefront's floating stars (`.sup-go__rise` in support.css: the markup is that span of five
+   `.sup-go__risestar`s, then the label in `.pp-cta__lbl`) for a pp-cta that asks for support or a big
+   yes. This is the HOST: the clip box the stars rise through, their colour (the button's own accent),
+   and the label riding above them. Lifted from the landing page's copy (2026-10) so a page that wants
+   the stars on a pp-cta never writes a sixth one. An unpressable button must not advertise. */
+.pp-cta--rise { position: relative; overflow: hidden; --sup-t: var(--cta-c, var(--pp-primary)); }
+.pp-cta--rise .pp-cta__lbl { position: relative; }
+.pp-cta--rise:disabled .sup-go__rise,
+.pp-cta--rise[aria-disabled="true"] .sup-go__rise { display: none; }

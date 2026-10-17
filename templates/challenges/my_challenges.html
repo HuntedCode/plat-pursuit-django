@@ -135,6 +135,52 @@
     ROWS LINE UP ACROSS THE THREE AT `lg:`: the pitch holds two lines' height there (`lg:min-h-[2lh]`), so the
     progress bars -- the strongest line in the row -- start level whichever pitch wraps, and `mt-auto` on the
     actions (DaisyUI's `.card-body` is already a flex column) puts the buttons on one line.{% endcomment %}
+    {% comment %}THE OPTIMIZER'S DOOR, a FEATURE card above the type cards (owner, 2026-10-17: "I really want people
+    to see and use this"). It acts on two of them at once, so it belongs to neither. Only once there is an A-Z or
+    Job Coverage run to plan. The primary-tinted border (the feature treatment, not the page header's left edge, so
+    it never reads as a second header) and the star button are what lift it off the page; the three ticks
+    are the beta card's own, so the page keeps one way of listing a promise. The status line is the hunter's own:
+    a saved plan to pick up, or where their free plan stands, its dates on their clock (`partials/_when.html`).
+    The button always says Optimize: "Open my plan" is the optimizer page's own button, and two of them, one on
+    each page, read as the same control (owner, 2026-10-17).
+    "New" retires itself at `OPTIMIZER_NEW_UNTIL`.{% endcomment %}
+    {% if can_plan %}
+    <section class="card bg-base-200/90 border-2 border-primary/30 shadow-lg shadow-neutral mb-3" data-optimizer-door>
+        <div class="card-body p-3 md:p-5 lg:p-6">
+            <div class="flex flex-col md:flex-row md:items-center gap-4 md:gap-6">
+                <div class="min-w-0 flex-1">
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <svg class="w-6 h-6 md:w-7 md:h-7 text-primary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="19" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/><circle cx="18" cy="5" r="3"/></svg>
+                        <h2 class="font-bold text-base md:text-lg">Challenge Optimizer</h2>
+                        {% if optimizer_is_new %}<span class="bd-chip bd-chip--primary pp-optdoor__new">New</span>{% endif %}
+                    </div>
+                    <p class="text-xs md:text-sm text-base-content/70 mt-1">One plan for your A-Z and Job Coverage runs, built around how you hunt.</p>
+                    <ul class="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs md:text-sm text-base-content/60" role="list">
+                        <li class="flex items-center gap-1"><svg class="w-3.5 h-3.5 text-success shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Games that count on both boards</li>
+                        <li class="flex items-center gap-1"><svg class="w-3.5 h-3.5 text-success shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>From your backlog, on your platforms</li>
+                        <li class="flex items-center gap-1"><svg class="w-3.5 h-3.5 text-success shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Clears badge stages too</li>
+                    </ul>
+                    {% with o=optimizer %}
+                    {% if o.next %}
+                    <p class="pp-optdoor__status">This week's plan is yours to tweak and apply. Your next free plan is ready {% include 'challenges/partials/_when.html' with when=o.next %}.</p>
+                    {% elif o.free %}
+                    <p class="pp-optdoor__status">Your free optimized plan for this week is ready.{% if o.saved %} Your last plan is saved too.{% endif %}</p>
+                    {% elif o.saved %}
+                    <p class="pp-optdoor__status">Pick up where you left off: your last plan was saved {% include 'challenges/partials/_when.html' with when=o.saved %}.</p>
+                    {% endif %}
+                    {% endwith %}
+                </div>
+                <a class="pp-cta pp-cta--rise pp-optdoor__go" href="{% url 'challenge_optimizer' %}">
+                    <span class="sup-go__rise" aria-hidden="true">
+                    {% for _ in "12345" %}<svg class="sup-go__risestar" viewBox="0 0 24 24"><path d="M12 2.6l2.6 5.9 6.4.6-4.8 4.3 1.4 6.3L12 16.4 6.4 19.7l1.4-6.3L3 9.1l6.4-.6z"/></svg>{% endfor %}
+                </span>
+                    <span class="pp-cta__lbl">Optimize my challenges</span>
+                </a>
+            </div>
+        </div>
+    </section>
+    {% endif %}
+
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
         {% for card in cards %}
         {% comment %}THE SPANNING CARD (`pp-ccard--wide`) LAYS OUT SIDE BY SIDE AT `md:` ONLY: stretched across
@@ -145,73 +191,7 @@
         <section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral{% if forloop.last %} md:col-span-2 lg:col-span-1 pp-ccard--wide{% endif %}">
             <div class="card-body p-3 md:p-5 lg:p-6">
                 <div class="pp-ccard__main">
-                <div class="flex items-start justify-between gap-2">
-                    {% comment %}THE TYPE, said with its glyph as well as its name, so the three cards read as three
-                    different things at a glance rather than three identical boxes with different headings. The
-                    tile goes quiet on a hidden run, matching the ghost chip.
-
-                    THE PITCH IS ALWAYS HERE, not only on an empty card. It used to replace the progress line,
-                    so a type's one-line description vanished the moment you started it -- and the Calendar's
-                    branch printed Job Coverage's copy, because the template had two branches for three types.
-                    {% endcomment %}
-                    <div class="flex items-start gap-3 min-w-0 flex-1">
-                        <span class="pp-ctype{% if card.state == 'resumable' %} pp-ctype--quiet{% endif %}" aria-hidden="true">
-                            {% include 'partials/icons/challenge_type.html' with type=card.type size='' %}
-                        </span>
-                        <div class="min-w-0 flex-1">
-                            {% comment %}THE CHIP SHARES THE TITLE'S ROW, NOT THE PITCH'S. It sat beside the whole text
-                            block first, so it narrowed the pitch too and every pitch wrapped with a stranded word
-                            ("A to / Z."). In the title row it costs only the title width it actually needs.{% endcomment %}
-                            <div class="flex items-start justify-between gap-2">
-                                <h2 class="text-base md:text-lg font-bold leading-tight min-w-0">{{ card.label }}</h2>
-                            {% comment %}The state, said once. `resumable` is the one a hunter would otherwise have
-                            no way to tell from having no run at all.
-
-                            `.bd-chip`, NOT DaisyUI's `.badge`. `chips.css` says why in its own header: the chip
-                            is the strangler replacement for `.badge` as shared atoms convert, and it tints from
-                            `--pp-*` where DaisyUI tints from its own theme. These two read as different greens and
-                            different blues sitting side by side, which is the whole cost of mixing them.
-
-                            `--ghost` for Hidden, NOT `--warning`, and the difference is register rather than
-                            colour. A hidden run is not a problem -- it is dormant, and Resume brings it back with
-                            every square intact. Warning is the bright yellow this page spends on the beta notice,
-                            which would read as "something needs attention" about a state where nothing does.
-
-                            Ghost still contrasts with `In progress` above it, which is the only thing the two
-                            chips have to do: tell a hunter which of their runs is live.{% endcomment %}
-                            {% if card.state == 'active' %}
-                            <span class="bd-chip bd-chip--primary shrink-0">In progress</span>
-                            {% elif card.state == 'resumable' %}
-                            <span class="bd-chip bd-chip--ghost shrink-0">Hidden</span>
-                            {% elif card.state == 'finished' %}
-                            <span class="bd-chip bd-chip--success shrink-0">Finished</span>
-                            {% endif %}
-                            </div>
-                            <p class="text-xs md:text-sm text-base-content/60 mt-0.5 text-pretty lg:min-h-[2lh]">
-                                {{ card.pitch }}
-                            </p>
-                        </div>
-                    </div>
-                </div>
-
-                {% if card.run %}
-                {% comment %}THE HORIZON, the kit's progress primitive, rather than a bespoke bar. Its
-                fill is inline because the value is per-run data and cannot be a class.{% endcomment %}
-                <p class="text-xs text-base-content/60 mt-3">
-                    {{ card.run.completed_count }} of {{ card.run.total_slots }} {{ card.run.unit }} {% if card.type == 'calendar' %}filled{% else %}done{% endif %}{% if card.planned %}, {{ card.planned }} planned{% endif %}{% if card.visible_completed_count and card.state != 'finished' %}<span class="text-base-content/50"> &middot; {{ card.visible_completed_count }} finished before</span>{% endif %}
-                </p>
-                <div class="mt-2">
-                    {% include 'components/horizon.html' with progress=card.progress %}
-                </div>
-                {% endif %}
-
-                {% comment %}"N FINISHED BEFORE" RIDES THE PROGRESS LINE when there is a run, so it does not push one
-                card's reward line below its neighbours'; on a card with no run it stands alone.{% endcomment %}
-                {% if card.visible_completed_count and not card.run %}
-                <p class="text-xs text-base-content/50 mt-3">
-                    {{ card.visible_completed_count }} finished before
-                </p>
-                {% endif %}
+                {% include 'challenges/partials/_type_card_summary.html' with card=card %}
                 </div>
                 <div class="pp-ccard__side">
 
@@ -226,25 +206,7 @@
                 `card.reward` comes from the view, which reads `rewards.title_for` and the shared constant --
                 the same source the run page's panel uses, so the two cannot quote different figures -- or, for
                 the Calendar, `rewards.next_calendar_rung`.{% endcomment %}
-                {% if card.reward %}
-                <p class="pp-cwr">
-                    <span class="pp-cwr__label">Reward</span>
-                    {% comment %}THE TITLE SPAN IS GATED, not the whole line: past the second completion
-                    there is no new title to earn, and the XP is still paid. Gating the line lost both.{% endcomment %}
-                    {% if card.reward.title_name %}
-                    <span class="pp-cwr__title">{{ card.reward.title_name }}</span>
-                    {% endif %}
-                    {% comment %}THE CALENDAR'S RUNG, AND WHERE IT SITS: its titles are a ladder climbed during the
-                    run, so the line names the next one the hunter can still earn (`rewards.next_calendar_rung`).
-                    {% endcomment %}
-                    {% if card.reward.at_days %}
-                    <span class="pp-cwr__at">at {{ card.reward.at_days }} days</span>
-                    {% endif %}
-                    {% if card.reward.per_square %}
-                    <span class="pp-cwr__xp">+{{ card.reward.per_square|intcomma }} job XP per job</span>
-                    {% endif %}
-                </p>
-                {% endif %}
+                {% include 'challenges/partials/_type_card_reward.html' with card=card %}
 
                 {% comment %}WHAT IS WAITING TO BE CLAIMED, which is a different question from what the run
                 is worth: the line above says what a square PAYS, this says what is owed right now (owner,

@@ -1,0 +1,421 @@
+/* ═══ Challenge Optimizer (/my-challenges/optimizer/) ═══════════════════════════════════════════════════════════
+   A five-step wizard card, then a plan that flows free below the chrome. Block `.pp-cplan` (grep'd clear in
+   output.css). The Other options sheet reuses the run page's `.pp-cpick` dialog and rows unchanged. */
+
+/* ── wizard rail ───────────────────────────────────────────────────────────────────────────── */
+.pp-cplan__rail {
+    /* WRAPS, never scrolls sideways: a scroll strip widens the mobile LAYOUT viewport (only `contain: layout
+       size` stops it), and at 375px five numbered steps plus the current label fit on one line anyway. */
+    display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 14px; padding: 0 0 12px;
+    border-bottom: 1px solid var(--pp-divider);
+}
+.pp-cplan__rail-step {
+    display: inline-flex; align-items: center; gap: 6px; padding: 5px 9px 5px 5px; white-space: nowrap;
+    font: inherit; font-size: 0.75rem; font-weight: 600; color: var(--pp-text-mute);
+    background: transparent; border: 1px solid transparent; border-radius: 999px; cursor: pointer;
+    transition: color var(--pp-dur) var(--pp-ease), border-color var(--pp-dur) var(--pp-ease), background var(--pp-dur) var(--pp-ease);
+}
+.pp-cplan__rail-step:disabled { cursor: default; opacity: 0.45; }
+.pp-cplan__rail-num {
+    display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%;
+    font-size: 0.7rem; font-weight: 700; border: 1px solid var(--pp-border); background: var(--pp-bg-1);
+    transition: background var(--pp-dur) var(--pp-ease), border-color var(--pp-dur) var(--pp-ease), color var(--pp-dur) var(--pp-ease);
+}
+/* Mobile: only the current step SHOWS its label, so five steps fit at 375px. The others are visually hidden,
+   never `display: none`: the number is aria-hidden, so the label is each step button's only name. */
+.pp-cplan__rail-lbl {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
+    clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+.pp-cplan__rail-step.is-current .pp-cplan__rail-lbl { position: static; width: auto; height: auto; margin: 0; overflow: visible; clip: auto; }
+.pp-cplan__rail-step.is-current {
+    color: var(--pp-text);
+    border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border));
+    background: color-mix(in oklab, var(--pp-primary) 12%, transparent);
+}
+.pp-cplan__rail-step.is-current .pp-cplan__rail-num { background: var(--pp-primary); border-color: var(--pp-primary); color: var(--pp-bg-0); }
+.pp-cplan__rail-step.is-done .pp-cplan__rail-num { border-color: color-mix(in oklab, var(--pp-success) 60%, var(--pp-border)); color: var(--pp-success); }
+@media (hover: hover) { .pp-cplan__rail-step:not(:disabled):hover { color: var(--pp-text); } }
+.pp-cplan__rail-step:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+@media (min-width: 768px) {
+    .pp-cplan__rail-lbl { position: static; width: auto; height: auto; margin: 0; overflow: visible; clip: auto; }
+    .pp-cplan__rail-step { font-size: 0.8rem; padding-right: 12px; }
+}
+
+/* ── one step ──────────────────────────────────────────────────────────────────────────────── */
+.pp-cplan__q { font-size: 1rem; font-weight: 700; line-height: 1.3; outline: none; }
+.pp-cplan__hint { margin-top: 2px; font-size: 0.8rem; color: var(--pp-text-mute); }
+.pp-cplan__optional {
+    margin-left: 6px; font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--pp-text-mute);
+}
+@media (min-width: 768px) { .pp-cplan__q { font-size: 1.125rem; } }
+
+.pp-cplan__opts { display: grid; grid-template-columns: 1fr; gap: 8px; margin-top: 12px; }
+@media (min-width: 768px) {
+    .pp-cplan__opts { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+    .pp-cplan__opts--two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+.pp-cplan__opt {
+    position: relative; display: flex; flex-direction: column; gap: 2px; padding: 11px 12px;
+    background: var(--pp-bg-1); border: 1px solid var(--pp-border); border-radius: var(--pp-radius-md);
+    cursor: pointer;
+    transition: border-color var(--pp-dur) var(--pp-ease), background var(--pp-dur) var(--pp-ease), box-shadow var(--pp-dur) var(--pp-ease);
+}
+.pp-cplan__opt input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.pp-cplan__opt-title { font-size: 0.875rem; font-weight: 700; }
+.pp-cplan__opt-sub { font-size: 0.75rem; color: var(--pp-text-mute); }
+.pp-cplan__opt:has(input:checked) {
+    border-color: color-mix(in oklab, var(--pp-primary) 55%, var(--pp-border));
+    background: color-mix(in oklab, var(--pp-primary) 10%, var(--pp-bg-1));
+}
+.pp-cplan__opt:not(.pp-cplan__opt--run):has(input:focus-visible) { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+@media (hover: hover) {
+    .pp-cplan__opt:not(.pp-cplan__opt--off):not(.pp-cplan__opt--start):not(.pp-cplan__opt--run):hover { box-shadow: 0 0 0 1px color-mix(in oklab, var(--pp-primary) 30%, transparent); }
+}
+/* GATED: only the decoration steps back (tile, Horizon). The text stays at full strength, because the beta note
+   is the only explanation this hunter gets. */
+.pp-cplan__opt--off { cursor: default; }
+/* A type with no run yet, startable from here: a dashed outline says "not on your board yet" while the Start
+   button stays at full strength (no dimming, unlike the beta-gated card). */
+.pp-cplan__opt--start { cursor: default; border-style: dashed; background: transparent; }
+/* `margin-top: auto` on both action rows, so a run card's Include pill and a Start card's button land on one
+   line when the cards sit side by side (My Challenges' `mt-auto`, for the same reason). */
+.pp-cplan__opt-form { margin-top: auto; }
+
+/* ── step 1's run cards: My Challenges' card summary, plus the Include toggle ── */
+.pp-cplan__opt--run, .pp-cplan__opt--start, .pp-cplan__opt--off { gap: 0; padding: 12px; cursor: default; }
+@media (min-width: 768px) { .pp-cplan__opt--run, .pp-cplan__opt--start, .pp-cplan__opt--off { padding: 16px; } }
+.pp-cplan__opt--run .pp-cwr, .pp-cplan__opt--start .pp-cwr, .pp-cplan__opt--off .pp-cwr { margin-top: 10px; }
+.pp-cplan__opt-foot {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+    margin-top: auto; padding-top: 10px; border-top: 1px solid var(--pp-divider);
+}
+.pp-cplan__opt-open { font-size: 0.8rem; font-weight: 600; color: var(--pp-text-mute); }
+/* The card's content block keeps 12px above the action row even when the row's auto margin collapses to 0. */
+.pp-cplan__opt-body { margin-bottom: 12px; }
+
+/* LEFT OUT: the card steps back so the included ones read as the plan, but only its DECORATION (tile, Horizon)
+   dims: its text is still read by a hunter deciding whether to put it back, and the text is already muted, so
+   dimming it again fell below AA. Opacity, never `filter` (mobile GPU rule); the transition sits on the base
+   selector so re-including fades back rather than snapping. */
+.pp-cplan__opt--run:not(:has(input:checked)) { border-style: dashed; background: transparent; }
+.pp-cplan__opt :is(.pp-ctype, .pp-horizon) { transition: opacity var(--pp-dur) var(--pp-ease); }
+.pp-cplan__opt--run:not(:has(input:checked)) :is(.pp-ctype, .pp-horizon),
+.pp-cplan__opt--off :is(.pp-ctype, .pp-horizon) { opacity: 0.45; }
+
+/* THE TOGGLE: a pill whose check badge fills when the run is in the plan and empties when it is not. */
+.pp-cplan__toggle {
+    /* 44px at every size (the design system's floor), and `margin-left: auto` keeps it right-aligned when the
+       foot wraps at 375px. */
+    display: inline-flex; align-items: center; gap: 8px; min-height: 44px; margin-left: auto; padding: 5px 14px 5px 8px;
+    font-size: 0.8rem; font-weight: 700; color: var(--pp-text-mute); cursor: pointer; user-select: none;
+    border: 1px solid var(--pp-border); border-radius: 999px; background: var(--pp-bg-1);
+    transition: color var(--pp-dur) var(--pp-ease), border-color var(--pp-dur) var(--pp-ease), background var(--pp-dur) var(--pp-ease);
+}
+.pp-cplan__check {
+    display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%;
+    border: 2px solid var(--pp-border); color: transparent;
+    transition: background var(--pp-dur) var(--pp-ease), border-color var(--pp-dur) var(--pp-ease), color var(--pp-dur) var(--pp-ease);
+}
+.pp-cplan__check svg { width: 14px; height: 14px; }
+.pp-cplan__toggle:has(input:checked) {
+    color: var(--pp-text);
+    border-color: color-mix(in oklab, var(--pp-primary) 55%, var(--pp-border));
+    background: color-mix(in oklab, var(--pp-primary) 14%, var(--pp-bg-1));
+}
+.pp-cplan__toggle:has(input:checked) .pp-cplan__check { background: var(--pp-primary); border-color: var(--pp-primary); color: var(--pp-bg-0); }
+.pp-cplan__toggle:has(input:focus-visible) { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+@media (hover: hover) { .pp-cplan__toggle:hover { border-color: color-mix(in oklab, var(--pp-primary) 40%, var(--pp-border)); } }
+
+/* `--pp-list-accent` is what `.pp-bgal__chip` tints its checked state and FOCUS RING with; it is only defined
+   inside the hosts that use those chips, so without it here the focus outline is invalid and never draws. */
+.pp-cplan__chips { --pp-list-accent: var(--pp-primary); display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+
+.pp-cplan__more-note { font-size: 0.75rem; color: var(--pp-text-mute); align-self: center; }
+
+/* The badge picker opens on `animatePanel` (height + opacity), so it clips while it tweens. No padding or border
+   here: the panel must collapse to a true 0. */
+.pp-cplan__pick { margin-top: 4px; overflow: hidden; transition: height 0.3s var(--pp-ease), opacity 0.22s ease; }
+@media (prefers-reduced-motion: reduce) { .pp-cplan__pick { transition: none; } }
+
+.pp-cplan__pinned { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.pp-cplan__pin {
+    display: inline-flex; align-items: center; gap: 4px; padding: 3px 4px 3px 10px; font-size: 0.8rem; font-weight: 600;
+    border: 1px solid color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border)); border-radius: 999px;
+    background: color-mix(in oklab, var(--pp-primary) 10%, transparent);
+}
+.pp-cplan__pin-x {
+    display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%;
+    font-size: 1rem; line-height: 1; color: var(--pp-text-mute); background: transparent; border: 0; cursor: pointer;
+}
+@media (hover: hover) { .pp-cplan__pin-x:hover { color: var(--pp-text); background: var(--pp-bg-2); } }
+@media (pointer: coarse) { .pp-cplan__pin-x { width: 44px; height: 44px; margin: -11px -6px -11px -11px; } }
+.pp-cplan__pin-x:focus-visible { outline: 2px solid var(--pp-primary); }
+.pp-cplan__results { margin-top: 6px; grid-template-columns: 1fr; }
+/* The shared art is full-width for the picker's grid cards; a list row sizes it like the picker's search rows. */
+.pp-cplan__results .pp-cpick__row { flex-direction: row; align-items: center; gap: 10px; }
+.pp-cplan__results .pp-cpick__row-art { width: 56px; flex: none; }
+
+.pp-cplan__nav { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+.pp-cplan__nav [data-cplan-back] { margin-right: auto; }
+
+.pp-cplan__status { min-height: 1.2em; margin: 6px 0 0; font-size: 0.8rem; color: var(--pp-text-mute); }
+.pp-cplan__status:empty { min-height: 0; margin: 0; }
+.pp-cplan__status--error { color: var(--pp-error); }
+.pp-cplan__status--page { margin-bottom: 8px; }
+
+/* ── review ────────────────────────────────────────────────────────────────────────────────── */
+/* The transition on the BASE rule, so the dim fades back out as well as in. */
+.pp-cplan__review { transition: opacity var(--pp-dur) var(--pp-ease); }
+.pp-cplan.is-busy .pp-cplan__review { opacity: 0.6; }
+
+.pp-cplan__stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 16px; }
+@media (min-width: 768px) { .pp-cplan__stats { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; } }
+/* The design system's stat cell (theme-safe 3% white on a 5% content border), centred. */
+.pp-cplan__stat {
+    display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 10px; text-align: center;
+    background: color-mix(in oklab, white 3%, transparent);
+    border: 1px solid color-mix(in oklab, var(--color-base-content) 5%, transparent); border-radius: var(--pp-radius-lg);
+}
+.pp-cplan__stat-num { font-size: 1.25rem; font-weight: 800; line-height: 1.1; color: var(--pp-primary); }
+.pp-cplan__stat-lbl { font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--pp-text-mute); }
+@media (min-width: 1024px) { .pp-cplan__stat-num { font-size: 1.5rem; } }
+
+.pp-cplan__section { margin-bottom: 20px; }
+.pp-cplan__section-head {
+    display: flex; align-items: center; gap: 8px; margin-bottom: 4px;
+    font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--pp-text-mute);
+}
+.pp-cplan__section-count {
+    padding: 0 7px; border-radius: 999px; font-size: 0.7rem; color: var(--pp-text); background: var(--pp-bg-2);
+    border: 1px solid var(--pp-border);
+}
+.pp-cplan__lines { display: grid; grid-template-columns: 1fr; gap: 8px; margin-top: 8px; }
+@media (min-width: 1024px) { .pp-cplan__lines { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; } }
+
+/* A plan line is an ITEM card inside free content (allowed by the stacked-page rule). */
+.pp-cplan__line {
+    display: flex; gap: 10px; padding: 10px;
+    background: var(--pp-bg-2); border: 1px solid var(--pp-border); border-radius: var(--pp-radius-md);
+    transition: border-color var(--pp-dur) var(--pp-ease), box-shadow var(--pp-dur) var(--pp-ease);
+}
+@media (hover: hover) { .pp-cplan__line:hover { box-shadow: 0 0 0 1px color-mix(in oklab, var(--pp-primary) 22%, transparent); } }
+.pp-cplan__line.is-locked { border-color: color-mix(in oklab, var(--pp-primary) 50%, var(--pp-border)); }
+.pp-cplan__line--muted { opacity: 0.8; }
+.pp-cplan__line .pp-cpick__row-art { width: 56px; flex: 0 0 56px; }
+@media (min-width: 768px) { .pp-cplan__line .pp-cpick__row-art { width: 64px; flex-basis: 64px; } }
+.pp-cplan__line-main { display: flex; flex-direction: column; gap: 6px; min-width: 0; flex: 1; }
+.pp-cplan__line-name { font-size: 0.9rem; font-weight: 700; line-height: 1.25; overflow-wrap: anywhere; }
+.pp-cplan__swap-why { font-size: 0.8rem; color: var(--pp-text-mute); }
+
+.pp-cplan__squares { display: flex; flex-wrap: wrap; gap: 6px; }
+.pp-cplan__sq {
+    --disc: var(--pp-primary);
+    display: inline-flex; align-items: center; gap: 5px; min-height: 28px; padding: 3px 9px;
+    font: inherit; font-size: 0.78rem; font-weight: 700; color: var(--pp-text);
+    background: color-mix(in oklab, var(--disc) 12%, var(--pp-bg-1));
+    border: 1px solid color-mix(in oklab, var(--disc) 45%, var(--pp-border)); border-radius: var(--pp-radius-sm);
+}
+button.pp-cplan__sq { cursor: pointer; transition: background var(--pp-dur) var(--pp-ease); }
+@media (hover: hover) { button.pp-cplan__sq:hover { background: color-mix(in oklab, var(--disc) 22%, var(--pp-bg-1)); } }
+button.pp-cplan__sq:focus-visible { outline: 2px solid var(--disc); outline-offset: 2px; }
+.pp-cplan__sq svg { width: 14px; height: 14px; color: var(--disc); flex-shrink: 0; }
+
+.pp-cplan__meta { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
+.pp-cplan__note { font-size: 12px; font-weight: 600; color: var(--pp-text-mute); }
+.pp-cplan__note + .pp-cplan__note::before { content: '\00b7'; margin-right: 5px; color: var(--pp-text-dim); }
+.pp-cplan__note--badge { color: var(--pp-metal-gold); }
+.pp-cplan__note--progress { color: var(--pp-info); }
+.pp-cplan__note--pin { color: var(--pp-primary); }
+.pp-cplan__note--warn { color: var(--pp-warning); }
+/* The picker's 12px floor for anything read to choose a game, applied to the same tags and chips here. */
+.pp-cplan__meta .bd-meta-tag { font-size: 12px; padding: 1px 6px; }
+.pp-cplan__meta .bd-chip { font-size: 12px; }
+
+.pp-cplan__actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.pp-cplan__act {
+    min-height: 32px; padding: 4px 10px; font: inherit; font-size: 0.75rem; font-weight: 600; color: var(--pp-text-mute);
+    background: transparent; border: 1px solid var(--pp-border); border-radius: var(--pp-radius-sm); cursor: pointer;
+    transition: color var(--pp-dur) var(--pp-ease), border-color var(--pp-dur) var(--pp-ease), background var(--pp-dur) var(--pp-ease);
+}
+@media (hover: hover) { .pp-cplan__act:hover { color: var(--pp-text); border-color: color-mix(in oklab, var(--pp-primary) 40%, var(--pp-border)); } }
+@media (prefers-reduced-motion: no-preference) { .pp-cplan__act:active { transform: translateY(1px); } }
+@media (pointer: coarse) { .pp-cplan__act, button.pp-cplan__sq, .pp-cplan__rail-step { min-height: 44px; } }
+.pp-cplan__act:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+.pp-cplan__act[aria-pressed="true"] {
+    color: var(--pp-text); border-color: color-mix(in oklab, var(--pp-primary) 55%, var(--pp-border));
+    background: color-mix(in oklab, var(--pp-primary) 14%, transparent);
+}
+
+.pp-cplan__notes ul { display: grid; gap: 6px; margin-top: 6px; }
+.pp-cplan__note-item { font-size: 0.8rem; color: var(--pp-text-mute); }
+
+/* ── the sticky action bar ─────────────────────────────────────────────────────────────────── */
+/* Sticky, not fixed: it rides `#page-recede` like the rest of the content. Below `lg` it clears the fixed
+   mobile tab bar (56px + the safe area). */
+.pp-cplan__bar {
+    position: sticky; z-index: 20; bottom: calc(56px + env(safe-area-inset-bottom, 0px) + 8px);
+    display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; padding: 10px;
+    background: color-mix(in oklab, var(--pp-bg-1) 94%, transparent);
+    border: 1px solid var(--pp-border); border-radius: var(--pp-radius-lg);
+    box-shadow: 0 8px 24px -12px rgba(0, 0, 0, 0.6);
+}
+.pp-cplan__bar .pp-cta { flex: 1; justify-content: center; }
+.pp-cplan__bar svg { width: 15px; height: 15px; }
+@media (min-width: 768px) { .pp-cplan__bar .pp-cta { flex: 0 0 auto; } }
+@media (min-width: 1024px) { .pp-cplan__bar { bottom: 12px; } }
+
+.pp-cplan__done .pp-cplan__actions { margin: 8px 0; }
+/* THE APPLY RESULT reads as a result, not a section label: sentence case at body size, its check traced in. */
+.pp-cplan__done .pp-cplan__section-head {
+    font-size: 1rem; text-transform: none; letter-spacing: 0; color: var(--pp-text);
+}
+.pp-cplan__done-check { width: 22px; height: 22px; flex: none; color: var(--pp-success); }
+
+/* The bar's own status line: beside the buttons from md:, its own row above them on a phone. Empty, it is gone. */
+.pp-cplan__bar { flex-wrap: wrap; align-items: center; }
+.pp-cplan__bar-status { flex: 1 1 100%; font-size: 0.75rem; color: var(--pp-text-dim); }
+.pp-cplan__bar-status:empty { display: none; }
+@media (min-width: 768px) { .pp-cplan__bar-status { flex: 1 1 auto; } }
+
+/* ── step 4: badges ── */
+.pp-cplan__chip-n {
+    margin-left: 4px; padding: 0 6px; border-radius: 999px; font-size: 12px; font-weight: 700;
+    color: var(--pp-text-mute); background: var(--pp-bg-2);
+}
+/* "All badges" covers every type: the type chips step back, never vanish (the hunter can see what it covers). */
+.pp-bgal__chip.is-covered { opacity: 0.5; cursor: default; }
+/* "All badges" greys the chips it covers with a FADE: the house chip's transition plus opacity. */
+.pp-cplan .pp-bgal__chip {
+    transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease, transform 0.12s ease, opacity 0.2s ease;
+}
+
+.pp-cplan__subhead { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 18px 0 8px; }
+.pp-cplan__subhead h3 {
+    font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--pp-text-mute);
+}
+[data-step="badges"] .pp-switch + .pp-cplan__hint { margin-top: 6px; }
+
+/* BADGE CARDS: a medallion beside its name, edition and progress. The grid STAYS two-up on a phone (item tiles,
+   the design system's multi-column-on-mobile rule) and widens at md / lg. */
+.pp-cplan__badges { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
+@media (min-width: 768px) { .pp-cplan__badges { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; } }
+@media (min-width: 1024px) { .pp-cplan__badges { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.pp-cplan__badge {
+    position: relative; display: flex; align-items: center; gap: 10px; padding: 8px 10px; min-width: 0;
+    background: var(--pp-bg-1); border: 1px solid var(--pp-border); border-radius: var(--pp-radius-md);
+    transition: border-color var(--pp-dur) var(--pp-ease), background var(--pp-dur) var(--pp-ease), box-shadow var(--pp-dur) var(--pp-ease);
+}
+/* THE ART AND THE CHECK TAKE NO TAPS: the toggle's stretched ::after sits under them in paint order, so without
+   this a tap on the check circle (the obvious place to tap) or on the medallion's meter would hit nothing.
+   It also keeps the medallion's own hover lift off the started list, whose cards are not buttons. */
+.pp-cplan__badge-med, .pp-cplan__badge-check { pointer-events: none; }
+.pp-cplan__badge-med { flex: none; }
+.pp-cplan__badge-med .pp-med { --sz: 52px; }
+.pp-cplan__badge-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+/* PHONE: two-up leaves ~150px a card, too narrow for art BESIDE a name, so the medallion stacks above it. */
+@media (max-width: 767px) {
+    .pp-cplan__badge { flex-direction: column; align-items: flex-start; gap: 6px; }
+}
+@media (min-width: 768px) { .pp-cplan__badge-med .pp-med { --sz: 60px; } }
+/* The check sits in the corner; selectable text keeps clear of it. */
+.pp-cplan__badge:has(.pp-cplan__badge-hit) .pp-cplan__badge-text { padding-right: 22px; }
+.pp-cplan__badge-hit, .pp-cplan__badge-name {
+    font: inherit; font-size: 0.82rem; font-weight: 700; line-height: 1.25; color: var(--pp-text); text-align: left;
+    background: none; border: 0; padding: 0;
+    display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+    overflow-wrap: break-word; hyphens: auto;
+}
+.pp-cplan__badge-hit { cursor: pointer; }
+/* THE STRETCHED HIT AREA: the button's ::after covers the card, so a tap anywhere toggles it. */
+.pp-cplan__badge-hit::after { content: ''; position: absolute; inset: 0; border-radius: inherit; }
+.pp-cplan__badge-hit:focus-visible { outline: none; }
+.pp-cplan__badge:has(.pp-cplan__badge-hit:focus-visible) { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+.pp-cplan__badge-edition { font-size: 12px; font-weight: 600; color: var(--pp-text-mute); }
+.pp-cplan__badge-progress { font-size: 12px; color: var(--pp-text-mute); }
+@media (hover: hover) {
+    .pp-cplan__badge:has(.pp-cplan__badge-hit):hover {
+        box-shadow: 0 0 0 1px color-mix(in oklab, var(--pp-primary) 30%, transparent);
+    }
+}
+.pp-cplan__badge-check { position: absolute; top: 6px; right: 6px; width: 20px; height: 20px; }
+.pp-cplan__badge-check svg { width: 12px; height: 12px; }
+/* SELECTED: tinted card, filled check, the same language as step 1's Include pill. */
+.pp-cplan__badge:has([aria-pressed="true"]) {
+    border-color: color-mix(in oklab, var(--pp-primary) 55%, var(--pp-border));
+    background: color-mix(in oklab, var(--pp-primary) 12%, var(--pp-bg-1));
+}
+.pp-cplan__badge:has([aria-pressed="true"]) .pp-cplan__badge-check {
+    background: var(--pp-primary); border-color: var(--pp-primary); color: var(--pp-bg-0);
+}
+.pp-cplan__badges--started .pp-cplan__badge { background: transparent; }
+
+.pp-cplan__pick .pp-cplan__chips { margin-top: 8px; }
+.pp-cplan__more { display: flex; justify-content: center; margin-top: 10px; }
+.pp-cplan__counting { margin-top: 16px; padding-top: 10px; border-top: 1px solid var(--pp-divider); }
+.pp-cplan__counting-line { font-size: 0.8rem; font-weight: 600; color: var(--pp-text); }
+
+/* ── the weekly allowance: the spend confirmation's facts ── */
+.pp-cplan__spend-facts { display: grid; gap: 8px; font-size: 0.85rem; color: var(--pp-text); }
+.pp-cplan__spend-facts li { position: relative; padding-left: 16px; }
+.pp-cplan__spend-facts li::before {
+    content: ''; position: absolute; left: 0; top: 0.5em; width: 6px; height: 6px; border-radius: 50%;
+    background: var(--pp-primary);
+}
+
+/* ── the build line: the status line and its Stop waiting control share a row ── */
+.pp-cplan__statusrow { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.pp-cplan__statusrow .pp-cplan__status { flex: 1 1 16rem; }
+
+/* ── the review's sort toggle, beside the "Covers both boards" heading (the script hosts it there) ── */
+.pp-cplan__section-top { display: flex; align-items: center; justify-content: space-between; gap: 8px 12px; flex-wrap: wrap; }
+.pp-cplan__sortbar { display: flex; align-items: center; gap: 8px; }
+.pp-cplan__sort-label { font-size: 0.75rem; color: var(--pp-text-mute); }
+
+/* ── the free banner's actions: Open my plan and the members door side by side, under the text on a
+   phone (each its own full-width row) and beside it from md: ── */
+.pp-cplan__members { --cta-c: var(--pp-accent); }
+.pp-cplan__allowance-actions { display: flex; flex-wrap: wrap; gap: 8px; width: 100%; }
+.pp-cplan__allowance-actions > .pp-cta { flex: 1 1 12rem; }
+@media (min-width: 768px) {
+    .pp-cplan__allowance-actions { width: auto; flex-wrap: nowrap; }
+    .pp-cplan__allowance-actions > .pp-cta { flex: 0 0 auto; }
+}
+
+/* ── a date the hunter is waiting on, highlighted wherever it sits mid-sentence (`partials/_when.html`) ── */
+.pp-when { font-weight: 700; color: var(--pp-primary); white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+/* ── the My Challenges door (`my_challenges.html`): its status line, and the star button sized up for a
+   feature card, full width on a phone and its natural size beside the copy from md: ── */
+.pp-optdoor__status { margin-top: 10px; font-size: 0.8rem; color: var(--pp-text-dim); }
+.pp-optdoor__new { font-size: 12px; }
+.pp-optdoor__go { width: 100%; padding: 0.7rem 1.25rem; font-size: 0.9rem; }
+@media (min-width: 768px) { .pp-optdoor__go { width: auto; flex-shrink: 0; } }
+
+/* ── touch: every control on the optimizer (and its door) is at least 44px tall under a finger. The house chip
+   and button are sized for a pointer, so this lifts them here rather than restyling the primitives site-wide. ── */
+@media (pointer: coarse) {
+    .pp-cplan .pp-switch__chip,
+    .pp-cplan .pp-cta,
+    #cplan-spend .pp-cta,
+    .pp-optdoor__go { min-height: 44px; }
+}
+
+/* ── the badge gallery's arrival (`staggerReveal`): held until each card is revealed. Under no-preference only,
+   and the script strips `pp-reveal` whenever it cannot reveal, so a card can never stick invisible. ── */
+@media (prefers-reduced-motion: no-preference) {
+    .pp-reveal .pp-cplan__badge { opacity: 0; }
+    .pp-reveal .pp-cplan__badge.is-revealed { opacity: 1; }
+}
+
+/* ── the Other options sheet holds its height while it loads, so the rows land without the sheet growing under
+   the hunter's thumb. Scoped to this page's sheet: the run page's picker shares the shell. ── */
+#cplan-alt .pp-cpick__body { min-height: 12rem; }
+
+/* ── a dialog playing its exit is already answered: no second tap lands on it ── */
+#cplan-alt.is-closing, #cplan-spend.is-closing { pointer-events: none; }
+
+/* ── None greys what it turns off (the weight, the picker, the picked chips), with the chips' own fade ── */
+.pp-cplan__badge-extras, [data-cplan-picked] { transition: opacity 0.2s ease; }
+.pp-cplan__badge-extras.is-covered, [data-cplan-picked].is-covered { opacity: 0.45; }

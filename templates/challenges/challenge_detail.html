@@ -154,6 +154,13 @@ Gated on the type, because an A-Z run references none of it and an unused sprite
                     <span class="hidden md:inline">Back to My Challenges</span><span class="md:hidden">My Challenges</span>
                 </a>
                 {% if can_share %}{% include 'challenges/partials/_share_button.html' with run=challenge %}{% endif %}
+                {% comment %}THE OPTIMIZER, for a run whose squares can still change. The Plat Calendar has none to plan.{% endcomment %}
+                {% if can_edit and challenge.profile.is_linked and challenge.challenge_type != 'calendar' %}
+                <a href="{% url 'challenge_optimizer' %}" class="pp-cta pp-cta--ghost">
+                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="19" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/><circle cx="18" cy="5" r="3"/></svg>
+                    Optimize
+                </a>
+                {% endif %}
             </div>
             {% endif %}
         </div>
