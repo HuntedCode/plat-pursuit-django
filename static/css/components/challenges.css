@@ -445,8 +445,10 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
  * (overlay darkens darks and lightens lights, so a near-black cover shows nothing), and most covers are dark.
  * Measured by screenshot, the finished and in-progress squares were indistinguishable but for the border. So:
  *
- * - a PRISMATIC WASH (platinum, violet, rose, mint) in diagonal bands on `screen`, which can only LIGHTEN, so it
- *   shows on dark art and light art alike, over a fine diagonal grain;
+ * - a PRISMATIC WASH in diagonal bands on `screen`, which can only LIGHTEN, so it shows on dark art and light art
+ *   alike: a full spectrum (platinum cyan leading and closing, violet, rose, gold, mint between) strong enough to
+ *   read as a rainbow shift, the way a holo card does, rather than a tint (owner, 2026-10-17: "really looks
+ *   holographic"), over a crisp diagonal grain and a glossy highlight band where the light catches the laminate;
  * - a PLATINUM RING inside the square's edge (a masked conic gradient), which reads as foil even at thumbnail
  *   size, where the wash is a few pixels of colour;
  * - ABOVE THE SCRIM (`z-index: 1`) and below the name (`z-index: 2`), so it covers the whole square instead of
@@ -474,15 +476,9 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     border-radius: inherit;
     pointer-events: none;
     background:
-        repeating-linear-gradient(115deg, rgba(255, 255, 255, 0.07) 0 1px, transparent 1px 3px),
-        linear-gradient(120deg,
-            rgba(143, 210, 234, 0) 0%,
-            rgba(143, 210, 234, 0.34) 16%,
-            rgba(196, 172, 255, 0.28) 34%,
-            rgba(255, 186, 228, 0.22) 50%,
-            rgba(168, 255, 222, 0.26) 66%,
-            rgba(143, 210, 234, 0.34) 84%,
-            rgba(143, 210, 234, 0) 100%);
+        repeating-linear-gradient(115deg, rgba(255, 255, 255, 0.11) 0 1px, transparent 1px 3px),
+        linear-gradient(60deg, rgba(255, 255, 255, 0) 30%, rgba(255, 255, 255, 0.2) 46%, rgba(255, 255, 255, 0.04) 54%, rgba(255, 255, 255, 0) 70%),
+        linear-gradient(120deg, rgba(143, 210, 234, 0.12) 0%, rgba(143, 210, 234, 0.5) 14%, rgba(186, 150, 255, 0.46) 28%, rgba(255, 150, 214, 0.42) 42%, rgba(255, 222, 140, 0.38) 56%, rgba(140, 255, 210, 0.44) 70%, rgba(143, 210, 234, 0.5) 86%, rgba(143, 210, 234, 0.12) 100%);
     mix-blend-mode: screen;
 }
 /* THE RING: a conic platinum gradient masked down to a 2px band just inside the edge. */
@@ -490,7 +486,7 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     content: '';
     position: absolute;
     inset: 0;
-    padding: 2px;
+    padding: 2.5px;
     border-radius: inherit;
     background: conic-gradient(from 210deg, #eaf8ff, #8fd2ea, #c7b6ff, #ffffff, #9fe6d6, #8fd2ea, #eaf8ff);
     -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);

@@ -89,7 +89,7 @@ def test_the_foil_reads_on_dark_art_and_carries_a_ring():
     # `screen` can only lighten, so it shows on the dark covers `overlay` vanished into.
     assert 'mix-blend-mode: screen;' in foil and 'z-index: 1;' in foil
     ring = _rule('.pp-csq__foil::before {')
-    assert 'conic-gradient(' in ring and 'mask-composite: xor;' in ring and 'padding: 2px;' in ring
+    assert 'conic-gradient(' in ring and 'mask-composite: xor;' in ring and 'padding: 2.5px;' in ring
     arrival = CSS[CSS.index('.pp-csq-board:not(.is-settled) .pp-csq__gleam,'):]
     assert arrival.index('.pp-csq--fresh .pp-csq__gleam {') < arrival.index('animation: ppCsqGleam 0.9s')
 
@@ -277,12 +277,12 @@ def test_the_page_and_the_card_share_one_foil_recipe():
     # the grain, the ring's gradient, its padding and its mask. Change one copy alone and this fails.
     foil = CSS[CSS.index('.pp-csq__foil {'):CSS.index('.pp-csq--done { isolation: isolate; }')]
     card = CARD_SQUARE[CARD_SQUARE.index("{% if sq.state == 'done' %}<div"):]
-    for name in ('repeating-linear-gradient', 'linear-gradient(120deg', 'conic-gradient'):
+    for name in ('repeating-linear-gradient', 'linear-gradient(60deg', 'linear-gradient(120deg', 'conic-gradient'):
         fn = name.split('(')[0]
         page_expr = _call(foil[foil.index(name):], fn)
         card_expr = _call(card[card.index(name):], fn)
         assert page_expr == card_expr, (page_expr, card_expr)
-    for declaration in ('padding: 2px;', 'mix-blend-mode: screen;',
+    for declaration in ('padding: 2.5px;', 'mix-blend-mode: screen;',
                         '-webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);',
                         '-webkit-mask-composite: xor;',
                         'mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);'):
