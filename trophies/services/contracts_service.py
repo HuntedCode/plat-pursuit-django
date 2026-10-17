@@ -169,6 +169,25 @@ def _bundle_progress(profile):
     return Cast(Floor(Coalesce(best, Value(0))), IntegerField())
 
 
+def _member_profile_games(profile):
+    """The hunter's ProfileGames on a contract's anchored home members, correlated on the outer contract."""
+    return ProfileGame.objects.filter(profile=profile, **_member_at_igdb('game__concept__'))
+
+
+def max_progress_expression(profile):
+    """The hunter's progress on the outer contract, 0-100, as one SQL expression. The Job Board's figure,
+    shared so the Challenge Optimizer ranks a backlog on the same number the board shows.
+
+    A bundle-only contract completes when EVERY concept in one of its bundles is done, so "best single game"
+    would read one finished episode of five as 100%. Its progress is the BEST BUNDLE's average over its
+    concepts (each concept at its best game, an unplayed one at 0), floored so it never reads 100 before the
+    bundle is. Separate correlated subqueries chosen by a CASE, evaluated only for those rows: never an OR
+    across join chains, which would scan the hunter's whole ProfileGame set per row."""
+    return _home_or_bundle(
+        Coalesce(Subquery(_member_profile_games(profile).order_by('-progress').values('progress')[:1]), 0),
+        _bundle_progress(profile), output_field=IntegerField())
+
+
 def annotated_contracts(profile, disc_levels=None, with_ranking=True):
     """Live Contracts annotated IN SQL with the viewer's per-contract status/progress and a
     relevance score -- so the board filters/sorts/paginates in the database, never by iterating
@@ -177,18 +196,8 @@ def annotated_contracts(profile, disc_levels=None, with_ranking=True):
     don't sort by them (the new-contracts modal, job detail's list) -- shaves two correlated subqueries."""
     weights, strengths = _disc_rankings(disc_levels)
     if profile is not None:
-        member_pg = ProfileGame.objects.filter(
-            profile=profile,
-            **_member_at_igdb('game__concept__'),
-        )
-        # A bundle-only contract completes when EVERY concept in one of its bundles is done, so "best single
-        # game" would read one finished episode of five as 100%. Its progress is the BEST BUNDLE's average
-        # over its concepts (each concept at its best game, an unplayed one at 0), floored so it never reads
-        # 100 before the bundle is. Separate correlated subqueries chosen by a CASE, evaluated only for those
-        # rows: never an OR across join chains, which would scan the hunter's whole ProfileGame set per row.
-        max_progress = _home_or_bundle(
-            Coalesce(Subquery(member_pg.order_by('-progress').values('progress')[:1]), 0),
-            _bundle_progress(profile), output_field=IntegerField())
+        member_pg = _member_profile_games(profile)
+        max_progress = max_progress_expression(profile)
         any_plat = Exists(member_pg.filter(has_plat=True))
         # The hunter's EarnedContract row as ONE filtered LEFT JOIN (`_ec`), not a correlated subquery per
         # field. Django inlines an annotation's whole expression at every reference, and status, its sort

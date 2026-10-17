@@ -10,12 +10,35 @@ since per-badge in-progress is engine-derived and not whale-safe across a catalo
 """
 from collections import defaultdict
 
-from django.db.models import Count
+from django.db.models import Count, Q
+from django.utils.text import slugify
 
 from trophies.models import GroupBadge, SeriesBadgeStanding, UserGroupBadge
 from trophies.services.badge_detail_service import group_medallion_layers
 from trophies.services.badge_rarity import group_rarity
 from trophies.services.rarity import community_size
+
+
+def live_editions(*, groups=(), badge_types=(), query=''):
+    """Live GroupBadges (editions), filtered DB-side by platform-group keys, badge types and a name search, with
+    the select_related every card builder here needs (no per-card FK query). UNSORTED: each caller orders it.
+
+    The Browse Gallery's filter body, lifted out so the Challenge Optimizer's badge picker filters editions by
+    exactly the same rules rather than a copy. The search matches the series slug OR name, like the gallery."""
+    qs = GroupBadge.objects.filter(is_live=True).select_related(
+        'series', 'series__artwork_source', 'series__franchise', 'series__collection', 'series__developer',
+        'platform_group',
+    )
+    groups = [k for k in groups if k]
+    if groups:
+        qs = qs.filter(platform_group__key__in=groups)
+    badge_types = [t for t in badge_types if t]
+    if badge_types:
+        qs = qs.filter(series__badge_type__in=badge_types)
+    query = (query or '').strip()
+    if query:
+        qs = qs.filter(Q(series__series_slug__icontains=slugify(query)) | Q(series__name__icontains=query))
+    return qs
 
 
 def _list_frame(gb, tier, layers, is_avatar, held, is_holo, stages_done=None, stages_total=None) -> dict:

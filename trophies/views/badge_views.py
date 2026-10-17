@@ -50,7 +50,7 @@ from ..models import (
 )
 from ..forms import BadgeSearchForm
 from trophies.services.badge_detail_service import get_badge_detail
-from trophies.services.badge_list_service import build_list_cards, build_series_items
+from trophies.services.badge_list_service import build_list_cards, build_series_items, live_editions
 from trophies.services.badge_rarity import (
     annotate_group_rarity, RARITY_CLASSES, RARITY_FILTER_CHOICES, RARITY_UNEARNED,
 )
@@ -278,21 +278,11 @@ class BadgeListView(ListView):
         platform_group FKs the batched card builder (badge_list_service) reads, so it issues no per-card FK
         queries. Personal state is a binary hold Exists (earned / not) -- whale-safe; per-badge in-progress is
         engine-derived and lives on the detail page."""
-        qs = GroupBadge.objects.filter(is_live=True).select_related('series', 'series__artwork_source', 'series__franchise', 'series__collection', 'series__developer', 'platform_group',
-        )
         g = self.request.GET
-
-        # MULTI-select chips (OR'd): platform group (Legacy HD / Ultra HD ...) + badge type (on the series).
-        groups = [k for k in g.getlist('group') if k]
-        if groups:
-            qs = qs.filter(platform_group__key__in=groups)
-        types = [t for t in g.getlist('badge_type') if t]
-        if types:
-            qs = qs.filter(series__badge_type__in=types)
-        q = (g.get('q') or '').strip()
-        if q:
-            search_q = Q(series__series_slug__icontains=slugify(q)) | Q(series__name__icontains=q)
-            qs = qs.filter(search_q)
+        # MULTI-select chips (OR'd): platform group (Legacy HD / Ultra HD ...) + badge type (on the series), and
+        # the name search. The shared filter body (`badge_list_service.live_editions`), which the Challenge
+        # Optimizer's badge picker uses too.
+        qs = live_editions(groups=g.getlist('group'), badge_types=g.getlist('badge_type'), query=g.get('q'))
 
         # Personal-state multi-select (auth only): Earned / Not-earned, OR'd. One binary-hold EXISTS probe.
         profile = self._profile()

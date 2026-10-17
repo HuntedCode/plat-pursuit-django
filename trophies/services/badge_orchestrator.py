@@ -30,8 +30,13 @@ _GAME_FIELDS = ('id', 'title_platform', 'is_obtainable', 'is_delisted', 'concept
 
 
 def _game_prefetch():
-    """Prefetch a stage/bundle's concepts -> games with only the fields the engine reads."""
-    return Prefetch('concepts', queryset=Concept.objects.prefetch_related(
+    """Prefetch a stage/bundle's concepts -> games with only the fields the engine reads.
+
+    CONCEPTS AS IDS ONLY: every reader of a catalogue (the engine, `badge_detail_service`, the Challenge
+    Optimizer) reads a concept's `id` and `.games` and nothing else, and a full Concept row carries several JSON
+    fields (media, descriptions, genres, title ids). Loading those for a whole catalogue on a request path is the
+    memory shape behind the May 2026 OOMs."""
+    return Prefetch('concepts', queryset=Concept.objects.only('id').prefetch_related(
         Prefetch('games', queryset=Game.objects.only(*_GAME_FIELDS)),
     ))
 

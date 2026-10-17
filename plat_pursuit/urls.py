@@ -23,6 +23,15 @@ from django.contrib.sitemaps.views import sitemap, index as sitemap_index
 from django.urls import path, include
 from django.views.generic import RedirectView, TemplateView
 
+from challenges.optimizer_views import (
+    OptimizerAlternativesView,
+    OptimizerApplyView,
+    OptimizerBadgesView,
+    OptimizerPlanView,
+    OptimizerSearchView,
+    OptimizerStartView,
+    OptimizerView,
+)
 from challenges.views import (
     CalendarDayView,
     AssignSlotView,
@@ -510,6 +519,17 @@ urlpatterns = [
     path('my-challenges/', MyChallengesView.as_view(), name='my_challenges'),
     path('my-challenges/start/<str:challenge_type>/', StartChallengeView.as_view(),
          name='challenge_start'),
+    # THE CHALLENGE OPTIMIZER: one page and six JSON doors, owner-only like everything under this prefix. Its own
+    # module (`challenges/optimizer_views.py`); see its docstring for the two rate-limit budgets.
+    path('my-challenges/optimizer/', OptimizerView.as_view(), name='challenge_optimizer'),
+    path('my-challenges/optimizer/plan/', OptimizerPlanView.as_view(), name='challenge_optimizer_plan'),
+    path('my-challenges/optimizer/alternatives/', OptimizerAlternativesView.as_view(),
+         name='challenge_optimizer_alternatives'),
+    path('my-challenges/optimizer/search/', OptimizerSearchView.as_view(), name='challenge_optimizer_search'),
+    path('my-challenges/optimizer/badges/', OptimizerBadgesView.as_view(), name='challenge_optimizer_badges'),
+    path('my-challenges/optimizer/apply/', OptimizerApplyView.as_view(), name='challenge_optimizer_apply'),
+    path('my-challenges/optimizer/start/<str:challenge_type>/', OptimizerStartView.as_view(),
+         name='challenge_optimizer_start'),
     # THE PICKER'S FIVE DOORS, under the personal path because every one of them is about the hunter's own
     # run -- three reads that need the hunter's completions to answer, and two writes.
     # THE HISTORY VIEW, beside the search door because it is the same kind of thing: a read over the whole

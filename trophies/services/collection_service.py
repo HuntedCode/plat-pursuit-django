@@ -40,6 +40,12 @@ _SECTION_LABELS = {
 }
 _PALETTES = ['cobalt', 'amber', 'emerald', 'violet']
 
+
+def badge_type_sections():
+    """[(badge_type, plural label)] in the Collection's section order. PUBLIC so the Challenge Optimizer's badge
+    step names whole types the way the Collection's Set filter does ("Franchises", "Mega Mixes")."""
+    return [(key, _SECTION_LABELS[key]) for key in _SECTION_ORDER]
+
 # Gallery sort options (client-side, applied by collection.js). Progress-forward by default so "what am I close
 # on" is the first answer. (key, label) -- order = dropdown order.
 COLLECTION_SORTS = [
