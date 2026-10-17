@@ -298,7 +298,9 @@ def test_names_are_written_as_text_never_as_markup():
     assert uses == sorted([
         'if (slot.html) { square.innerHTML = slot.html; }',
         'wrap.innerHTML = data.rewards_html;',
-        'if (cell && square.html) { cell.innerHTML = square.html; }',
+        # A claim's squares; the statement stands on its own line since the claim also strips the square's
+        # `pp-csq--fresh` mark first (2026-10-17). Still the same server-rendered `_square_body.html` markup.
+        'cell.innerHTML = square.html;',
         # 2026-10-09: the same `_rewards_panel.html` markup, sent when placing a game FINISHES a Job
         # Coverage square (`views._slot_json`), so the panel is not stale until a reload.
         'payWrap.innerHTML = slot.rewards_html;',

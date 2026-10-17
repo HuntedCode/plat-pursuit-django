@@ -50,12 +50,14 @@ Params: card (from `slot_render.slot_cards`).{% endcomment %}
     <img src="{{ card.cover.display_image_url }}" alt="" decoding="async"
          {% if card.index >= 7 %}loading="lazy"{% endif %}
          class="pp-csq__art{% if not card.cover.has_cover_art %} pp-csq__art--icon{% endif %}">
+    {% if card.is_completed %}{% include 'challenges/partials/_square_foil.html' %}{% endif %}
     {% comment %}The scrim rides with the ART only. Over `.pp-csq__noart` -- a designed dark field with
     nothing beneath it -- it solved no legibility problem and took that field's own glyph below the
     contrast floor.{% endcomment %}
     <span class="pp-csq__scrim" aria-hidden="true"></span>
     {% else %}
     <span class="pp-csq__noart" aria-hidden="true">?</span>
+    {% if card.is_completed %}{% include 'challenges/partials/_square_foil.html' %}{% endif %}
     {% endif %}
     {% comment %}THE KEY CHIP rides over the art, which is the only reason it exists -- so it belongs to
     the filled branch. An empty square shows its key once, large and centred, rather than twice.{% endcomment %}
@@ -95,6 +97,15 @@ filled disc, where a 2-weight stroke disappears. A deliberate exception, said ou
 does not have to guess.{% endcomment %}
 <span class="pp-csq__check" aria-hidden="true">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+</span>
+{% elif card.is_filled %}
+{% comment %}IN PROGRESS, said in the same corner the check owns (owner, 2026-10-17: "hard to tell which games are
+complete and which are still in progress"). One corner, one state: the check when done, this when not. A
+half-filled disc on every square, and the words beside it from `lg:`, where a square is wide enough to hold
+them next to the key chip (at 109px the words would run into it). `aria-hidden`: the line below says it.{% endcomment %}
+<span class="pp-csq__tag" aria-hidden="true">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5a8.5 8.5 0 0 1 0 17z" fill="currentColor" stroke="none"/></svg>
+    <span class="pp-csq__tag-lbl">In progress</span>
 </span>
 {% endif %}
 

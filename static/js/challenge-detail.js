@@ -246,9 +246,15 @@
             }
             // THE SQUARES THAT CHANGED lose their pips. Server markup again, from the same partial the page
             // rendered, so a swapped square cannot look different from one that was there on load.
+            // A CLAIM IS NOT A COMPLETION: the board counts as arrived from here, and a square that only just
+            // completed loses its `pp-csq--fresh` mark, so the re-rendered foil does not replay its sweep.
+            board.classList.add('is-settled');
             (data.squares || []).forEach(function (square) {
                 var cell = board.querySelector('[data-key="' + cssEscape(square.key) + '"]');
-                if (cell && square.html) { cell.innerHTML = square.html; }
+                if (cell && square.html) {
+                    cell.classList.remove('pp-csq--fresh');
+                    cell.innerHTML = square.html;
+                }
             });
             // AND THE NAV MARKER, which is markup the claim changed and the reply does NOT carry. The server
             // clears its cached answer, but the navbar and the tab bar were rendered before the claim and this
@@ -486,6 +492,79 @@
         });
     }
 
+    /**
+     * THE FOIL CARD UNDER THE POINTER (owner, 2026-10-17): a finished square leans toward the cursor and its holo
+     * shine follows it, the way you tilt a foil trading card under a light -- the badge medallion's gesture
+     * (`medallion.js`), scaled for a board of 25 or 26.
+     *
+     * AN INSPECT-ONLY EXCEPTION to the board's rule that a square which does nothing never reacts to the cursor
+     * (`challenges.css`): the cursor stays an arrow and nothing lifts, so it reads as "look at this", not
+     * "click this". FINE POINTERS ONLY and off under reduced motion, the medallion's own gate; a phone keeps the
+     * still foil and its one arrival sweep.
+     *
+     * ONE DELEGATED LISTENER on the board, not 26, writing the CSS variables at most once a frame. Only the square
+     * under the pointer animates.
+     *
+     * MEASURED OFF THE SQUARE'S GRID CELL (its `<li>`), never the square: the square itself moves (its entrance
+     * animation shrinks and offsets it, and a tilt or its spring-back rotates it), so a box read off it skews the
+     * mapping for the whole hover. The cell never moves, and is read in the frame callback from the latest pointer
+     * position, so a scroll under a resting pointer is corrected on the next move.
+     *
+     * A SQUARE STILL ARRIVING DOES NOT TILT: its entrance animation owns `transform` until it ends, so a tilt would
+     * be overridden and then snap in. And the position is LEFT in place on release, so the shine fades out where
+     * it was rather than jumping to the centre mid-fade.
+     */
+    function wireFoilTilt(board) {
+        var canTilt = window.matchMedia && !window.matchMedia('(prefers-reduced-motion: reduce)').matches
+            && window.matchMedia('(any-hover: hover) and (any-pointer: fine)').matches;
+        if (!board || !canTilt) { return; }
+        var current = null, frame = 0, clientX = 0, clientY = 0;
+
+        // THE ENTRANCE ONLY: `getAnimations()` also returns CSS TRANSITIONS, and the tilt itself starts a transform
+        // transition, so counting those made every tilt cancel itself on the next move (a flicker loop, caught in a
+        // real browser). A CSS animation has an `animationName`; a transition has none.
+        function arriving(square) {
+            return !!(square.getAnimations && square.getAnimations().some(function (a) {
+                return a.playState === 'running' && a.animationName;
+            }));
+        }
+        function release() {
+            if (!current) { return; }
+            current.classList.remove('is-tilting');
+            current = null;
+        }
+        function paint() {
+            frame = 0;
+            if (!current) { return; }
+            var cell = (current.parentElement || current).getBoundingClientRect();
+            if (!cell.width || !cell.height) { return; }
+            var px = Math.min(1, Math.max(0, (clientX - cell.left) / cell.width));
+            var py = Math.min(1, Math.max(0, (clientY - cell.top) / cell.height));
+            current.style.setProperty('--px', px.toFixed(3));
+            current.style.setProperty('--py', py.toFixed(3));
+        }
+        board.addEventListener('pointermove', function (e) {
+            if (e.pointerType && e.pointerType !== 'mouse' && e.pointerType !== 'pen') { return; }
+            var square = e.target.closest ? e.target.closest('.pp-csq--done') : null;
+            // Asked only when the pointer REACHES a square: a square already tilting is past its entrance.
+            if (square && square !== current && arriving(square)) { square = null; }
+            clientX = e.clientX;
+            clientY = e.clientY;
+            if (square !== current) {
+                release();
+                if (!square) { return; }
+                current = square;
+                // THIS square's position first, then the class: otherwise the first frame leans toward wherever the
+                // pointer left it last time.
+                paint();
+                square.classList.add('is-tilting');
+                return;
+            }
+            if (!frame) { frame = window.requestAnimationFrame(paint); }
+        });
+        board.addEventListener('pointerleave', release);
+    }
+
     function boot(first) {
         // EVERY VIEWER, before the guard below sends a visitor home -- but ONCE.
         //
@@ -504,6 +583,25 @@
         // lives on `document`, so binding it twice would send two requests per press -- one of which would
         // then be refused as already-redeemed, turning a successful claim into an error toast.
         if (first) { wireRewards(); }
+
+        // THE BOARD HAS ARRIVED once its entrance is over (the last square lands by ~0.9s and its foil's sweep
+        // ends by ~1.8s): from then on a finished square's sweep plays only when it has JUST completed
+        // (`pp-csq--fresh`), never again when a claim re-renders it. Every viewer, so a visitor's page settles too.
+        // COUNTED FROM WHEN THE PAGE IS SEEN: a tab opened in the background runs its timers but not its CSS
+        // animations, so a clock started at load would settle the board before anyone saw it arrive.
+        var settling = document.querySelector('.pp-csq-board');
+        var settleSoon = function () { window.setTimeout(function () { settling.classList.add('is-settled'); }, 2500); };
+        if (first && settling) {
+            wireFoilTilt(settling);
+            if (!document.hidden) { settleSoon(); } else {
+                var onShow = function () {
+                    if (document.hidden) { return; }
+                    document.removeEventListener('visibilitychange', onShow);
+                    settleSoon();
+                };
+                document.addEventListener('visibilitychange', onShow);
+            }
+        }
 
         var dialog = document.getElementById('cpick');
         // THE BOARD, not a grid. A jobs run draws one grid per discipline, so `querySelector` on
@@ -1893,6 +1991,12 @@
                 square.classList.toggle('pp-csq--filled', slot.is_filled && !slot.is_completed);
                 square.classList.toggle('pp-csq--empty', !slot.is_filled);
                 square.classList.toggle('pp-csq--done', slot.is_completed);
+                // A SQUARE THAT JUST COMPLETED gets its one sweep, the "stamp of completion"; the mark comes off
+                // once it has played, so a later claim re-rendering this square does not replay it.
+                if (slot.is_completed) {
+                    square.classList.add('pp-csq--fresh');
+                    window.setTimeout(function () { square.classList.remove('pp-csq--fresh'); }, 2500);
+                }
                 // A COMPLETED SQUARE STOPS BEING PRESSABLE. It stays a `<button>` rather than becoming the
                 // `<div>` a fresh render would produce -- swapping the tag would mean rebuilding the element
                 // and losing focus with it -- so it is disabled and loses its open hook instead. `:disabled`
