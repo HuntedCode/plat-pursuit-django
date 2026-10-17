@@ -32,7 +32,7 @@ The template system uses Django's template inheritance with a single `base.html`
       footer
     </div>
   </div>
-  back-to-top button          <!-- Fixed, outside wrapper -->
+  back-to-top button          <!-- Fixed, outside wrapper; click-through while faded out (main.js) -->
   mobile tabbar               <!-- Fixed, outside wrapper -->
   toast container              <!-- Fixed, outside wrapper -->
   {% block fixed_overlays %}   <!-- Modals, outside wrapper -->

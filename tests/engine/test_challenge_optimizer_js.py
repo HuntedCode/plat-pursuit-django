@@ -166,10 +166,14 @@ def test_an_other_options_pick_closes_the_sheet_before_re_solving():
     assert "dialog.addEventListener('close', function () { restoreFocus(key, scroll); }, { once: true });" in focus
 
 
-def test_the_sticky_bar_clears_the_mobile_tab_bar():
-    bar = CSS[CSS.index('.pp-cplan__bar {'):]
-    bar = bar[:bar.index('}')]
-    assert 'position: sticky' in bar and 'calc(56px + env(safe-area-inset-bottom' in bar
+def test_the_docks_are_sticky_and_clear_the_mobile_tab_bar():
+    # The review's bar and the wizard's Back/Next share one dock rule; Next used to scroll off a long step.
+    dock = CSS[CSS.index('.pp-cplan__dock {'):]
+    dock = dock[:dock.index('}')]
+    assert 'position: sticky' in dock and 'calc(56px + env(safe-area-inset-bottom' in dock
+    assert 'class="pp-cplan__nav pp-cplan__dock" data-cplan-dock' in TEMPLATE
+    assert 'class="pp-cplan__bar pp-cplan__dock" data-cplan-dock' in TEMPLATE
+    assert "watchDocks(root.querySelectorAll('[data-cplan-dock]'));" in JS
 
 
 def test_badge_sources_reach_the_plan_body_from_the_submitted_answers():

@@ -44,6 +44,20 @@
 
     function plural(n, one, many) { return n + ' ' + (n === 1 ? one : many); }
 
+    /** The showing dock's height as `--pp-cplan-dock-h`, which lifts the site's back-to-top button above it (see
+     *  the docks in challenge-optimizer.css). A hidden dock measures 0, and the observer reports every change: a
+     *  step swap, the wizard folding into the review, the bar's status line wrapping. No observer, no lift. */
+    function watchDocks(docks) {
+        if (!docks.length || !window.ResizeObserver) { return; }
+        var sync = function () {
+            var tallest = 0;
+            docks.forEach(function (dock) { tallest = Math.max(tallest, dock.offsetHeight); });
+            document.documentElement.style.setProperty('--pp-cplan-dock-h', tallest + 'px');
+        };
+        var observer = new ResizeObserver(sync);
+        docks.forEach(function (dock) { observer.observe(dock); });
+    }
+
     function boot() {
         var root = document.querySelector('[data-cplan]');
         if (!root || root.dataset.cplanWired || !PP.API) { return; }
@@ -96,6 +110,7 @@
         if (!els.wizard) { return; }
         STEPS.forEach(function (key) { els.steps[key] = root.querySelector('[data-step="' + key + '"]'); });
         els.barStatus = root.querySelector('[data-cplan-bar-status]');
+        watchDocks(root.querySelectorAll('[data-cplan-dock]'));
 
         // ── motion (the Google/Apple pass, owner 2026-10-17) ─────────────────────────────────────
         //
@@ -285,7 +300,7 @@
         var badgePicks = new Map();      // GroupBadge id -> "Series (Edition)"
         var WEIGHT_HINTS = {
             bonus: 'Badges break ties. Your challenges come first.',
-            priority: 'Badge games win close calls, even at the cost of an extra game. Filling squares still comes first.',
+            priority: 'Badge games fill as many squares as they can, even if that takes an extra game. Filling squares still comes first.',
             only: "Only games that clear a badge stage. A square no badge game fits stays open for you to fill."
         };
         var WEIGHT_TAGS = { priority: ' (priority)', only: ' (badges only)' };
@@ -1415,6 +1430,8 @@
                 why.textContent = 'Replaces ' + (r.name || 'the game') + ' in ' + r.label + '.';
                 main.appendChild(why);
             });
+            var stages = stageList(line);
+            if (stages) { main.appendChild(stages); }
             var meta = metaList(line);
             if (meta) { main.appendChild(meta); }
             main.appendChild(lineActions(line, locked, swapped));
@@ -1425,9 +1442,6 @@
         function metaList(item) {
             var wrap = document.createElement('div');
             wrap.className = 'pp-cplan__meta';
-            (item.stages || []).forEach(function (s) {
-                wrap.appendChild(metaNote((s.part ? 'Part of ' : 'Counts toward ') + stageName(s), 'badge'));
-            });
             if (item.progress > 0) { wrap.appendChild(metaNote("You're " + item.progress + '% in', 'progress')); }
             if (item.pinned) { wrap.appendChild(metaNote('Your pick', 'pin')); }
             if (item.outside_filters) { wrap.appendChild(metaNote('Outside your filters', 'warn')); }
@@ -1448,9 +1462,91 @@
             return wrap.childNodes.length ? wrap : null;
         }
 
-        function stageName(s) {
-            var editions = (s.editions || []).length ? ', ' + s.editions.join(' / ') : '';
-            return 'Stage ' + s.stage + (s.title ? ' (' + s.title + ')' : '') + ' of ' + s.series_name + editions;
+        /** The badge stages a game advances, ONE ROW PER BADGE (owner, 2026-10-17): the badge and its editions once,
+         *  then its stage numbers, each stage's title on hover (and read out after its number). A game in a long
+         *  series used to repeat "Counts toward Stage N (title) of Series, Edition" once per stage. A stage reached
+         *  only through a bundle keeps its own row, "Part of stage N": the game alone does not clear it. */
+        function stageList(item) {
+            var groups = [];
+            var byKey = {};
+            (item.stages || []).forEach(function (s) {
+                var editions = (s.editions || []).join(' / ');
+                var key = [s.series, editions, s.part ? 1 : 0].join('|');
+                if (!byKey[key]) {
+                    byKey[key] = { name: s.series_name, editions: editions, part: !!s.part, stages: [] };
+                    groups.push(byKey[key]);
+                }
+                byKey[key].stages.push(s);
+            });
+            if (!groups.length) { return null; }
+            var list = document.createElement('ul');
+            list.className = 'pp-cplan__stages';
+            list.setAttribute('role', 'list');
+            groups.forEach(function (g) { list.appendChild(stageRow(g)); });
+            return list;
+        }
+
+        function stageRow(group) {
+            var row = document.createElement('li');
+            row.className = 'pp-cplan__stage';
+            row.appendChild(badgeGlyph());
+            // The name and numbers wrap INSIDE their own box, so a wrapped "Stages ..." lines up under the name.
+            var body = document.createElement('span');
+            body.className = 'pp-cplan__stage-body';
+            row.appendChild(body);
+            var name = document.createElement('span');
+            name.className = 'pp-cplan__stage-name';
+            name.textContent = group.name;
+            if (group.editions) {
+                var ed = document.createElement('span');
+                ed.className = 'pp-cplan__stage-ed';
+                ed.textContent = ' (' + group.editions + ')';
+                name.appendChild(ed);
+            }
+            body.appendChild(name);
+
+            var nums = document.createElement('span');
+            nums.className = 'pp-cplan__stage-nums';
+            var word = group.stages.length > 1 ? 'Stages ' : 'Stage ';
+            nums.appendChild(document.createTextNode(group.part ? 'Part of ' + word.toLowerCase() : word));
+            group.stages.forEach(function (s, i) {
+                if (i) { nums.appendChild(document.createTextNode(', ')); }
+                var n = document.createElement('span');
+                n.className = 'pp-cplan__stage-n';
+                n.textContent = String(s.stage);
+                if (s.title) {
+                    n.title = s.title;
+                    var spoken = document.createElement('span');
+                    spoken.className = 'sr-only';
+                    spoken.textContent = ' (' + s.title + ')';
+                    n.appendChild(spoken);
+                }
+                nums.appendChild(n);
+            });
+            body.appendChild(nums);
+            return row;
+        }
+
+        /** Lucide's award glyph, the badge mark beside each stage row. */
+        function badgeGlyph() {
+            var NS = 'http://www.w3.org/2000/svg';
+            var svg = document.createElementNS(NS, 'svg');
+            svg.setAttribute('viewBox', '0 0 24 24');
+            svg.setAttribute('fill', 'none');
+            svg.setAttribute('stroke', 'currentColor');
+            svg.setAttribute('stroke-width', '2');
+            svg.setAttribute('stroke-linecap', 'round');
+            svg.setAttribute('stroke-linejoin', 'round');
+            svg.setAttribute('aria-hidden', 'true');
+            var ring = document.createElementNS(NS, 'circle');
+            ring.setAttribute('cx', '12');
+            ring.setAttribute('cy', '8');
+            ring.setAttribute('r', '6');
+            var ribbon = document.createElementNS(NS, 'path');
+            ribbon.setAttribute('d', 'M15.477 12.89 17 22l-5-3-5 3 1.523-9.11');
+            svg.appendChild(ring);
+            svg.appendChild(ribbon);
+            return svg;
         }
 
         function metaNote(text, kind) {
@@ -1543,6 +1639,8 @@
             why.textContent = 'Replaces ' + (swap.current.name || 'the game') + ' in ' + swap.square.label
                 + (also ? ', and also covers ' + also : '') + '.';
             main.appendChild(why);
+            var stages = stageList(swap.suggested);
+            if (stages) { main.appendChild(stages); }
             var meta = metaList(swap.suggested);
             if (meta) { main.appendChild(meta); }
             var row = document.createElement('div');

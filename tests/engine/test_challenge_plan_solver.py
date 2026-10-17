@@ -253,8 +253,8 @@ def test_a_full_size_plan_fills_every_square_it_can():
 
 
 
-def test_the_priority_weight_puts_badge_stages_above_using_fewer_games():
-    # Bonus keeps the double (one game); Priority takes the stage game for A even though it needs a second game
+def test_the_priority_weight_puts_badge_games_above_using_fewer_games():
+    # Bonus keeps the double (one game); Priority takes the badge game for A even though it needs a second game
     # for the job (either 1 or 3 may then take it: both plans fill both squares with two games).
     def run(stages_first):
         return solve(Problem(
@@ -297,8 +297,8 @@ def test_under_priority_different_games_still_finds_different_games():
 
 
 def test_under_priority_an_unfinished_square_is_offered_a_stage_clearing_swap():
-    # Bonus keeps the occupant (a swap would save no game); Priority ranks stages above keeping it, so the swap
-    # solve proposes the stage game. Swaps are opt-in, so this is an offer, never a change.
+    # Bonus keeps the occupant (a swap would save no game); Priority ranks badge games above keeping it, so the swap
+    # solve proposes the badge game. Swaps are opt-in, so this is an offer, never a change.
     def run(stages_first):
         return solve(Problem(
             squares=az('A'), candidates=(cand(9, letter='A'), cand(1, letter='A', stages=3)),
@@ -306,3 +306,81 @@ def test_under_priority_an_unfinished_square_is_offered_a_stage_clearing_swap():
         )).assignments
     assert run(False) == {(AZ, 'A'): 9}
     assert run(True) == {(AZ, 'A'): 1}
+
+
+# --- badge games (owner, 2026-10-17): a yes/no per game, never a stage count, decides against fewer games -----
+
+def test_priority_fills_leftover_squares_with_badge_singles_while_bonus_takes_any_double():
+    # A + brawler: a badge double. B + scout: only a plain double, or two badge singles.
+    def run(stages_first):
+        return solve(Problem(
+            squares=az('A', 'B') + jobs('brawler', 'scout'),
+            candidates=(cand(1, letter='A', jobs=['brawler'], stages=1), cand(2, letter='B', jobs=['scout']),
+                        cand(3, letter='B', stages=1), cand(4, jobs=['scout'], stages=1)),
+            stages_first=stages_first,
+        )).assignments
+    assert run(True) == {(AZ, 'A'): 1, (JOBS, 'brawler'): 1, (AZ, 'B'): 3, (JOBS, 'scout'): 4}
+    assert run(False) == {(AZ, 'A'): 1, (JOBS, 'brawler'): 1, (AZ, 'B'): 2, (JOBS, 'scout'): 2}
+
+
+def test_priority_keeps_a_badge_double_over_badge_singles_that_clear_more_stages():
+    # Both plans fill both squares with badge games, so the fewest games decide: stage counts only break ties.
+    problem = Problem(
+        squares=az('A') + jobs('brawler'),
+        candidates=(cand(2, letter='A', stages=4), cand(3, jobs=['brawler'], stages=4),
+                    cand(1, letter='A', jobs=['brawler'], stages=1)),
+        stages_first=True,
+    )
+    assert solve(problem).assignments == {(AZ, 'A'): 1, (JOBS, 'brawler'): 1}
+
+
+def test_bonus_prefers_a_badge_double_to_a_plain_one_at_no_extra_cost():
+    problem = Problem(
+        squares=az('A') + jobs('brawler'),
+        candidates=(cand(1, letter='A', jobs=['brawler']), cand(2, letter='A', jobs=['brawler'], stages=1)),
+    )
+    assert solve(problem).assignments == {(AZ, 'A'): 2, (JOBS, 'brawler'): 2}
+
+
+def test_more_stages_break_a_tie_between_badge_games():
+    problem = Problem(squares=az('A'), candidates=(cand(1, letter='A', stages=1), cand(2, letter='A', stages=3)))
+    assert solve(problem).assignments == {(AZ, 'A'): 2}
+
+
+@pytest.mark.parametrize('stages_first', [False, True])
+def test_a_board_where_every_game_clears_a_stage_still_uses_doubles(stages_first):
+    # THE REPORTED BUG (2026-10-17): with "All badges" nearly every game clears a stage, and Priority ranked the
+    # stage COUNT above fewer games, so it split every double and used one game per square.
+    letters = [chr(ord('A') + i) for i in range(26)]
+    job_keys = [f'job{i}' for i in range(25)]
+    candidates = [cand(i, letter=letters[i], jobs=[job_keys[i]], stages=1) for i in range(25)]
+    candidates += [cand(100 + i, letter=letter, stages=2) for i, letter in enumerate(letters)]
+    candidates += [cand(200 + i, jobs=[key], stages=2) for i, key in enumerate(job_keys)]
+    result = solve(Problem(squares=az(*letters) + jobs(*job_keys), candidates=tuple(candidates),
+                           stages_first=stages_first))
+    assert len(result.assignments) == 51
+    assert len(set(result.assignments.values())) == 26
+
+
+def test_under_bonus_more_badge_squares_beat_more_stages_at_the_same_cost():
+    # Two games either way. {1, 2} or {1, 4 on B}: two badge squares, one stage. {3, 4}: one badge square, five
+    # stages. The badge tier decides before stage counts can.
+    problem = Problem(
+        squares=az('A', 'B') + jobs('brawler'),
+        candidates=(cand(3, letter='A', stages=5), cand(4, letter='B', jobs=['brawler']),
+                    cand(1, letter='A', jobs=['brawler'], stages=1), cand(2, letter='B')),
+    )
+    assignments = solve(problem).assignments
+    assert assignments[(AZ, 'A')] == 1 and assignments[(JOBS, 'brawler')] == 1
+
+
+def test_a_badge_tier_that_repeats_fill_is_not_solved_again():
+    # Every game a badge game: the tier would only re-prove the fill tier's optimum.
+    import numpy as np
+    from challenges.services.plan_solver import _allowed_pairs, _tiers
+    problem = Problem(squares=az('A'), candidates=(cand(1, letter='A', stages=1), cand(2, letter='A', stages=2)))
+    pairs = _allowed_pairs(problem)
+    u_index = {1: 2, 2: 3}
+    tiers = _tiers(problem, pairs, u_index, [1, 2], {c.id: c for c in problem.candidates}, {1: 0, 2: 1}, 4)
+    fill = np.array([1, 1, 0, 0])
+    assert sum(1 for t in tiers if np.array_equal(t, fill)) == 1
