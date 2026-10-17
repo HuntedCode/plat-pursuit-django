@@ -80,7 +80,10 @@ class DetectTimezoneAPIView(APIView):
 
     @method_decorator(ratelimit(key='user', rate='10/m', method='POST', block=True))
     def post(self, request):
-        adopted = adopt_detected_timezone(request.user, (request.data.get('timezone') or '').strip())
+        # Passed RAW: `normalize_zone` strips a string and rejects anything else, so a crafted body (a number, a
+        # list, an array instead of an object) is a calm "not adopted", never a 500.
+        data = request.data if isinstance(request.data, dict) else {}
+        adopted = adopt_detected_timezone(request.user, data.get('timezone'))
         return Response({'adopted': adopted, 'timezone': request.user.user_timezone})
 
 

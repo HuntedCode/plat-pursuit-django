@@ -180,3 +180,14 @@ def test_the_asked_flag_is_per_account_so_a_shared_browser_still_asks_the_next(c
     client.force_login(user)
     html = client.get(reverse('my_challenges')).content.decode()
     assert "var KEY = 'pp-tz-detect-asked:%d';" % user.pk in html
+
+
+
+@pytest.mark.parametrize('body', [{'timezone': 42}, {'timezone': ['Asia/Tokyo']}, {'timezone': None}, ['Asia/Tokyo']])
+def test_a_crafted_detect_body_is_a_calm_no_never_a_500(client, body):
+    user = _user()
+    client.force_login(user)
+    resp = client.post(reverse('api:user-timezone-detect'), data=json.dumps(body), content_type='application/json')
+    assert resp.status_code == 200 and json.loads(resp.content)['adopted'] is False
+    user.refresh_from_db()
+    assert user.user_timezone == 'UTC'
