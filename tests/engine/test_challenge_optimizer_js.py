@@ -82,8 +82,9 @@ def test_a_swiped_sheet_closes_directly():
 
 def test_an_accepted_swap_always_re_solves():
     # A swap moves games; the plan above it must be redrawn around it before anything is applied.
-    block = JS[JS.index('function swapRow'):JS.index('function unplacedRow')]
-    assert 'change(function () { tweaks.squarePins[sqKey(swap.square)]' in block
+    block = JS[JS.index('function swapRow'):JS.index('function swapChoice')]
+    use = block[block.index("action('Use this swap'"):]
+    assert use.index('change(function () {') < use.index('pinGame(swap.suggested.slug, chosen);')
 
 
 def test_different_games_never_penalizes_a_locked_or_pinned_game():
@@ -161,9 +162,97 @@ def test_an_other_options_pick_closes_the_sheet_before_re_solving():
     # The sheet plays its exit while the re-plan starts; a re-plan landing inside the exit must not focus a line
     # on a page the open modal makes inert, so focus WAITS for the dialog's real close.
     block = JS[JS.index('function openAlternatives'):JS.index('if (dialog) {')]
-    assert block.index('closeSheet();') < block.index('change(function () { tweaks.squarePins[sqKey(square)]')
+    pick = block[block.index('var pick = function (row) {'):]
+    assert pick.index('closeSheet();') < pick.index('change(function () {') < pick.index(
+        'pinGame(row.slug, row.both ? [square].concat(partners) : [square]);')
     focus = JS[JS.index('function restoreFocus('):JS.index('// ── rendering the plan')]
     assert "dialog.addEventListener('close', function () { restoreFocus(key, scroll); }, { once: true });" in focus
+
+
+def test_other_options_sends_the_lines_other_squares_and_heads_the_two_halves():
+    block = JS[JS.index('function openAlternatives'):JS.index('function altList')]
+    assert 'body.partners = partners.map(' in block
+    assert "altGroup('Covers ' + all," in block and "altGroup('Only ' + square.label," in block
+    # A line with one square keeps one plain list.
+    assert 'if (!partners.length) { alt.rows.appendChild(altList(rows, pick, true)); return; }' in block
+    assert '<div data-cplan-alt-rows></div>' in TEMPLATE
+    # The line's own game rides along so the server leaves it out of the covering half.
+    assert 'body.current = line.slug;' in block
+
+
+def test_a_covering_pick_takes_every_square_of_the_line():
+    # Pinning only the clicked square let a locked line (or an accepted swap) keep its old game on the other one.
+    block = JS[JS.index('function openAlternatives'):JS.index('function altList')]
+    pick = block[block.index('var pick = function (row) {'):block.index("'line:' + row.slug);")]
+    assert 'pinGame(row.slug, row.both ? [square].concat(partners) : [square]);' in pick
+
+
+def test_a_swap_replacing_a_game_in_each_challenge_offers_both_or_one():
+    row = JS[JS.index('function swapRow'):JS.index('function swapChoice')]
+    # Every game it replaces is named, and the choice appears only when there are two.
+    assert 'swap.replaces.forEach(function (r) {' in row and "'Replaces ' + (r.current.name" in row
+    assert 'var choice = swap.replaces.length > 1 ? swapChoice(swap) : null;' in row
+    assert 'pinGame(swap.suggested.slug, chosen);' in row
+    choice = JS[JS.index('function swapChoice'):JS.index('function swapKey')]
+    assert "[{ value: 'both', label: 'Both', squares:" in choice and "label: 'Only ' + r.square.label" in choice
+    assert "tweaks.choices[name] : 'both';" in choice and 'input.checked = opt.value === kept;' in choice
+
+
+def test_a_swap_choice_survives_a_redraw_that_is_not_a_re_plan():
+    # The Letter/Job sort rebuilds every card; an "Only A" must not quietly become Both before Use this swap.
+    choice = JS[JS.index('function swapChoice'):JS.index('function swapKey')]
+    assert "input.addEventListener('change', function () { if (input.checked) { tweaks.choices[name] = opt.value; } });" in choice
+    # A fresh plan (and Open my plan) starts every card on Both; Undo swap resets its own card.
+    assert "declined: new Set(), choices: {} };" in JS[JS.index('function freshTweaks'):JS.index('// ── answers')]
+    assert "declined: new Set(), choices: {} };" in JS[JS.index('function restoreTweaks'):JS.index('function sortedStrings')]
+    undo = JS[JS.index("action('Undo swap'"):JS.index("action('Lock'")]
+    assert "if (k.indexOf('cplan_swap_' + line.slug + '@') === 0) { delete tweaks.choices[k]; }" in undo
+
+
+def test_a_declined_swap_half_stays_declined_until_the_swap_is_undone():
+    # "Only C" would otherwise be offered the other half again by the very next re-solve.
+    row = JS[JS.index('function swapRow'):JS.index('function swapChoice')]
+    assert 'tweaks.declined.add(swapKey(swap.suggested.slug, r.square));' in row
+    assert 'plan.swaps.map(offeredSwap).filter(Boolean)' in JS
+    assert "declined: new Set(), choices: {} };" in JS[JS.index('function freshTweaks'):JS.index('// ── answers')]
+    # Rolled back with the rest of a failed re-plan's tweaks, and present on a plan Open my plan restores (where
+    # `offeredSwap` would otherwise call `.has` on undefined).
+    snap = JS[JS.index('function snapshot()'):JS.index('function pinGame')]
+    assert 'declined: new Set(tweaks.declined) };' in snap and 'tweaks.declined = s.declined;' in snap
+    assert 'declined: new Set(), choices: {} };' in JS[JS.index('function restoreTweaks'):JS.index('function sortedStrings')]
+    offered = JS[JS.index('function offeredSwap'):JS.index('function unplacedRow')]
+    assert "!tweaks.declined.has(swapKey(swap.suggested.slug, r.square))" in offered
+    assert 'if (!left.length) { return null; }' in offered
+    undo = JS[JS.index("action('Undo swap'"):JS.index("action('Lock'")]
+    assert "if (k.indexOf(line.slug + '@') === 0) { tweaks.declined.delete(k); }" in undo
+    # Never sent: the server has no idea of it.
+    sent = JS[JS.index('function payload'):JS.index('function summaryLine')]
+    assert 'declined' not in sent and 'choices' not in sent
+
+
+def test_pinning_a_game_clears_its_other_pins_in_the_same_runs():
+    # The solver keeps one square pin per game per run; a second left a square empty and the game "unplaced".
+    pin = JS[JS.index('function pinGame'):JS.index('function restoreTweaks')]
+    assert "if (tweaks.squarePins[k] === slug && runs.indexOf(k.split('|')[0]) >= 0) { delete tweaks.squarePins[k]; }" in pin
+    block = JS[JS.index('function openAlternatives'):JS.index('function altList')]
+    assert 'pinGame(row.slug, row.both ? [square].concat(partners) : [square]);' in block
+
+
+def test_the_halves_reuse_the_reviews_section_shell_and_its_spoken_count():
+    group = JS[JS.index('function altGroup'):JS.index('if (dialog) {')]
+    assert "sectionShell(title, rows.length, 'h3')" in group
+    shell = JS[JS.index('function sectionShell'):JS.index('function hint')]
+    assert "document.createElement(level || 'h2')" in shell and "pill.setAttribute('aria-hidden', 'true');" in shell
+
+
+def test_every_offered_card_carries_its_platforms():
+    # The sheet's and the must-have search's cards; the run page's picker cards always did (`rowTags` there).
+    offer = JS[JS.index('function offerRow'):JS.index('function rowTags')]
+    assert 'var tags = rowTags(row);' in offer and 'if (tags) { main.appendChild(tags); }' in offer
+    # Stacked in the picker's own column, so a must-have result (laid out as a row) does not squeeze them.
+    assert "main.className = 'pp-cpick__row-main';" in offer
+    tags = JS[JS.index('function rowTags'):JS.index('function jobIcon')]
+    assert "wrap.className = 'pp-cpick__row-plats';" in tags and 'platformTag(p)' in tags
 
 
 def test_the_docks_are_sticky_and_clear_the_mobile_tab_bar():

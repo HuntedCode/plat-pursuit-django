@@ -361,7 +361,8 @@ choreography and `dismissableSheet` wiring with it).{% endcomment %}
     </div>
     <div class="pp-cpick__body">
         <p class="pp-cpick__status" data-cplan-alt-status role="status" aria-live="polite"></p>
-        <ul class="pp-cpick__rows" role="list" data-cplan-alt-rows></ul>
+        {% comment %}Drawn by the script: one list, or two headed halves when the line holds two squares.{% endcomment %}
+        <div data-cplan-alt-rows></div>
     </div>
 </dialog>
 {% endblock %}

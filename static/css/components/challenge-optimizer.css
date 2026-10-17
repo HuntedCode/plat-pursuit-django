@@ -246,6 +246,15 @@ button.pp-cplan__sq:focus-visible { outline: 2px solid var(--disc); outline-offs
 @media (hover: hover) {
     .pp-cplan__stage-n[title] { text-decoration: underline dotted; text-underline-offset: 3px; cursor: help; }
 }
+/* A swap card's Both / Only A / Only Gunslinger choice: the house switch, hugging its chips (a card's column would
+   stretch it) with tighter chips so three fit a phone card on one row more often. */
+.pp-cplan__swap-choice { align-self: flex-start; max-width: 100%; }
+.pp-cplan__swap-choice .pp-switch__chip { padding: 6px 10px; }
+/* Other options, split when the line holds two squares: "Covers C and Gunslinger", then "Only C". The shell is the
+   review's `.pp-cplan__section`, whose bottom margin spaces the two halves. */
+.pp-cplan__alt-group:last-child { margin-bottom: 0; }
+.pp-cplan__alt-group .pp-cpick__rows { margin-top: 8px; }
+.pp-cplan__alt-none { margin-top: 6px; font-size: 0.8rem; color: var(--pp-text-mute); }
 /* The picker's 12px floor for anything read to choose a game, applied to the same tags and chips here. */
 .pp-cplan__meta .bd-meta-tag { font-size: 12px; padding: 1px 6px; }
 .pp-cplan__meta .bd-chip { font-size: 12px; }

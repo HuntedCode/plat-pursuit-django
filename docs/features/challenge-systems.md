@@ -421,10 +421,20 @@ snapshot slug, `''` for an open square); a square that changed since planning is
 history importer and the hatch appear as notes that link to the run, whose picker asks first.
 
 **Review tools:** Lock (holds a line's squares through re-solves), Not this one (exclude), Other options
-(per square, doubles first; picking one pins it), must-haves (pins, which beat the platform and source
+(per square, doubles first; picking one pins it. Opened from a line that holds two squares, the sheet sends the
+line's other square as `partners` (and the line's own game as `current`, left out) and splits into "Covers C and
+Gunslinger" and "Only C", up to `ALTERNATIVES_LIMIT` each, an empty half saying so. A covering pick is pinned to
+every square of the line, so a locked or swapped line cannot keep its old game on the other square. Every card
+carries its platforms, owner 2026-10-17), must-haves (pins, which beat the platform and source
 filters and are reported with a reason when they cannot fit), Different games (accumulating penalties), and
 opt-in swaps for unfinished squares. A swap is solved on top of the plan, so it never contradicts a line; once
-accepted, the game's line says what it replaces and offers Undo swap. Edit answers hides the plan until the
+accepted, the game's line says what it replaces and offers Undo swap. **One card per suggested game** (owner,
+2026-10-17): the planner suggests per square, so a game that would replace a game in each challenge arrives as two
+swaps, and `_plan_json` merges them into one card that names both replacements with a Both / Only A / Only
+Gunslinger switch. A half left out is DECLINED for that plan (`tweaks.declined`, page-only, never sent), or the
+next re-solve would offer it straight back; Undo swap clears it. Every pin a pick or swap makes goes through
+`pinGame`, which first clears the game's other pins in the same runs (the solver keeps one square pin per game per
+run). Edit answers hides the plan until the
 wizard is submitted again (tweaks reset, must-haves carry over), and after Apply a Plan again button re-plans
 the same answers. Every tweak that re-solves rolls back if the request fails, and a tweak made while a request
 is in flight is queued, never dropped. The list is grouped (Covers both / A-Z only / Job Coverage only), and
