@@ -196,6 +196,10 @@ def test_a_claim_re_render_never_replays_the_sweep():
     assert boot.index("settling.classList.add('is-settled');") < boot.index("if (!dialog || !grid || !dialog.showModal")
     # ... and counts from when the page is SEEN (a background tab runs timers but not CSS animations).
     assert "document.addEventListener('visibilitychange', onShow);" in boot
+    # ... and the listener takes itself off once the page shows, so it settles once and never lingers.
+    show = boot[boot.index('var onShow = function () {'):]
+    show = show[:show.index('};')]
+    assert show.index("document.removeEventListener('visibilitychange', onShow);") < show.index('settleSoon();')
     apply = js[js.index('function applySlot('):]
     apply = apply[:apply.index('if (slot.is_completed) {\n                    // ONLY WHEN')]
     assert "square.classList.add('pp-csq--fresh');" in apply
