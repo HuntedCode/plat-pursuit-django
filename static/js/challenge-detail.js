@@ -548,14 +548,18 @@
             var square = e.target.closest ? e.target.closest('.pp-csq--done') : null;
             // Asked only when the pointer REACHES a square: a square already tilting is past its entrance.
             if (square && square !== current && arriving(square)) { square = null; }
+            clientX = e.clientX;
+            clientY = e.clientY;
             if (square !== current) {
                 release();
                 if (!square) { return; }
                 current = square;
+                // THIS square's position first, then the class: otherwise the first frame leans toward wherever the
+                // pointer left it last time.
+                paint();
                 square.classList.add('is-tilting');
+                return;
             }
-            clientX = e.clientX;
-            clientY = e.clientY;
             if (!frame) { frame = window.requestAnimationFrame(paint); }
         });
         board.addEventListener('pointerleave', release);

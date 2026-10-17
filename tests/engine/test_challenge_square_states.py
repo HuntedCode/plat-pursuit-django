@@ -377,3 +377,11 @@ def test_the_shine_follows_the_pointer():
     shine = _rule('.pp-csq__foil::after {')
     assert 'radial-gradient(circle at calc(var(--px, 0.5) * 100%) calc(var(--py, 0.5) * 100%)' in ' '.join(shine.split())
     assert 'opacity: 0;' in shine
+
+
+def test_a_newly_tilted_square_paints_its_own_position_first():
+    js = Path('static/js/challenge-detail.js').read_text(encoding='utf-8')
+    tilt = js[js.index('function wireFoilTilt(board) {'):js.index('function boot(first) {')]
+    arrive = tilt[tilt.index('if (square !== current) {'):]
+    arrive = arrive[:arrive.index('if (!frame)')]
+    assert arrive.index('paint();') < arrive.index("square.classList.add('is-tilting');")

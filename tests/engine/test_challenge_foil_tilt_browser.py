@@ -36,13 +36,18 @@ SQUARE = ('<li><div class="pp-csq pp-csq--done" style="--rev: 0;">'
           '<span class="pp-csq__scrim"></span><span class="pp-csq__key">A</span></div></li>')
 
 
-def _page_file(tmp_path):
+#: A square whose entrance is held for SECONDS, so "the pointer arrived while it was still arriving" does not depend on
+#: catching a 0.42s animation inside a slow runner's page load.
+SLOW_SQUARE = SQUARE.replace('style="--rev: 0;"', 'style="--rev: 0; animation-delay: 2s;"')
+
+
+def _page_file(tmp_path, square=SQUARE):
     js = (ROOT / 'static/js/challenge-detail.js').read_text(encoding='utf-8')
     fn = js[js.index('    function wireFoilTilt(board) {'):js.index('    function boot(first) {')]
     css = (ROOT / 'static/css/output.css').as_uri()
     html = (f'<!doctype html><html data-theme="dark"><head><link rel="stylesheet" href="{css}">'
             '<style>body{background:#0b0f17;padding:40px;margin:0}.wrap{width:420px}</style></head><body>'
-            f'<div class="wrap"><div class="pp-csq-board"><ul class="pp-csq-grid" role="list">{SQUARE * 3}</ul>'
+            f'<div class="wrap"><div class="pp-csq-board"><ul class="pp-csq-grid" role="list">{square * 3}</ul>'
             f'</div></div><script>{fn}\nwireFoilTilt(document.querySelector(".pp-csq-board"));</script>'
             '</body></html>')
     path = tmp_path / 'tilt.html'
@@ -96,14 +101,14 @@ def test_a_square_still_arriving_waits_then_tilts(tmp_path):
         browser = p.chromium.launch()
         page = browser.new_page(viewport={'width': 600, 'height': 600})
         page.emulate_media(reduced_motion='no-preference')
-        page.goto(_page_file(tmp_path))
+        page.goto(_page_file(tmp_path, SLOW_SQUARE))
         page.wait_for_timeout(60)
         box = page.locator('.pp-csq').first.bounding_box()
         page.mouse.move(box['x'] + box['width'] * 0.3, box['y'] + box['height'] * 0.5)
         page.wait_for_timeout(40)
         # The pointer arrives during the board's entrance: no tilt yet (the entrance owns `transform`) ...
         early = page.evaluate(STATE)
-        page.wait_for_timeout(900)
+        page.wait_for_timeout(2700)   # past the held entrance (2s delay + 0.42s)
         page.mouse.move(box['x'] + box['width'] * 0.7, box['y'] + box['height'] * 0.5)
         page.wait_for_timeout(60)
         # ... and once it has landed, the next move tilts it.
