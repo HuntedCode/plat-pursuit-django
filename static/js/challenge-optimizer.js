@@ -163,8 +163,12 @@
         // plan that disagrees with the pin list or the tweaks the hunter just set.
         var queued = null;                // {rollback, focus} for the re-plan to run when this one lands
 
+        /** Two page-only fields, never sent: `declined`, swap halves the hunter left out with "Only C", and
+         *  `choices`, {radio group name: option} for the swap cards' Both / Only switches. A REDRAW that is not a
+         *  re-plan (the Letter/Job sort) rebuilds every card and must not quietly reset an "Only A" to Both; a
+         *  fresh plan starts every card on Both again. */
         function freshTweaks() {
-            return { squarePins: {}, excluded: new Set(), penalized: new Set() };
+            return { squarePins: {}, excluded: new Set(), penalized: new Set(), declined: new Set(), choices: {} };
         }
 
         // ── answers ──────────────────────────────────────────────────────────────────────────────
@@ -708,7 +712,8 @@
 
         function snapshot() {
             return { pins: pins.slice(), squarePins: Object.assign({}, tweaks.squarePins),
-                     excluded: new Set(tweaks.excluded), penalized: new Set(tweaks.penalized) };
+                     excluded: new Set(tweaks.excluded), penalized: new Set(tweaks.penalized),
+                     declined: new Set(tweaks.declined) };
         }
 
         function restore(s) {
@@ -716,7 +721,19 @@
             tweaks.squarePins = s.squarePins;
             tweaks.excluded = s.excluded;
             tweaks.penalized = s.penalized;
+            tweaks.declined = s.declined;
             renderPinned();
+        }
+
+        /** Pin one game to these squares, first clearing any pin it already holds elsewhere in THEIR runs: the
+         *  solver keeps one square pin per game per run, so a second would leave a square empty and report the
+         *  game as unplaced while it sits on the plan. Picking a game that is locked on another line moves it. */
+        function pinGame(slug, squares) {
+            var runs = squares.map(function (s) { return s.type; });
+            Object.keys(tweaks.squarePins).forEach(function (k) {
+                if (tweaks.squarePins[k] === slug && runs.indexOf(k.split('|')[0]) >= 0) { delete tweaks.squarePins[k]; }
+            });
+            squares.forEach(function (s) { tweaks.squarePins[sqKey(s)] = slug; });
         }
 
         /** Apply a tweak and re-solve; the tweak is rolled back if the re-solve fails. */
@@ -839,7 +856,8 @@
             renderPinned();
             var squarePins = {};
             (t.square_pins || []).forEach(function (e) { squarePins[e.type + '|' + e.key] = e.contract; });
-            return { squarePins: squarePins, excluded: new Set(t.excluded || []), penalized: new Set(t.penalized || []) };
+            return { squarePins: squarePins, excluded: new Set(t.excluded || []), penalized: new Set(t.penalized || []),
+                     declined: new Set(), choices: {} };
         }
 
         function sortedStrings(list) { return (list || []).map(String).sort(); }
@@ -1298,7 +1316,8 @@
             hostSortBar(section('Covers both boards', 'One game, two squares.', both, lineRow), both.length);
             section('A-Z only', null, az, lineRow);
             section('Job Coverage only', null, jobs, lineRow);
-            section('Swaps worth a look', "Replace a game you haven't finished with one that covers more.", plan.swaps, swapRow);
+            section('Swaps worth a look', "Replace a game you haven't finished with one that covers more.",
+                    plan.swaps.map(offeredSwap).filter(Boolean), swapRow);
             section("Couldn't place", null, plan.unplaced, unplacedRow);
             emptySection();
             if (!plan.lines.length && !plan.swaps.length && !plan.empty.length) { nothingToPlan(); }
@@ -1348,10 +1367,10 @@
             });
         }
 
-        function sectionShell(title, count) {
+        function sectionShell(title, count, level) {
             var wrap = document.createElement('section');
             wrap.className = 'pp-cplan__section';
-            var head = document.createElement('h2');
+            var head = document.createElement(level || 'h2');
             head.className = 'pp-cplan__section-head';
             head.appendChild(document.createTextNode(title));
             if (count !== undefined) {
@@ -1445,21 +1464,31 @@
             if (item.progress > 0) { wrap.appendChild(metaNote("You're " + item.progress + '% in', 'progress')); }
             if (item.pinned) { wrap.appendChild(metaNote('Your pick', 'pin')); }
             if (item.outside_filters) { wrap.appendChild(metaNote('Outside your filters', 'warn')); }
-            // DELISTED / UNOBTAINABLE as the house alert chip, the picker's own treatment for the same facts.
             (item.availability || []).forEach(function (flag) {
-                if (!AVAILABILITY_LABELS[flag]) { return; }
-                var alertChip = document.createElement('span');
-                alertChip.className = 'bd-chip bd-chip--error';
-                alertChip.textContent = AVAILABILITY_LABELS[flag];
-                wrap.appendChild(alertChip);
+                var alertChip = availabilityChip(flag);
+                if (alertChip) { wrap.appendChild(alertChip); }
             });
-            (item.platforms || []).forEach(function (p) {
-                var tag = document.createElement('span');
-                tag.className = 'bd-meta-tag' + (/^[a-z]+$/.test(p.tone || '') ? ' bd-meta-tag--' + p.tone : '');
-                tag.textContent = p.name;
-                wrap.appendChild(tag);
-            });
+            (item.platforms || []).forEach(function (p) { wrap.appendChild(platformTag(p)); });
             return wrap.childNodes.length ? wrap : null;
+        }
+
+        /** A platform as the site's flat platform tag. The TONE comes from the server (`platform_color_str`), and
+         *  it is checked as a bare word before it becomes a class, because a class name is markup. */
+        function platformTag(p) {
+            var tag = document.createElement('span');
+            tag.className = 'bd-meta-tag' + (/^[a-z]+$/.test(p.tone || '') ? ' bd-meta-tag--' + p.tone : '');
+            tag.textContent = p.name;
+            return tag;
+        }
+
+        /** DELISTED / UNOBTAINABLE as the house alert chip, the picker's own treatment for the same facts; null for
+         *  a flag this page has no words for. */
+        function availabilityChip(flag) {
+            if (!AVAILABILITY_LABELS[flag]) { return null; }
+            var alertChip = document.createElement('span');
+            alertChip.className = 'bd-chip bd-chip--error';
+            alertChip.textContent = AVAILABILITY_LABELS[flag];
+            return alertChip;
         }
 
         /** The badge stages a game advances, ONE ROW PER BADGE (owner, 2026-10-17): the badge and its editions once,
@@ -1563,6 +1592,14 @@
                 row.appendChild(action('Undo swap', function () {
                     change(function () {
                         line.replaces.forEach(function (r) { delete tweaks.squarePins[sqKey(r)]; });
+                        // An undone swap is undone whole: a half left out with "Only C" may be offered again, and its
+                        // card starts on Both.
+                        tweaks.declined.forEach(function (k) {
+                            if (k.indexOf(line.slug + '@') === 0) { tweaks.declined.delete(k); }
+                        });
+                        Object.keys(tweaks.choices).forEach(function (k) {
+                            if (k.indexOf('cplan_swap_' + line.slug + '@') === 0) { delete tweaks.choices[k]; }
+                        });
                     });
                 }, { aria: 'Undo swap: ' + line.name }));
             } else {
@@ -1633,26 +1670,95 @@
             name.className = 'pp-cplan__line-name';
             name.textContent = swap.suggested.name;
             main.appendChild(name);
-            var why = document.createElement('p');
-            why.className = 'pp-cplan__swap-why';
+            // EVERY GAME IT REPLACES, one line each (owner, 2026-10-17): a game that would replace unfinished games
+            // in both challenges says so on one card, instead of hiding the second as "also covers".
+            swap.replaces.forEach(function (r) {
+                var why = document.createElement('p');
+                why.className = 'pp-cplan__swap-why';
+                why.textContent = 'Replaces ' + (r.current.name || 'the game') + ' in ' + r.square.label + '.';
+                main.appendChild(why);
+            });
             var also = (swap.also || []).map(function (s) { return s.label; }).join(', ');
-            why.textContent = 'Replaces ' + (swap.current.name || 'the game') + ' in ' + swap.square.label
-                + (also ? ', and also covers ' + also : '') + '.';
-            main.appendChild(why);
+            if (also) {
+                var alsoNote = document.createElement('p');
+                alsoNote.className = 'pp-cplan__swap-why';
+                alsoNote.textContent = 'Also covers ' + also + '.';
+                main.appendChild(alsoNote);
+            }
             var stages = stageList(swap.suggested);
             if (stages) { main.appendChild(stages); }
             var meta = metaList(swap.suggested);
             if (meta) { main.appendChild(meta); }
+            var choice = swap.replaces.length > 1 ? swapChoice(swap) : null;
+            if (choice) { main.appendChild(choice.el); }
             var row = document.createElement('div');
             row.className = 'pp-cplan__actions';
             row.appendChild(action('Use this swap', function () {
+                var chosen = choice ? choice.squares() : swap.replaces.map(function (r) { return r.square; });
+                // "JUST THIS ONE" STICKS: the halves left out are declined for this plan, or the re-solve would
+                // offer the same game for them again at once (it still saves a game there).
                 // RE-SOLVED, ALWAYS: an accepted swap moves games, and the plan above it must be redrawn around
                 // it before anything is applied. The swapped-in game then leads its line with an Undo.
-                change(function () { tweaks.squarePins[sqKey(swap.square)] = swap.suggested.slug; }, 'line:' + swap.suggested.slug);
-            }, { aria: 'Use this swap: ' + swap.suggested.name + ' in ' + swap.square.label }));
+                change(function () {
+                    swap.replaces.forEach(function (r) {
+                        if (chosen.indexOf(r.square) < 0) { tweaks.declined.add(swapKey(swap.suggested.slug, r.square)); }
+                    });
+                    pinGame(swap.suggested.slug, chosen);
+                }, 'line:' + swap.suggested.slug);
+            }, { aria: 'Use this swap: ' + swap.suggested.name }));
             main.appendChild(row);
             li.appendChild(main);
             return li;
+        }
+
+        /** BOTH OR ONE, for a game that would replace a game in each challenge: the house segmented switch, radio
+         *  backed (no JS state to drift), Both preselected. `squares()` reads which squares "Use this swap" takes. */
+        function swapChoice(swap) {
+            var group = document.createElement('div');
+            group.className = 'pp-switch pp-cplan__swap-choice';
+            group.setAttribute('role', 'radiogroup');
+            group.setAttribute('aria-label', 'Which games to replace');
+            var name = 'cplan_swap_' + swapKey(swap.suggested.slug, swap.replaces[0].square);
+            var options = [{ value: 'both', label: 'Both', squares: swap.replaces.map(function (r) { return r.square; }) }]
+                .concat(swap.replaces.map(function (r) {
+                    return { value: sqKey(r.square), label: 'Only ' + r.square.label, squares: [r.square] };
+                }));
+            var kept = options.some(function (opt) { return opt.value === tweaks.choices[name]; }) ? tweaks.choices[name] : 'both';
+            var inputs = options.map(function (opt) {
+                var chip = document.createElement('label');
+                chip.className = 'pp-switch__chip';
+                var input = document.createElement('input');
+                input.type = 'radio';
+                input.name = name;
+                input.className = 'sr-only';
+                input.value = opt.value;
+                input.checked = opt.value === kept;
+                input.addEventListener('change', function () { if (input.checked) { tweaks.choices[name] = opt.value; } });
+                var text = document.createElement('span');
+                text.className = 'pp-switch__lbl';
+                text.textContent = opt.label;
+                chip.appendChild(input);
+                chip.appendChild(text);
+                group.appendChild(chip);
+                return input;
+            });
+            return {
+                el: group,
+                squares: function () {
+                    for (var i = 0; i < inputs.length; i++) { if (inputs[i].checked) { return options[i].squares; } }
+                    return options[0].squares;
+                }
+            };
+        }
+
+        function swapKey(slug, square) { return slug + '@' + sqKey(square); }
+
+        /** A suggested swap minus the halves the hunter declined ("Only C" declines the other). Null when nothing
+         *  is left to offer. */
+        function offeredSwap(swap) {
+            var left = swap.replaces.filter(function (r) { return !tweaks.declined.has(swapKey(swap.suggested.slug, r.square)); });
+            if (!left.length) { return null; }
+            return left.length === swap.replaces.length ? swap : Object.assign({}, swap, { replaces: left });
         }
 
         function unplacedRow(item) {
@@ -1767,19 +1873,42 @@
             if (onPick) { el.type = 'button'; }
             el.className = 'pp-cpick__row' + (onPick ? '' : ' pp-cpick__row--static');
             el.appendChild(art(row));
+            // THE TEXT STACKS in the picker's own column (`.pp-cpick__row-main`): the must-have results lay a card
+            // out as a ROW, where name, platforms and note side by side squeezed each other on a phone.
+            var main = document.createElement('span');
+            main.className = 'pp-cpick__row-main';
             var name = document.createElement('span');
             name.className = 'pp-cpick__row-name';
             name.textContent = row.name;
-            el.appendChild(name);
+            main.appendChild(name);
+            var tags = rowTags(row);
+            if (tags) { main.appendChild(tags); }
             if (noteText) {
                 var note = document.createElement('span');
                 note.className = 'pp-cpick__row-note';
                 note.textContent = noteText;
-                el.appendChild(note);
+                main.appendChild(note);
             }
+            el.appendChild(main);
             if (onPick) { el.addEventListener('click', function () { onPick(row); }); }
             item.appendChild(el);
             return item;
+        }
+
+        /** A card's platforms, then its availability flags, in the run page picker's own `.pp-cpick__row-plats` row
+         *  (`challenge-detail.js`'s `rowTags`), so the two sheets' cards read alike; null for a game with neither. */
+        function rowTags(row) {
+            var plats = row.platforms || [];
+            var flags = row.availability || [];
+            if (!plats.length && !flags.length) { return null; }
+            var wrap = document.createElement('span');
+            wrap.className = 'pp-cpick__row-plats';
+            plats.forEach(function (p) { wrap.appendChild(platformTag(p)); });
+            flags.forEach(function (flag) {
+                var alertChip = availabilityChip(flag);
+                if (alertChip) { wrap.appendChild(alertChip); }
+            });
+            return wrap;
         }
 
         /** A job glyph out of the page's sprite, as `challenge-detail.js` builds it (`createElementNS`: an SVG
@@ -1867,28 +1996,67 @@
             dialog.showModal();
             dialog.focus();
             window.setTimeout(function () { if (mine === altSeq) { altSay('Loading…'); } }, 0);
+            // THE LINE'S OTHER SQUARES (owner, 2026-10-17): a game that fits them too can take the whole line, so
+            // the server returns those as their own half (`both`) and the sheet heads them apart. `current` is the
+            // line's own game, which fits both by definition: left out server-side, so it never costs that half a place.
+            var partners = line.squares.filter(function (s) { return s.type !== square.type || s.key !== square.key; });
             var body = payload();
             body.type = square.type;
             body.key = square.key;
+            body.partners = partners.map(function (s) { return { type: s.type, key: s.key }; });
+            body.current = line.slug;
             PP.API.post(urls.alt, body).then(function (data) {
                 if (mine !== altSeq) { return; }
                 var rows = data.rows.filter(function (r) { return r.slug !== line.slug; });
                 if (!rows.length) { altSay('Nothing else on your terms fits ' + square.label + '.'); return; }
                 altSay('');
-                rows.forEach(function (row) {
-                    var also = (row.also || []).map(function (s) { return s.label; });
-                    var note = also.length ? 'Also covers ' + also.join(', ') : '';
-                    alt.rows.appendChild(offerRow(row, note, function () {
-                        // THE SHEET PLAYS ITS EXIT while the re-plan starts at once; `restoreFocus` waits for the
-                        // dialog to be really closed (the page is inert until then), so focus still lands.
-                        closeSheet();
-                        change(function () { tweaks.squarePins[sqKey(square)] = row.slug; }, 'line:' + row.slug);
-                    }));
-                });
+                var pick = function (row) {
+                    // THE SHEET PLAYS ITS EXIT while the re-plan starts at once; `restoreFocus` waits for the
+                    // dialog to be really closed (the page is inert until then), so focus still lands.
+                    closeSheet();
+                    // A "covers both" pick TAKES THE WHOLE LINE: pinned to every square of it, or a locked line (or an
+                    // accepted swap) would keep its old game on the other square.
+                    change(function () { pinGame(row.slug, row.both ? [square].concat(partners) : [square]); },
+                           'line:' + row.slug);
+                };
+                if (!partners.length) { alt.rows.appendChild(altList(rows, pick, true)); return; }
+                var all = [square].concat(partners).map(function (s) { return s.label; }).join(' and ');
+                // AN EMPTY HALF STAYS, with a line saying so (owner, 2026-10-17): "nothing covers both" is an answer.
+                // The covering half drops "Also covers": its heading already says which squares a game takes.
+                alt.rows.appendChild(altGroup('Covers ' + all, rows.filter(function (r) { return r.both; }),
+                                              'Nothing else covers both.', pick, false));
+                alt.rows.appendChild(altGroup('Only ' + square.label, rows.filter(function (r) { return !r.both; }),
+                                              'Nothing else fits only ' + square.label + '.', pick, true));
             }).catch(function (err) {
                 if (mine !== altSeq) { return; }
                 failureText(err, 'Other options did not load.').then(function (msg) { altSay(msg, true); });
             });
+        }
+
+        function altList(rows, pick, withAlso) {
+            var list = document.createElement('ul');
+            list.className = 'pp-cpick__rows';
+            list.setAttribute('role', 'list');
+            rows.forEach(function (row) {
+                var also = withAlso ? (row.also || []).map(function (s) { return s.label; }) : [];
+                list.appendChild(offerRow(row, also.length ? 'Also covers ' + also.join(', ') : '', pick));
+            });
+            return list;
+        }
+
+        /** One headed half of the sheet: the review's own section shell, an `<h3>` under the sheet's title. */
+        function altGroup(title, rows, emptyText, pick, withAlso) {
+            var group = sectionShell(title, rows.length, 'h3');
+            group.classList.add('pp-cplan__alt-group');
+            if (rows.length) {
+                group.appendChild(altList(rows, pick, withAlso));
+            } else {
+                var none = document.createElement('p');
+                none.className = 'pp-cplan__alt-none';
+                none.textContent = emptyText;
+                group.appendChild(none);
+            }
+            return group;
         }
 
         if (dialog) {

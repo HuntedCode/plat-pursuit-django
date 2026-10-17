@@ -181,8 +181,9 @@ class Plan:
     #: {(type, key): contract id} for open squares (and unfinished squares the hunter pinned a swap into).
     assignments: dict
     #: {(type, key): (current id, suggested id, [other squares the suggested game holds])} for unfinished
-    #: squares. Solved ON TOP of `assignments`, so the other squares are the plan's own ("also covers
-    #: Brawler" names a square the plan really gives that game).
+    #: squares. Solved ON TOP of `assignments`, so a plan square it lists is the plan's own. It may also list
+    #: another unfinished square (that square's own swap, or the game staying where it already is) or an open
+    #: square the swap solve could fill; `_plan_json` sorts those out for the card.
     swaps: dict
     #: {contract id: reason code} for pins the plan could not place.
     unplaced_pins: dict
@@ -565,9 +566,16 @@ def _allowed(cand, options):
     return bool(cand['stages']) or not options.badges_only
 
 
-def alternatives(pool, states, square, excluded=frozenset(), limit=ALTERNATIVES_LIMIT, options=None):
-    """[(candidate dict, [open squares it also fits in the OTHER run])] for one square, doubles first, then
-    pool order. Reads only the cached pool and the run state: the "Other options" sheet costs no pool scan.
+def alternatives(pool, states, square, excluded=frozenset(), limit=ALTERNATIVES_LIMIT, options=None, partners=()):
+    """[(candidate dict, [open squares it also fits in the OTHER run], covers every partner)] for one square.
+    Reads only the cached pool and the run state: the "Other options" sheet costs no pool scan.
+
+    PARTNERS are the other squares of the plan line the hunter opened it from (owner, 2026-10-17): a game that
+    fits them all can take the whole line (the sheet pins it to every square of it), so those come first, up to
+    `limit` of them, then up to `limit` of the rest. The covering half keeps pool order (its other fits are moot: the
+    pick pins it to the partner); the rest lists doubles first, then pool order. A partner is
+    never repeated in `also`, and it may be an unfinished square (an accepted swap), so it is matched on fit, not
+    on being open. Pass the line's own game in `excluded`: it fits every partner and would take a place.
 
     A game already in a run is never offered for that run's squares, here or in `also` (it cannot be placed
     there twice); excluded games are not offered at all, because the hunter said "not this one". With badge
@@ -576,17 +584,21 @@ def alternatives(pool, states, square, excluded=frozenset(), limit=ALTERNATIVES_
     state = states.get(run_type)
     if state is None:
         return []
+    partners = [(t, k) for t, k in partners if t in states and t != run_type]
     found = []
     for cand in pool['candidates']:
         if cand['id'] in excluded or cand['id'] in state.in_run or key not in cand['fits'].get(run_type, ()):
             continue
         if options is not None and not _allowed(cand, options):
             continue
+        covers = bool(partners) and all(k in cand['fits'].get(t, ()) and cand['id'] not in states[t].in_run
+                                        for t, k in partners)
         also = [(t, k) for t, s in states.items() if t != run_type and cand['id'] not in s.in_run
-                for k in s.open_keys if k in cand['fits'].get(t, ())]
-        found.append((cand, also))
-    found.sort(key=lambda pair: not pair[1])   # stable: doubles first, pool order within each half
-    return found[:limit]
+                for k in s.open_keys if k in cand['fits'].get(t, ()) and (t, k) not in partners]
+        found.append((cand, also, covers))
+    covering = [row for row in found if row[2]]
+    rest = sorted((row for row in found if not row[2]), key=lambda row: not row[1])   # stable: doubles first
+    return covering[:limit] + rest[:limit]
 
 
 def _prune(pool, squares, pins, penalized, in_run, square_pins):

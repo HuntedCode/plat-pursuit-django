@@ -578,6 +578,7 @@ class OptimizerAlternativesView(_OptimizerJsonView):
         square = (data.get('type'), data.get('key'))
         if not all(isinstance(part, str) for part in square):
             return self.fail(PlanRequestError('That request could not be read.'))
+        partners = _partner_squares(data.get('partners'))
         states = planner.run_states(profile, options.types)
         if square[0] not in states:
             return self.not_found()
@@ -592,14 +593,20 @@ class OptimizerAlternativesView(_OptimizerJsonView):
             return JsonResponse({'error': CATALOGUE_BUSY_MESSAGE}, status=429)
         if pool is None:
             return JsonResponse({'error': BUILD_LIMITED_MESSAGE}, status=429)
-        found = planner.alternatives(pool, states, square, tweaks.excluded, options=options)
-        rows = _rows_by_id({cand['id'] for cand, _ in found})
+        # THE LINE'S OWN GAME is left out like an excluded one: it fits both squares by definition, and in the
+        # covering half it would take one of the places the sheet shows (the sheet never offers it anyway).
+        current = data.get('current')
+        skip = set(tweaks.excluded)
+        if isinstance(current, str) and current:
+            skip.update(Contract.objects.filter(slug=current).values_list('pk', flat=True))
+        found = planner.alternatives(pool, states, square, frozenset(skip), options=options, partners=partners)
+        rows = _rows_by_id({cand['id'] for cand, _, _ in found})
         labels = _labels(states)
         return JsonResponse({
             'square': _square(square, labels),
             'rows': [{**rows[cand['id']], 'stages': cand['stages'], 'progress': cand['progress'],
-                      'also': [_square(sq, labels) for sq in also]}
-                     for cand, also in found if cand['id'] in rows],
+                      'also': [_square(sq, labels) for sq in also], 'both': covers}
+                     for cand, also, covers in found if cand['id'] in rows],
         })
 
 
@@ -811,6 +818,20 @@ def _rows_by_id(ids):
     return {cid: _wire(row) for cid, row in picker.contract_rows(list(Contract.objects.filter(pk__in=ids))).items()}
 
 
+#: A plan line holds at most one square per run, so it has at most this many squares besides the one opened.
+MAX_PARTNER_SQUARES = len(planner.PLANNABLE_TYPES) - 1
+
+
+def _partner_squares(raw):
+    """The other squares of the line Other options was opened from, as (type, key) pairs. Hunter-supplied, so
+    anything malformed is dropped rather than refused: the sheet still answers, just without the "covers both"
+    half. `alternatives` itself ignores a partner in a run with no active run, or in the opened square's own run."""
+    if not isinstance(raw, list):
+        return []
+    pairs = [(p.get('type'), p.get('key')) for p in raw[:MAX_PARTNER_SQUARES] if isinstance(p, dict)]
+    return [(t, k) for t, k in pairs if isinstance(t, str) and isinstance(k, str)]
+
+
 def _labels(states):
     return {t: picker.square_labels(s.challenge) for t, s in states.items()}
 
@@ -875,13 +896,25 @@ def _plan_json(plan, pool, states, tweaks, built, badges_only=False):
     # Games that cover both runs lead, then the board order of their first square.
     lines.sort(key=lambda line: (-len(line['squares']), order[(line['squares'][0]['type'], line['squares'][0]['key'])]))
 
-    swaps = []
+    # ONE CARD PER SUGGESTED GAME (owner, 2026-10-17). The planner suggests per square, so a game that would
+    # replace unfinished games in BOTH runs arrives as two swaps, each naming the other square as "also covers".
+    # Merged, the card names every game it replaces and the hunter chooses both or one. `also` drops every square
+    # it would replace, and every square the game ALREADY holds unfinished (it is staying there, so it covers
+    # nothing new); what is left is the game's plan squares, or an open square the swap could fill.
+    by_game = {}
     for square in sorted(plan.swaps, key=order.__getitem__):
         current, suggested, also = plan.swaps[square]
+        by_game.setdefault(suggested, []).append((square, current, also))
+    swaps = []
+    for suggested, items in by_game.items():
+        replaced = {square for square, _, _ in items}
+        also = {sq for _, _, extra in items for sq in extra
+                if sq not in replaced and states[sq[0]].unfinished.get(sq[1]) != suggested}
         cand = plan.candidates.get(suggested, {})
         swaps.append({
-            'square': _square(square, labels),
-            'current': {k: rows.get(current, {}).get(k, '') for k in ('slug', 'name')},
+            'replaces': [{'square': _square(square, labels),
+                          'current': {k: rows.get(current, {}).get(k, '') for k in ('slug', 'name')}}
+                         for square, current, _ in items],
             'suggested': {**rows.get(suggested, {}), 'stages': cand.get('stages', []),
                           'progress': cand.get('progress', 0)},
             'also': [_square(sq, labels) for sq in sorted(also, key=order.__getitem__)],

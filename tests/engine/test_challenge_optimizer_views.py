@@ -356,6 +356,104 @@ def test_alternatives_offer_doubles_first(client):
     assert [s['key'] for s in body['rows'][0]['also']] == [job.slug]
 
 
+def test_alternatives_flag_games_that_also_fit_the_lines_other_square(client):
+    profile = _hunter(client)
+    job = Job.objects.order_by('slug').first()
+    single = _contract('Apex')
+    double = _contract('Astro Bot', jobs=[job])
+    svc.start(profile, AZ)
+    svc.start(profile, JOBS)
+    _plan(client)
+
+    body = _body(_post(client, 'challenge_optimizer_alternatives',
+                       {'types': [AZ, JOBS], 'badge_started': False, 'type': AZ, 'key': 'A',
+                        'partners': [{'type': JOBS, 'key': job.slug}]}))
+
+    assert [(r['slug'], r['both']) for r in body['rows']] == [(double.slug, True), (single.slug, False)]
+    assert body['rows'][0]['also'] == []   # the partner is the line's own square, never "also"
+    assert body['rows'][0]['platforms']    # the sheet's cards carry platforms
+
+
+def test_a_game_replacing_a_game_in_each_challenge_is_one_swap_card(client):
+    # Apex holds A and 7 Days holds the job, both unfinished; Astro Bot fits both, so it would replace each. The
+    # planner suggests per square (two swaps); the plan JSON merges them into one card naming both games.
+    profile = _hunter(client)
+    job = Job.objects.order_by('slug').first()
+    apex = _contract('Apex')
+    days = _contract('7 Days', jobs=[job])
+    astro = _contract('Astro Bot', jobs=[job])
+    az_run = svc.start(profile, AZ)
+    jobs_run = svc.start(profile, JOBS)
+    svc.assign(az_run, profile, 'A', apex)
+    svc.assign(jobs_run, profile, job.slug, days)
+
+    [swap] = _body(_plan(client))['swaps']
+
+    assert swap['suggested']['slug'] == astro.slug
+    assert [(r['square']['key'], r['current']['slug']) for r in swap['replaces']] == [('A', apex.slug),
+                                                                                     (job.slug, days.slug)]
+    assert swap['also'] == []   # a square it would REPLACE is never "also covers"
+
+
+def test_a_swap_card_never_claims_a_square_the_game_already_holds(client):
+    # Astro Bot already sits unfinished in the job; the swap solve keeps it there and suggests it for A too. It
+    # covers nothing new in the job, so the card must not say "Also covers" it.
+    profile = _hunter(client)
+    job = Job.objects.order_by('slug').first()
+    apex = _contract('Apex')
+    astro = _contract('Astro Bot', jobs=[job])
+    az_run = svc.start(profile, AZ)
+    jobs_run = svc.start(profile, JOBS)
+    svc.assign(az_run, profile, 'A', apex)
+    svc.assign(jobs_run, profile, job.slug, astro)
+
+    [swap] = _body(_plan(client))['swaps']
+
+    assert [r['current']['slug'] for r in swap['replaces']] == [apex.slug]
+    assert swap['also'] == []
+
+
+def _covering_setup(client):
+    """Both runs, and a game that fits A and the first job: a valid partner would flag it `both`."""
+    profile = _hunter(client)
+    job = Job.objects.order_by('slug').first()
+    double = _contract('Astro Bot', jobs=[job])
+    svc.start(profile, AZ)
+    svc.start(profile, JOBS)
+    _plan(client)
+    return job, double
+
+
+def _alternatives(client, **extra):
+    return _post(client, 'challenge_optimizer_alternatives',
+                 {'types': [AZ, JOBS], 'badge_started': False, 'type': AZ, 'key': 'A', **extra})
+
+
+@pytest.mark.parametrize('partners', ['jobs', [['jobs', 'x']], [{'type': ['jobs'], 'key': 'x'}], [None], {'a': 1},
+                                      [{'type': JOBS, 'key': ['x']}]])
+def test_crafted_partners_are_dropped_not_a_500(client, partners):
+    # The game below WOULD be flagged by a valid partner, so `both` False proves the crafted one was dropped.
+    _covering_setup(client)
+    resp = _alternatives(client, partners=partners)
+    assert resp.status_code == 200
+    assert [r['both'] for r in _body(resp)['rows']] == [False]
+
+
+def test_the_lines_own_game_is_left_out_of_the_sheet(client):
+    job, double = _covering_setup(client)
+    partners = [{'type': JOBS, 'key': job.slug}]
+    assert [r['slug'] for r in _body(_alternatives(client, partners=partners))['rows']] == [double.slug]
+    body = _body(_alternatives(client, partners=partners, current=double.slug))
+    assert body['rows'] == []
+
+
+@pytest.mark.parametrize('current', [['x'], 42, ''])
+def test_a_crafted_current_is_ignored_not_a_500(client, current):
+    _covering_setup(client)
+    resp = _alternatives(client, current=current)
+    assert resp.status_code == 200 and len(_body(resp)['rows']) == 1
+
+
 def test_the_search_merges_one_game_across_both_runs(client):
     profile = _hunter(client)
     job = Job.objects.order_by('slug').first()

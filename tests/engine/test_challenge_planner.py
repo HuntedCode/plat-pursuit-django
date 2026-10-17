@@ -821,9 +821,106 @@ def test_alternatives_never_offer_a_double_into_a_run_that_already_holds_the_gam
     options = _options()
     pool, _ = planner.get_pool(profile, options)
 
-    [(cand, also)] = planner.alternatives(pool, planner.run_states(profile, options.types), (AZ, 'A'))
+    [(cand, also, _)] = planner.alternatives(pool, planner.run_states(profile, options.types), (AZ, 'A'))
 
     assert cand['id'] == held.id and also == []
+
+
+def _two_run_pool(profile):
+    _runs(profile, AZ, JOBS)
+    options = _options()
+    pool, _ = planner.get_pool(profile, options)
+    return pool, planner.run_states(profile, options.types)
+
+
+def test_alternatives_put_games_that_fit_the_lines_other_square_first():
+    # Opened on A from a line that also holds job_a: a game fitting job_a can take over the whole line.
+    profile = _member()
+    job_a, job_b = _two_jobs()
+    other_double = _contract('Alpha', jobs=[job_b])
+    single = _contract('Apex')
+    covers = _contract('Astro Bot', jobs=[job_a, job_b])
+    pool, states = _two_run_pool(profile)
+
+    found = planner.alternatives(pool, states, (AZ, 'A'), partners=[(JOBS, job_a.slug)])
+
+    assert [(c['id'], both) for c, _, both in found] == [(covers.id, True), (other_double.id, False),
+                                                         (single.id, False)]
+    # The partner square is the line's own, so "also covers" names only the OTHER squares a game fits.
+    assert [also for _, also, _ in found] == [[(JOBS, job_b.slug)], [(JOBS, job_b.slug)], []]
+
+
+def test_alternatives_without_partners_flag_nothing_and_keep_doubles_first():
+    profile = _member()
+    job_a, _ = _two_jobs()
+    single = _contract('Apex')
+    double = _contract('Astro Bot', jobs=[job_a])
+    pool, states = _two_run_pool(profile)
+
+    found = planner.alternatives(pool, states, (AZ, 'A'))
+
+    assert [(c['id'], both) for c, _, both in found] == [(double.id, False), (single.id, False)]
+
+
+def test_each_half_of_the_alternatives_gets_its_own_limit():
+    # Otherwise a long run of games that cover both would push every "only this square" game off the sheet.
+    profile = _member()
+    job_a, _ = _two_jobs()
+    covering = [_contract(f'Alpha {i}', jobs=[job_a]) for i in range(3)]
+    singles = [_contract(f'Apex {i}') for i in range(3)]
+    pool, states = _two_run_pool(profile)
+
+    found = planner.alternatives(pool, states, (AZ, 'A'), limit=2, partners=[(JOBS, job_a.slug)])
+
+    assert [both for _, _, both in found] == [True, True, False, False]
+    assert {c['id'] for c, _, _ in found} <= {c.id for c in covering + singles}
+
+
+def test_the_covering_half_keeps_pool_order():
+    # Astro Bot also fits job_b, but the pick pins a covering game to the partner, so that fit is moot and must
+    # not push the earlier Alpha down (or off the sheet at the limit).
+    profile = _member()
+    job_a, job_b = _two_jobs()
+    alpha = _contract('Alpha', jobs=[job_a])
+    astro = _contract('Astro Bot', jobs=[job_a, job_b])
+    pool, states = _two_run_pool(profile)
+
+    found = planner.alternatives(pool, states, (AZ, 'A'), partners=[(JOBS, job_a.slug)])
+
+    assert [c['id'] for c, _, both in found if both] == [alpha.id, astro.id]
+
+
+def test_an_unfinished_partner_square_is_matched_on_fit():
+    # A line holding an accepted swap has an UNFINISHED square as its partner: not open, still coverable.
+    profile = _member()
+    job_a, _ = _two_jobs()
+    occupant = _contract('Bastion', jobs=[job_a])
+    covers = _contract('Astro Bot', jobs=[job_a])
+    az_run, jobs_run = _runs(profile, AZ, JOBS)
+    svc.assign(jobs_run, profile, job_a.slug, occupant)
+    options = _options()
+    pool, _ = planner.get_pool(profile, options)
+    states = planner.run_states(profile, options.types)
+    assert job_a.slug not in states[JOBS].open_keys
+
+    found = planner.alternatives(pool, states, (AZ, 'A'), partners=[(JOBS, job_a.slug)])
+
+    assert [(c['id'], both) for c, _, both in found] == [(covers.id, True)]
+
+
+def test_a_partner_in_a_run_already_holding_the_game_is_not_covered():
+    profile = _member()
+    job_a, job_b = _two_jobs()
+    held = _contract('Astro Bot', jobs=[job_a, job_b])
+    az_run, jobs_run = _runs(profile, AZ, JOBS)
+    svc.assign(jobs_run, profile, job_b.slug, held)
+    options = _options()
+    pool, _ = planner.get_pool(profile, options)
+
+    [(cand, _, both)] = planner.alternatives(pool, planner.run_states(profile, options.types), (AZ, 'A'),
+                                             partners=[(JOBS, job_a.slug)])
+
+    assert cand['id'] == held.id and both is False
 
 
 def test_all_badges_covers_started_and_types_in_the_cache_key():
@@ -891,7 +988,7 @@ def test_other_options_under_only_offer_badge_games_alone():
     pool, _ = planner.get_pool(profile, options)
     states = planner.run_states(profile, options.types)
 
-    assert [c['id'] for c, _ in planner.alternatives(pool, states, (AZ, 'A'), options=options)] == [badge_game.id]
+    assert [c['id'] for c, _, _ in planner.alternatives(pool, states, (AZ, 'A'), options=options)] == [badge_game.id]
     assert len(planner.alternatives(pool, states, (AZ, 'A'))) == 2   # without the answers: every game
 
 
