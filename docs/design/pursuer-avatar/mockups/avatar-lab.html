@@ -1,0 +1,778 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pursuer Avatar Lab</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Inter:wght@400;500;600&display=swap">
+<style>
+/* Layout: a lab bench. Global controls up top, three builder cards side by side, then the rank ladder and the unlock rules. */
+:root {
+  --bg-0: oklch(0.13 0.012 254);
+  --bg-1: oklch(0.23 0.014 253);
+  --bg-1b: oklch(0.205 0.013 253);
+  --bg-2: oklch(0.28 0.016 252);
+  --text: oklch(0.97 0.012 256);
+  --dim: oklch(0.72 0.02 256);
+  --mute: oklch(0.66 0.02 256);
+  --border: oklch(0.40 0.02 254 / 0.55);
+  --divider: oklch(0.40 0.02 254 / 0.30);
+  --primary: oklch(0.86 0.142 206);
+  --primary-glow: oklch(0.86 0.142 206 / 0.25);
+  --example: oklch(0.80 0.12 285);
+  --warn: oklch(0.86 0.17 90);
+  --acc: #55cf8e;
+  --font-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg-0);
+  background-image: radial-gradient(1100px 480px at 50% -8%, oklch(0.30 0.06 250 / 0.45), transparent 70%);
+  background-repeat: no-repeat;
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 32px 56px;
+}
+.wrap { max-width: 1240px; margin: 0 auto; display: grid; gap: 28px; }
+
+.eyebrow { font-size: 0.72rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--primary); font-weight: 600; }
+.hero { display: grid; gap: 10px; }
+.hero h1 {
+  font-family: var(--font-display); font-weight: 800; margin: 0;
+  font-size: clamp(2.1rem, 5vw, 3.3rem); line-height: 1.02; letter-spacing: -0.02em; text-wrap: balance;
+}
+.lead { color: var(--dim); max-width: 66ch; margin: 0; }
+
+.panel {
+  background: linear-gradient(180deg, var(--bg-1), var(--bg-1b));
+  border: 2px solid var(--border);
+  border-radius: 6px;
+  box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.06);
+}
+
+/* Controls */
+.controls { display: flex; flex-wrap: wrap; gap: 18px 32px; align-items: flex-end; padding: 16px 18px; }
+.ctl { display: grid; gap: 8px; min-width: 0; }
+.ctl-label { font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--mute); font-weight: 600; }
+.rank-read { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.rank-name { font-family: var(--font-display); font-weight: 800; font-size: 1.35rem; line-height: 1; }
+.tier-chip { font-size: 0.75rem; padding: 2px 8px; border: 1px solid var(--border); border-radius: 4px; color: var(--dim); white-space: nowrap; }
+input[type=range] { width: min(320px, 100%); accent-color: var(--acc); margin: 0; }
+input[type=range]:focus-visible { outline: 2px solid var(--primary); outline-offset: 4px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { position: relative; }
+.chip input { position: absolute; opacity: 0; pointer-events: none; }
+.chip span {
+  display: inline-flex; align-items: center; gap: 8px; padding: 6px 11px;
+  border: 2px solid var(--border); border-radius: 5px; background: var(--bg-2);
+  font-size: 0.85rem; cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s;
+}
+.chip span i { width: 9px; height: 9px; border-radius: 1px; transform: rotate(45deg); background: var(--c); }
+.chip span:hover { border-color: var(--c); }
+.chip input:checked + span { border-color: var(--c); box-shadow: inset 0 0 0 1px var(--c), 0 0 14px color-mix(in oklab, var(--c) 35%, transparent); }
+.chip input:focus-visible + span { outline: 2px solid var(--primary); outline-offset: 2px; }
+.controls .push { margin-left: auto; }
+
+.btn {
+  font: inherit; font-weight: 600; font-size: 0.88rem; color: var(--text);
+  background: var(--bg-2); border: 2px solid var(--border); border-radius: 5px;
+  padding: 8px 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 8px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.btn:hover { border-color: var(--primary); box-shadow: 0 0 14px var(--primary-glow); }
+.btn--primary { border-color: oklch(0.86 0.142 206 / 0.6); background: oklch(0.86 0.142 206 / 0.1); }
+.btn--sm { padding: 4px 10px; font-size: 0.78rem; }
+.btn:focus-visible, .step:focus-visible, .seg button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+/* Direction cards */
+.dirs { display: grid; gap: 20px; grid-template-columns: 1fr; align-items: start; }
+.dir { padding: 18px; display: grid; gap: 16px; min-width: 0; }
+.dir-head h2 { font-family: var(--font-display); font-weight: 800; font-size: 1.55rem; line-height: 1.1; margin: 2px 0 0; }
+.dir-head p { margin: 6px 0 0; color: var(--dim); font-size: 0.9rem; }
+.dir-visual, .dir-parts { display: grid; gap: 14px; min-width: 0; align-content: start; }
+@media (min-width: 700px) and (max-width: 999px) {
+  .dir { grid-template-columns: minmax(0, 300px) minmax(0, 1fr); column-gap: 24px; }
+  .dir-head { grid-column: 1 / -1; }
+}
+@media (min-width: 1000px) { .dirs { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+
+.stage {
+  border: 2px solid var(--divider); border-radius: 6px; padding: 24px 16px;
+  display: grid; place-items: center;
+  background-color: var(--bg-0);
+  background-image: radial-gradient(oklch(1 0 0 / 0.05) 1px, transparent 1.3px);
+  background-size: 14px 14px;
+}
+.stage-meta { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+
+.av { display: block; aspect-ratio: 1; max-width: 100%; flex: none; }
+.av svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.av--lg { width: min(232px, 100%); --avs: 232px; }
+.av.t2 { filter: drop-shadow(0 0 calc(var(--avs, 120px) * 0.05) oklch(0.74 0.19 285 / 0.45)); }
+.av.t3 { filter: drop-shadow(0 0 calc(var(--avs, 120px) * 0.06) oklch(0.86 0.13 210 / 0.5)); }
+.av.t4 { filter: drop-shadow(0 0 calc(var(--avs, 120px) * 0.08) oklch(0.93 0.11 210 / 0.75)); }
+.av-sheen { animation: av-sheen 5.5s cubic-bezier(0.45, 0, 0.2, 1) infinite; }
+@keyframes av-sheen { 0%, 10% { transform: translateX(0); } 55%, 100% { transform: translateX(420px); } }
+@media (prefers-reduced-motion: reduce) { .av-sheen { animation: none; opacity: 0; } }
+
+.sizes { display: flex; align-items: flex-end; justify-content: center; gap: 22px; }
+.size { display: grid; justify-items: center; gap: 6px; font-size: 0.68rem; color: var(--mute); letter-spacing: 0.08em; text-transform: uppercase; font-variant-numeric: tabular-nums; }
+
+.slots { list-style: none; margin: 0; padding: 0; display: grid; }
+.slot {
+  display: grid; grid-template-columns: 86px 30px minmax(0, 1fr) 30px; align-items: center;
+  gap: 8px; padding: 7px 0; border-top: 1px solid var(--divider);
+}
+.slot:first-child { border-top: 0; padding-top: 0; }
+.slot-label { font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--mute); font-weight: 600; }
+.slot-val { display: grid; justify-items: center; text-align: center; min-width: 0; gap: 1px; }
+.slot-name { font-weight: 600; font-size: 0.92rem; display: inline-flex; align-items: center; gap: 7px; }
+.slot-name i { width: 10px; height: 10px; border-radius: 50%; background: var(--sw); box-shadow: 0 0 0 1px oklch(1 0 0 / 0.25); }
+.slot-src { font-size: 0.74rem; color: var(--mute); display: inline-flex; align-items: center; gap: 5px; }
+.slot-src.is-earned { color: var(--dim); }
+.slot-src.is-example { color: var(--example); }
+.slot-src.is-locked { color: var(--warn); }
+.step {
+  width: 30px; height: 30px; display: grid; place-items: center; padding: 0;
+  border: 2px solid var(--border); border-radius: 5px; background: var(--bg-2); color: var(--text);
+  cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s;
+}
+.step:hover { border-color: var(--primary); box-shadow: 0 0 10px var(--primary-glow); }
+
+.lock-note { margin: 0; font-size: 0.82rem; color: var(--warn); display: flex; gap: 8px; align-items: flex-start; }
+.lock-note svg { margin-top: 3px; flex: none; }
+.recipe {
+  display: flex; gap: 8px; align-items: center; min-width: 0;
+  background: var(--bg-0); border: 1px solid var(--divider); border-radius: 5px; padding: 6px 6px 6px 10px;
+}
+.recipe code { font-family: var(--font-mono); font-size: 0.76rem; color: var(--dim); overflow-x: auto; white-space: nowrap; flex: 1; min-width: 0; }
+.recipe-hint { margin: -6px 0 0; font-size: 0.76rem; color: var(--mute); }
+
+/* Sections */
+.section { display: grid; gap: 14px; }
+.section-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; }
+.section-head h2 { font-family: var(--font-display); font-weight: 800; font-size: 1.6rem; line-height: 1.1; margin: 0; }
+.section-head p { margin: 6px 0 0; color: var(--dim); max-width: 60ch; }
+
+.seg { display: inline-flex; padding: 3px; gap: 2px; background: var(--bg-0); border: 2px solid var(--border); border-radius: 6px; }
+.seg button {
+  font: inherit; font-size: 0.84rem; font-weight: 600; color: var(--mute); background: transparent;
+  border: 0; border-radius: 4px; padding: 6px 12px; cursor: pointer; transition: color 0.15s, background-color 0.15s;
+}
+.seg button:hover { color: var(--text); }
+.seg button[aria-pressed="true"] { background: var(--bg-2); color: var(--text); box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.08); }
+
+.ladder { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; padding: 16px 10px; }
+@media (min-width: 700px) { .ladder { gap: 14px; padding: 20px; } }
+.tier { display: grid; gap: 8px; justify-items: center; align-content: start; text-align: center; padding: 12px 4px; border-radius: 6px; border: 2px solid transparent; min-width: 0; }
+.tier.is-current { border-color: var(--divider); background: oklch(1 0 0 / 0.03); }
+.tier .av { width: 100%; max-width: 140px; --avs: 130px; }
+.tier-name { font-family: var(--font-display); font-weight: 800; font-size: clamp(0.82rem, 2.4vw, 1.05rem); line-height: 1.1; }
+.tier-ranks { font-size: 0.72rem; color: var(--mute); }
+.tier-now { font-size: 0.66rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--primary); font-weight: 600; }
+@media (max-width: 520px) { .tier-ranks { display: none; } }
+
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 0.9rem; min-width: 560px; }
+th { text-align: left; font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--mute); padding: 12px 16px; border-bottom: 2px solid var(--divider); font-weight: 600; }
+td { padding: 12px 16px; border-bottom: 1px solid var(--divider); vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+td:first-child { font-weight: 600; white-space: nowrap; }
+td:last-child { color: var(--dim); }
+
+.rules { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.rule { padding: 16px 18px; display: grid; gap: 6px; align-content: start; }
+.rule h3 { margin: 0; font-size: 0.98rem; font-weight: 600; display: flex; align-items: center; gap: 9px; }
+.rule h3 i { width: 8px; height: 8px; transform: rotate(45deg); background: var(--primary); border-radius: 1px; flex: none; }
+.rule p { margin: 0; color: var(--dim); font-size: 0.88rem; }
+
+.foot { color: var(--mute); font-size: 0.8rem; margin: 0; }
+</style>
+
+<div class="wrap">
+  <header class="hero">
+    <div class="eyebrow">Concept mockup · Platinum Pursuit</div>
+    <h1>Pursuer Avatar Lab</h1>
+    <p class="lead">Three directions for an avatar drawn entirely in code. Every part is a shape with settings, so one part becomes many looks. Your rank sets the finish, your discipline sets the color, and badges, Contracts and milestones unlock parts. This same character becomes your Pursuer in the Frontier.</p>
+  </header>
+
+  <section class="panel controls" aria-label="Controls">
+    <div class="ctl">
+      <label class="ctl-label" for="rank">Rank</label>
+      <div class="rank-read"><span class="rank-name" id="rank-name">Warden</span><span class="tier-chip" id="rank-tier">Violet finish</span></div>
+      <input type="range" id="rank" min="0" max="10" step="1" value="5">
+    </div>
+    <div class="ctl">
+      <span class="ctl-label" id="disc-label">Discipline color</span>
+      <div class="chips" role="radiogroup" aria-labelledby="disc-label" id="disc-chips"></div>
+    </div>
+    <button type="button" class="btn btn--primary push" id="rand-all"></button>
+  </section>
+
+  <section class="dirs" id="dirs" aria-label="Avatar directions"></section>
+
+  <section class="section">
+    <div class="section-head">
+      <div>
+        <h2>Rank finish</h2>
+        <p>The parts stay the same while the material climbs with your rank. Same five steps as the Pursuer Card ladder.</p>
+      </div>
+      <div class="seg" role="group" aria-label="Direction shown on the ladder" id="ladder-seg"></div>
+    </div>
+    <div class="panel ladder" id="ladder"></div>
+  </section>
+
+  <section class="section">
+    <div class="section-head">
+      <div>
+        <h2>Where parts come from</h2>
+        <p>Unlocks follow rules, so a new badge or Contract produces its part automatically. Nobody authors one unlock at a time.</p>
+      </div>
+    </div>
+    <div class="panel table-wrap">
+      <table>
+        <thead><tr><th scope="col">Source</th><th scope="col">Unlocks</th><th scope="col">Example</th></tr></thead>
+        <tbody>
+          <tr><td>Rank</td><td>Finish: frame, metal, glow</td><td>Matte at Newbie, radiant glass at Luminary</td></tr>
+          <tr><td>Discipline levels</td><td>Themed parts and colors</td><td>Combat level 10 unlocks pauldrons</td></tr>
+          <tr><td>Badge tiers</td><td>Signature parts</td><td>Any badge at Gold unlocks the crested helmet</td></tr>
+          <tr><td>Platinum milestones</td><td>Accessories</td><td>50 platinums unlocks the cloak</td></tr>
+          <tr><td>Contracts</td><td>Gear</td><td>10 Contracts completed unlocks the lamp</td></tr>
+          <tr><td>Frontier (later)</td><td>Equipped gear</td><td>Gear found on expeditions shows on your avatar</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="rules" aria-label="Ground rules">
+    <div class="panel rule"><h3><i></i>Identity is always free</h3><p>Face, skin, hair and eyes never lock. Unlocks are for gear, symbols and finish, the things you earn.</p></div>
+    <div class="panel rule"><h3><i></i>Saved as a recipe</h3><p>An avatar is stored as a list of parts plus a recipe version. Redrawing a part later never changes anyone's saved look.</p></div>
+    <div class="panel rule"><h3><i></i>One character, two homes</h3><p>The avatar you build on the site is your Pursuer in the Frontier, and gear you find there shows up here.</p></div>
+    <div class="panel rule"><h3><i></i>Readable at nav size</h3><p>Every direction has to hold up at 28px. The size row under each builder shows how it reads.</p></div>
+  </section>
+
+  <p class="foot">Mockup only. Unlock sources are examples, not decisions.</p>
+</div>
+
+<script>
+(() => {
+  const BG0 = '#0b0f15';
+  const RANKS = ['Newbie','Recruit','Seeker','Hunter','Ranger','Warden','Marshal','Vanquisher','Paragon','Luminary','Ascendant'];
+  const TIER_OF = [0,0,1,1,2,2,2,3,3,4,4];
+  const TIERS = [
+    { name: 'Matte',    light: '#8b94a2', mid: '#5f6876', dark: '#373d48', edge: '#4b525e' },
+    { name: 'Steel',    light: '#e2e8f0', mid: '#a3aebd', dark: '#5a6371', edge: '#8e98a7' },
+    { name: 'Violet',   light: '#e2d9ff', mid: '#a08cf5', dark: '#4c3c9a', edge: '#a492f6' },
+    { name: 'Platinum', light: '#ecfbff', mid: '#8fd2ea', dark: '#2f7690', edge: '#8fd2ea' },
+    { name: 'Radiant',  light: '#ffffff', mid: '#b4f0ff', dark: '#3f93b4', edge: '#cdf6ff' },
+  ];
+  const DISC = {
+    combat:      { name: 'Combat',      c: '#e5544b' },
+    exploration: { name: 'Exploration', c: '#55cf8e' },
+    mind:        { name: 'Mind',        c: '#9b8cf2' },
+    heart:       { name: 'Heart',       c: '#ee6a9e' },
+    finesse:     { name: 'Finesse',     c: '#f0bb52' },
+  };
+  const ICON = {
+    left: '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M10 3 5 8l5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    right: '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="m6 3 5 5-5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    lock: '<svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true"><rect x="3" y="7" width="10" height="7" rx="1.5" fill="currentColor"/><path d="M5 7V5a3 3 0 0 1 6 0v2" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>',
+    dice: '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect x="2" y="2" width="12" height="12" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="5.5" cy="5.5" r="1.2" fill="currentColor"/><circle cx="8" cy="8" r="1.2" fill="currentColor"/><circle cx="10.5" cy="10.5" r="1.2" fill="currentColor"/></svg>',
+  };
+
+  /* ---------- helpers ---------- */
+  const hex2rgb = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+  const mix = (a, b, t) => {
+    const A = hex2rgb(a), B = hex2rgb(b);
+    return '#' + A.map((v, i) => Math.round(v + (B[i] - v) * t).toString(16).padStart(2, '0')).join('');
+  };
+  const f1 = n => n.toFixed(1);
+  const starPath = (cx, cy, R, r, n) => {
+    let d = '';
+    for (let i = 0; i < n * 2; i++) {
+      const a = -Math.PI / 2 + i * Math.PI / n, rad = i % 2 ? r : R;
+      d += (i ? 'L' : 'M') + f1(cx + rad * Math.cos(a)) + ',' + f1(cy + rad * Math.sin(a));
+    }
+    return d + 'Z';
+  };
+  const o = (name, req, sw) => ({ name, req, sw });
+
+  const state = {
+    rank: 5,
+    disc: 'exploration',
+    ladder: 'explorer',
+    picks: {
+      explorer: { helmet: 3, visor: 0, suit: 0, emblem: 0, gear: 1, backdrop: 1 },
+      hunter:   { face: 0, skin: 2, hair: 1, hairColor: 1, eyes: 0, mouth: 0, outfit: 1, extra: 1, pin: 0 },
+      crest:    { shield: 0, field: 1, tincture: 0, symbol: 0, ornament: 2 },
+    },
+  };
+  const accent = () => DISC[state.disc].c;
+  const swatch = opt => {
+    if (!opt.sw) return null;
+    if (opt.sw === 'accent') return accent();
+    if (opt.sw === 'deep') return mix(accent(), BG0, 0.72);
+    return opt.sw;
+  };
+
+  /* ---------- shared drawing ---------- */
+  function defs(c) {
+    const u = c.uid, t = c.tier, A = c.accent;
+    return `<defs>
+      <linearGradient id="m${u}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${t.light}"/><stop offset=".55" stop-color="${t.mid}"/><stop offset="1" stop-color="${t.dark}"/></linearGradient>
+      <linearGradient id="mh${u}" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="${t.dark}"/><stop offset=".35" stop-color="${t.light}"/><stop offset=".65" stop-color="${t.mid}"/><stop offset="1" stop-color="${t.dark}"/></linearGradient>
+      <radialGradient id="v${u}" cx=".38" cy=".3" r=".9"><stop offset="0" stop-color="${mix(A, '#ffffff', 0.55)}"/><stop offset=".38" stop-color="${A}"/><stop offset="1" stop-color="${mix(A, BG0, 0.8)}"/></radialGradient>
+      <radialGradient id="bg${u}" cx=".5" cy=".38" r=".8"><stop offset="0" stop-color="${mix(A, BG0, 0.62)}"/><stop offset="1" stop-color="${BG0}"/></radialGradient>
+      <linearGradient id="hz${u}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${BG0}"/><stop offset=".72" stop-color="${mix(A, BG0, 0.7)}"/><stop offset=".73" stop-color="${mix(A, BG0, 0.5)}"/><stop offset="1" stop-color="${mix(A, BG0, 0.86)}"/></linearGradient>
+      <linearGradient id="sh${u}" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#ffffff" stop-opacity="0"/><stop offset=".5" stop-color="#ffffff" stop-opacity=".55"/><stop offset="1" stop-color="#ffffff" stop-opacity="0"/></linearGradient>
+      <clipPath id="c${u}"><rect x="6" y="6" width="188" height="188" rx="14"/></clipPath>
+    </defs>`;
+  }
+
+  const STARS = [[24,30,1.2],[52,18,.8],[160,26,1.4],[180,58,.9],[138,14,.7],[32,70,.8],[186,104,1],[14,116,.9],[70,40,.6]];
+  function backdrop(kind, c) {
+    const u = c.uid, A = c.accent;
+    if (kind === 'Horizon') {
+      return `<rect width="200" height="200" fill="url(#hz${u})"/>` +
+        STARS.map(([x, y, r]) => `<circle cx="${x}" cy="${y}" r="${r}" fill="#ffffff" fill-opacity=".6"/>`).join('') +
+        `<path d="M0,145.5 H200" stroke="${A}" stroke-opacity=".6" stroke-width="1.5"/>`;
+    }
+    let s = `<rect width="200" height="200" fill="url(#bg${u})"/>`;
+    if (kind === 'Grid') {
+      for (let i = 20; i < 200; i += 20) s += `<path d="M${i},0 V200 M0,${i} H200" stroke="${A}" stroke-opacity=".12" stroke-width="1"/>`;
+    } else if (kind === 'Burst') {
+      for (let i = 0; i < 18; i++) {
+        const a1 = (i * 20) * Math.PI / 180, a2 = (i * 20 + 9) * Math.PI / 180;
+        s += `<path d="M100,92 L${f1(100 + 190 * Math.cos(a1))},${f1(92 + 190 * Math.sin(a1))} L${f1(100 + 190 * Math.cos(a2))},${f1(92 + 190 * Math.sin(a2))} Z" fill="${A}" fill-opacity=".09"/>`;
+      }
+    }
+    return s;
+  }
+
+  // Small metal glyphs: chest emblems and pins.
+  function glyph(kind, x, y, r, c) {
+    const M = `url(#m${c.uid})`, dk = mix(c.tier.dark, '#000000', 0.4), A = c.accent;
+    switch (kind) {
+      case 'Diamond': return `<path d="M${x},${y - r} L${x + r * .8},${y} L${x},${y + r} L${x - r * .8},${y} Z" fill="${M}" stroke="${dk}" stroke-width="1.2"/><path d="M${x},${y - r * .5} L${x + r * .38},${y} L${x},${y + r * .5} L${x - r * .38},${y} Z" fill="${A}"/>`;
+      case 'Chevron': return `<path d="M${x - r},${y - r * .5} L${x},${y + r * .35} L${x + r},${y - r * .5} L${x + r},${y + r * .2} L${x},${y + r} L${x - r},${y + r * .2} Z" fill="${M}" stroke="${dk}" stroke-width="1.2" stroke-linejoin="round"/>`;
+      case 'Star': return `<path d="${starPath(x, y, r * 1.1, r * .48, 5)}" fill="${M}" stroke="${dk}" stroke-width="1.2" stroke-linejoin="round"/>`;
+      case 'Ring': return `<circle cx="${x}" cy="${y}" r="${r * .78}" fill="none" stroke="${M}" stroke-width="${r * .42}"/><circle cx="${x}" cy="${y}" r="${r * .26}" fill="${A}"/>`;
+      case 'Trophy': return `<path d="M${x - r * .8},${y - r} H${x + r * .8} V${y - r * .3} Q${x + r * .8},${y + r * .35} ${x},${y + r * .45} Q${x - r * .8},${y + r * .35} ${x - r * .8},${y - r * .3} Z" fill="${M}" stroke="${dk}" stroke-width="1.1"/><rect x="${x - r * .14}" y="${y + r * .42}" width="${r * .28}" height="${r * .36}" fill="${M}"/><rect x="${x - r * .55}" y="${y + r * .74}" width="${r * 1.1}" height="${r * .32}" rx="${r * .1}" fill="${M}" stroke="${dk}" stroke-width="1"/>`;
+      case 'Gem': return `<path d="M${x - r * .8},${y - r * .3} L${x - r * .4},${y - r * .85} H${x + r * .4} L${x + r * .8},${y - r * .3} L${x},${y + r} Z" fill="url(#v${c.uid})" stroke="${dk}" stroke-width="1.2" stroke-linejoin="round"/><path d="M${x - r * .8},${y - r * .3} H${x + r * .8}" stroke="${M}" stroke-width="1"/>`;
+      default: return '';
+    }
+  }
+
+  /* ---------- Direction A: Explorer ---------- */
+  function drawExplorer(p, c) {
+    const u = c.uid, A = c.accent, M = `url(#m${u})`, MH = `url(#mh${u})`, V = `url(#v${u})`;
+    const dk = mix(c.tier.dark, '#000000', 0.35);
+    const suit = mix(A, BG0, 0.74), seam = mix(A, BG0, 0.5);
+    let s = backdrop(p.backdrop.name, c);
+
+    s += `<path d="M22,200 C24,168 52,150 100,150 C148,150 176,168 178,200 Z" fill="${suit}"/>`;
+    s += `<path d="M100,160 V200" stroke="${seam}" stroke-width="1.5"/>`;
+    s += `<rect x="86" y="126" width="28" height="30" fill="#1a1f27"/>`;
+    switch (p.suit.name) {
+      case 'Field suit': s += `<path d="M70,153 Q100,170 130,153" fill="none" stroke="${M}" stroke-width="5" stroke-linecap="round"/>`; break;
+      case 'Pauldrons': s += `<path d="M70,153 Q100,168 130,153" fill="none" stroke="${M}" stroke-width="4" stroke-linecap="round"/><ellipse cx="50" cy="170" rx="32" ry="19" transform="rotate(-16 50 170)" fill="${M}" stroke="${dk}" stroke-width="2"/><ellipse cx="150" cy="170" rx="32" ry="19" transform="rotate(16 150 170)" fill="${M}" stroke="${dk}" stroke-width="2"/>`; break;
+      case 'High collar': s += `<path d="M62,148 L68,128 Q100,142 132,128 L138,148 Q100,168 62,148 Z" fill="${M}" stroke="${dk}" stroke-width="2" stroke-linejoin="round"/>`; break;
+      case 'Cloak': s += `<path d="M26,200 L58,154 Q100,180 142,154 L174,200 Z" fill="${mix(A, BG0, 0.45)}"/><path d="M58,154 Q100,180 142,154" fill="none" stroke="${M}" stroke-width="3"/><circle cx="100" cy="166" r="6" fill="${M}" stroke="${dk}" stroke-width="1.5"/>`; break;
+    }
+    s += glyph(p.emblem.name, 100, 186, 8, c);
+
+    if (p.gear.name === 'Fins') {
+      s += `<path d="M52,92 L22,74 L30,96 L18,110 L52,112 Z" fill="${M}" stroke="${dk}" stroke-width="2" stroke-linejoin="round"/><path d="M148,92 L178,74 L170,96 L182,110 L148,112 Z" fill="${M}" stroke="${dk}" stroke-width="2" stroke-linejoin="round"/>`;
+    }
+    if (p.helmet.name === 'Crested') {
+      s += `<path d="M88,54 C88,26 102,10 116,12 C110,24 112,40 112,54 Z" fill="${mix(A, BG0, 0.12)}" stroke="${dk}" stroke-width="2" stroke-linejoin="round"/>`;
+    }
+    switch (p.helmet.name) {
+      case 'Dome':
+      case 'Crested': s += `<circle cx="100" cy="92" r="54" fill="${M}" stroke="${dk}" stroke-width="2"/>`; break;
+      case 'Faceted': s += `<path d="M100,36 L148,58 L156,104 L132,144 L68,144 L44,104 L52,58 Z" fill="${M}" stroke="${dk}" stroke-width="2" stroke-linejoin="round"/><path d="M100,36 L52,58 L60,72 L100,54 Z" fill="#ffffff" fill-opacity=".18"/><path d="M100,36 L148,58 L140,72 L100,54 Z" fill="#ffffff" fill-opacity=".07"/>`; break;
+      case 'Scout': s += `<rect x="36" y="80" width="16" height="32" rx="6" fill="${MH}" stroke="${dk}" stroke-width="2"/><rect x="148" y="80" width="16" height="32" rx="6" fill="${MH}" stroke="${dk}" stroke-width="2"/><rect x="46" y="40" width="108" height="106" rx="42" fill="${M}" stroke="${dk}" stroke-width="2"/>`; break;
+    }
+    if (p.helmet.name !== 'Faceted') s += `<path d="M66,60 Q100,34 134,60" fill="none" stroke="#ffffff" stroke-opacity=".32" stroke-width="3" stroke-linecap="round"/>`;
+    s += `<path d="M86,133 H114 M90,139 H110" stroke="${dk}" stroke-width="2.5" stroke-linecap="round"/>`;
+
+    const vs = `fill="${V}" stroke="${dk}" stroke-width="3" stroke-linejoin="round"`;
+    const hl = `fill="none" stroke="#ffffff" stroke-opacity=".55" stroke-width="3" stroke-linecap="round"`;
+    switch (p.visor.name) {
+      case 'Wraparound': s += `<path d="M56,80 Q100,62 144,80 L140,112 Q100,128 60,112 Z" ${vs}/><path d="M66,86 Q86,74 108,74" ${hl}/>`; break;
+      case 'T-slot': s += `<path d="M58,78 H142 V96 H110 V126 H90 V96 H58 Z" ${vs}/><path d="M64,85 H96" ${hl}/>`; break;
+      case 'Twin lens': s += `<rect x="90" y="92" width="20" height="8" fill="${dk}"/><circle cx="78" cy="96" r="17" ${vs}/><circle cx="122" cy="96" r="17" ${vs}/><path d="M68,91 Q71,84 80,83" ${hl}/><path d="M112,91 Q115,84 124,83" ${hl}/>`; break;
+      case 'Slit': s += `<rect x="54" y="88" width="92" height="16" rx="8" ${vs}/><path d="M63,94.5 H98" ${hl}/>`; break;
+    }
+    switch (p.gear.name) {
+      case 'Antenna': s += `<path d="M134,54 L152,22" stroke="${M}" stroke-width="3" stroke-linecap="round"/><circle cx="153" cy="20" r="9" fill="${A}" fill-opacity=".25"/><circle cx="153" cy="20" r="5" fill="${A}"/>`; break;
+      case 'Lamp': s += `<rect x="134" y="62" width="20" height="12" rx="4" fill="${MH}" stroke="${dk}" stroke-width="1.5"/><circle cx="152" cy="68" r="10" fill="${mix(A, '#ffffff', 0.5)}" fill-opacity=".28"/><circle cx="152" cy="68" r="3.5" fill="#ffffff"/>`; break;
+      case 'Halo': s += `<ellipse cx="100" cy="28" rx="34" ry="8" fill="none" stroke="${mix(A, '#ffffff', 0.6)}" stroke-opacity=".35" stroke-width="9"/><ellipse cx="100" cy="28" rx="34" ry="8" fill="none" stroke="#ffffff" stroke-width="2.5"/>`; break;
+    }
+    return s;
+  }
+
+  /* ---------- Direction B: Hunter ---------- */
+  const SKINS = ['#f6d7c3', '#eabf9f', '#d49a6a', '#b07448', '#8a5532', '#5c3720'];
+  function drawHunter(p, c) {
+    const u = c.uid, A = c.accent, M = `url(#m${u})`;
+    const dk = mix(c.tier.dark, '#000000', 0.4);
+    const skin = swatch(p.skin), shade = mix(skin, '#3a1f12', 0.28);
+    const hairBase = swatch(p.hairColor);
+    const hair = p.hairColor.name === 'Dyed' ? mix(hairBase, '#000000', 0.12) : hairBase;
+    const hairHi = mix(hair, '#ffffff', 0.22), brow = mix(hair, '#000000', 0.15);
+    const lip = mix(skin, '#2a0f0a', 0.6), eyeInk = '#1b1411', white = '#f4efe9';
+    const outfit = p.outfit.name, hairStyle = p.hair.name;
+    let s = `<rect width="200" height="200" fill="url(#bg${u})"/><circle cx="100" cy="92" r="66" fill="${A}" fill-opacity=".1"/>`;
+
+    if (hairStyle === 'Bun') s += `<circle cx="100" cy="34" r="16" fill="${hair}"/><path d="M88,46 Q100,52 112,46" stroke="${A}" stroke-width="3" fill="none"/>`;
+
+    // body
+    const bodyFill = { Hoodie: mix(A, BG0, 0.55), Jacket: '#232933', Scarf: '#2a303a', 'Armor collar': '#232933' }[outfit];
+    s += `<path d="M24,200 C26,170 54,154 100,154 C146,154 174,170 176,200 Z" fill="${bodyFill}"/>`;
+    if (outfit === 'Hoodie') s += `<path d="M58,164 Q62,132 100,130 Q138,132 142,164 Z" fill="${mix(A, BG0, 0.68)}"/>`;
+    if (hairStyle === 'Long') s += `<path d="M56,90 C50,48 74,36 100,36 C126,36 150,48 144,90 L148,150 C140,158 128,156 122,148 L122,112 L78,112 L78,148 C72,156 60,158 52,150 Z" fill="${mix(hair, '#000000', 0.15)}"/>`;
+    s += `<rect x="86" y="124" width="28" height="36" rx="6" fill="${shade}"/>`;
+    switch (outfit) {
+      case 'Hoodie': s += `<path d="M78,152 Q100,170 122,152" fill="none" stroke="${mix(A, BG0, 0.35)}" stroke-width="6" stroke-linecap="round"/><path d="M92,166 L90,188 M108,166 L110,188" stroke="${mix(A, '#ffffff', 0.5)}" stroke-width="2" stroke-linecap="round"/><circle cx="90" cy="189" r="2.4" fill="${M}"/><circle cx="110" cy="189" r="2.4" fill="${M}"/>`; break;
+      case 'Jacket': s += `<path d="M84,154 L100,184 L116,154 Z" fill="${mix(A, BG0, 0.25)}"/><path d="M84,154 L100,184 L90,200 L64,168 Z" fill="#171b22"/><path d="M116,154 L100,184 L110,200 L136,168 Z" fill="#171b22"/>`; break;
+      case 'Scarf': s += `<path d="M64,148 Q100,170 136,148 L140,164 Q100,190 60,164 Z" fill="${A}"/><path d="M70,160 Q100,178 130,160" fill="none" stroke="${mix(A, BG0, 0.3)}" stroke-width="1.5"/><path d="M108,170 L122,198 L102,198 Z" fill="${mix(A, BG0, 0.3)}"/>`; break;
+      case 'Armor collar': s += `<path d="M56,176 Q100,138 144,176 L148,190 Q100,158 52,190 Z" fill="${M}" stroke="${dk}" stroke-width="2" stroke-linejoin="round"/><circle cx="100" cy="166" r="5" fill="${A}" stroke="${dk}" stroke-width="1.5"/>`; break;
+    }
+
+    // head
+    s += `<ellipse cx="62" cy="100" rx="7" ry="11" fill="${shade}"/><ellipse cx="138" cy="100" rx="7" ry="11" fill="${shade}"/>`;
+    switch (p.face.name) {
+      case 'Oval': s += `<ellipse cx="100" cy="96" rx="38" ry="46" fill="${skin}"/>`; break;
+      case 'Round': s += `<ellipse cx="100" cy="98" rx="41" ry="42" fill="${skin}"/>`; break;
+      case 'Angular': s += `<path d="M62,84 Q62,50 100,50 Q138,50 138,84 L136,108 Q130,132 100,142 Q70,132 64,108 Z" fill="${skin}"/>`; break;
+    }
+    s += `<circle cx="79" cy="113" r="7" fill="#e0707a" fill-opacity=".14"/><circle cx="121" cy="113" r="7" fill="#e0707a" fill-opacity=".14"/>`;
+    s += `<path d="M100,99 L96.5,110 Q100,112.5 103.5,110.5" fill="none" stroke="${shade}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>`;
+
+    switch (p.mouth.name) {
+      case 'Smile': s += `<path d="M90,119 Q100,127 110,119" fill="none" stroke="${lip}" stroke-width="3" stroke-linecap="round"/>`; break;
+      case 'Neutral': s += `<path d="M92,121 H108" stroke="${lip}" stroke-width="3" stroke-linecap="round"/>`; break;
+      case 'Smirk': s += `<path d="M91,122 Q103,124 110,117" fill="none" stroke="${lip}" stroke-width="3" stroke-linecap="round"/>`; break;
+      case 'Grin': s += `<path d="M89,118 Q100,132 111,118 Z" fill="#3a1712" stroke="${lip}" stroke-width="1.5" stroke-linejoin="round"/><path d="M91,119.5 Q100,123 109,119.5" fill="none" stroke="#f6f1ea" stroke-width="2.4"/>`; break;
+    }
+
+    [84, 116].forEach(x => {
+      const d = x - 84;
+      switch (p.eyes.name) {
+        case 'Almond': s += `<path d="M${76 + d},99 Q${84 + d},92 ${92 + d},99 Q${84 + d},104 ${76 + d},99 Z" fill="${white}"/><circle cx="${84 + d}" cy="98.6" r="3.3" fill="${eyeInk}"/><circle cx="${85.2 + d}" cy="97.4" r="1" fill="#ffffff"/><path d="M${76 + d},99 Q${84 + d},92 ${92 + d},99" fill="none" stroke="${eyeInk}" stroke-width="1.8" stroke-linecap="round"/>`; break;
+        case 'Bright': s += `<circle cx="${84 + d}" cy="99" r="5.2" fill="${white}"/><circle cx="${84 + d}" cy="99.5" r="3.4" fill="${eyeInk}"/><circle cx="${85.3 + d}" cy="98" r="1.1" fill="#ffffff"/>`; break;
+        case 'Calm': s += `<path d="M${76 + d},99.5 Q${84 + d},95 ${92 + d},99.5 Q${84 + d},103.5 ${76 + d},99.5 Z" fill="${white}"/><circle cx="${84 + d}" cy="100" r="2.8" fill="${eyeInk}"/><path d="M${75 + d},99 Q${84 + d},94.5 ${93 + d},99" fill="none" stroke="${eyeInk}" stroke-width="2.4" stroke-linecap="round"/>`; break;
+      }
+    });
+    s += `<path d="M76,87 Q84,82.5 92,85.5" fill="none" stroke="${brow}" stroke-width="3.5" stroke-linecap="round"/><path d="M108,85.5 Q116,82.5 124,87" fill="none" stroke="${brow}" stroke-width="3.5" stroke-linecap="round"/>`;
+
+    // front hair
+    const crop = `<path d="M60,96 C56,58 74,42 100,42 C126,42 144,58 140,96 C136,74 124,62 100,62 C76,62 64,74 60,96 Z" fill="${hair}"/>`;
+    const shine = `<path d="M78,54 Q90,48 104,48" fill="none" stroke="${hairHi}" stroke-opacity=".7" stroke-width="3" stroke-linecap="round"/>`;
+    switch (hairStyle) {
+      case 'Crop':
+      case 'Bun': s += crop + shine; break;
+      case 'Swept': s += `<path d="M58,100 C52,56 76,38 104,40 C132,42 146,62 142,94 C132,70 112,62 92,72 C78,80 66,88 58,100 Z" fill="${hair}"/>` + shine; break;
+      case 'Long': s += `<path d="M60,96 C56,56 76,40 100,42 C124,40 144,56 140,96 C134,70 118,58 102,58 C98,66 84,72 60,96 Z" fill="${hair}"/>` + shine; break;
+      case 'Buzz': s += `<path d="M62,90 C60,60 78,48 100,48 C122,48 140,60 138,90 C132,72 118,64 100,64 C82,64 68,72 62,90 Z" fill="${hair}" fill-opacity=".72"/>`; break;
+    }
+
+    switch (p.extra.name) {
+      case 'Headset': s += `<path d="M60,94 C56,40 144,40 140,94" fill="none" stroke="#1a1f27" stroke-width="6"/><rect x="50" y="86" width="16" height="26" rx="6" fill="${M}" stroke="${dk}" stroke-width="1.5"/><rect x="134" y="86" width="16" height="26" rx="6" fill="${M}" stroke="${dk}" stroke-width="1.5"/><path d="M58,110 Q64,128 86,127" fill="none" stroke="#1a1f27" stroke-width="3" stroke-linecap="round"/><circle cx="88" cy="127" r="4" fill="${A}"/>`; break;
+      case 'Glasses': s += `<rect x="73" y="91" width="22" height="15" rx="5" fill="${A}" fill-opacity=".16" stroke="#14171d" stroke-width="3"/><rect x="105" y="91" width="22" height="15" rx="5" fill="${A}" fill-opacity=".16" stroke="#14171d" stroke-width="3"/><path d="M95,96 Q100,93 105,96" fill="none" stroke="#14171d" stroke-width="2.5"/>`; break;
+      case 'Visor band': s += `<path d="M60,90 H140 L137,108 H63 Z" fill="${A}" fill-opacity=".6" stroke="${M}" stroke-width="2.5" stroke-linejoin="round"/><path d="M68,95 H100" stroke="#ffffff" stroke-opacity=".6" stroke-width="2.5" stroke-linecap="round"/>`; break;
+    }
+    s += glyph(p.pin.name, 142, 182, 7, c);
+    return s;
+  }
+
+  /* ---------- Direction C: Crest ---------- */
+  const SHIELDS = {
+    Heater: 'M52,44 H148 V96 Q148,140 100,162 Q52,140 52,96 Z',
+    Round: 'M42,100 A58,58 0 1 0 158,100 A58,58 0 1 0 42,100 Z',
+    Kite: 'M100,36 Q148,44 148,84 Q142,128 100,166 Q58,128 52,84 Q52,44 100,36 Z',
+    Hexagon: 'M100,38 L152,68 L152,130 L100,160 L48,130 L48,68 Z',
+    Banner: 'M54,40 H146 V154 L100,134 L54,154 Z',
+  };
+  function laurelSide(c, dk) {
+    const M = `url(#m${c.uid})`, R = 70, cy = 104, a0 = 110, step = 16, n = 8;
+    const pt = deg => [100 + R * Math.cos(deg * Math.PI / 180), cy + R * Math.sin(deg * Math.PI / 180)];
+    const [sx, sy] = pt(a0), [ex, ey] = pt(a0 + step * (n - 1));
+    let s = `<path d="M${f1(sx)},${f1(sy)} A${R},${R} 0 0 1 ${f1(ex)},${f1(ey)}" fill="none" stroke="${M}" stroke-width="3" stroke-linecap="round"/>`;
+    for (let i = 0; i < n; i++) {
+      const deg = a0 + i * step, [x, y] = pt(deg);
+      s += `<ellipse cx="${f1(x)}" cy="${f1(y)}" rx="10" ry="4.6" transform="rotate(${f1(deg + 118)} ${f1(x)} ${f1(y)})" fill="${M}" stroke="${dk}" stroke-width="1"/>`;
+    }
+    return s;
+  }
+  function drawCrest(p, c) {
+    const u = c.uid, A = c.accent, M = `url(#m${u})`, dk = mix(c.tier.dark, '#000000', 0.45);
+    const fieldA = mix(A, BG0, 0.42), fieldB = swatch(p.tincture), shape = SHIELDS[p.shield.name];
+    const mirror = inner => `${inner}<g transform="matrix(-1 0 0 1 200 0)">${inner}</g>`;
+    let s = `<rect width="200" height="200" fill="url(#bg${u})"/>`;
+
+    switch (p.ornament.name) {
+      case 'Rays':
+        for (let i = 0; i < 16; i++) {
+          const a1 = (i * 22.5 - 4) * Math.PI / 180, a2 = (i * 22.5 + 4) * Math.PI / 180;
+          s += `<path d="M100,100 L${f1(100 + 130 * Math.cos(a1))},${f1(100 + 130 * Math.sin(a1))} L${f1(100 + 130 * Math.cos(a2))},${f1(100 + 130 * Math.sin(a2))} Z" fill="${c.tier.light}" fill-opacity=".16"/>`;
+        }
+        break;
+      case 'Laurels': s += mirror(laurelSide(c, dk)); break;
+      case 'Wings': s += mirror(`<path d="M52,78 C36,64 20,58 6,58 C14,66 18,72 20,78 C10,78 5,82 2,87 C12,88 18,92 22,96 C14,98 10,104 8,109 C20,109 34,107 52,104 Z" fill="${M}" stroke="${dk}" stroke-width="1.5" stroke-linejoin="round"/>`); break;
+    }
+
+    let division = '';
+    switch (p.field.name) {
+      case 'Split': division = `<rect x="100" y="0" width="100" height="200" fill="${fieldB}"/>`; break;
+      case 'Chevron': division = `<path d="M30,170 L100,118 L170,170 L170,196 L100,144 L30,196 Z" fill="${fieldB}"/>`; break;
+      case 'Quartered': division = `<rect x="100" y="0" width="100" height="100" fill="${fieldB}"/><rect x="0" y="100" width="100" height="100" fill="${fieldB}"/>`; break;
+    }
+    s += `<clipPath id="f${u}"><path d="${shape}"/></clipPath>`;
+    s += `<g clip-path="url(#f${u})"><rect width="200" height="200" fill="${fieldA}"/>${division}<rect width="200" height="96" fill="#ffffff" fill-opacity=".05"/></g>`;
+    s += `<path d="${shape}" fill="none" stroke="${M}" stroke-width="8" stroke-linejoin="round"/><path d="${shape}" fill="none" stroke="#ffffff" stroke-opacity=".35" stroke-width="1.5" stroke-linejoin="round"/>`;
+
+    const sym = `fill="${M}" stroke="${dk}" stroke-width="2" stroke-linejoin="round"`;
+    switch (p.symbol.name) {
+      case 'Trophy': s += `<path d="M76,70 H66 Q64,90 80,94" fill="none" stroke="${M}" stroke-width="5" stroke-linecap="round"/><path d="M124,70 H134 Q136,90 120,94" fill="none" stroke="${M}" stroke-width="5" stroke-linecap="round"/><path d="M76,64 H124 V80 Q124,106 100,110 Q76,106 76,80 Z" ${sym}/><path d="M95,110 H105 V122 H95 Z" ${sym}/><path d="M84,122 H116 V130 H84 Z" ${sym}/>`; break;
+      case 'Star': s += `<path d="${starPath(100, 98, 36, 15, 5)}" ${sym}/>`; break;
+      case 'Gem': s += `<path d="M70,84 L84,64 H116 L130,84 L100,130 Z" fill="url(#v${u})" stroke="${dk}" stroke-width="2" stroke-linejoin="round"/><path d="M70,84 H130 M84,64 L92,84 L100,130 L108,84 L116,64" fill="none" stroke="${dk}" stroke-opacity=".55" stroke-width="1.5"/><path d="M86,70 L82,80" stroke="#ffffff" stroke-opacity=".7" stroke-width="2.5" stroke-linecap="round"/>`; break;
+      case 'Compass': s += `<circle cx="100" cy="98" r="30" fill="none" stroke="${M}" stroke-width="5"/><path d="${starPath(100, 98, 32, 7, 4)}" ${sym}/><circle cx="100" cy="98" r="4" fill="${A}"/>`; break;
+      case 'Flame': s += `<path d="M100,58 C114,74 128,88 124,108 C121,124 110,132 100,132 C90,132 79,124 76,108 C73,92 86,82 90,70 C94,82 98,86 102,88 C102,78 100,68 100,58 Z" ${sym}/><path d="M100,94 C108,104 112,112 110,120 C108,126 104,128 100,128 C96,128 91,125 90,119 C89,111 96,104 100,94 Z" fill="${A}"/>`; break;
+      case 'Crown': s += `<path d="M68,124 L72,74 L88,96 L100,66 L112,96 L128,74 L132,124 Z" ${sym}/><path d="M69,113 H131" stroke="${dk}" stroke-width="2"/><circle cx="72" cy="74" r="4.5" fill="${A}"/><circle cx="100" cy="66" r="5" fill="${A}"/><circle cx="128" cy="74" r="4.5" fill="${A}"/><circle cx="100" cy="119" r="3.5" fill="${A}"/>`; break;
+    }
+    return s;
+  }
+
+  /* ---------- directions ---------- */
+  const DIRS = {
+    explorer: {
+      letter: 'A', name: 'Explorer', draw: drawExplorer,
+      pitch: 'A helmeted Pursuer. Every unlock has an obvious place to go: helmet, visor, suit and gear.',
+      slots: [
+        { key: 'helmet', code: 'h', label: 'Helmet', opts: [o('Dome'), o('Faceted', 3), o('Scout'), o('Crested', 'any badge at Gold tier')] },
+        { key: 'visor', code: 'v', label: 'Visor', opts: [o('Wraparound'), o('T-slot', 2), o('Twin lens', 'Exploration level 10'), o('Slit', 5)] },
+        { key: 'suit', code: 's', label: 'Suit', opts: [o('Field suit'), o('Pauldrons', 'Combat level 10'), o('High collar', 6), o('Cloak', '50 platinums')] },
+        { key: 'emblem', code: 'e', label: 'Emblem', opts: [o('Diamond'), o('Chevron'), o('Ring', 4), o('Star', 'an Ultra Rare platinum')] },
+        { key: 'gear', code: 'g', label: 'Gear', opts: [o('None'), o('Antenna', 1), o('Lamp', '10 Contracts completed'), o('Fins', 7), o('Halo', 9)] },
+        { key: 'backdrop', code: 'b', label: 'Backdrop', opts: [o('Plain'), o('Horizon', 2), o('Grid', 'Mind level 10'), o('Burst', 8)] },
+      ],
+    },
+    hunter: {
+      letter: 'B', name: 'Hunter', draw: drawHunter,
+      pitch: 'A face and hair builder, the closest to an Xbox-style avatar. The most personal, and the most parts to draw.',
+      slots: [
+        { key: 'face', code: 'f', label: 'Face', opts: [o('Oval'), o('Round'), o('Angular')] },
+        { key: 'skin', code: 'k', label: 'Skin', opts: SKINS.map((sw, i) => o('Tone ' + (i + 1), undefined, sw)) },
+        { key: 'hair', code: 'h', label: 'Hair', opts: [o('Crop'), o('Swept'), o('Long'), o('Bun'), o('Buzz')] },
+        { key: 'hairColor', code: 'c', label: 'Hair color', opts: [o('Black', undefined, '#1f1b1b'), o('Brown', undefined, '#4a2f20'), o('Auburn', undefined, '#9a5a2c'), o('Blonde', undefined, '#dcbd78'), o('Silver', undefined, '#c4cad3'), o('Dyed', undefined, 'accent')] },
+        { key: 'eyes', code: 'e', label: 'Eyes', opts: [o('Almond'), o('Bright'), o('Calm')] },
+        { key: 'mouth', code: 'm', label: 'Mouth', opts: [o('Smile'), o('Neutral'), o('Smirk'), o('Grin')] },
+        { key: 'outfit', code: 'o', label: 'Outfit', opts: [o('Hoodie'), o('Jacket', 2), o('Scarf', 'Heart level 10'), o('Armor collar', 6)] },
+        { key: 'extra', code: 'x', label: 'Extra', opts: [o('None'), o('Headset', 1), o('Glasses'), o('Visor band', 'Finesse level 10')] },
+        { key: 'pin', code: 'p', label: 'Pin', opts: [o('Trophy'), o('Star', 3), o('Gem', 7), o('None')] },
+      ],
+    },
+    crest: {
+      letter: 'C', name: 'Crest', draw: drawCrest,
+      pitch: 'A heraldic sigil. Abstract, the easiest to make look premium, and already sketched in the Frontier notes.',
+      slots: [
+        { key: 'shield', code: 's', label: 'Shield', opts: [o('Heater'), o('Round'), o('Kite', 3), o('Hexagon', 5), o('Banner', 'any badge at Platinum tier')] },
+        { key: 'field', code: 'f', label: 'Field', opts: [o('Plain'), o('Split'), o('Chevron', 2), o('Quartered', '25 platinums')] },
+        { key: 'tincture', code: 't', label: '2nd color', opts: [o('Night', undefined, '#121720'), o('Steel', undefined, '#4b5361'), o('Deep', undefined, 'deep'), o('Ivory', 3, '#e6e0cf')] },
+        { key: 'symbol', code: 'y', label: 'Symbol', opts: [o('Trophy'), o('Star'), o('Gem', 4), o('Compass', 'Exploration level 20'), o('Flame', 'Combat level 20'), o('Crown', 10)] },
+        { key: 'ornament', code: 'o', label: 'Ornament', opts: [o('None'), o('Rays', 4), o('Laurels', 7), o('Wings', 9)] },
+      ],
+    },
+  };
+
+  /* ---------- render ---------- */
+  let UID = 0;
+  function renderAvatar(id, picks, ti) {
+    const t = TIERS[ti], u = ++UID, c = { uid: u, tier: t, ti, accent: accent() };
+    const inner = DIRS[id].draw(picks, c);
+    const sheen = ti === 4 ? `<g transform="skewX(-18)"><rect class="av-sheen" x="-120" y="-10" width="70" height="220" fill="url(#sh${u})"/></g>` : '';
+    const frameStroke = ti >= 2 ? `url(#m${u})` : t.edge;
+    const topLight = ti >= 1 ? `<path d="M22,7.6 H178" stroke="#ffffff" stroke-opacity="${ti >= 3 ? 0.55 : 0.3}" stroke-width="1.5" stroke-linecap="round"/>` : '';
+    let notches = '';
+    if (ti >= 2) {
+      const sz = ti === 4 ? 6.5 : 5.2, fill = ti === 4 ? '#ffffff' : ti === 3 ? t.light : t.mid;
+      [[10.1, 10.1], [189.9, 10.1], [10.1, 189.9], [189.9, 189.9]].forEach(([x, y]) => {
+        if (ti === 4) notches += `<path d="M${x},${y - 12} L${x + 12},${y} L${x},${y + 12} L${x - 12},${y} Z" fill="${t.mid}" fill-opacity=".35"/>`;
+        notches += `<path d="M${x},${y - sz} L${x + sz},${y} L${x},${y + sz} L${x - sz},${y} Z" fill="${fill}" stroke="${t.dark}" stroke-width="1"/>`;
+      });
+    }
+    const label = `${DIRS[id].name} avatar, ${t.name} finish`;
+    return `<svg viewBox="0 0 200 200" role="img" aria-label="${label}">${defs(c)}<g clip-path="url(#c${u})"><rect width="200" height="200" fill="${BG0}"/>${inner}${sheen}</g><rect x="6" y="6" width="188" height="188" rx="14" fill="none" stroke="${frameStroke}" stroke-width="${ti >= 2 ? 5 : 4}"/>${topLight}${notches}</svg>`;
+  }
+
+  const resolved = id => {
+    const out = {};
+    DIRS[id].slots.forEach(s => { out[s.key] = s.opts[state.picks[id][s.key]]; });
+    return out;
+  };
+  const isLocked = opt => typeof opt.req === 'number' && opt.req > state.rank;
+  function srcInfo(opt) {
+    if (opt.req === undefined) return { cls: '', html: 'Free' };
+    if (typeof opt.req === 'number') {
+      return isLocked(opt)
+        ? { cls: 'is-locked', html: `${ICON.lock}Locked · reach ${RANKS[opt.req]}`, locked: true }
+        : { cls: 'is-earned', html: `Unlocked at ${RANKS[opt.req]}` };
+    }
+    return { cls: 'is-example', html: `From ${opt.req}` };
+  }
+  const recipe = id => `pp-avatar/v1 ${id} ${DIRS[id].slots.map(s => s.code + state.picks[id][s.key]).join('.')} ${state.disc}`;
+  const SIZES = [['Profile', 72], ['Card', 44], ['Nav', 28]];
+
+  const cards = {};
+  function buildCard(id) {
+    const d = DIRS[id], el = document.createElement('article');
+    el.className = 'panel dir';
+    el.dataset.dir = id;
+    el.innerHTML = `
+      <header class="dir-head"><div class="eyebrow">Direction ${d.letter}</div><h2>${d.name}</h2><p>${d.pitch}</p></header>
+      <div class="dir-visual">
+        <div class="stage"><div class="av av--lg" data-role="main"></div></div>
+        <div class="stage-meta"><span class="tier-chip" data-role="finish"></span><button type="button" class="btn btn--sm" data-random id="rand-${id}">${ICON.dice}Randomize</button></div>
+        <div class="sizes" data-role="sizes"></div>
+      </div>
+      <div class="dir-parts">
+        <ul class="slots">${d.slots.map(s => `
+          <li class="slot" data-slot="${s.key}">
+            <span class="slot-label">${s.label}</span>
+            <button type="button" class="step" data-step="-1" id="${id}-${s.key}-prev" aria-label="Previous ${s.label.toLowerCase()}">${ICON.left}</button>
+            <span class="slot-val"><span class="slot-name"></span><span class="slot-src"></span></span>
+            <button type="button" class="step" data-step="1" id="${id}-${s.key}-next" aria-label="Next ${s.label.toLowerCase()}">${ICON.right}</button>
+          </li>`).join('')}
+        </ul>
+        <p class="lock-note" data-role="locknote" hidden></p>
+        <div class="recipe"><code data-role="recipe"></code><button type="button" class="btn btn--sm" data-copy id="copy-${id}">Copy</button></div>
+        <p class="recipe-hint">Saved as parts plus a version. The finish comes from your live rank.</p>
+      </div>`;
+    return el;
+  }
+
+  function updateCard(id) {
+    const el = cards[id], d = DIRS[id], ti = TIER_OF[state.rank], p = resolved(id);
+    const main = el.querySelector('[data-role=main]');
+    main.className = 'av av--lg t' + ti;
+    main.innerHTML = renderAvatar(id, p, ti);
+    el.querySelector('[data-role=finish]').textContent = `${TIERS[ti].name} finish`;
+    el.querySelector('[data-role=sizes]').innerHTML = SIZES.map(([label, px]) =>
+      `<div class="size"><div class="av t${ti}" style="--avs:${px}px;width:${px}px;height:${px}px">${renderAvatar(id, p, ti)}</div><span>${label} ${px}</span></div>`).join('');
+    let locked = 0;
+    d.slots.forEach(s => {
+      const row = el.querySelector(`[data-slot="${s.key}"]`), opt = p[s.key], sw = swatch(opt), info = srcInfo(opt);
+      row.querySelector('.slot-name').innerHTML = (sw ? `<i style="--sw:${sw}"></i>` : '') + opt.name;
+      const src = row.querySelector('.slot-src');
+      src.className = 'slot-src ' + info.cls;
+      src.innerHTML = info.html;
+      if (info.locked) locked++;
+    });
+    const note = el.querySelector('[data-role=locknote]');
+    note.hidden = !locked;
+    note.innerHTML = locked ? `${ICON.lock}<span>Previewing ${locked} locked part${locked > 1 ? 's' : ''}. Randomize only rolls parts you have.</span>` : '';
+    el.querySelector('[data-role=recipe]').textContent = recipe(id);
+  }
+
+  const ladderEl = document.getElementById('ladder');
+  function updateLadder() {
+    const cur = TIER_OF[state.rank], p = resolved(state.ladder);
+    ladderEl.innerHTML = TIERS.map((t, i) => `
+      <div class="tier${i === cur ? ' is-current' : ''}">
+        <div class="av t${i}">${renderAvatar(state.ladder, p, i)}</div>
+        <div class="tier-name">${t.name}</div>
+        <div class="tier-ranks">${RANKS.filter((_, r) => TIER_OF[r] === i).join(' · ')}</div>
+        ${i === cur ? '<div class="tier-now">Current</div>' : ''}
+      </div>`).join('');
+    document.querySelectorAll('#ladder-seg button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.ladder === state.ladder)));
+  }
+
+  function updateControls() {
+    const ti = TIER_OF[state.rank];
+    document.getElementById('rank-name').textContent = RANKS[state.rank];
+    document.getElementById('rank-tier').textContent = `${TIERS[ti].name} finish`;
+    document.documentElement.style.setProperty('--acc', accent());
+  }
+  function renderAll() {
+    updateControls();
+    Object.keys(DIRS).forEach(updateCard);
+    updateLadder();
+  }
+
+  function randomize(id) {
+    DIRS[id].slots.forEach(s => {
+      const pool = s.opts.map((opt, i) => i).filter(i => !isLocked(s.opts[i]));
+      state.picks[id][s.key] = pool[Math.floor(Math.random() * pool.length)];
+    });
+  }
+
+  /* ---------- mount ---------- */
+  const dirsEl = document.getElementById('dirs');
+  Object.keys(DIRS).forEach(id => { cards[id] = buildCard(id); dirsEl.appendChild(cards[id]); });
+
+  document.getElementById('disc-chips').innerHTML = Object.entries(DISC).map(([k, v]) =>
+    `<label class="chip" style="--c:${v.c}"><input type="radio" name="disc" id="disc-${k}" value="${k}"${k === state.disc ? ' checked' : ''}><span><i></i>${v.name}</span></label>`).join('');
+  document.getElementById('ladder-seg').innerHTML = Object.entries(DIRS).map(([k, v]) =>
+    `<button type="button" data-ladder="${k}" id="ladder-${k}" aria-pressed="false">${v.name}</button>`).join('');
+  document.getElementById('rand-all').innerHTML = `${ICON.dice}Randomize all`;
+
+  document.getElementById('rank').addEventListener('input', e => { state.rank = Number(e.target.value); renderAll(); });
+  document.getElementById('disc-chips').addEventListener('change', e => { if (e.target.name === 'disc') { state.disc = e.target.value; renderAll(); } });
+  document.getElementById('rand-all').addEventListener('click', () => { Object.keys(DIRS).forEach(randomize); renderAll(); });
+  document.getElementById('ladder-seg').addEventListener('click', e => {
+    const b = e.target.closest('[data-ladder]');
+    if (b) { state.ladder = b.dataset.ladder; updateLadder(); }
+  });
+
+  dirsEl.addEventListener('click', e => {
+    const card = e.target.closest('.dir');
+    if (!card) return;
+    const id = card.dataset.dir;
+    const step = e.target.closest('[data-step]');
+    if (step) {
+      const key = step.closest('.slot').dataset.slot;
+      const slot = DIRS[id].slots.find(s => s.key === key), n = slot.opts.length;
+      state.picks[id][key] = (state.picks[id][key] + Number(step.dataset.step) + n) % n;
+      updateCard(id);
+      if (state.ladder === id) updateLadder();
+      return;
+    }
+    if (e.target.closest('[data-random]')) {
+      randomize(id);
+      updateCard(id);
+      if (state.ladder === id) updateLadder();
+      return;
+    }
+    const copyBtn = e.target.closest('[data-copy]');
+    if (copyBtn) {
+      const code = card.querySelector('[data-role=recipe]');
+      const done = () => { copyBtn.textContent = 'Copied'; setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1500); };
+      const fallback = () => {
+        const range = document.createRange();
+        range.selectNodeContents(code);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+        copyBtn.textContent = 'Selected';
+        setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1500);
+      };
+      try {
+        navigator.clipboard.writeText(code.textContent).then(done, fallback);
+      } catch (err) { fallback(); }
+    }
+  });
+
+  renderAll();
+})();
+</script>

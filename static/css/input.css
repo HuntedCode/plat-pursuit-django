@@ -2,6 +2,8 @@
 /* Tailwind scans the whole repo for class names. .github holds YAML (dependabot.yml's
    `[version-update:semver-major]`) that reads as an arbitrary property and adds a junk rule. */
 @source not "../../.github";
+/* Standalone design mockups (raw HTML/JS kept as a record) are not site templates; their inline CSS reads as junk utilities. */
+@source not "../../docs/design/pursuer-avatar/mockups";
 @import "./components/chips.css";
 @import "./components/buttons.css";
 @import "./components/chrome.css";

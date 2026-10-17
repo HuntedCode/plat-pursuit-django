@@ -1,0 +1,43 @@
+<!doctype html>
+<meta charset="utf-8">
+<style>
+body { margin: 0; background: #0b0f15; color: #aab; font: 13px system-ui; padding: 20px; }
+.grid { display: grid; grid-template-columns: repeat(4, 330px); gap: 16px; }
+.cell { background: #131a22; border-radius: 6px; padding: 70px 10px 10px; display: grid; justify-items: center; gap: 6px; }
+.cell svg { width: 300px; height: auto; overflow: visible; display: block; }
+.crop svg { width: 220px; }
+.tiny svg { width: 44px; }
+.fig-g { transform-box: fill-box; transform-origin: 50% 100%; }
+.idle, .shadow, .fx-trophy, .spark, .eyes { transform-box: fill-box; transform-origin: 50% 50%; }
+.head { transform-box: fill-box; transform-origin: 50% 100%; }
+.arm { transform-box: fill-box; transform-origin: 50% 0; }
+.arm-l { transform: rotate(18deg); }
+.arm-r { transform: rotate(-18deg); }
+.item, .cape { transform-box: fill-box; transform-origin: 50% 50%; }
+.cape { transform-origin: 50% 0; }
+.item { transform: rotate(18deg); }
+.cheer .arm-l { transform: rotate(115deg); }
+.cheer .arm-r { transform: rotate(-115deg); }
+.cheer .item { transform: rotate(115deg); }
+.cheer .jet { opacity: 1; }
+</style>
+<div class="grid" id="g"></div>
+<script src="figure.js"></script>
+<script>
+const base = { helmet: 'Dome', eyes: 'Bright', suit: 'Ranger', pack: 'None', boots: 'Trail boots', held: 'Lantern', topper: 'Antenna' };
+const D = Fig.DISC;
+const cells = [
+  ['Ranger · Warden · Exploration', base, 5, D.exploration.c],
+  ['Ranger cheer · trophy', { ...base, held: 'Trophy', eyes: 'Happy' }, 5, D.exploration.c, 'cheer'],
+  ['Ranger · Luminary · Combat', { ...base, boots: 'Jet boots', topper: 'Halo', held: 'Map' }, 9, D.combat.c],
+  ['Ranger · Newbie · Mind · Scout', { ...base, helmet: 'Scout', topper: 'None', held: 'None' }, 0, D.mind.c],
+  ['Field suit · Finesse · backpack', { ...base, suit: 'Field suit', pack: 'Backpack' }, 3, D.finesse.c],
+  ['Field suit cheer · jetpack', { ...base, suit: 'Field suit', pack: 'Jetpack', boots: 'Heavy boots', held: 'None', eyes: 'Happy' }, 7, D.heart.c, 'cheer'],
+];
+const g = document.getElementById('g');
+cells.forEach(([label, p, ti, acc, cls]) => {
+  g.insertAdjacentHTML('beforeend', `<div class="cell ${cls || ''}">${Fig.renderFull(p, Fig.TIER_OF[ti], acc, false)}<div>${label}</div></div>`);
+});
+g.insertAdjacentHTML('beforeend', `<div class="cell crop">${Fig.renderCrop(base, Fig.TIER_OF[5], D.exploration.c)}<div>Crop 220</div></div>`);
+g.insertAdjacentHTML('beforeend', `<div class="cell tiny">${Fig.renderCrop(base, Fig.TIER_OF[5], D.exploration.c)}<div>Crop 44</div></div>`);
+</script>
