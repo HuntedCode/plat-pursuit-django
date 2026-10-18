@@ -46,6 +46,14 @@ pytestmark = pytest.mark.django_db
 
 open_beta = override_settings(CHALLENGES_BETA_MEMBERS_ONLY=False)
 
+
+@pytest.fixture(autouse=True)
+def _beta_on():
+    """These tests cover the members-first gate, so it is ON here unless a test says `open_beta`. The
+    setting's own default has been off since the public release."""
+    with override_settings(CHALLENGES_BETA_MEMBERS_ONLY=True):
+        yield
+
 ROOT = Path(__file__).resolve().parents[2]
 
 _SEQ = {'n': 0}
@@ -972,6 +980,30 @@ def test_a_member_never_sees_the_beta_card(client):
     _hunter(client, premium=True)
 
     assert 'Challenges are in beta' not in client.get(reverse('my_challenges')).content.decode()
+
+
+def _staff(client):
+    profile = _hunter(client, premium=True)
+    profile.user.is_staff = True
+    profile.user.save(update_fields=['is_staff'])
+    return profile
+
+
+@open_beta
+def test_the_free_preview_is_inert_once_the_beta_is_over(client):
+    _staff(client)
+    resp = client.get(reverse('my_challenges') + '?preview=challenges-free')
+    body = resp.content.decode()
+    assert resp.status_code == 200 and 'Start' in body
+    assert 'Challenges are in beta' not in body and 'aria-disabled="true"' not in body
+
+
+@open_beta
+def test_the_free_preview_starts_a_run_once_the_beta_is_over(client):
+    # The release smoke check posts through the door; after the beta it must start the run, not refuse it.
+    profile = _staff(client)
+    client.post(reverse('challenge_start', args=[CHALLENGE_TYPE_AZ]) + '?preview=challenges-free')
+    assert Challenge.objects.filter(profile=profile, challenge_type=CHALLENGE_TYPE_AZ).exists()
 
 
 def test_the_beta_card_asks_for_support_last(client):

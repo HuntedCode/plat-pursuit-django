@@ -46,8 +46,17 @@ carry the reasoning; this is the order. No notification template to load: see ro
      the same deploy; nothing to migrate.)
 7. Tonight's nightly runs `process_challenges` after `process_contracts`; nothing to schedule.
 
-**Ending the beta later:** set `CHALLENGES_BETA_MEMBERS_ONLY=False` exactly and restart (row R). Everyone who saw
-the beta intro sees the live one once.
+**Ending the beta: the public release** (branch `feature/challenges/public-release`). The branch flips the
+setting's DEFAULT to off, so merging and deploying IS the release, and the What's New entry
+(`2026-10-challenges-open`) lands in the same deploy. No migrations, no commands.
+
+1. Before deploying: `CHALLENGES_BETA_MEMBERS_ONLY` is still ABSENT from the Render env (row R). If somebody set it
+   to `True`, delete it, or the beta carries on under the new default.
+2. If the release day is not 18 Oct, change the entry's `published` date in `core/whats_new.py` first (the modal
+   shows it).
+3. After deploying, as a free hunter: Start works on `/my-challenges/` with no beta card, the "How Challenges
+   work" intro opens once in its live version, the What's New dot lights for "Challenges are open to everyone",
+   and `/support/` shows six perk tiles including "Unlimited optimizer plans".
 
 ## Launch tasks (rebuild cutover)
 
@@ -211,7 +220,7 @@ These are already on the `main`/production path and can/should happen before cut
 | O | **Migration `challenges/0003_the_unclaimed_xp_index`** — adds one PARTIAL index to `challenges_challengeslot` for the My Pursuit "XP" nav pill, whose question is "does this hunter have Job XP waiting to be claimed?" (completed square, `xp_redeemed_at IS NULL`). **No backfill, no command** — listed because an index build is a lock event and row 14 is the precedent for recording one rather than discovering it. Django does NOT emit `CONCURRENTLY`, so the build takes a SHARE lock and blocks writes to the table for its duration. That duration is nil here: `challenges_challengeslot` was created by `0001_initial` on this same branch, so it is EMPTY in prod on first deploy and the partial index carries only rows in flight thereafter. Ships as generated, no action. | (auto, on `migrate`) | With the Challenges rewards deploy | ☐ |
 | P | **Migrations `challenges/0004`-`0009` (Plat Calendar)** -- `0004` creates `challenges_calendarday` (unique `(challenge, month, day)` plus three checks) and drops/re-adds `challenge_type_valid` to admit `calendar`; `0006` adds `calendarday_day_within_month`, which forbids 29 February by design (`calendar_fill._fold` folds it into the 28th). `0005`/`0007`/`0008`/`0009` are development churn that nets out to three columns: `calendar_plats_seen`, `plat_count` and `opening_seen_at`. Every table involved is created by `0001` in the same deploy, so they are EMPTY: no lock duration and no backfill. **No Calendar sweep is needed:** prod has no runs, a new run fills from history at creation, and the nightly picks up any run whose watermark is unset. | (auto, on `migrate`) | With the Challenges deploy | ☐ |
 | Q | **Check the five Calendar title names are free, BEFORE deploy** -- the same hazard as row N, and sharper: a Calendar run fills at creation and grants its day-marker titles in that same request, so a veteran member's first Start claims up to five titles at once (all five for a hunter whose history fills every day). Read-only. If a name is taken, rename OURS (`rewards.CALENDAR_DAY_TITLES`), never the other system's row. | `Title.objects.filter(name__in=['Calendar Marker', 'Calendar Keeper', 'Calendar Chronicler', 'Calendar Champion', 'Calendar Legend'])` in `manage.py shell` -- must be empty | Before the Challenges deploy | ☐ |
-| R | **`CHALLENGES_BETA_MEMBERS_ONLY` -- leave it unset at deploy** (it defaults on). To END the beta, set it to exactly `False` and restart. The parse is `== 'True'`, so ANY other value (`true`, `1`, `yes`) also opens creation to everybody. Ending the beta also moves the Challenges intro from its `beta` version to `live`, which shows the intro once more to everyone who saw the beta one (intended). | Render env (no action at deploy) | With the Challenges deploy; again when the beta ends | ☐ |
+| R | **`CHALLENGES_BETA_MEMBERS_ONLY` -- leave it unset at deploy.** It defaulted on for the beta; the public release flips the default to off, so the release is a deploy, not an env change. Setting it to exactly `True` brings the members-first gate back. The parse is `== 'True'`, so ANY other value (`true`, `1`, `yes`) also opens creation to everybody. Ending the beta also moves the Challenges intro from its `beta` version to `live`, which shows the intro once more to everyone who saw the beta one (intended). | Render env (no action at deploy) | With the Challenges deploy; again at the public release (still unset) | ☐ |
 | S | **Confirm `trophies/0340` (row L) is already applied in prod** -- `0341` (row 14) depends on it, so if prod has not taken `0340` this deploy carries its column-drop hazard too. | `python manage.py showmigrations trophies \| tail -4` on prod | Before the Challenges deploy | ☐ |
 | T | **Post-deploy smoke test** -- `nightly --dry-run` should list challenge detection between contracts and milestones, and `process_challenges --dry-run` should exit clean against the empty tables. | the two commands | After the Challenges deploy | ☐ |
 

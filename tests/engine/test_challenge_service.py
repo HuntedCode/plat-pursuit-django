@@ -56,9 +56,17 @@ from trophies.models import Contract, EarnedContract, Job
 
 pytestmark = pytest.mark.django_db
 
-#: The beta is ON by default in settings, so tests about anything OTHER than the gate run as a member
-#: unless they say otherwise. `open_beta` below is the shorthand for the post-beta world.
+#: The beta is ON in this module (the fixture below), so tests about anything OTHER than the gate run as a
+#: member unless they say otherwise. `open_beta` is the shorthand for the post-beta world.
 open_beta = override_settings(CHALLENGES_BETA_MEMBERS_ONLY=False)
+
+
+@pytest.fixture(autouse=True)
+def _beta_on():
+    """These tests cover the members-first gate, so it is ON here unless a test says `open_beta`. The
+    setting's own default has been off since the public release."""
+    with override_settings(CHALLENGES_BETA_MEMBERS_ONLY=True):
+        yield
 
 _SEQ = {'n': 0}
 

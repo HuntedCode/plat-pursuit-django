@@ -544,15 +544,16 @@ PSN_METADATA_CAPTURE_ENABLED = os.getenv('PSN_METADATA_CAPTURE_ENABLED', 'True')
 # the Hall of Fame are public to everyone throughout -- this gates creation and nothing else, which is
 # what makes it a DIAL (members go first) rather than a door (a feature free hunters cannot reach).
 #
-# Defaults True so the beta is on the moment the feature ships, and ending it is an env-var flip plus a
-# restart rather than a deploy -- the owner's call on timing, taken without a release.
+# Defaulted True from the beta's start (10 Oct 2026) until the public release, which flipped the default to
+# False, so that deploy WAS the release and its What's New entry landed with it. Exactly 'True' turns the
+# gate back on (a restart, not a deploy).
 #
 # Read ONLY by `challenge_service.creation_is_open_to`, so the rule has one enforcement point. In
 # particular NOT by `trophies.mixins.PremiumRequiredMixin`, which REDIRECTS to `beta_access_required`:
 # bouncing a free hunter out of a parked feature is the behaviour that was rejected when Challenges
 # was first parked, and `tests/engine/test_challenges_live.py` pins that decision
 # (inverted from `test_challenges_coming_soon.py` when the real pages shipped).
-CHALLENGES_BETA_MEMBERS_ONLY = os.getenv('CHALLENGES_BETA_MEMBERS_ONLY', 'True') == 'True'
+CHALLENGES_BETA_MEMBERS_ONLY = os.getenv('CHALLENGES_BETA_MEMBERS_ONLY', 'False') == 'True'
 
 
 # Internationalization

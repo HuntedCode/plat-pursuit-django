@@ -85,6 +85,24 @@ class Entry:
 #: NEWEST FIRST. See the module docstring before adding one.
 ENTRIES: tuple[Entry, ...] = (
     Entry(
+        id='2026-10-challenges-open',
+        published=date(2026, 10, 18),
+        title='Challenges are open to everyone',
+        beats=(
+            ('Start your own',
+             'Anyone can start an A-Z, Job Coverage or Plat Calendar run now. Finished runs join the '
+             'Hall of Fame.'),
+            ('Plan it with the optimizer',
+             'The Challenge Optimizer lines up a game for every open square, and finds games that count on '
+             'both your A-Z and Job Coverage runs. One plan a week for everyone, as many as you like for '
+             'members.'),
+            ('Show it off',
+             'Every run has a share card, so you can post your board as it fills.'),
+        ),
+        link_label='Browse the challenges',
+        link_url='/community/challenges/',
+    ),
+    Entry(
         id='2026-10-challenges-beta',
         published=date(2026, 10, 10),
         title='Challenges are here, in beta',

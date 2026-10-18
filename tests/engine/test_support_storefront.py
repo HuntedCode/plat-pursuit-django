@@ -323,9 +323,10 @@ def test_no_perk_promises_something_that_no_longer_exists():
 def test_the_perk_list_is_the_decided_lineup():
     """Every perk-table test iterates PREMIUM_PERKS, so a shrunk or emptied list passes them all
     vacuously. Pinning the slugs is what gives those loops a floor."""
-    # The 2026-08-22 lineup: polls split out of discord, beta replaces early as the wide closer,
-    # credit moved to the purchase box's checklist alone.
-    assert [p['slug'] for p in PREMIUM_PERKS] == ['sync', 'discord', 'mark', 'polls', 'beta']
+    # The 2026-08-22 lineup: polls split out of discord, beta replaced early (the wide closer until
+    # 2026-10), credit moved to the purchase box's checklist alone.
+    # The optimizer dial joined at the Challenges public release (2026-10).
+    assert [p['slug'] for p in PREMIUM_PERKS] == ['sync', 'discord', 'mark', 'polls', 'beta', 'optimizer']
 
 
 def test_every_perk_names_what_a_free_user_gets():
@@ -808,16 +809,15 @@ def test_the_perks_modal_is_reachable_whatever_you_pick(client):
 
 
 def test_the_modal_carries_every_perks_member_line(client):
-    """Five tiles, member line each; the wide beta closer spans the grid (perk.wide). The dial's
-    'everyone' column retired 2026-08-22 -- the lede's one sentence now carries that frame."""
+    """Six tiles, member line each, filling the two-column grid (the full-width beta closer went when the
+    optimizer made six). The dial's 'everyone' column retired 2026-08-22 -- the lede's one sentence now
+    carries that frame."""
     body = _flat(client)
     dialog = body[body.index('<dialog id="sup-perks"'):]
 
     for perk in PREMIUM_PERKS:
         assert perk['member'] in dialog, f"{perk['slug']}: member line missing"
-    wides = [p for p in PREMIUM_PERKS if p.get('wide')]
-    assert len(wides) == 1 and wides[0]['slug'] == 'beta'
-    assert dialog.count('sup-perk--wide') == 1, 'the beta closer lost its full-width span'
+    assert len(PREMIUM_PERKS) % 2 == 0, 'an odd tile leaves a hole in the two-column grid'
     # The flavour beat: every tile carries an example -- text in the perk's tint, except the
     # mark, whose example IS the rendered object (name + the star).
     for perk in PREMIUM_PERKS:
