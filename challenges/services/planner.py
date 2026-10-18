@@ -251,7 +251,7 @@ def get_pool(profile, options, *, build_if_missing=True, line_ticket=None, join_
 
 def build_pool(profile, options, line_ticket=None, join_line=True):
     """The STORED form: {'candidates': [[id, progress, fits]] in preference order, 'stages': [[id, [stage ref]]],
-    'stage_names': {key: [series, series name, number, title]}, 'unobtainable': [id]} (the unobtainable contracts
+    'stage_names': {key: [series, series name, number, title, type label]}, 'unobtainable': [id]} (the unobtainable contracts
     that passed the filters and were left out, so the plan can tell them from ones outside the filters).
 
     The stage map is kept whole beside the list so a pin from outside the pool gets its stages without a
