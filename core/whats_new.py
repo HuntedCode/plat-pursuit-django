@@ -96,11 +96,10 @@ ENTRIES: tuple[Entry, ...] = (
              'The Challenge Optimizer lines up a game for every open square, and finds games that count on '
              'both your A-Z and Job Coverage runs. One plan a week for everyone, as many as you like for '
              'members.'),
-            ('Titles to earn',
-             'Your first two finished A-Z and Job Coverage runs each earn a title, Job Coverage pays job XP '
-             'for every job, and the Plat Calendar hands out titles as its days fill.'),
+            ('Show it off',
+             'Every run has a share card, so you can post your board as it fills.'),
         ),
-        link_label='See the challenges',
+        link_label='Browse the challenges',
         link_url='/community/challenges/',
     ),
     Entry(

@@ -146,7 +146,8 @@ SUPPORT_TIERS_ARE_PLACEHOLDERS = False
 #   discord    -> trophies/services/discord_roles.py, granted off premium_tier
 #   mark       -> `.pp-supname`/`.pp-supstar` (the successor pair; site-wide wiring pending the
 #                 Profile tier denorm) -- `.legendary-title` is LEGACY and being removed
-#   beta       -> trophies/mixins.py -> beta_access_required
+#   beta       -> challenge_service.creation_is_open_to / CHALLENGES_BETA_MEMBERS_ONLY (members-first starts;
+#                 off since the Challenges public release, kept for the next members-first feature)
 #   optimizer  -> challenges/services/allowance.py: FREE_PLAN_WINDOW (one plan a week) vs members unlimited
 #   polls      -> Discord-side, like the channel: run as native Discord polls in #supporter-chat
 #                 (NOT built ballots -- premium-proposal.md's no-ballot-features decision stands;
@@ -450,9 +451,6 @@ ROADMAP_TIERS = [
 # band compresses this same list (tier name + first few feature names), so both surfaces tell
 # one story from one constant.
 ROADMAP_FEATURES = [
-    {'key': 'challenges', 'tier': 'works',
-     'name': 'Challenges, revamped',
-     'blurb': 'The revamp we have long wanted to give them: better formats, better rewards.'},
     {'key': 'quests', 'tier': 'works',
      'name': 'Quests and streaks',
      'blurb': 'New reasons to hunt today, and tomorrow, and the day after.'},

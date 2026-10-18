@@ -158,7 +158,8 @@ CALENDAR_DAY_RATELIMIT_GROUP = 'challenges:calendar-day'
 CHALLENGES_BROWSE_RATELIMIT_GROUP = 'challenges:browse'
 HALL_OF_FAME_RATELIMIT_GROUP = 'challenges:hall-of-fame'
 
-#: The team preview door for what a FREE hunter sees during the beta: `?preview=challenges-free`.
+#: The team preview door for what a FREE hunter sees during the beta: `?preview=challenges-free`. Inert once
+#: the beta is off (`svc.beta_is_on()`), so a release smoke check through it sees the real page.
 #:
 #: Staff or moderator only, and it writes nothing -- `core.previews` enforces both, and that is the
 #: whole reason to use it rather than the obvious alternative of flipping your own `user_is_premium`
@@ -201,7 +202,7 @@ PREVIEW_CALENDAR_OPENING = 'calendar-opening'
 #: `data-auto`, so closing a previewed tutorial records nothing.
 #:
 #: `challenges-intro` opens the system intro as the CURRENT version (My Challenges or the hub).
-#: `challenges-intro-live` opens the LIVE version, which nobody can otherwise see until the beta ends.
+#: `challenges-intro-live` opens the LIVE version, which nobody could otherwise see during a beta.
 #: `challenge-tutorial` opens the type tutorial on any run page.
 PREVIEW_INTRO = 'challenges-intro'
 PREVIEW_INTRO_LIVE = 'challenges-intro-live'
@@ -244,7 +245,7 @@ def creation_is_open(request, profile):
     `challenge_service.creation_is_open_to` is the real gate and stays the single enforcement point;
     this is that answer plus the team preview door, which can only ever make it stricter.
     """
-    if previewing(request, PREVIEW_FREE):
+    if svc.beta_is_on() and previewing(request, PREVIEW_FREE):
         return False
     return svc.creation_is_open_to(profile)
 
@@ -1275,7 +1276,8 @@ def start_from_request(request, challenge_type):
     new run: previewing must not take away a run you already have, which is the same line the beta gate itself
     draws.
     """
-    if previewing(request, PREVIEW_FREE) and svc.active_run(request.user.profile, challenge_type) is None:
+    if (svc.beta_is_on() and previewing(request, PREVIEW_FREE)
+            and svc.active_run(request.user.profile, challenge_type) is None):
         return None, None, ('Starting a challenge is in beta for members first. '
                             'Everyone can start one when the beta ends.')
     try:

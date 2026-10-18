@@ -304,7 +304,7 @@ signed out is a JSON 401, an unlinked account a JSON 403. Detail in
 | `/community/challenges/<id>/` | `challenge_detail` | GET -- the run's page (public; a hidden run is owner-only) |
 | `/community/challenges/<id>/day/<month>/<day>/` | `challenge_calendar_day` | GET -- a Calendar day's games, an HTML fragment |
 | `/my-challenges/` | `my_challenges` | GET -- login and a linked PSN account |
-| `/my-challenges/start/<type>/` | `challenge_start` | POST (form) -- start or resume; members-only during the beta. Optional `return_to=optimizer` (a name from `START_RETURN_PAGES`, never a URL) redirects back to the optimizer |
+| `/my-challenges/start/<type>/` | `challenge_start` | POST (form) -- start or resume; members-only while `CHALLENGES_BETA_MEMBERS_ONLY` is on (off since the public release). Optional `return_to=optimizer` (a name from `START_RETURN_PAGES`, never a URL) redirects back to the optimizer |
 | `/my-challenges/<id>/slot/<key>/` | `challenge_slot` | GET -- what fits this square. `?q=`, `?offset=` (paging), `?badge=1`, `?platform=` (repeatable) |
 | `/my-challenges/<id>/search/` | `challenge_search` | GET -- contract-first search. `?q=`, `?offset=`, `?badge=1`, `?platform=` |
 | `/my-challenges/<id>/history/` | `challenge_history` | GET -- the first-run importer's offers. `?q=`, `?cursor=` (paging: a keyset, the reply's `cursor`), `?badge=1`, `?platform=` |

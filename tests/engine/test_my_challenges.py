@@ -982,6 +982,15 @@ def test_a_member_never_sees_the_beta_card(client):
     assert 'Challenges are in beta' not in client.get(reverse('my_challenges')).content.decode()
 
 
+@open_beta
+def test_the_free_preview_is_inert_once_the_beta_is_over(client):
+    user = UserFactory(is_staff=True)
+    ProfileFactory(user=user, user_is_premium=True, is_linked=True)
+    client.force_login(user)
+    body = client.get(reverse('my_challenges') + '?preview=challenges-free').content.decode()
+    assert 'Challenges are in beta' not in body
+
+
 def test_the_beta_card_asks_for_support_last(client):
     """The ask sits at the FOOT of the card, after everything a hunter gets either way.
 

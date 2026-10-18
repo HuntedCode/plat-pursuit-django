@@ -208,8 +208,8 @@ otherwise fire three notifications in the same second.
 hiding the door: a free hunter sees the Start button marked `aria-disabled`, with the reason as visible text
 above it. `aria-disabled` deliberately rather than `disabled` — a disabled button takes no pointer events, so
 its explanation is unreachable — which means the POST still goes through and the **service** is what refuses
-it. Setting it to exactly `True` brings the gate back without a deploy. Staff preview the free-tier view with
-`?preview=challenges-free`. A lapsed member keeps a run they already started; the gate is on starting, not
+it. Setting it to exactly `True` brings the gate back with a restart, not a deploy. Staff preview the free-tier
+view with `?preview=challenges-free`, which is inert while the gate is off. A lapsed member keeps a run they already started; the gate is on starting, not
 on owning.
 
 **Runs are sequential.** One active run per type per hunter, enforced by a partial unique

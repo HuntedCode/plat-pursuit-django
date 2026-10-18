@@ -722,10 +722,13 @@ def test_the_beta_is_over_by_default():
     import os
     from django.conf import settings
     from challenges.services import challenge_service, tutorials
-    if 'CHALLENGES_BETA_MEMBERS_ONLY' not in os.environ:
-        assert settings.CHALLENGES_BETA_MEMBERS_ONLY is False
-        assert challenge_service.creation_is_open_to(None) is True
-        assert tutorials.current_intro_version() == tutorials.INTRO_LIVE
+    source = (ROOT / 'plat_pursuit' / 'settings.py').read_text(encoding='utf-8')
+    assert "os.getenv('CHALLENGES_BETA_MEMBERS_ONLY', 'False') == 'True'" in source
+    if 'CHALLENGES_BETA_MEMBERS_ONLY' in os.environ:
+        pytest.skip('CHALLENGES_BETA_MEMBERS_ONLY is set in this environment (a local .env?)')
+    assert settings.CHALLENGES_BETA_MEMBERS_ONLY is False
+    assert challenge_service.creation_is_open_to(None) is True
+    assert tutorials.current_intro_version() == tutorials.INTRO_LIVE
 
 
 def test_the_membership_perk_no_longer_says_challenges_are_coming():

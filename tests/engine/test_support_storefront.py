@@ -323,8 +323,8 @@ def test_no_perk_promises_something_that_no_longer_exists():
 def test_the_perk_list_is_the_decided_lineup():
     """Every perk-table test iterates PREMIUM_PERKS, so a shrunk or emptied list passes them all
     vacuously. Pinning the slugs is what gives those loops a floor."""
-    # The 2026-08-22 lineup: polls split out of discord, beta replaces early as the wide closer,
-    # credit moved to the purchase box's checklist alone.
+    # The 2026-08-22 lineup: polls split out of discord, beta replaced early (the wide closer until
+    # 2026-10), credit moved to the purchase box's checklist alone.
     # The optimizer dial joined at the Challenges public release (2026-10).
     assert [p['slug'] for p in PREMIUM_PERKS] == ['sync', 'discord', 'mark', 'polls', 'beta', 'optimizer']
 
