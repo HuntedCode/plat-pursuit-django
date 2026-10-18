@@ -460,7 +460,8 @@ REBUILDS the plan, not the plan: the answers and the tweaks in the wire's slugs 
 Members get a "Pick up where you left off" card (hidden while a plan is on screen, back on Edit answers); a free
 hunter's lives in the allowance banner. A free hunter whose week is in use reopens the SPENT answers, borrowing
 the draft's tweaks only when it is the same plan. **Apply keeps the draft**, minus the applied games' must-haves
-and locks (they are on the board now). The autosave runs after the spend and never fails a plan.
+and the square pins on the squares it wrote (they are on the board now; the same game locked elsewhere keeps its
+lock). The autosave runs after the spend and never fails a plan.
 
 **Doors in:** a "Challenge Optimizer" FEATURE card on My Challenges (when an A-Z or Job Coverage run is active:
 primary edge, the star button `pp-cta--rise`, three ticks, a "New" chip until `views.OPTIMIZER_NEW_UNTIL`, and a
@@ -581,17 +582,30 @@ to their new places (one `lineFlip`, shared with the Letter/Job view switch) and
 
 **Games already picked** (owner, 2026-10-18): a square holding a game the hunter has not finished is theirs, so
 step 1 says plainly what the plan does with it. Each run card reads "8 open squares · 5 picked" (`run_option`'s
-`picked`, `filled_count - completed_count`), and while an included run has a pick it asks **Keep them** (the
-default: plan the open squares, suggest swaps) or **Replan them too** (the answer `picks`, `keep` / `replan`).
-Replan is ONE solve over the open AND unfinished squares, each occupant a candidate that may stay (the swap solve's
-keep tier), so a pick changes only when the swap rule would have suggested it: a pin, a filled square, a saved game,
-and under Priority a badge game. A pick that stays is no line; a changed one is an ordinary line (it locks) whose
-**Keep [game]** (on the line, or the sheet's foot) puts it back: the `left_open` tweak on an unfinished square,
-listed under **Keeping** with **Replan it** (or "Keeping ..." in its discipline shelf). Nothing is offered as a
-swap under Replan, and the stats add "picks changed". A must-have whose only square holds a kept pick is unplaced
-as `kept`; one that IS a pick and stays put is reported `in_run`, not silently dropped. Like the weight, `picks` is
-an answer that is NOT in the pool digest or the weekly allowance's same-plan key: it changes how the plan is
-solved, not the pool, so a free hunter can flip it on this week's plan.
+`picked`, `filled_count - completed_count`), and while an included run has a pick it asks (the answer `picks`):
+
+| Choice | `picks` | What the plan does with picks |
+|---|---|---|
+| **Keep them** (default) | `keep` | Never plans them; offers swaps (opt-in cards) where another game covers more |
+| **Plan around them** | `replan` | Plans them in the one solve, each pick preferred on its square (the keep tier): it changes only when a swap would have been suggested (a pin, a filled square, a saved game, and under Priority a badge game) |
+| **Start fresh** | `fresh` | The same solve without the keep tier (`Problem.keep_occupants=False`): a pick stays only on its merits |
+
+When the picks are planned (`PlannerOptions.replan_picks`), EVERY pick is on the plan: one that stays is a line
+too (`Plan.staying`; its square carries `stays`, reads "Already your pick in B." and is never applied), so a hunter
+whose squares are all filled sees the whole plan, not an empty page. A changed pick is an ordinary line whose
+**Keep [game]** (on the line, or the sheet's foot), and Lock on a pick that stays, LOCK the pick: a square pin
+naming the square's own occupant, sent with `lock: true` (`Tweaks.locks`), which `make_plan` holds through
+re-solves (`locked_picks`; under Keep it means nothing). The mark is what makes a lock safe to save: once the square
+holds something else (filled by hand, or finished) the lock is dropped, where an unmarked pin would put its game
+back over the hunter's new pick. "Different games" never rerolls a pick, and Apply skips a square that already
+holds the game ("It's already your pick there.") and forgets only the squares it wrote, so the same game locked
+elsewhere keeps its lock. A line replacing a pick in BOTH its squares offers **Only F** and **Only
+Survivalist** (plain buttons, so an arrow key never re-plans): "Only F" pins the game to F and locks the other
+pick. Keep also undoes an earlier "Not this one" on that pick (the latest word wins), and a stale lock is not
+saved. **Not this one** on a pick drops it from its square (planned like an
+open one). Nothing is offered as a swap, and the stats add "picks changed". Like the weight, `picks` is an answer
+that is NOT in the pool digest or the weekly allowance's same-plan key: it changes how the plan is solved, not the
+pool, so a free hunter can flip it on this week's plan.
 
 **Leave a square open** (owner, 2026-10-17): the Other options sheet's foot offers "Leave C open" for each OPEN
 square of the line (both on a C + Gunslinger line; an unfinished square is left out, Undo swap is its way back).
@@ -599,7 +613,7 @@ It is a tweak, `left_open: [{type, key}]`, autosaved with the rest: `make_plan` 
 beats a square pin on the same square, and the plan returns it as `left_open`, drawn with **Plan it** (under Still
 open, or in its discipline shelf in the Job view). Only an OPEN square can be left open: one the hunter has since
 filled by hand drops out (the door saves only what the plan returns), and a must-have whose only open squares are
-left open is unplaced as `left_open`. Under Replan an unfinished square can be left as it is too (Keep, above).
+left open is unplaced as `left_open`. An unfinished square can never be left open (a pick is kept by locking it).
 
 **The Letter / Job view** (owner, 2026-10-17): the switch sits above the plan, shown when both boards are planned
 and there is more than one game, because Job regroups ALL of it (a remembered Job never applies while the switch is

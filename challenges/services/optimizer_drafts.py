@@ -3,7 +3,8 @@
 See `OptimizerDraft` for what is kept and why. Three jobs here: SAVE what a built plan was made from, FORGET the
 games an Apply put on the board, and say what the page should REOPEN.
 
-TWEAKS ARE KEPT IN SLUGS, the plan door's own wire shape: `{pins: [slug], square_pins: [{type, key, contract}],
+TWEAKS ARE KEPT IN SLUGS, the plan door's own wire shape: `{pins: [slug], square_pins: [{type, key, contract,
+lock?}],
 excluded: [slug], penalized: [slug], left_open: [{type, key}]}`. The page posts them back unchanged and the door re-resolves them, so a
 contract that went away since is simply dropped there, as it would be from any request.
 """
@@ -24,12 +25,16 @@ def save(profile, options, tweaks):
         profile=profile, defaults={'answers': allowance.answers_of(options), 'tweaks': tweaks})
 
 
-def forget_applied(profile, slugs):
-    """The games an Apply placed leave the draft's must-haves and locks: they are on the board now, and carrying
-    them would re-plan them as unplaced. Everything else ("not this one", rerolls, the answers) stays."""
-    slugs = set(slugs)
-    if not slugs:
+def forget_applied(profile, applied):
+    """What an Apply placed leaves the draft: its games' must-haves, and the square pins on the squares it wrote
+    (they are on the board now, and carrying them would re-plan them as unplaced). `applied`: (type, key, slug) per
+    written square. Only THOSE squares: the same game locked as a pick elsewhere keeps its lock. Everything else
+    ("not this one", rerolls, the answers) stays."""
+    applied = list(applied)
+    if not applied:
         return
+    slugs = {slug for _, _, slug in applied}
+    squares = {(t, k) for t, k, _ in applied}
     # LOCKED: a plan autosaving from another tab between the read and the write would otherwise get this draft's
     # old tweaks written over its own.
     with transaction.atomic():
@@ -39,7 +44,7 @@ def forget_applied(profile, slugs):
         tweaks = _clean(draft.tweaks)
         kept = {**tweaks,
                 'pins': [s for s in tweaks['pins'] if s not in slugs],
-                'square_pins': [e for e in tweaks['square_pins'] if e['contract'] not in slugs]}
+                'square_pins': [e for e in tweaks['square_pins'] if (e['type'], e['key']) not in squares]}
         if kept != tweaks:
             draft.tweaks = kept
             draft.save(update_fields=['tweaks', 'updated_at'])
@@ -77,7 +82,8 @@ def _clean(raw):
     field and well-formed square pins, never a 500 on the page that reads them."""
     raw = raw if isinstance(raw, dict) else {}
     out = {f: [s for s in _list(raw.get(f)) if isinstance(s, str)] for f in TWEAK_LISTS}
-    out['square_pins'] = [{k: e[k] for k in SQUARE_PIN_FIELDS} for e in _list(raw.get('square_pins'))
+    out['square_pins'] = [{**{k: e[k] for k in SQUARE_PIN_FIELDS}, **({'lock': True} if e.get('lock') is True else {})}
+                          for e in _list(raw.get('square_pins'))
                           if isinstance(e, dict) and all(isinstance(e.get(k), str) for k in SQUARE_PIN_FIELDS)]
     out['left_open'] = [{k: e[k] for k in SQUARE_FIELDS} for e in _list(raw.get('left_open'))
                         if isinstance(e, dict) and all(isinstance(e.get(k), str) for k in SQUARE_FIELDS)]

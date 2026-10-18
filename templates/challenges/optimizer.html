@@ -114,16 +114,21 @@ reload, and its squares need the glyphs from then on.{% endcomment %}
                 <div data-cplan-picks-q hidden>
                     <div class="pp-cplan__subhead"><h3 id="cplan-picks-label">Games you've already picked</h3></div>
                     <p class="pp-cplan__hint" id="cplan-picks-hint" data-cplan-picks-hint>Squares with a game you haven't finished.</p>
-                    <div class="pp-cplan__opts pp-cplan__opts--two" role="radiogroup" aria-labelledby="cplan-picks-label" aria-describedby="cplan-picks-hint">
+                    <div class="pp-cplan__opts" role="radiogroup" aria-labelledby="cplan-picks-label" aria-describedby="cplan-picks-hint">
                         <label class="pp-cplan__opt">
                             <input type="radio" name="picks" value="keep" checked data-cplan-picks>
                             <span class="pp-cplan__opt-title">Keep them</span>
-                            <span class="pp-cplan__opt-sub">Plan the open squares. We'll suggest swaps where a better game fits.</span>
+                            <span class="pp-cplan__opt-sub">Only your open squares get planned. Where another game would cover more, we'll suggest a swap you can take or leave.</span>
                         </label>
                         <label class="pp-cplan__opt">
                             <input type="radio" name="picks" value="replan" data-cplan-picks>
-                            <span class="pp-cplan__opt-title">Replan them too</span>
-                            <span class="pp-cplan__opt-sub">Plan every unfinished square. A pick only changes when that's worth it, and you can keep any of them.</span>
+                            <span class="pp-cplan__opt-title">Plan around them</span>
+                            <span class="pp-cplan__opt-sub">Your picks join the plan and change only when that's clearly better. Change or lock any of them.</span>
+                        </label>
+                        <label class="pp-cplan__opt">
+                            <input type="radio" name="picks" value="fresh" data-cplan-picks>
+                            <span class="pp-cplan__opt-title">Start fresh</span>
+                            <span class="pp-cplan__opt-sub">Plan every unfinished square from scratch. A pick stays only where it's still the best fit.</span>
                         </label>
                     </div>
                 </div>

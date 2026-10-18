@@ -285,7 +285,7 @@ def test_a_declined_swap_half_stays_declined_until_the_swap_is_undone():
 def test_pinning_a_game_clears_its_other_pins_in_the_same_runs():
     # The solver keeps one square pin per game per run; a second left a square empty and the game "unplaced".
     pin = JS[JS.index('function pinGame'):JS.index('function restoreTweaks')]
-    assert "if (tweaks.squarePins[k] === slug && runs.indexOf(k.split('|')[0]) >= 0) { delete tweaks.squarePins[k]; }" in pin
+    assert "if (tweaks.squarePins[k] === slug && runs.indexOf(k.split('|')[0]) >= 0) {" in pin
     block = JS[JS.index('function appendAlternatives'):JS.index('function renderAltTabs')]
     assert 'change(function () { pinGame(row.slug, squares); }' in block
 
@@ -295,7 +295,7 @@ def test_the_job_view_groups_by_discipline_and_keeps_every_jobs_place():
     assert 'plan.job_groups.forEach(function (group) {' in by_job
     assert "if (byJob[key]) { rows.push(lineRow(byJob[key], 'jobs')); }" in by_job
     assert "blocked[key] ? 'No badge game fits' : 'Nothing on your terms fits'" in by_job
-    assert "isKept(left[key]) ? 'Keeping ' + keptName(left[key]) : 'Leaving open', true));" in by_job
+    assert "rows.push(slotRow(left[key], 'Leaving open', true));" in by_job
     # The run page's discipline tint, checked as a bare word before it becomes CSS.
     assert "if (/^[a-z-]+$/.test(group.slug || '')) {" in by_job
     assert "section('A-Z only', null, azOnly, lineRow);" in by_job
@@ -334,7 +334,7 @@ def test_focus_after_leave_open_or_plan_it_lands_on_that_square():
     assert "btn.setAttribute('data-square', sqKey(sq));" in JS[JS.index('function lineRow('):JS.index('function metaList(')]
     assert "btn.setAttribute('data-square', sqKey(sq));" in JS[JS.index('function planItAction('):JS.index('//: The stats')]
     foot = JS[JS.index('function renderAltFoot('):JS.index('function altList(')]
-    assert "change(function () { leaveOpen(sq); }, 'square:' + sqKey(sq));" in foot
+    assert "change(function () { if (old) { keepPick(old); } else { leaveOpen(sq); } }, 'square:' + sqKey(sq));" in foot
 
 
 def test_step_one_asks_about_picked_games_only_while_an_included_run_has_one():
@@ -355,6 +355,7 @@ def test_step_one_asks_about_picked_games_only_while_an_included_run_has_one():
     html = open('templates/challenges/optimizer.html', encoding='utf-8').read()
     q = html[html.index('data-cplan-picks-q'):html.index('{# Step 2')]
     assert 'value="keep" checked data-cplan-picks' in q and 'value="replan" data-cplan-picks' in q
+    assert 'value="fresh" data-cplan-picks' in q
     assert 'role="radiogroup" aria-labelledby="cplan-picks-label" aria-describedby="cplan-picks-hint"' in q
     assert 'id="cplan-picks-hint"' in q
     # The card is found by the DOM, never a selector built from data.
@@ -363,32 +364,49 @@ def test_step_one_asks_about_picked_games_only_while_an_included_run_has_one():
     assert 'data-cplan-picked-for="{{ r.type }}" data-picked="{{ r.picked }}"' in card
 
 
-def test_under_replan_a_changed_pick_can_be_kept():
+def test_when_the_picks_are_planned_a_pick_shows_and_can_be_kept_or_split():
+    assert "var PICKS_TAGS = { replan: 'Planning around your picks', fresh: 'Starting fresh on your picks' };" in JS
+    assert 'function replanning() { return !!submitted && !!PICKS_TAGS[submitted.picks]; }' in JS
+    assert 'if (PICKS_TAGS[a.picks]) { parts.push(PICKS_TAGS[a.picks]); }' in JS
     row = JS[JS.index('function lineRow('):JS.index('function metaList(')]
-    # A changed pick is the plan's own line under Replan, so it locks like any other (no Undo swap).
+    # A changed pick is the plan's own line, so it locks like any other (no Undo swap).
     assert "var swapped = !replanning() && (line.replaces || []).length > 0;" in row
+    # A pick that stays is a line too, said so it never reads as a change.
+    assert "if (sq.stays) { main.appendChild(lineNote('Already your pick in ' + sq.label + '.')); }" in row
+    # Keep locks the pick back by its live slug (and undoes a "Not this one" on it); the server holds it.
+    assert 'function keepPick(r) { tweaks.excluded.delete(r.slug); pinGame(r.slug, [r]); tweaks.locks.add(sqKey(r)); }' in JS
+    # A lock is sent as one, so the server drops it once the square holds something else.
+    assert 'if (tweaks.locks.has(sq)) { entry.lock = true; }' in JS
+    assert "if (on && sq.stays) { tweaks.locks.add(sqKey(sq)); } else { tweaks.locks.delete(sqKey(sq)); }" in JS
+    assert "if (e.lock === true) { locks.add(e.type + '|' + e.key); }" in JS
+    # "Different games" never rerolls the hunter's own picks.
+    reroll = JS[JS.index("els.reroll.addEventListener('click'"):JS.index("els.apply.addEventListener('click'")]
+    assert 'var theirs = line.squares.some(function (sq) { return sq.stays; });' in reroll
+    assert 'if (!theirs && !isLocked(line)' in reroll
+    # The saved plan forgets only the squares an Apply wrote.
+    assert "square_pins: (savedTweaks.square_pins || []).filter(function (e) { return !written.has(e.type + '|' + e.key); })" in JS
     acts = JS[JS.index('function lineActions('):JS.index('function action(')]
-    assert "if (replanning() && (line.replaces || []).length) {" in acts
-    assert "change(function () { kept.forEach(leaveOpen); }, 'square:' + sqKey(kept[0]));" in acts
-    kept = JS[JS.index('function keptSection('):JS.index('function nothingToPlan(')]
-    assert "return mine(sq) && isKept(sq);" in kept and "sectionShell('Keeping', kept.length)" in kept
-    # Still open lists only open squares; a kept pick is in Keeping, with Replan it.
-    empty = JS[JS.index('function emptySection('):JS.index('function keptSection(')]
-    assert "return mine(sq) && !isKept(sq);" in empty and 'keptSection(mine);' in empty
-    assert "var label = isKept(sq) ? 'Replan it' : 'Plan it';" in JS
-    # Each spoken name starts with the visible text (WCAG label in name), and names its square.
-    assert "{ aria: label + ': ' + sq.label }" in JS
+    assert "var kept = replanning() ? (line.replaces || []).filter(function (r) { return r.slug; }) : [];" in acts
+    assert "change(function () { kept.forEach(keepPick); }, 'square:' + sqKey(kept[0]));" in acts
     assert "{ aria: keepLabel + ': ' + kept.map(" in acts
-    assert "if (old) { btn.setAttribute('aria-label', btn.textContent + ' in ' + sq.label); }" in JS
-    # A cut-off title keeps its full name on hover; an empty snapshot name still reads as a pick.
-    assert 'name.title = keptName(sq);' in kept
-    assert "function keptName(sq) { return sq.kept || 'your pick'; }" in JS
-    # A kept pick's name can be empty, so it is told apart by null, never by truthiness.
-    assert 'function isKept(sq) { return sq.kept != null; }' in JS
-    assert "kept: \"You're keeping the pick in the square it fits.\"" in JS
-    assert "? 'Every square already has a game, and your picks are the best fit for them.'" in JS
-    assert "if (a.picks === 'replan') { parts.push('Replanning your picks'); }" in JS
+    # Only F / Only Survivalist: plain buttons, only when both picks can be locked back.
+    assert 'if (kept.length === 2 && line.squares.length === 2) {' in acts
+    assert "row.appendChild(action('Only ' + r.label, function () {" in acts
+    assert "change(function () { pinGame(line.slug, [r]); keepPick(other); }, 'square:' + sqKey(r));" in acts
+    assert 'splitChoice' not in JS
+    # A pin moved off a square takes its lock with it; the ready line counts only games with a square to write.
+    pin_game = JS[JS.index('function pinGame('):JS.index('function leaveOpen(')]
+    assert 'delete tweaks.squarePins[k];\n                    tweaks.locks.delete(k);' in pin_game
+    assert 'var games = plan.lines.filter(function (line) { return line.squares.some(changes); }).length;' in JS
+    # The saved plan does not carry a stale lock.
+    views = open('challenges/optimizer_views.py', encoding='utf-8').read()
+    assert "or _still_holds(states, (e['type'], e['key']), tweaks)]}" in views
+    # Apply never writes a pick that stays; the counts leave it out.
+    assert 'function changes(sq) { return !sq.stays; }' in JS
+    assert 'line.squares.filter(changes).forEach(function (sq) {' in JS
     assert "if (replanning() || changed) { cells.push(['changed', changed" in JS
+    # The "Keeping" section of #195 is gone: a kept pick is a locked line.
+    assert 'keptSection' not in JS and 'isKept' not in JS
 
 
 def test_the_sheet_offers_to_leave_each_open_square_of_the_line_open():
@@ -397,8 +415,8 @@ def test_the_sheet_offers_to_leave_each_open_square_of_the_line_open():
     assert "btn.textContent = old ? 'Keep ' + (old.name || 'your pick') : 'Leave ' + sq.label + ' open';" in foot
     # An unfinished square already holds its game: Undo swap is its way back, not "leave open". Under Replan the
     # sheet offers Keep for it instead.
-    assert 'if (old && !replanning()) { return; }' in foot
-    assert 'closeSheet();' in foot and 'change(function () { leaveOpen(sq); }' in foot
+    assert 'if (sq.stays || (old && !(replanning() && old.slug))) { return; }' in foot
+    assert 'closeSheet();' in foot and 'else { leaveOpen(sq); }' in foot
     assert "left_open: \"You're leaving the square it fits open.\"" in JS
     assert '<div class="pp-cpick__foot" data-cplan-alt-foot hidden></div>' in TEMPLATE
 

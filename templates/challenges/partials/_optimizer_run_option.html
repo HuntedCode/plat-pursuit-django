@@ -15,7 +15,7 @@ what it says and what it is called.{% endcomment %}
     <div class="pp-cplan__opt-foot">
         <span class="pp-cplan__opt-counts">
             <span class="pp-cplan__opt-open" data-cplan-open-for="{{ r.type }}">{{ r.open }} open square{{ r.open|pluralize }}</span>
-            {% comment %}Squares holding a game not finished yet, which the plan keeps unless step 1 says replan them
+            {% comment %}Squares holding a game not finished yet, which the plan keeps unless step 1 says to plan them
             (owner, 2026-10-18). The script reads `data-picked`, never the text.{% endcomment %}
             <span class="pp-cplan__opt-picked" data-cplan-picked-for="{{ r.type }}" data-picked="{{ r.picked }}" {% if not r.picked %}hidden{% endif %}><span aria-hidden="true">&middot; </span>{{ r.picked }} picked</span>
         </span>

@@ -8,9 +8,10 @@
  * TWEAKS, all by contract slug:
  *   pins        "Any games you want in?" (step 5)
  *   squarePins  "type|key" -> slug: a locked line, an Other options pick, or an accepted swap
+ *   locks       "type|key": the square pins that lock the hunter's own pick there (sent as `lock: true`)
  *   excluded    "Not this one"
  *   penalized   "Different games" (accumulates, so each press reaches further)
- *   leftOpen    "type|key": an open square the hunter will fill themselves, or (Replan) a pick they are keeping
+ *   leftOpen    "type|key": an open square the hunter will fill themselves
  * A change that needs a re-solve goes through `change()`, which snapshots the tweaks first and rolls them back
  * if the request fails, so the tweaks never disagree with the plan on screen.
  *
@@ -34,9 +35,10 @@
         in_run: 'It is already in the run it fits.',
         conflict: 'Other picks took the squares it fits.',
         square_closed: "That square isn't open any more.",
-        left_open: "You're leaving the square it fits open.",
-        kept: "You're keeping the pick in the square it fits."
+        left_open: "You're leaving the square it fits open."
     };
+    //: The collapsed summary's word on the picks, when they are planned (step 1, owner 2026-10-18).
+    var PICKS_TAGS = { replan: 'Planning around your picks', fresh: 'Starting fresh on your picks' };
     var AVAILABILITY_LABELS = { delisted: 'Delisted', unobtainable: 'Unobtainable' };
     //: Mirrors the server's ceiling on "Different games" (`optimizer_views.MAX_EXCLUDED`).
     var MAX_PENALIZED = 200;
@@ -173,7 +175,7 @@
          *  re-plan (the Letter/Job sort) rebuilds every card and must not quietly reset an "Only A" to Both; a
          *  fresh plan starts every card on Both again. */
         function freshTweaks() {
-            return { squarePins: {}, excluded: new Set(), penalized: new Set(), leftOpen: new Set(),
+            return { squarePins: {}, locks: new Set(), excluded: new Set(), penalized: new Set(), leftOpen: new Set(),
                      declined: new Set(), choices: {} };
         }
 
@@ -236,13 +238,8 @@
             }
         }
 
-        /** Is the plan on screen replanning the picks? */
-        function replanning() { return !!submitted && submitted.picks === 'replan'; }
-
-        /** A `left_open` square that is a kept pick (Replan's Keep) rather than an open square: `kept` is the game's
-         *  name, null for an open square. Its name may be empty (a snapshot with none), so never test truthiness. */
-        function isKept(sq) { return sq.kept != null; }
-        function keptName(sq) { return sq.kept || 'your pick'; }
+        /** Are the picks in the plan on screen ("Plan around them" or "Start fresh")? */
+        function replanning() { return !!submitted && !!PICKS_TAGS[submitted.picks]; }
 
         function payload() {
             var a = submitted;
@@ -254,7 +251,9 @@
                     pins: pins.map(function (p) { return p.slug; }),
                     square_pins: Object.keys(tweaks.squarePins).map(function (sq) {
                         var parts = sq.split('|');
-                        return { type: parts[0], key: parts[1], contract: tweaks.squarePins[sq] };
+                        var entry = { type: parts[0], key: parts[1], contract: tweaks.squarePins[sq] };
+                        if (tweaks.locks.has(sq)) { entry.lock = true; }
+                        return entry;
                     }),
                     excluded: Array.from(tweaks.excluded),
                     penalized: Array.from(tweaks.penalized),
@@ -271,7 +270,7 @@
             parts.push(a.platformLabels.length ? a.platformLabels.join(', ') : 'Any platform');
             parts.push(SOURCE_LABELS[a.source]);
             parts.push(badgeLine(a));
-            if (a.picks === 'replan') { parts.push('Replanning your picks'); }
+            if (PICKS_TAGS[a.picks]) { parts.push(PICKS_TAGS[a.picks]); }
             if (pins.length) { parts.push(plural(pins.length, 'must-have', 'must-haves')); }
             return parts.join(' · ');
         }
@@ -761,7 +760,7 @@
         // ── planning ─────────────────────────────────────────────────────────────────────────────
 
         function snapshot() {
-            return { pins: pins.slice(), squarePins: Object.assign({}, tweaks.squarePins),
+            return { pins: pins.slice(), squarePins: Object.assign({}, tweaks.squarePins), locks: new Set(tweaks.locks),
                      excluded: new Set(tweaks.excluded), penalized: new Set(tweaks.penalized),
                      leftOpen: new Set(tweaks.leftOpen), declined: new Set(tweaks.declined) };
         }
@@ -769,6 +768,7 @@
         function restore(s) {
             pins = s.pins;
             tweaks.squarePins = s.squarePins;
+            tweaks.locks = s.locks;
             tweaks.excluded = s.excluded;
             tweaks.penalized = s.penalized;
             tweaks.leftOpen = s.leftOpen;
@@ -782,9 +782,12 @@
         function pinGame(slug, squares) {
             var runs = squares.map(function (s) { return s.type; });
             Object.keys(tweaks.squarePins).forEach(function (k) {
-                if (tweaks.squarePins[k] === slug && runs.indexOf(k.split('|')[0]) >= 0) { delete tweaks.squarePins[k]; }
+                if (tweaks.squarePins[k] === slug && runs.indexOf(k.split('|')[0]) >= 0) {
+                    delete tweaks.squarePins[k];
+                    tweaks.locks.delete(k);
+                }
             });
-            squares.forEach(function (s) { tweaks.squarePins[sqKey(s)] = slug; });
+            squares.forEach(function (s) { tweaks.squarePins[sqKey(s)] = slug; tweaks.locks.delete(sqKey(s)); });
         }
 
         /** LEAVE A SQUARE OPEN (owner, 2026-10-17): the hunter will fill it themselves, so the plan stops filling it
@@ -792,7 +795,13 @@
         function leaveOpen(sq) {
             tweaks.leftOpen.add(sqKey(sq));
             delete tweaks.squarePins[sqKey(sq)];
+            tweaks.locks.delete(sqKey(sq));
         }
+
+        /** KEEP A PICK (picks planned, owner 2026-10-18): its own game locked back onto its square, which the server
+         *  holds through re-solves. `r` is a line's `replaces` entry, carrying the pick's live slug. The latest word
+         *  wins, so it also undoes an earlier "Not this one" on that game. */
+        function keepPick(r) { tweaks.excluded.delete(r.slug); pinGame(r.slug, [r]); tweaks.locks.add(sqKey(r)); }
 
         /** Apply a tweak and re-solve; the tweak is rolled back if the re-solve fails. */
         function change(mutate, focus) {
@@ -898,11 +907,13 @@
         /** Applied games are on the board now: they leave the saved must-haves and locks, as on the server. */
         function forgetApplied(results) {
             if (!savedTweaks) { return; }
-            var placed = new Set(results.filter(function (r) { return r.status === 'applied'; })
-                                        .map(function (r) { return r.contract; }));
+            var done = results.filter(function (r) { return r.status === 'applied'; });
+            var placed = new Set(done.map(function (r) { return r.contract; }));
+            var written = new Set(done.map(function (r) { return r.type + '|' + r.key; }));
             savedTweaks = Object.assign({}, savedTweaks, {
                 pins: (savedTweaks.pins || []).filter(function (p) { return !placed.has(p.slug); }),
-                square_pins: (savedTweaks.square_pins || []).filter(function (e) { return !placed.has(e.contract); })
+                // Only the squares written: the same game locked as a pick elsewhere keeps its lock.
+                square_pins: (savedTweaks.square_pins || []).filter(function (e) { return !written.has(e.type + '|' + e.key); })
             });
         }
 
@@ -913,9 +924,13 @@
             pins = (t.pins || []).slice(0, maxPins).map(function (p) { return { slug: p.slug, name: p.name }; });
             renderPinned();
             var squarePins = {};
-            (t.square_pins || []).forEach(function (e) { squarePins[e.type + '|' + e.key] = e.contract; });
+            var locks = new Set();
+            (t.square_pins || []).forEach(function (e) {
+                squarePins[e.type + '|' + e.key] = e.contract;
+                if (e.lock === true) { locks.add(e.type + '|' + e.key); }
+            });
             var leftOpen = new Set((t.left_open || []).map(function (e) { return e.type + '|' + e.key; }));
-            return { squarePins: squarePins, excluded: new Set(t.excluded || []), penalized: new Set(t.penalized || []),
+            return { squarePins: squarePins, locks: locks, excluded: new Set(t.excluded || []), penalized: new Set(t.penalized || []),
                      leftOpen: leftOpen, declined: new Set(), choices: {} };
         }
 
@@ -1027,7 +1042,7 @@
             setChecked('[data-cplan-weight]', [a.badge_weight || 'bonus']);
             setChecked('[data-cplan-picks]', [a.picks || 'keep']);
             // The runs were re-ticked without a `change` event: show the question for them before `answers()` reads
-            // it, or a saved Replan would be sent as Keep (and its Keeps forgotten by the autosave).
+            // it, or a saved Plan around would be sent as Keep (and its locks would mean nothing).
             syncPicks();
             setChecked('[data-cplan-badge-type]', a.badge_types);
             if (els.badgeStarted) { els.badgeStarted.checked = !!a.badge_started; }
@@ -1225,8 +1240,10 @@
 
         function readyLine() {
             var squares = squareCount();
-            if (!plan.lines.length) { return 'Plan ready.'; }
-            return 'Plan ready: ' + plural(plan.lines.length, 'game', 'games') + ' for ' + plural(squares, 'square', 'squares') + '.';
+            // Games with a square to write: a pick that only stays is part of the plan, not news.
+            var games = plan.lines.filter(function (line) { return line.squares.some(changes); }).length;
+            if (!games) { return 'Plan ready.'; }
+            return 'Plan ready: ' + plural(games, 'game', 'games') + ' for ' + plural(squares, 'square', 'squares') + '.';
         }
 
         function setBusy(on) {
@@ -1280,15 +1297,18 @@
             reveal();
         }
 
+        /** Squares Apply would write: every planned square but a pick that stays (it is already there). */
         function squareCount() {
             if (!plan) { return 0; }
-            return plan.lines.reduce(function (n, line) { return n + line.squares.length; }, 0);
+            return plan.lines.reduce(function (n, line) { return n + line.squares.filter(changes).length; }, 0);
         }
 
-        /** Open squares the plan fills: every planned square except the unfinished ones an accepted swap replaces. */
+        function changes(sq) { return !sq.stays; }
+
+        /** Open squares the plan fills: every square it writes except the unfinished ones it replaces. */
         function openSquaresFilled() {
             if (!plan) { return 0; }
-            return plan.lines.reduce(function (n, line) { return n + line.squares.length - (line.replaces || []).length; }, 0);
+            return squareCount() - plan.lines.reduce(function (n, line) { return n + (line.replaces || []).length; }, 0);
         }
 
         // ── focus ────────────────────────────────────────────────────────────────────────────────
@@ -1431,7 +1451,7 @@
                         rows.push(slotRow(empty[key], blocked[key] ? 'No badge game fits' : 'Nothing on your terms fits'));
                     }
                     else if (left[key]) {
-                        rows.push(slotRow(left[key], isKept(left[key]) ? 'Keeping ' + keptName(left[key]) : 'Leaving open', true));
+                        rows.push(slotRow(left[key], 'Leaving open', true));
                     }
                 });
                 if (!rows.length) { return; }
@@ -1477,10 +1497,9 @@
         }
 
         function planItAction(sq) {
-            var label = isKept(sq) ? 'Replan it' : 'Plan it';
-            var btn = action(label, function () {
+            var btn = action('Plan it', function () {
                 change(function () { tweaks.leftOpen.delete(sqKey(sq)); }, 'square:' + sqKey(sq));
-            }, { aria: label + ': ' + sq.label });
+            }, { aria: 'Plan it: ' + sq.label });
             btn.setAttribute('data-square', sqKey(sq));
             return btn;
         }
@@ -1499,7 +1518,7 @@
                          ['games', plan.lines.length, '', plan.lines.length === 1 ? 'game' : 'games']];
             // "Cover both" only means something when two boards are planned.
             if (Object.keys(plan.runs).length > 1) { cells.push(['both', doubles, '', 'cover both']); }
-            // Under Replan, how many of the hunter's own picks this plan would change (an accepted swap counts too).
+            // When the picks are planned, how many of them this plan would change (an accepted swap counts too).
             var changed = plan.lines.reduce(function (n, l) { return n + (l.replaces || []).length; }, 0);
             if (replanning() || changed) { cells.push(['changed', changed, '', changed === 1 ? 'pick changed' : 'picks changed']); }
             cells.push(['stages', stages.size, '', stages.size === 1 ? 'badge stage' : 'badge stages']);
@@ -1612,10 +1631,11 @@
             main.appendChild(squares);
 
             (line.replaces || []).forEach(function (r) {
-                var why = document.createElement('p');
-                why.className = 'pp-cplan__swap-why';
-                why.textContent = 'Replaces ' + (r.name || 'the game') + ' in ' + r.label + '.';
-                main.appendChild(why);
+                main.appendChild(lineNote('Replaces ' + (r.name || 'the game') + ' in ' + r.label + '.'));
+            });
+            // A PICK THAT STAYS is on the plan so the hunter sees all of it, said so it never reads as a change.
+            line.squares.forEach(function (sq) {
+                if (sq.stays) { main.appendChild(lineNote('Already your pick in ' + sq.label + '.')); }
             });
             var stages = stageList(line);
             if (stages) { main.appendChild(stages); }
@@ -1746,6 +1766,14 @@
             return svg;
         }
 
+        /** One plain sentence under a game's name: what it replaces, covers, keeps, or why it did not fit. */
+        function lineNote(text) {
+            var p = document.createElement('p');
+            p.className = 'pp-cplan__swap-why';
+            p.textContent = text;
+            return p;
+        }
+
         function metaNote(text, kind) {
             var span = document.createElement('span');
             span.className = 'pp-cplan__note pp-cplan__note--' + kind;
@@ -1777,6 +1805,8 @@
                     var on = !isLocked(line);
                     line.squares.forEach(function (sq) {
                         if (on) { tweaks.squarePins[sqKey(sq)] = line.slug; } else { delete tweaks.squarePins[sqKey(sq)]; }
+                        // A pick that stays is LOCKED there, so a later hand edit to that square drops it.
+                        if (on && sq.stays) { tweaks.locks.add(sqKey(sq)); } else { tweaks.locks.delete(sqKey(sq)); }
                     });
                     btn.setAttribute('aria-pressed', on ? 'true' : 'false');
                     var li = btn.closest('.pp-cplan__line');
@@ -1784,17 +1814,32 @@
                     if (on && PP.igniteTab) { PP.igniteTab(btn); }
                 }, { pressed: locked, aria: 'Lock ' + line.name, focus: 'lock:' + line.slug }));
             }
-            if (replanning() && (line.replaces || []).length) {
-                var kept = line.replaces;
+            // KEEP (picks planned): put the pick back, LOCKED, so its line comes back as "Already your pick".
+            var kept = replanning() ? (line.replaces || []).filter(function (r) { return r.slug; }) : [];
+            if (kept.length) {
                 var keepLabel = kept.length === 1 ? 'Keep ' + (kept[0].name || 'your pick') : 'Keep your picks';
                 row.appendChild(action(keepLabel, function () {
-                    change(function () { kept.forEach(leaveOpen); }, 'square:' + sqKey(kept[0]));
+                    change(function () { kept.forEach(keepPick); }, 'square:' + sqKey(kept[0]));
                 }, { aria: keepLabel + ': ' + kept.map(function (r) { return (r.name || 'your pick') + ' in ' + r.label; }).join(' and ') }));
+            }
+            // USE IT FOR ONE SQUARE (owner, 2026-10-18): a line replacing a pick in BOTH its squares offers "Only F"
+            // and "Only Survivalist". "Only F" pins the game to F and locks the other pick back; the re-solve then
+            // draws two lines. Plain buttons, so nothing re-plans until one is pressed.
+            if (kept.length === 2 && line.squares.length === 2) {
+                kept.forEach(function (r) {
+                    var other = kept.filter(function (o) { return sqKey(o) !== sqKey(r); })[0];
+                    row.appendChild(action('Only ' + r.label, function () {
+                        change(function () { pinGame(line.slug, [r]); keepPick(other); }, 'square:' + sqKey(r));
+                    }, { aria: 'Only ' + r.label + ': use ' + line.name + ' there and keep ' + (other.name || 'your pick')
+                                + ' in ' + other.label }));
+                });
             }
             row.appendChild(action('Not this one', function () {
                 change(function () {
                     tweaks.excluded.add(line.slug);
-                    Object.keys(tweaks.squarePins).forEach(function (k) { if (tweaks.squarePins[k] === line.slug) { delete tweaks.squarePins[k]; } });
+                    Object.keys(tweaks.squarePins).forEach(function (k) {
+                        if (tweaks.squarePins[k] === line.slug) { delete tweaks.squarePins[k]; tweaks.locks.delete(k); }
+                    });
                     pins = pins.filter(function (p) { return p.slug !== line.slug; });
                     renderPinned();
                 });
@@ -1848,18 +1893,10 @@
             // EVERY GAME IT REPLACES, one line each (owner, 2026-10-17): a game that would replace unfinished games
             // in both challenges says so on one card, instead of hiding the second as "also covers".
             swap.replaces.forEach(function (r) {
-                var why = document.createElement('p');
-                why.className = 'pp-cplan__swap-why';
-                why.textContent = 'Replaces ' + (r.current.name || 'the game') + ' in ' + r.square.label + '.';
-                main.appendChild(why);
+                main.appendChild(lineNote('Replaces ' + (r.current.name || 'the game') + ' in ' + r.square.label + '.'));
             });
             var also = (swap.also || []).map(function (s) { return s.label; }).join(', ');
-            if (also) {
-                var alsoNote = document.createElement('p');
-                alsoNote.className = 'pp-cplan__swap-why';
-                alsoNote.textContent = 'Also covers ' + also + '.';
-                main.appendChild(alsoNote);
-            }
+            if (also) { main.appendChild(lineNote('Also covers ' + also + '.')); }
             var stages = stageList(swap.suggested);
             if (stages) { main.appendChild(stages); }
             var meta = metaList(swap.suggested);
@@ -1945,10 +1982,7 @@
             name.className = 'pp-cplan__line-name';
             name.textContent = item.name || 'A game you picked';
             main.appendChild(name);
-            var why = document.createElement('p');
-            why.className = 'pp-cplan__swap-why';
-            why.textContent = UNPLACED_COPY[item.reason] || "It didn't fit this plan.";
-            main.appendChild(why);
+            main.appendChild(lineNote(UNPLACED_COPY[item.reason] || "It didn't fit this plan."));
             li.appendChild(main);
             return li;
         }
@@ -1957,8 +1991,7 @@
         function emptySection(onlyType) {
             var mine = function (sq) { return !onlyType || sq.type === onlyType; };
             var empty = plan.empty.filter(mine);
-            var left = (plan.left_open || []).filter(function (sq) { return mine(sq) && !isKept(sq); });
-            keptSection(mine);
+            var left = (plan.left_open || []).filter(mine);
             if (!empty.length && !left.length) { return; }
             var wrap = sectionShell('Still open', empty.length + left.length);
             if (empty.length) {
@@ -1989,36 +2022,9 @@
             els.sections.appendChild(wrap);
         }
 
-        /** KEEPING (Replan): the picks the hunter chose to keep as they are, each with Replan it. Drawn before Still
-         *  open, which `emptySection` follows with. */
-        function keptSection(mine) {
-            var kept = (plan.left_open || []).filter(function (sq) { return mine(sq) && isKept(sq); });
-            if (!kept.length) { return; }
-            var wrap = sectionShell('Keeping', kept.length);
-            wrap.appendChild(hint("You're keeping these picks as they are."));
-            var list = document.createElement('div');
-            list.className = 'pp-cplan__left-open';
-            kept.forEach(function (sq) {
-                var item = document.createElement('div');
-                item.className = 'pp-cplan__left-open-item';
-                item.appendChild(squareChip(sq, false));
-                var name = document.createElement('span');
-                name.className = 'pp-cplan__kept-name';
-                name.textContent = keptName(sq);
-                name.title = keptName(sq);   // the full title where the ellipsis cut it
-                item.appendChild(name);
-                item.appendChild(planItAction(sq));
-                list.appendChild(item);
-            });
-            wrap.appendChild(list);
-            els.sections.appendChild(wrap);
-        }
-
         function nothingToPlan() {
             var wrap = sectionShell('Nothing to plan');
-            wrap.appendChild(hint(replanning()
-                ? 'Every square already has a game, and your picks are the best fit for them.'
-                : 'Every open square already has a game. Finish a few and come back.'));
+            wrap.appendChild(hint('Every open square already has a game. Finish a few and come back.'));
             wrap.appendChild(runLinks(plan.runs, function (t, r) { return 'Open ' + TYPE_LABELS[t]; }));
             els.sections.appendChild(wrap);
         }
@@ -2433,7 +2439,8 @@
 
         /** LEAVE IT OPEN, from the sheet (owner, 2026-10-17): one button per OPEN square of the line (both on a
          *  C + Gunslinger line), for "none of these, I'll fill it myself". An unfinished square is left out: its
-         *  game is already there, and Undo swap is how it goes back. Under Replan it offers Keep instead. */
+         *  game is already there, and Undo swap is how it goes back. When the picks are planned a changed pick offers
+         *  Keep instead, and a pick that stays offers nothing (its line has Lock). */
         function renderAltFoot(square, partners, line) {
             if (!alt.foot) { return; }
             alt.foot.textContent = '';
@@ -2441,7 +2448,7 @@
             (line.replaces || []).forEach(function (r) { replaced[sqKey(r)] = r; });
             [square].concat(partners).forEach(function (sq) {
                 var old = replaced[sqKey(sq)];
-                if (old && !replanning()) { return; }
+                if (sq.stays || (old && !(replanning() && old.slug))) { return; }
                 var btn = document.createElement('button');
                 btn.type = 'button';
                 btn.className = 'pp-cta pp-cta--ghost';
@@ -2450,7 +2457,7 @@
                 btn.addEventListener('click', function () {
                     if (busy) { return; }
                     closeSheet();
-                    change(function () { leaveOpen(sq); }, 'square:' + sqKey(sq));
+                    change(function () { if (old) { keepPick(old); } else { leaveOpen(sq); } }, 'square:' + sqKey(sq));
                 });
                 alt.foot.appendChild(btn);
             });
@@ -2513,7 +2520,9 @@
                 }
                 change(function () {
                     plan.lines.forEach(function (line) {
-                        if (!isLocked(line) && !line.pinned && tweaks.penalized.size < MAX_PENALIZED) {
+                        // A pick that stays is the hunter's own game, never a suggestion to reroll.
+                        var theirs = line.squares.some(function (sq) { return sq.stays; });
+                        if (!theirs && !isLocked(line) && !line.pinned && tweaks.penalized.size < MAX_PENALIZED) {
                             tweaks.penalized.add(line.slug);
                         }
                     });
@@ -2526,7 +2535,7 @@
                 if (!plan || busy || !squareCount()) { return; }
                 var lines = [];
                 plan.lines.forEach(function (line) {
-                    line.squares.forEach(function (sq) {
+                    line.squares.filter(changes).forEach(function (sq) {
                         lines.push({ type: sq.type, key: sq.key, contract: line.slug,
                                      replacing: (line.replacing || {})[sq.type] || '' });
                     });
