@@ -94,7 +94,7 @@ def test_applied_games_leave_the_saved_must_haves_and_locks_only():
     optimizer_drafts.save(profile, _options(), _tweaks(pins=['placed', 'still-pinned'], square_pins=[lock, other],
                                                          excluded=['placed'], penalized=['rerolled']))
 
-    optimizer_drafts.forget_applied(profile, {'placed'})
+    optimizer_drafts.forget_applied(profile, [(AZ, 'A', 'placed')])
 
     tweaks = OptimizerDraft.objects.get(profile=profile).tweaks
     assert tweaks['pins'] == ['still-pinned'] and tweaks['square_pins'] == [other]
@@ -102,14 +102,25 @@ def test_applied_games_leave_the_saved_must_haves_and_locks_only():
     assert tweaks['excluded'] == ['placed'] and tweaks['penalized'] == ['rerolled']
 
 
+def test_a_game_applied_in_one_run_keeps_its_lock_as_a_pick_in_the_other():
+    profile = ProfileFactory()
+    lock = {'type': AZ, 'key': 'B', 'contract': 'game', 'lock': True}
+    optimizer_drafts.save(profile, _options(), _tweaks(square_pins=[lock, {'type': 'jobs', 'key': 'medic',
+                                                                           'contract': 'game'}]))
+
+    optimizer_drafts.forget_applied(profile, [('jobs', 'medic', 'game')])
+
+    assert OptimizerDraft.objects.get(profile=profile).tweaks['square_pins'] == [lock]
+
+
 def test_forgetting_with_nothing_applied_or_no_draft_writes_nothing():
     profile = ProfileFactory()
-    optimizer_drafts.forget_applied(profile, {'anything'})   # no draft: no row appears
+    optimizer_drafts.forget_applied(profile, [(AZ, 'A', 'anything')])   # no draft: no row appears
     assert not OptimizerDraft.objects.filter(profile=profile).exists()
     optimizer_drafts.save(profile, _options(), _tweaks(pins=['a']))
     before = OptimizerDraft.objects.get(profile=profile).updated_at
-    optimizer_drafts.forget_applied(profile, set())
-    optimizer_drafts.forget_applied(profile, {'not-in-it'})
+    optimizer_drafts.forget_applied(profile, [])
+    optimizer_drafts.forget_applied(profile, [(AZ, 'A', 'not-in-it')])
     assert OptimizerDraft.objects.get(profile=profile).updated_at == before
 
 
@@ -275,6 +286,6 @@ def test_forgetting_applied_games_locks_the_draft_row():
     profile = ProfileFactory()
     optimizer_drafts.save(profile, _options(), _tweaks(pins=['placed']))
     with CaptureQueriesContext(connection) as captured:
-        optimizer_drafts.forget_applied(profile, {'placed'})
+        optimizer_drafts.forget_applied(profile, [(AZ, 'A', 'placed')])
     reads = [q['sql'] for q in captured.captured_queries if 'optimizerdraft' in q['sql'].lower() and 'SELECT' in q['sql']]
     assert reads and all('FOR UPDATE' in sql for sql in reads)

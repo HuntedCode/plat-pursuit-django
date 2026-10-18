@@ -901,14 +901,121 @@ def test_step_one_counts_the_squares_already_picked(client):
     assert 'data-picked="1" >' in picked   # no `hidden` on the count
 
 
-def test_a_kept_pick_comes_back_with_the_game_it_keeps(client):
+def test_a_pick_that_stays_is_a_line_with_nothing_to_apply(client):
     profile = _hunter(client)
     run = svc.start(profile, AZ)
-    svc.assign(run, profile, 'B', _contract('Bastion'))
-    _contract('Apex')
-    body = _body(_plan(client, types=[AZ], picks='replan',
-                       tweaks={'left_open': [{'type': AZ, 'key': 'A'}, {'type': AZ, 'key': 'B'}]}))
-    assert {s['key']: s['kept'] for s in body['left_open']} == {'A': None, 'B': 'Bastion'}
+    current = _contract('Bastion')
+    svc.assign(run, profile, 'B', current)
+    body = _body(_plan(client, types=[AZ], picks='replan'))
+    [line] = [line for line in body['lines'] if line['slug'] == current.slug]
+    assert line['squares'][0]['key'] == 'B' and line['squares'][0]['stays'] is True
+    assert line['replacing'] == {} and line['replaces'] == [] and line['outside_filters'] is False
+
+
+def test_a_changed_pick_names_the_game_it_replaces_by_its_live_slug(client):
+    profile = _hunter(client)
+    run = svc.start(profile, AZ)
+    current = _contract('Bastion')
+    svc.assign(run, profile, 'B', current)
+    other = _contract('Bloodborne')
+    body = _body(_plan(client, types=[AZ], picks='replan', tweaks={'pins': [other.slug]}))
+    [line] = [line for line in body['lines'] if line['slug'] == other.slug]
+    assert line['squares'][0]['stays'] is False
+    assert line['replaces'] == [{**line['replaces'][0], 'name': 'Bastion', 'slug': current.slug}]
+    assert line['replacing'] == {AZ: current.slug}
+
+
+def test_a_staying_pick_off_your_platforms_is_never_called_outside_your_filters(client):
+    profile = _hunter(client)
+    run = svc.start(profile, AZ)
+    off = _contract('Bastion', platforms=('PS4',))
+    svc.assign(run, profile, 'B', off)
+    body = _body(_plan(client, types=[AZ], platforms=['PS5'], picks='replan'))
+    [line] = [line for line in body['lines'] if line['slug'] == off.slug]
+    assert line['squares'][0]['stays'] is True and line['outside_filters'] is False
+
+
+def test_a_changed_pick_carries_its_live_slug_while_apply_compares_the_snapshot(client):
+    profile = _hunter(client)
+    run = svc.start(profile, AZ)
+    current = _contract('Bastion')
+    svc.assign(run, profile, 'B', current)
+    snapshot = current.slug
+    Contract.objects.filter(pk=current.pk).update(slug='bastion-renamed')
+    other = _contract('Bloodborne')
+    body = _body(_plan(client, types=[AZ], picks='replan', tweaks={'pins': [other.slug]}))
+    [line] = [line for line in body['lines'] if line['slug'] == other.slug]
+    assert line['replaces'][0]['slug'] == 'bastion-renamed' and line['replacing'] == {AZ: snapshot}
+
+
+def test_a_lock_round_trips_and_is_saved_as_one(client):
+    from challenges.models import OptimizerDraft
+    profile = _hunter(client)
+    run = svc.start(profile, AZ)
+    current = _contract('Bastion')
+    svc.assign(run, profile, 'B', current)
+    entry = {'type': AZ, 'key': 'B', 'contract': current.slug, 'lock': True}
+    _plan(client, types=[AZ], picks='replan', tweaks={'square_pins': [entry, {**entry, 'key': 'C', 'lock': 'yes'}]})
+    saved = OptimizerDraft.objects.get(profile=profile).tweaks['square_pins']
+    assert saved == [entry, {'type': AZ, 'key': 'C', 'contract': current.slug}]   # only a real true is a lock
+
+
+def test_a_stale_lock_is_not_saved_with_the_plan(client):
+    from challenges.models import OptimizerDraft
+    profile = _hunter(client)
+    run = svc.start(profile, AZ)
+    locked, mine = _contract('Bastion'), _contract('Bloodborne')
+    svc.assign(run, profile, 'B', mine)   # the hunter changed B by hand since locking Bastion there
+    stale = {'type': AZ, 'key': 'B', 'contract': locked.slug, 'lock': True}
+    holds = {'type': AZ, 'key': 'C', 'contract': mine.slug}   # an unmarked pin is kept as sent
+    _plan(client, types=[AZ], picks='replan', tweaks={'square_pins': [stale, holds]})
+    assert OptimizerDraft.objects.get(profile=profile).tweaks['square_pins'] == [holds]
+
+
+def test_a_locked_pick_that_stays_is_not_tagged_your_pick(client):
+    profile = _hunter(client)
+    run = svc.start(profile, AZ)
+    current = _contract('Bastion')
+    svc.assign(run, profile, 'B', current)
+    lock = {'type': AZ, 'key': 'B', 'contract': current.slug, 'lock': True}
+    body = _body(_plan(client, types=[AZ], picks='replan', tweaks={'square_pins': [lock]}))
+    [line] = [line for line in body['lines'] if line['slug'] == current.slug]
+    assert line['squares'][0]['stays'] is True and line['pinned'] is False
+
+
+def test_apply_never_rewrites_a_square_that_already_holds_the_game(client):
+    profile = _hunter(client)
+    run = svc.start(profile, AZ)
+    current = _contract('Bastion')
+    svc.assign(run, profile, 'B', current)
+    body = _body(_post(client, 'challenge_optimizer_apply',
+                       {'lines': [{'type': AZ, 'key': 'B', 'contract': current.slug, 'replacing': current.slug}]}))
+    assert body['applied'] == 0 and body['results'][0]['reason'] == "It's already your pick there."
+
+
+def test_other_options_never_offers_a_locked_pick_as_a_square_a_game_also_covers(client):
+    profile = _hunter(client)
+    job = Job.objects.order_by('slug').first()
+    double = _contract('Astro Bot', jobs=[job])
+    svc.start(profile, AZ)
+    jobs_run = svc.start(profile, JOBS)
+    pick = _contract('Bloodborne', jobs=[job])
+    svc.assign(jobs_run, profile, job.slug, pick)
+    ask = {'types': [AZ, JOBS], 'badge_started': False, 'type': AZ, 'key': 'A', 'picks': 'replan'}
+    _plan(client, picks='replan')
+
+    def also(extra):
+        rows = _body(_post(client, 'challenge_optimizer_alternatives', {**ask, **extra, 'group': 'rest'}))['rows']
+        return {r['slug']: [s['key'] for s in r['also']] for r in rows}[double.slug]
+
+    assert also({}) == [job.slug]
+    lock = {'type': JOBS, 'key': job.slug, 'contract': pick.slug, 'lock': True}
+    assert also({'tweaks': {'square_pins': [lock]}}) == []
+
+
+def test_start_fresh_is_an_answer_the_door_takes(client):
+    from challenges.optimizer_views import _OptimizerJsonView
+    assert _OptimizerJsonView().options({'types': [AZ], 'picks': 'fresh'}).fresh_picks
 
 
 def test_an_unknown_badge_weight_is_refused(client):

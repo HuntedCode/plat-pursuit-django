@@ -155,6 +155,18 @@ def test_an_occupant_is_kept_when_a_swap_gains_nothing():
     assert solve(problem).assignments == {(AZ, 'A'): 9}
 
 
+def test_without_the_keep_tier_an_occupant_stays_only_on_its_merits():
+    # "Start fresh": the occupant (9) is still allowed on its square, but no longer preferred, so the earlier
+    # candidate wins the tie a kept occupant would have won.
+    base = dict(squares=az('A'), candidates=(cand(1, letter='A'), cand(9, letter='A')),
+                in_run={AZ: frozenset({9})}, occupants={(AZ, 'A'): 9})
+    assert solve(Problem(**base)).assignments == {(AZ, 'A'): 9}
+    assert solve(Problem(**base, keep_occupants=False)).assignments == {(AZ, 'A'): 1}
+    # It may still stay when it is the best fit.
+    better = dict(base, candidates=(cand(1, letter='A'), cand(9, letter='A', stages=2)))
+    assert solve(Problem(**better, keep_occupants=False)).assignments == {(AZ, 'A'): 9}
+
+
 def test_penalized_games_are_avoided_without_losing_squares_or_doubles():
     problem = Problem(
         squares=az('A') + jobs('brawler'),

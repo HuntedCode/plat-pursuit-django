@@ -260,11 +260,6 @@ button.pp-cplan__sq:focus-visible { outline: 2px solid var(--disc); outline-offs
 /* Still open's "leaving these open" squares, each with its Plan it. */
 .pp-cplan__left-open { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
 .pp-cplan__left-open-item { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
-/* Keeping's game name (Replan): one line, so a long title never pushes Replan it off the row. */
-.pp-cplan__kept-name {
-    min-width: 0; max-width: 14rem; font-size: 0.8rem; font-weight: 600;
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
 .pp-cplan__left-open-item .pp-cplan__act { flex: none; white-space: nowrap; }
 
 /* A swap card's Both / Only A / Only Gunslinger choice: the house switch, hugging its chips (a card's column would

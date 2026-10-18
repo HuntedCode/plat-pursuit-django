@@ -385,13 +385,15 @@ class _OptimizerJsonView(_ChallengeJsonView):
         pins = _str_list(raw.get('pins'))[:MAX_PINS]
         excluded = _str_list(raw.get('excluded'))[:MAX_EXCLUDED]
         penalized = _str_list(raw.get('penalized'))[:MAX_EXCLUDED]
-        square_pins = []
+        square_pins, locks = [], set()
         raw_square_pins = raw.get('square_pins') or []
         if not isinstance(raw_square_pins, list):
             raise PlanRequestError('That request could not be read.')
         for entry in raw_square_pins[:MAX_LINES]:
             if isinstance(entry, dict) and all(isinstance(entry.get(f), str) for f in ('type', 'key', 'contract')):
                 square_pins.append((entry['type'], entry['key'], entry['contract']))
+                if entry.get('lock') is True:   # a LOCKED PICK (planner.Tweaks.locks)
+                    locks.add((entry['type'], entry['key']))
         raw_left_open = raw.get('left_open') or []
         if not isinstance(raw_left_open, list):
             raise PlanRequestError('That request could not be read.')
@@ -406,10 +408,12 @@ class _OptimizerJsonView(_ChallengeJsonView):
             excluded=frozenset(ids[s] for s in excluded if s in ids),
             penalized=frozenset(ids[s] for s in penalized if s in ids),
             left_open=frozenset(left_open),
+            locks=frozenset(locks),
         )
         slugs = {
             'pins': [s for s in dict.fromkeys(pins) if s in ids],
-            'square_pins': [{'type': t, 'key': k, 'contract': s} for t, k, s in square_pins if s in ids],
+            'square_pins': [{'type': t, 'key': k, 'contract': s, **({'lock': True} if (t, k) in locks else {})}
+                            for t, k, s in square_pins if s in ids],
             'excluded': [s for s in dict.fromkeys(excluded) if s in ids],
             'penalized': [s for s in dict.fromkeys(penalized) if s in ids],
             'left_open': [{'type': t, 'key': k} for t, k in left_open],
@@ -559,8 +563,11 @@ class OptimizerPlanView(_OptimizerJsonView):
         if pool is None:
             return JsonResponse({'error': BUILD_LIMITED_MESSAGE}, status=429)
         plan = planner.make_plan(profile, options, pool, states, tweaks)
-        # A square left open that the hunter has since filled by hand is forgotten, not saved for ever.
-        tweak_slugs = {**tweak_slugs, 'left_open': [{'type': t, 'key': k} for t, k in plan.left_open]}
+        # A square left open that the hunter has since filled by hand is forgotten, not saved for ever; so is a lock
+        # whose square holds another game now (the planner drops it on every solve anyway).
+        tweak_slugs = {**tweak_slugs, 'left_open': [{'type': t, 'key': k} for t, k in plan.left_open],
+                       'square_pins': [e for e in tweak_slugs['square_pins'] if not e.get('lock')
+                                       or _still_holds(states, (e['type'], e['key']), tweaks)]}
         body = _plan_json(plan, pool, states, tweaks, built, badges_only=options.badges_only)
         if outcome == allowance.SPEND:
             if preview_week(request) is not None:
@@ -637,8 +644,11 @@ class OptimizerAlternativesView(_OptimizerJsonView):
         skip = set(tweaks.excluded)
         if isinstance(current, str) and current:
             skip.update(Contract.objects.filter(slug=current).values_list('pk', flat=True))
+        # A LOCKED PICK takes no other game, so it is never a square a game "also covers".
+        held = {sq for sq in tweaks.locks
+                if sq[0] in states and states[sq[0]].unfinished.get(sq[1]) == tweaks.square_pins.get(sq)}
         halves = planner.alternatives(pool, states, square, frozenset(skip), options=options, partners=partners,
-                                      left_open=tweaks.left_open, badge_only=data.get('badge_only') is True)
+                                      left_open=tweaks.left_open | held, badge_only=data.get('badge_only') is True)
         # THE TAB: the one asked for, else the first with games (both, then the square alone, then the partner
         # alone), else the square alone. `fallback` (the badge chip) also moves off an asked-for tab the filter
         # left empty. `offset` pages it.
@@ -804,7 +814,8 @@ class OptimizerApplyView(_OptimizerJsonView):
         # THE SAVED PLAN STAYS (owner, 2026-10-16), minus what just went on the board. Never a reason to report a
         # done Apply as failed: the squares are already filled.
         try:
-            optimizer_drafts.forget_applied(profile, {r['contract'] for r in results if r['status'] == 'applied'})
+            optimizer_drafts.forget_applied(profile, [(r['type'], r['key'], r['contract'])
+                                                      for r in results if r['status'] == 'applied'])
         except Exception:
             logger.exception('optimizer draft could not forget applied games for profile %s', profile.pk)
         fresh = Challenge.objects.filter(pk__in=[r.pk for r in runs.values() if r is not None])
@@ -843,9 +854,19 @@ def _apply_lines(raw):
     return lines
 
 
+def _still_holds(states, square, tweaks):
+    """Does a locked square still hold the game its lock names?"""
+    state = states.get(square[0])
+    return state is not None and state.unfinished.get(square[1]) == tweaks.square_pins.get(square)
+
+
 def _apply_one(profile, run, slot, contract, key, replacing):
     if run is None or slot is None:
         return {'status': 'skipped', 'reason': 'That challenge is not running any more.'}
+    if contract is not None and slot.contract_id == contract.id and not slot.is_completed:
+        # ALREADY THERE (a pick that stays; the page never sends one): nothing to write, and not "applied", so the
+        # saved plan keeps its lock.
+        return {'status': 'skipped', 'reason': "It's already your pick there."}
     if slot.is_completed or slot.contract_slug != replacing:
         return {'status': 'skipped', 'reason': 'That square changed since you planned it.'}
     if contract is None:
@@ -936,7 +957,11 @@ def _plan_json(plan, pool, states, tweaks, built, badges_only=False):
     pool_ids = ({c['id'] for c in pool['candidates'] if c['stages'] or not badges_only}
                 | {cid for cid in pool.get('unobtainable', ()) if cid in pool['stages'] or not badges_only})
     pinned = set(tweaks.pins) | set(tweaks.square_pins.values())
-    ids = (set(plan.candidates) | {cur for cur, _, _ in plan.swaps.values()} | set(plan.unplaced_pins))
+    # Every pick too, for its LIVE slug: Keep pins it back by slug, and a snapshot slug a staff rename left stale
+    # would never resolve.
+    occupant_of = {(t, k): cid for t, s in states.items() for k, cid in s.unfinished.items()}
+    ids = (set(plan.candidates) | set(plan.assignments.values()) | {cur for cur, _, _ in plan.swaps.values()}
+           | set(plan.unplaced_pins) | set(occupant_of.values()))
     rows = _rows_by_id(ids)
 
     by_contract = {}
@@ -945,21 +970,26 @@ def _plan_json(plan, pool, states, tweaks, built, badges_only=False):
     lines = []
     for cid, squares in by_contract.items():
         cand = plan.candidates.get(cid, {})
+        # A PICK THAT STAYS (picks planned) is drawn like any line, `stays` on its square: nothing to apply there.
+        changes = [sq for sq in squares if sq not in plan.staying]
         lines.append({
             **rows.get(cid, {}),
-            'squares': [_square(sq, labels) for sq in squares],
+            'squares': [{**_square(sq, labels), 'stays': sq in plan.staying} for sq in squares],
             # THE SLOT'S OWN SNAPSHOT, which is what Apply compares: a staff rename leaves it stale, and the
             # live slug would then never match.
             'replacing': {sq[0]: states[sq[0]].snapshots[sq[1]]
-                          for sq in squares if sq[1] in states[sq[0]].snapshots},
+                          for sq in changes if sq[1] in states[sq[0]].snapshots},
             # What the line will overwrite, said on the line itself: an accepted swap (its row is gone once
-            # accepted), or a pick Replan changes.
-            'replaces': [{**_square(sq, labels), 'name': states[sq[0]].names.get(sq[1], '')}
-                         for sq in squares if sq[1] in states[sq[0]].snapshots],
+            # accepted), or a pick the plan changes. `slug` is the pick's live slug, for Keep.
+            'replaces': [{**_square(sq, labels), 'name': states[sq[0]].names.get(sq[1], ''),
+                          'slug': rows.get(occupant_of.get(sq), {}).get('slug', '')}
+                         for sq in changes if sq[1] in states[sq[0]].snapshots],
             'stages': cand.get('stages', []),
             'progress': cand.get('progress', 0),
-            'pinned': cid in pinned,
-            'outside_filters': cid not in pool_ids,
+            # "Your pick" is for a game the hunter asked for: a pick that only stays already says so on its line.
+            'pinned': cid in pinned and bool(changes),
+            # A pick staying where it is was the hunter's choice, whatever the filters say.
+            'outside_filters': cid not in pool_ids and not any(sq in plan.staying for sq in squares),
             # THE SORT TOGGLE'S KEYS: where this game's square sits on each board it fills (the board's own
             # order, as its run page shows it). A game takes one square per run, so there is one per type.
             'sort': {sq[0]: order[sq][1] for sq in squares},
@@ -1002,10 +1032,7 @@ def _plan_json(plan, pool, states, tweaks, built, badges_only=False):
         'unplaced': [{**{k: rows.get(cid, {}).get(k, '') for k in ('slug', 'name')}, 'reason': reason}
                      for cid, reason in plan.unplaced_pins.items()],
         'empty': [_square(sq, labels) for sq in sorted(plan.empty, key=order.__getitem__)],
-        # A kept pick (Replan's "Keep") carries the game it keeps, for its row; an open square has none.
-        'left_open': [{**_square(sq, labels), 'kept': states[sq[0]].names.get(sq[1], '')
-                       if sq[1] in states[sq[0]].unfinished else None}
-                      for sq in sorted(plan.left_open, key=order.__getitem__)],
+        'left_open': [_square(sq, labels) for sq in sorted(plan.left_open, key=order.__getitem__)],
         'job_groups': _job_groups(labels),
         'notes': {
             'hatch': {t: [_square((t, k), labels) for k in keys] for t, keys in plan.hatch_keys.items() if keys},
