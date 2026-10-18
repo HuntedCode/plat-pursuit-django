@@ -10,6 +10,7 @@
  *   squarePins  "type|key" -> slug: a locked line, an Other options pick, or an accepted swap
  *   excluded    "Not this one"
  *   penalized   "Different games" (accumulates, so each press reaches further)
+ *   leftOpen    "type|key": an open square the hunter will fill themselves, or (Replan) a pick they are keeping
  * A change that needs a re-solve goes through `change()`, which snapshots the tweaks first and rolls them back
  * if the request fails, so the tweaks never disagree with the plan on screen.
  *
@@ -33,7 +34,8 @@
         in_run: 'It is already in the run it fits.',
         conflict: 'Other picks took the squares it fits.',
         square_closed: "That square isn't open any more.",
-        left_open: "You're leaving the square it fits open."
+        left_open: "You're leaving the square it fits open.",
+        kept: "You're keeping the pick in the square it fits."
     };
     var AVAILABILITY_LABELS = { delisted: 'Delisted', unobtainable: 'Unobtainable' };
     //: Mirrors the server's ceiling on "Different games" (`optimizer_views.MAX_EXCLUDED`).
@@ -90,6 +92,8 @@
             apply: root.querySelector('[data-cplan-apply]'),
             again: root.querySelector('[data-cplan-again]'),
             openTotal: root.querySelector('[data-cplan-open-total]'),
+            picksQ: root.querySelector('[data-cplan-picks-q]'),
+            picksHint: root.querySelector('[data-cplan-picks-hint]'),
             badgeStarted: root.querySelector('[data-cplan-badge-started]'),
             badgeAll: root.querySelector('[data-cplan-badge-all]'),
             badgeNone: root.querySelector('[data-cplan-badge-none]'),
@@ -199,16 +203,53 @@
                 badge_types: all ? [] : typeBoxes.map(function (i) { return i.value; }),
                 badgeTypeLabels: all ? [] : typeBoxes.map(function (i) { return i.dataset.label; }),
                 badge_picks: none ? [] : Array.from(badgePicks.keys()),
-                badge_weight: radioValue('[data-cplan-weight]', 'bonus')
+                badge_weight: radioValue('[data-cplan-weight]', 'bonus'),
+                // Asked only while an included run holds a pick; with none, Replan would plan the same squares.
+                picks: picksAsked() ? radioValue('[data-cplan-picks]', 'keep') : 'keep'
             };
         }
+
+        // ── games already picked (owner, 2026-10-18) ─────────────────────────────────────────────
+        //
+        // A square holding a game the hunter has not finished is planned only if they say so: step 1 asks while an
+        // included run has one, counting from each card's `data-picked` (the server's own run counts).
+
+        /** Unfinished squares in the runs step 1 is planning. */
+        function pickedTotal() {
+            var total = 0;
+            root.querySelectorAll('[data-cplan-picked-for]').forEach(function (el) {
+                var card = el.closest('[data-cplan-run]');
+                var box = card && card.querySelector('[data-cplan-type]');
+                if (box && box.checked) { total += parseInt(el.dataset.picked, 10) || 0; }
+            });
+            return total;
+        }
+
+        function picksAsked() { return !!els.picksQ && !els.picksQ.hidden; }
+
+        function syncPicks() {
+            if (!els.picksQ) { return; }
+            var total = pickedTotal();
+            els.picksQ.hidden = !total;
+            if (els.picksHint) {
+                els.picksHint.textContent = plural(total, 'square has', 'squares have') + " a game you haven't finished.";
+            }
+        }
+
+        /** Is the plan on screen replanning the picks? */
+        function replanning() { return !!submitted && submitted.picks === 'replan'; }
+
+        /** A `left_open` square that is a kept pick (Replan's Keep) rather than an open square: `kept` is the game's
+         *  name, null for an open square. Its name may be empty (a snapshot with none), so never test truthiness. */
+        function isKept(sq) { return sq.kept != null; }
+        function keptName(sq) { return sq.kept || 'your pick'; }
 
         function payload() {
             var a = submitted;
             return {
                 types: a.types, platforms: a.platforms, source: a.source,
                 badge_started: a.badge_started, badge_all: a.badge_all, badge_types: a.badge_types,
-                badge_picks: a.badge_picks, badge_weight: a.badge_weight,
+                badge_picks: a.badge_picks, badge_weight: a.badge_weight, picks: a.picks,
                 tweaks: {
                     pins: pins.map(function (p) { return p.slug; }),
                     square_pins: Object.keys(tweaks.squarePins).map(function (sq) {
@@ -230,6 +271,7 @@
             parts.push(a.platformLabels.length ? a.platformLabels.join(', ') : 'Any platform');
             parts.push(SOURCE_LABELS[a.source]);
             parts.push(badgeLine(a));
+            if (a.picks === 'replan') { parts.push('Replanning your picks'); }
             if (pins.length) { parts.push(plural(pins.length, 'must-have', 'must-haves')); }
             return parts.join(' · ');
         }
@@ -514,6 +556,7 @@
             });
         }
         syncBadgeStep();
+        syncPicks();
 
         // ── must-have search ─────────────────────────────────────────────────────────────────────
 
@@ -634,7 +677,7 @@
         // DELEGATED, so a run card swapped in by Start (below) is wired without a second binding.
         if (els.steps.runs) {
             els.steps.runs.addEventListener('change', function (e) {
-                if (e.target.matches && e.target.matches('[data-cplan-type]')) { clearSearch(); }
+                if (e.target.matches && e.target.matches('[data-cplan-type]')) { clearSearch(); syncPicks(); }
             });
         }
 
@@ -661,6 +704,7 @@
                 // without a `change` event, so the delegated listener would not clear them.
                 clearSearch();
                 syncRunCopy();
+                syncPicks();
                 recountOpen(true);
                 settleIn(fresh);
                 say('');
@@ -883,7 +927,8 @@
             return Array.prototype.map.call(root.querySelectorAll(selector), function (i) { return i.value; });
         }
 
-        /** "Is this the same plan?" in the server's own terms (`allowance.same_plan`): the weight is not part of it,
+        /** "Is this the same plan?" in the server's own terms (`allowance.same_plan`): the weight and the picks
+         *  choice are not part of it,
          *  "All badges" covers started and the types, and both sides are judged against what EXISTS now: a run that
          *  finished mid-week, or a badge type gone dormant, must not lock a hunter out of the plan they spent. */
         function answersKey(a) {
@@ -980,6 +1025,10 @@
             setChecked('[data-cplan-platform]', a.platforms);
             setChecked('[data-cplan-source]', [a.source]);
             setChecked('[data-cplan-weight]', [a.badge_weight || 'bonus']);
+            setChecked('[data-cplan-picks]', [a.picks || 'keep']);
+            // The runs were re-ticked without a `change` event: show the question for them before `answers()` reads
+            // it, or a saved Replan would be sent as Keep (and its Keeps forgotten by the autosave).
+            syncPicks();
             setChecked('[data-cplan-badge-type]', a.badge_types);
             if (els.badgeStarted) { els.badgeStarted.checked = !!a.badge_started; }
             if (els.badgeAll) { els.badgeAll.checked = !!a.badge_all; }
@@ -1381,7 +1430,9 @@
                     else if (empty[key]) {
                         rows.push(slotRow(empty[key], blocked[key] ? 'No badge game fits' : 'Nothing on your terms fits'));
                     }
-                    else if (left[key]) { rows.push(slotRow(left[key], 'Leaving open', true)); }
+                    else if (left[key]) {
+                        rows.push(slotRow(left[key], isKept(left[key]) ? 'Keeping ' + keptName(left[key]) : 'Leaving open', true));
+                    }
                 });
                 if (!rows.length) { return; }
                 var filled = group.keys.filter(function (key) { return byJob[key]; }).length;
@@ -1426,9 +1477,10 @@
         }
 
         function planItAction(sq) {
-            var btn = action('Plan it', function () {
+            var label = isKept(sq) ? 'Replan it' : 'Plan it';
+            var btn = action(label, function () {
                 change(function () { tweaks.leftOpen.delete(sqKey(sq)); }, 'square:' + sqKey(sq));
-            }, { aria: 'Plan ' + sq.label + ' again' });
+            }, { aria: label + ': ' + sq.label });
             btn.setAttribute('data-square', sqKey(sq));
             return btn;
         }
@@ -1447,6 +1499,9 @@
                          ['games', plan.lines.length, '', plan.lines.length === 1 ? 'game' : 'games']];
             // "Cover both" only means something when two boards are planned.
             if (Object.keys(plan.runs).length > 1) { cells.push(['both', doubles, '', 'cover both']); }
+            // Under Replan, how many of the hunter's own picks this plan would change (an accepted swap counts too).
+            var changed = plan.lines.reduce(function (n, l) { return n + (l.replaces || []).length; }, 0);
+            if (replanning() || changed) { cells.push(['changed', changed, '', changed === 1 ? 'pick changed' : 'picks changed']); }
             cells.push(['stages', stages.size, '', stages.size === 1 ? 'badge stage' : 'badge stages']);
             var before = lastStats;
             lastStats = {};
@@ -1525,7 +1580,9 @@
         function lineRow(line, lead) {
             var li = document.createElement('li');
             li.className = 'pp-cplan__line';
-            var swapped = (line.replaces || []).length > 0;
+            // UNDER REPLAN a changed pick is the plan's own line, not an accepted swap: it locks like any other, and
+            // Keep (in place of Undo swap) puts the old game back.
+            var swapped = !replanning() && (line.replaces || []).length > 0;
             var locked = !swapped && isLocked(line);
             li.classList.toggle('is-locked', locked || swapped);
             li.appendChild(art(line));
@@ -1727,6 +1784,13 @@
                     if (on && PP.igniteTab) { PP.igniteTab(btn); }
                 }, { pressed: locked, aria: 'Lock ' + line.name, focus: 'lock:' + line.slug }));
             }
+            if (replanning() && (line.replaces || []).length) {
+                var kept = line.replaces;
+                var keepLabel = kept.length === 1 ? 'Keep ' + (kept[0].name || 'your pick') : 'Keep your picks';
+                row.appendChild(action(keepLabel, function () {
+                    change(function () { kept.forEach(leaveOpen); }, 'square:' + sqKey(kept[0]));
+                }, { aria: keepLabel + ': ' + kept.map(function (r) { return (r.name || 'your pick') + ' in ' + r.label; }).join(' and ') }));
+            }
             row.appendChild(action('Not this one', function () {
                 change(function () {
                     tweaks.excluded.add(line.slug);
@@ -1893,7 +1957,8 @@
         function emptySection(onlyType) {
             var mine = function (sq) { return !onlyType || sq.type === onlyType; };
             var empty = plan.empty.filter(mine);
-            var left = (plan.left_open || []).filter(mine);
+            var left = (plan.left_open || []).filter(function (sq) { return mine(sq) && !isKept(sq); });
+            keptSection(mine);
             if (!empty.length && !left.length) { return; }
             var wrap = sectionShell('Still open', empty.length + left.length);
             if (empty.length) {
@@ -1924,9 +1989,36 @@
             els.sections.appendChild(wrap);
         }
 
+        /** KEEPING (Replan): the picks the hunter chose to keep as they are, each with Replan it. Drawn before Still
+         *  open, which `emptySection` follows with. */
+        function keptSection(mine) {
+            var kept = (plan.left_open || []).filter(function (sq) { return mine(sq) && isKept(sq); });
+            if (!kept.length) { return; }
+            var wrap = sectionShell('Keeping', kept.length);
+            wrap.appendChild(hint("You're keeping these picks as they are."));
+            var list = document.createElement('div');
+            list.className = 'pp-cplan__left-open';
+            kept.forEach(function (sq) {
+                var item = document.createElement('div');
+                item.className = 'pp-cplan__left-open-item';
+                item.appendChild(squareChip(sq, false));
+                var name = document.createElement('span');
+                name.className = 'pp-cplan__kept-name';
+                name.textContent = keptName(sq);
+                name.title = keptName(sq);   // the full title where the ellipsis cut it
+                item.appendChild(name);
+                item.appendChild(planItAction(sq));
+                list.appendChild(item);
+            });
+            wrap.appendChild(list);
+            els.sections.appendChild(wrap);
+        }
+
         function nothingToPlan() {
             var wrap = sectionShell('Nothing to plan');
-            wrap.appendChild(hint('Every open square already has a game. Finish a few and come back.'));
+            wrap.appendChild(hint(replanning()
+                ? 'Every square already has a game, and your picks are the best fit for them.'
+                : 'Every open square already has a game. Finish a few and come back.'));
             wrap.appendChild(runLinks(plan.runs, function (t, r) { return 'Open ' + TYPE_LABELS[t]; }));
             els.sections.appendChild(wrap);
         }
@@ -2341,17 +2433,20 @@
 
         /** LEAVE IT OPEN, from the sheet (owner, 2026-10-17): one button per OPEN square of the line (both on a
          *  C + Gunslinger line), for "none of these, I'll fill it myself". An unfinished square is left out: its
-         *  game is already there, and Undo swap is how it goes back. */
+         *  game is already there, and Undo swap is how it goes back. Under Replan it offers Keep instead. */
         function renderAltFoot(square, partners, line) {
             if (!alt.foot) { return; }
             alt.foot.textContent = '';
-            var replaced = (line.replaces || []).map(sqKey);
+            var replaced = {};
+            (line.replaces || []).forEach(function (r) { replaced[sqKey(r)] = r; });
             [square].concat(partners).forEach(function (sq) {
-                if (replaced.indexOf(sqKey(sq)) >= 0) { return; }
+                var old = replaced[sqKey(sq)];
+                if (old && !replanning()) { return; }
                 var btn = document.createElement('button');
                 btn.type = 'button';
                 btn.className = 'pp-cta pp-cta--ghost';
-                btn.textContent = 'Leave ' + sq.label + ' open';
+                btn.textContent = old ? 'Keep ' + (old.name || 'your pick') : 'Leave ' + sq.label + ' open';
+                if (old) { btn.setAttribute('aria-label', btn.textContent + ' in ' + sq.label); }
                 btn.addEventListener('click', function () {
                     if (busy) { return; }
                     closeSheet();
@@ -2509,6 +2604,7 @@
             renderPinned();
             els.summaryText.textContent = summaryLine(submitted);
             Object.keys(data.cards || {}).forEach(function (t) { swapCard(t, data.cards[t]); });
+            syncPicks();
             refreshOpenCounts(data.runs);
             els.stats.textContent = '';
             els.sections.textContent = '';

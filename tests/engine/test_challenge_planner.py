@@ -995,6 +995,144 @@ def test_a_left_open_square_that_is_no_longer_plannable_is_forgotten():
     assert plan.left_open == []
 
 
+# --- replan the games already picked (owner, 2026-10-18) ---------------------------------------------------
+
+REPLAN = planner.PICKS_REPLAN
+
+
+def test_replan_changes_a_pick_when_one_game_can_cover_both_runs_and_suggests_nothing():
+    profile = _member()
+    job, _ = _two_jobs()
+    single = _contract('Bloodborne')
+    double = _contract('Brothers', jobs=[job])
+    az_run, _ = _runs(profile, AZ, JOBS)
+    svc.assign(az_run, profile, 'B', single)
+
+    plan = _plan(profile, _options(picks=REPLAN))
+
+    assert plan.assignments[(AZ, 'B')] == double.id and plan.assignments[(JOBS, job.slug)] == double.id
+    assert plan.swaps == {}
+    assert (AZ, 'B') not in plan.empty
+
+
+def test_replan_keeps_a_pick_when_changing_it_gains_nothing():
+    profile = _member()
+    current = _contract('Bloodborne')
+    _contract('Brothers')
+    [run] = _runs(profile, AZ)
+    svc.assign(run, profile, 'B', current)
+
+    plan = _plan(profile, _options(types=(AZ,), picks=REPLAN))
+
+    # The game stays, so the square is no line: there is nothing to apply.
+    assert (AZ, 'B') not in plan.assignments and (AZ, 'B') not in plan.empty
+    assert plan.swaps == {}
+
+
+def test_replan_changes_a_plain_pick_for_a_badge_game_only_under_priority():
+    profile = _member()
+    current = _contract('Bastion')
+    staged = _contract('Bloodborne')
+    series = _badge(staged)
+    [run] = _runs(profile, AZ)
+    svc.assign(run, profile, 'B', current)
+
+    def planned(weight):
+        return _plan(profile, _options(types=(AZ,), picks=REPLAN, badge_picks=(series.edition.id,),
+                                       badge_weight=weight)).assignments.get((AZ, 'B'))
+
+    assert planned(planner.WEIGHT_PRIORITY) == staged.id
+    assert planned(planner.WEIGHT_BONUS) is None   # Bonus: a badge game wins only where it costs nothing
+
+
+def test_replan_keeps_a_pick_the_hunter_chose_to_keep():
+    profile = _member()
+    job, _ = _two_jobs()
+    single = _contract('Bloodborne')
+    _contract('Brothers', jobs=[job])
+    az_run, _ = _runs(profile, AZ, JOBS)
+    svc.assign(az_run, profile, 'B', single)
+
+    plan = _plan(profile, _options(picks=REPLAN), tweaks=planner.Tweaks(left_open=frozenset({(AZ, 'B')})))
+
+    assert (AZ, 'B') not in plan.assignments and plan.left_open == [(AZ, 'B')]
+    # Under Keep the same entry means nothing (an unfinished square cannot be left open) and is forgotten.
+    assert _plan(profile, _options(), tweaks=planner.Tweaks(left_open=frozenset({(AZ, 'B')}))).left_open == []
+
+
+def test_replan_places_a_must_have_whose_only_square_holds_a_pick():
+    profile = _member()
+    current = _contract('Bastion')
+    wanted = _contract('Bloodborne')
+    [run] = _runs(profile, AZ)
+    svc.assign(run, profile, 'B', current)
+    tweaks = planner.Tweaks(pins=frozenset({wanted.id}))
+
+    assert _plan(profile, _options(types=(AZ,), picks=REPLAN), tweaks=tweaks).assignments[(AZ, 'B')] == wanted.id
+    keep = _plan(profile, _options(types=(AZ,)), tweaks=tweaks)
+    assert keep.unplaced_pins == {wanted.id: planner.UNPLACED_NO_SQUARE}
+
+
+def test_replan_blames_other_picks_when_a_must_have_loses_its_unfinished_square():
+    # Two must-haves for the one unfinished square B: under Replan B was a square either could take.
+    profile = _member()
+    _contract('Bastion')
+    first, second = _contract('Bloodborne'), _contract('Brothers')
+    [run] = _runs(profile, AZ)
+    svc.assign(run, profile, 'B', _contract('Bayonetta'))
+
+    plan = _plan(profile, _options(types=(AZ,), picks=REPLAN),
+                 tweaks=planner.Tweaks(pins=frozenset({first.id, second.id})))
+
+    assert set(plan.unplaced_pins.values()) == {planner.UNPLACED_CONFLICT}
+
+
+def test_replan_says_when_a_must_haves_only_square_holds_a_pick_being_kept():
+    profile = _member()
+    wanted = _contract('Bloodborne')
+    [run] = _runs(profile, AZ)
+    svc.assign(run, profile, 'B', _contract('Bastion'))
+
+    plan = _plan(profile, _options(types=(AZ,), picks=REPLAN),
+                 tweaks=planner.Tweaks(pins=frozenset({wanted.id}), left_open=frozenset({(AZ, 'B')})))
+
+    assert plan.unplaced_pins == {wanted.id: planner.UNPLACED_KEPT}
+
+
+def test_replan_says_a_must_have_that_is_already_a_pick_stays_where_it_is():
+    profile = _member()
+    current = _contract('Bastion')
+    [run] = _runs(profile, AZ)
+    svc.assign(run, profile, 'B', current)
+
+    plan = _plan(profile, _options(types=(AZ,), picks=REPLAN), tweaks=planner.Tweaks(pins=frozenset({current.id})))
+
+    assert (AZ, 'B') not in plan.assignments
+    assert plan.unplaced_pins == {current.id: planner.UNPLACED_IN_RUN}
+
+
+def test_under_replan_the_sheet_counts_the_other_runs_picks_as_squares_a_game_also_takes():
+    profile = _member()
+    job_a, _ = _two_jobs()
+    both = _contract('Astro Bot', jobs=[job_a])
+    az_run, jobs_run = _runs(profile, AZ, JOBS)
+    svc.assign(jobs_run, profile, job_a.slug, _contract('Bloodborne', jobs=[job_a]))
+    options = _options(picks=REPLAN)
+    pool, _ = planner.get_pool(profile, options)
+    states = planner.run_states(profile, options.types)
+
+    def also(opts):
+        rows = planner.alternatives(pool, states, (AZ, 'A'), options=opts)['rest']
+        return {c['id']: a for c, a in rows}[both.id]
+
+    assert also(options) == [(JOBS, job_a.slug)]
+    assert also(_options()) == []   # under Keep that square is not the plan's to fill
+
+
+def test_the_picks_choice_never_splits_the_pool():
+    assert _options(picks=REPLAN).digest() == _options().digest()
+
+
 def test_the_covering_half_keeps_pool_order():
     # Astro Bot also fits job_b, but the pick pins a covering game to the partner, so that fit is moot and must
     # not push the earlier Alpha down (or off the sheet at the limit).

@@ -107,6 +107,26 @@ reload, and its squares need the glyphs from then on.{% endcomment %}
                 <div class="pp-cplan__opts pp-cplan__opts--two">
                     {% for r in runs %}{% include 'challenges/partials/_optimizer_run_option.html' %}{% endfor %}
                 </div>
+
+                {% comment %}GAMES ALREADY PICKED (owner, 2026-10-18): a square with a game the hunter has not finished is
+                theirs unless they say otherwise, so the plan says plainly what it does with them. Shown only while
+                the included runs have one; the script keeps the count and the visibility in step.{% endcomment %}
+                <div data-cplan-picks-q hidden>
+                    <div class="pp-cplan__subhead"><h3 id="cplan-picks-label">Games you've already picked</h3></div>
+                    <p class="pp-cplan__hint" id="cplan-picks-hint" data-cplan-picks-hint>Squares with a game you haven't finished.</p>
+                    <div class="pp-cplan__opts pp-cplan__opts--two" role="radiogroup" aria-labelledby="cplan-picks-label" aria-describedby="cplan-picks-hint">
+                        <label class="pp-cplan__opt">
+                            <input type="radio" name="picks" value="keep" checked data-cplan-picks>
+                            <span class="pp-cplan__opt-title">Keep them</span>
+                            <span class="pp-cplan__opt-sub">Plan the open squares. We'll suggest swaps where a better game fits.</span>
+                        </label>
+                        <label class="pp-cplan__opt">
+                            <input type="radio" name="picks" value="replan" data-cplan-picks>
+                            <span class="pp-cplan__opt-title">Replan them too</span>
+                            <span class="pp-cplan__opt-sub">Plan every unfinished square. A pick only changes when that's worth it, and you can keep any of them.</span>
+                        </label>
+                    </div>
+                </div>
             </section>
 
             {# Step 2: platforms #}

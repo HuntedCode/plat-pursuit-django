@@ -80,7 +80,8 @@ def test_the_saved_answers_are_the_plan_doors_own_body_shape():
     allowance.spend(profile, options, ACTIVE)
     saved = allowance.state_for(profile).answers
     assert saved == {'types': [AZ], 'platforms': ['PS5'], 'source': 'both', 'badge_started': False,
-                     'badge_all': True, 'badge_types': [], 'badge_picks': [2, 4], 'badge_weight': 'bonus'}
+                     'badge_all': True, 'badge_types': [], 'badge_picks': [2, 4], 'badge_weight': 'bonus',
+                     'picks': 'keep'}
 
 
 # --- the doors --------------------------------------------------------------------------------------------
@@ -280,6 +281,13 @@ def test_the_page_names_a_saved_plans_picked_badges():
     allowance.spend(profile, _options(badge_picks=(gb.id,)), ACTIVE)
     names = allowance_context(profile)['allowance_saved']['badge_pick_names']
     assert names == {str(gb.id): f'{gb.series.name} ({gb.platform_group.name})'}
+
+
+def test_replanning_the_picks_is_the_same_plan():
+    # Like the weight, it is how the plan is solved, not what it is: a free hunter can try it on this week's plan.
+    profile = _free()
+    allowance.spend(profile, _options(platforms=('PS5',)), ACTIVE)
+    assert allowance.decide(profile, _options(platforms=('PS5',), picks=planner.PICKS_REPLAN), ACTIVE) == allowance.FREE
 
 
 def test_switching_to_badge_games_only_is_the_same_plan():

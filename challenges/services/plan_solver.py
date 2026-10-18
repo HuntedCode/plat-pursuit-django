@@ -7,8 +7,8 @@ A run holds a contract once. Choose at most one contract per square so that, in 
     0. the most PINS are honoured (a contract the hunter asked for, or a contract fixed to one square)
     1. the most squares are filled
     2. the fewest distinct games are used (a game that takes its letter AND a job counts once)
-    3. (swap mode) unfinished squares keep their current game, so one is replaced only when that serves a
-       higher tier: a pin, a filled square, or a saved game
+    3. (swap mode, and the planner's Replan) unfinished squares keep their current game, so one is replaced only
+       when that serves a higher tier: a pin, a filled square, or a saved game
     4. games the hunter asked to see less of ("Show me different games") are avoided
     5. the most squares are filled by BADGE GAMES (a game that advances at least one uncleared stage)
     6. the most badge stages are advanced, as a sum of each chosen game's count (a tie-break between badge games)
@@ -253,7 +253,7 @@ def _tiers(problem, pairs, u_index, placeable_ids, by_id, order, n):
 
     # PRIORITY moves "avoid" up WITH the badge tier: otherwise "Different games" would keep returning the same
     # badge games. "keep" stays below it, so an unfinished square may be OFFERED a swap for a badge game (a swap is
-    # always opt-in).
+    # always opt-in), or under the planner's Replan be planned with one.
     # WHEN EVERY PLACEABLE GAME IS A BADGE GAME ("Badges only", or nearly all of "All badges") the badge tier IS the
     # fill tier, already settled above it: dropped, so it does not spend the shared time budget proving nothing.
     if np.array_equal(badge, fill):

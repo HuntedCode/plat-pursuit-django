@@ -128,7 +128,7 @@ def answers_of(options):
         'types': list(options.types), 'platforms': list(options.platforms), 'source': options.source,
         'badge_started': options.badge_started, 'badge_all': options.badge_all,
         'badge_types': list(options.chosen_types), 'badge_picks': list(options.picked_badges),
-        'badge_weight': options.badge_weight,
+        'badge_weight': options.badge_weight, 'picks': options.picks,
     }
 
 

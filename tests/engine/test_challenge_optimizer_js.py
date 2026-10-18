@@ -295,7 +295,7 @@ def test_the_job_view_groups_by_discipline_and_keeps_every_jobs_place():
     assert 'plan.job_groups.forEach(function (group) {' in by_job
     assert "if (byJob[key]) { rows.push(lineRow(byJob[key], 'jobs')); }" in by_job
     assert "blocked[key] ? 'No badge game fits' : 'Nothing on your terms fits'" in by_job
-    assert "else if (left[key]) { rows.push(slotRow(left[key], 'Leaving open', true)); }" in by_job
+    assert "isKept(left[key]) ? 'Keeping ' + keptName(left[key]) : 'Leaving open', true));" in by_job
     # The run page's discipline tint, checked as a bare word before it becomes CSS.
     assert "if (/^[a-z-]+$/.test(group.slug || '')) {" in by_job
     assert "section('A-Z only', null, azOnly, lineRow);" in by_job
@@ -337,12 +337,67 @@ def test_focus_after_leave_open_or_plan_it_lands_on_that_square():
     assert "change(function () { leaveOpen(sq); }, 'square:' + sqKey(sq));" in foot
 
 
+def test_step_one_asks_about_picked_games_only_while_an_included_run_has_one():
+    picks = JS[JS.index('function pickedTotal()'):JS.index('function replanning()')]
+    # Counted from each card's server count, only for the runs being planned.
+    assert "if (box && box.checked) { total += parseInt(el.dataset.picked, 10) || 0; }" in picks
+    assert 'els.picksQ.hidden = !total;' in picks
+    # The answer is sent only while it is asked: with no picks, Replan would plan the same squares.
+    assert "picks: picksAsked() ? radioValue('[data-cplan-picks]', 'keep') : 'keep'" in JS
+    assert "badge_weight: a.badge_weight, picks: a.picks," in JS
+    assert "setChecked('[data-cplan-picks]', [a.picks || 'keep']);" in JS
+    # Kept in step whenever the cards change: an Include toggle, a Start, an Apply's re-rendered cards.
+    assert "clearSearch(); syncPicks(); }" in JS
+    assert JS.count('syncPicks();') >= 5
+    # Open my plan re-ticks the runs with no change event: the question must follow before answers() reads it.
+    apply_answers = JS[JS.index('function applyAnswers('):JS.index("root.querySelectorAll('[data-cplan-open-saved]')")]
+    assert apply_answers.index("setChecked('[data-cplan-picks]'") < apply_answers.index('syncPicks();')
+    html = open('templates/challenges/optimizer.html', encoding='utf-8').read()
+    q = html[html.index('data-cplan-picks-q'):html.index('{# Step 2')]
+    assert 'value="keep" checked data-cplan-picks' in q and 'value="replan" data-cplan-picks' in q
+    assert 'role="radiogroup" aria-labelledby="cplan-picks-label" aria-describedby="cplan-picks-hint"' in q
+    assert 'id="cplan-picks-hint"' in q
+    # The card is found by the DOM, never a selector built from data.
+    assert "var card = el.closest('[data-cplan-run]');" in picks
+    card = open('templates/challenges/partials/_optimizer_run_option.html', encoding='utf-8').read()
+    assert 'data-cplan-picked-for="{{ r.type }}" data-picked="{{ r.picked }}"' in card
+
+
+def test_under_replan_a_changed_pick_can_be_kept():
+    row = JS[JS.index('function lineRow('):JS.index('function metaList(')]
+    # A changed pick is the plan's own line under Replan, so it locks like any other (no Undo swap).
+    assert "var swapped = !replanning() && (line.replaces || []).length > 0;" in row
+    acts = JS[JS.index('function lineActions('):JS.index('function action(')]
+    assert "if (replanning() && (line.replaces || []).length) {" in acts
+    assert "change(function () { kept.forEach(leaveOpen); }, 'square:' + sqKey(kept[0]));" in acts
+    kept = JS[JS.index('function keptSection('):JS.index('function nothingToPlan(')]
+    assert "return mine(sq) && isKept(sq);" in kept and "sectionShell('Keeping', kept.length)" in kept
+    # Still open lists only open squares; a kept pick is in Keeping, with Replan it.
+    empty = JS[JS.index('function emptySection('):JS.index('function keptSection(')]
+    assert "return mine(sq) && !isKept(sq);" in empty and 'keptSection(mine);' in empty
+    assert "var label = isKept(sq) ? 'Replan it' : 'Plan it';" in JS
+    # Each spoken name starts with the visible text (WCAG label in name), and names its square.
+    assert "{ aria: label + ': ' + sq.label }" in JS
+    assert "{ aria: keepLabel + ': ' + kept.map(" in acts
+    assert "if (old) { btn.setAttribute('aria-label', btn.textContent + ' in ' + sq.label); }" in JS
+    # A cut-off title keeps its full name on hover; an empty snapshot name still reads as a pick.
+    assert 'name.title = keptName(sq);' in kept
+    assert "function keptName(sq) { return sq.kept || 'your pick'; }" in JS
+    # A kept pick's name can be empty, so it is told apart by null, never by truthiness.
+    assert 'function isKept(sq) { return sq.kept != null; }' in JS
+    assert "kept: \"You're keeping the pick in the square it fits.\"" in JS
+    assert "? 'Every square already has a game, and your picks are the best fit for them.'" in JS
+    assert "if (a.picks === 'replan') { parts.push('Replanning your picks'); }" in JS
+    assert "if (replanning() || changed) { cells.push(['changed', changed" in JS
+
+
 def test_the_sheet_offers_to_leave_each_open_square_of_the_line_open():
     foot = JS[JS.index('function renderAltFoot('):JS.index('function altList(')]
     assert '[square].concat(partners).forEach(function (sq) {' in foot
-    assert "btn.textContent = 'Leave ' + sq.label + ' open';" in foot
-    # An unfinished square already holds its game: Undo swap is its way back, not "leave open".
-    assert 'if (replaced.indexOf(sqKey(sq)) >= 0) { return; }' in foot
+    assert "btn.textContent = old ? 'Keep ' + (old.name || 'your pick') : 'Leave ' + sq.label + ' open';" in foot
+    # An unfinished square already holds its game: Undo swap is its way back, not "leave open". Under Replan the
+    # sheet offers Keep for it instead.
+    assert 'if (old && !replanning()) { return; }' in foot
     assert 'closeSheet();' in foot and 'change(function () { leaveOpen(sq); }' in foot
     assert "left_open: \"You're leaving the square it fits open.\"" in JS
     assert '<div class="pp-cpick__foot" data-cplan-alt-foot hidden></div>' in TEMPLATE
@@ -660,6 +715,12 @@ def test_a_resort_glides_and_keeps_the_switchs_focus():
     assert 'input.focus({ preventScroll: true });' in change
     # Rows are rebuilt, so identity comes from the game, not the node.
     assert "key: function (el) { var f = el.querySelector('[data-focus]');" in change
+
+
+def test_the_stats_sit_on_one_row_however_many_there_are():
+    # Two to five cells ("cover both" and "picks changed" come and go): a fixed column count would orphan one.
+    rule = CSS[CSS.index('.pp-cplan__stats { grid-template-columns: none;'):]
+    assert 'grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr);' in rule[:rule.index('}')]
 
 
 def test_the_view_switch_sits_on_the_right():

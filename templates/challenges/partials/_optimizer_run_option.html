@@ -13,7 +13,12 @@ what it says and what it is called.{% endcomment %}
         {% include 'challenges/partials/_type_card_reward.html' with card=r.card %}
     </div>
     <div class="pp-cplan__opt-foot">
-        <span class="pp-cplan__opt-open" data-cplan-open-for="{{ r.type }}">{{ r.open }} open square{{ r.open|pluralize }}</span>
+        <span class="pp-cplan__opt-counts">
+            <span class="pp-cplan__opt-open" data-cplan-open-for="{{ r.type }}">{{ r.open }} open square{{ r.open|pluralize }}</span>
+            {% comment %}Squares holding a game not finished yet, which the plan keeps unless step 1 says replan them
+            (owner, 2026-10-18). The script reads `data-picked`, never the text.{% endcomment %}
+            <span class="pp-cplan__opt-picked" data-cplan-picked-for="{{ r.type }}" data-picked="{{ r.picked }}" {% if not r.picked %}hidden{% endif %}><span aria-hidden="true">&middot; </span>{{ r.picked }} picked</span>
+        </span>
         <label class="pp-cplan__toggle">
             <input type="checkbox" name="types" value="{{ r.type }}" checked data-cplan-type>
             <span class="pp-cplan__check" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
