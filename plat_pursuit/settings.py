@@ -544,9 +544,9 @@ PSN_METADATA_CAPTURE_ENABLED = os.getenv('PSN_METADATA_CAPTURE_ENABLED', 'True')
 # the Hall of Fame are public to everyone throughout -- this gates creation and nothing else, which is
 # what makes it a DIAL (members go first) rather than a door (a feature free hunters cannot reach).
 #
-# Defaulted True through the beta (10 Oct 2026); the public release flipped the default to False, so that
-# deploy WAS the release and its What's New entry landed with it. Exactly 'True' turns the gate back on
-# (a restart, not a deploy).
+# Defaulted True from the beta's start (10 Oct 2026) until the public release, which flipped the default to
+# False, so that deploy WAS the release and its What's New entry landed with it. Exactly 'True' turns the
+# gate back on (a restart, not a deploy).
 #
 # Read ONLY by `challenge_service.creation_is_open_to`, so the rule has one enforcement point. In
 # particular NOT by `trophies.mixins.PremiumRequiredMixin`, which REDIRECTS to `beta_access_required`:
