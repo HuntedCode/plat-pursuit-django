@@ -866,13 +866,14 @@ def test_the_badge_picker_names_each_badges_type(client):
     _hunter(client)
     franchise = _edition('God of War', badge_type='franchise')
     series = _edition('God of War', badge_type='series')
+    community = _edition('God of War', badge_type='user')   # the Collection's word, not the model's "User"
 
     html = _body(_badges(client))['html']
 
-    for gb, label in ((franchise, 'Franchise'), (series, 'Series')):
+    for gb, label in ((franchise, 'Franchise'), (series, 'Series'), (community, 'Community')):
         card = html[html.index(f'data-badge-id="{gb.id}"'):]
         card = card[:card.index('</li>')]
-        assert f'{label} <span aria-hidden="true">&middot;</span> {gb.platform_group.name}' in card
+        assert f'{label}&nbsp;<span aria-hidden="true">&middot;</span> {gb.platform_group.name}' in card
         assert f'data-name="God of War ({label}, {gb.platform_group.name})"' in card
         assert f'aria-label="God of War, {label}, {gb.platform_group.name}"' in card
 
@@ -1084,6 +1085,19 @@ def test_a_badge_page_costs_a_fixed_number_of_queries(client, django_assert_max_
     with django_assert_max_num_queries(10):
         resp = client.get(reverse('challenge_optimizer_badges'))
     assert _body(resp)['total'] == 7
+
+
+def test_started_cards_name_their_type_too(client):
+    from django.template.loader import render_to_string
+    from trophies.models import SeriesBadgeStanding
+    from challenges.optimizer_views import badge_step_context
+    profile = _hunter(client)
+    gb = _edition('God of War', badge_type='franchise', stages=4)
+    SeriesBadgeStanding.objects.create(profile=profile, series_slug=gb.series.series_slug, progress_bp=2500,
+                                       group_progress={gb.platform_group.key: [1, 4]})
+    [card] = badge_step_context(profile)['started_badges']
+    html = render_to_string('challenges/partials/_optimizer_badge_card.html', {'card': card, 'selectable': False})
+    assert f'Franchise&nbsp;<span aria-hidden="true">&middot;</span> {gb.platform_group.name}' in html
 
 
 def test_step_four_builds_only_the_cards_it_shows(client, django_assert_max_num_queries):

@@ -348,7 +348,7 @@
         // THE SOURCES ARE A UNION: started editions, whole types, everything, and hand picks, in any mix. The
         // server resolves them; this only collects them and says back what counts.
 
-        var badgePicks = new Map();      // GroupBadge id -> "Series (Edition)"
+        var badgePicks = new Map();      // GroupBadge id -> "Series (Type, Edition)"
         var WEIGHT_HINTS = {
             bonus: 'Badges break ties. Your challenges come first.',
             priority: 'Badge games fill as many squares as they can, even if that takes an extra game. Filling squares still comes first.',
@@ -516,7 +516,8 @@
                 });
                 if (els.badgeMore) { els.badgeMore.hidden = !data.more; }
                 revealBadges();
-                badgeSay(data.total ? plural(data.total, 'badge', 'badges') + ' match.' : 'No badges match those filters.');
+                badgeSay(data.total ? plural(data.total, 'badge', 'badges') + ' match.'
+                                    : "No badges match those filters. Badges you've earned are left out.");
             }).catch(function (err) {
                 if (mine !== badgeSeq) { return; }
                 failureText(err, 'Badges did not load.').then(function (msg) { badgeSay(msg, true); });
@@ -1690,7 +1691,7 @@
                 var editions = (s.editions || []).join(' / ');
                 var key = [s.series, editions, s.part ? 1 : 0].join('|');
                 if (!byKey[key]) {
-                    byKey[key] = { name: s.series_name, editions: editions, part: !!s.part, stages: [] };
+                    byKey[key] = { name: s.series_name, type: s.type_label || '', editions: editions, part: !!s.part, stages: [] };
                     groups.push(byKey[key]);
                 }
                 byKey[key].stages.push(s);
@@ -1714,10 +1715,12 @@
             var name = document.createElement('span');
             name.className = 'pp-cplan__stage-name';
             name.textContent = group.name;
-            if (group.editions) {
+            // The type first, so a Franchise and a Series badge of one name read apart: "God of War (Franchise, Legacy HD)".
+            var detail = [group.type, group.editions].filter(Boolean).join(', ');
+            if (detail) {
                 var ed = document.createElement('span');
                 ed.className = 'pp-cplan__stage-ed';
-                ed.textContent = ' (' + group.editions + ')';
+                ed.textContent = ' (' + detail + ')';
                 name.appendChild(ed);
             }
             body.appendChild(name);

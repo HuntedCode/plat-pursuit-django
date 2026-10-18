@@ -56,10 +56,10 @@ from challenges.views import (
     start_from_request,
 )
 from trophies.constants import PLATFORM_LABELS
-from trophies.models import BadgeSeries, Contract, GroupBadge, PlatformGroup, UserGroupBadge
+from trophies.models import Contract, GroupBadge, PlatformGroup, UserGroupBadge
 from trophies.services.badge_list_service import build_list_cards, live_editions
 from trophies.services.badge_xp import edition_display_state
-from trophies.services.collection_service import badge_type_sections
+from trophies.services.collection_service import badge_type_label, badge_type_sections
 from trophies.util_modules.constants import ALL_PLATFORMS, MODERN_PLATFORMS
 
 logger = logging.getLogger(__name__)
@@ -157,17 +157,27 @@ def run_option(profile, challenge_type):
     }
 
 
+def pick_name(series_name, badge_type, edition):
+    """A picked badge as its chip names it: "God of War (Franchise, Legacy HD)". The type is what tells a Franchise
+    badge from a Series badge of the same name (owner, 2026-10-18). One builder for the live chip (the card's
+    `data-name`) and the saved one (`_with_pick_names`)."""
+    return f'{series_name} ({badge_type_label(badge_type)}, {edition})'
+
+
 def badge_cards(group_badges, profile):
     """Picker cards for a page of editions: the badge list's own batched cards (`build_list_cards`: art, edition,
     the hunter's per-edition progress, two bulk queries), with the medallion's state set from that progress by
-    the Collection's shared rule (`edition_display_state`): earned is bright, in progress fills, unearned is grey.
-    The list page shows everything full-colour because it is a showcase; a picker is about the hunter's own
-    standing, so it uses the Collection's reading instead."""
+    the Collection's shared rule (`edition_display_state`): in progress fills, untouched is grey (the picker never
+    shows an edition the hunter holds). The list page shows everything full-colour because it is a showcase; a
+    picker is about the hunter's own standing, so it uses the Collection's reading instead. Each card also carries
+    its `type_label` and its chip's `pick_name`."""
     cards = build_list_cards(group_badges, profile)
     for card in cards:
         frame = card['frame']
         frame['state'], frame['progress_pct'] = edition_display_state(
             card['earned'], frame['stages_done'], frame['stages_total'])
+        card['type_label'] = badge_type_label(card['series'].badge_type)
+        card['pick_name'] = pick_name(card['series'].name, card['series'].badge_type, card['platform_group'].name)
     return cards
 
 
@@ -272,8 +282,7 @@ def _with_pick_names(answers):
     picks = answers.get('badge_picks')
     picks = [gid for gid in picks if isinstance(gid, int)] if isinstance(picks, list) else []
     if picks:
-        types = dict(BadgeSeries.BADGE_TYPES)
-        names = {gid: f'{series} ({types.get(kind, kind)}, {group})' for gid, series, kind, group in GroupBadge.objects
+        names = {gid: pick_name(series, kind, group) for gid, series, kind, group in GroupBadge.objects
                  .filter(pk__in=picks).values_list('id', 'series__name', 'series__badge_type', 'platform_group__name')}
         answers['badge_pick_names'] = {str(gid): names[gid] for gid in picks if gid in names}
     return answers
