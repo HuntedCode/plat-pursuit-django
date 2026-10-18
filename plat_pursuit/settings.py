@@ -552,7 +552,7 @@ PSN_METADATA_CAPTURE_ENABLED = os.getenv('PSN_METADATA_CAPTURE_ENABLED', 'True')
 # bouncing a free hunter out of a parked feature is the behaviour that was rejected when Challenges
 # was first parked, and `tests/engine/test_challenges_live.py` pins that decision
 # (inverted from `test_challenges_coming_soon.py` when the real pages shipped).
-CHALLENGES_BETA_MEMBERS_ONLY = os.getenv('CHALLENGES_BETA_MEMBERS_ONLY', 'True') == 'True'
+CHALLENGES_BETA_MEMBERS_ONLY = os.getenv('CHALLENGES_BETA_MEMBERS_ONLY', 'False') == 'True'
 
 
 # Internationalization

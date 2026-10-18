@@ -25,7 +25,7 @@ no services and no templates with it; the few lessons worth carrying forward are
 | Rewards: A-Z and Job Coverage titles and job XP, the Calendar's day-marker ladder, the completion notification | **built.** `challenges/services/rewards.py` is the only writer |
 | Share cards, all three types | **built.** Minting one as a Hall of Fame cover was **CUT**; see [The Hall of Fame draws heroes](#the-hall-of-fame-draws-heroes-not-cards) |
 | Tutorials (system intro + one per type) | **built.** See [The tutorials](#the-tutorials) |
-| Beta gate (`CHALLENGES_BETA_MEMBERS_ONLY`) | **built, and on by default** |
+| Beta gate (`CHALLENGES_BETA_MEMBERS_ONLY`) | **built, off by default since the public release** (2026-10). The switch stays for a future members-first type |
 | The Challenge Optimizer (A-Z + Job Coverage together) | **built** (2026-10). See [The optimizer](#the-optimizer) |
 | Beta release audit (chunk 12) | **done.** See [Beta hardening](#beta-hardening) |
 | Badge + holo award | **deferred to a follow-up branch**, post-beta. Completions are recorded from day one so badges backfill |
@@ -203,12 +203,12 @@ owner, since that is the real thing happening to them.
 four rungs below it are silent, because a backfilling run passes several at once on day one and would
 otherwise fire three notifications in the same second.
 
-**Starting a run is members-only during the beta.** `CHALLENGES_BETA_MEMBERS_ONLY` (env var, defaults
-to **on**) is checked inside `start_reporting` after the profile lock, so it refuses the write rather than
+**Starting a run was members-only during the beta** (10 Oct 2026 to the public release). `CHALLENGES_BETA_MEMBERS_ONLY`
+(env var, defaults to **off** since the public release, which made the deploy itself the release) is checked inside `start_reporting` after the profile lock, so it refuses the write rather than
 hiding the door: a free hunter sees the Start button marked `aria-disabled`, with the reason as visible text
 above it. `aria-disabled` deliberately rather than `disabled` — a disabled button takes no pointer events, so
 its explanation is unreachable — which means the POST still goes through and the **service** is what refuses
-it. It is an env var so ending the beta is a config flip rather than a deploy. Staff preview the free-tier view with
+it. Setting it to exactly `True` brings the gate back without a deploy. Staff preview the free-tier view with
 `?preview=challenges-free`. A lapsed member keeps a run they already started; the gate is on starting, not
 on owning.
 

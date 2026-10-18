@@ -26,7 +26,7 @@ from pathlib import Path
 import pytest
 from django.core.management import call_command
 from django.db import connection
-from django.test import Client
+from django.test import Client, override_settings
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
@@ -676,6 +676,7 @@ def test_the_card_actions_fit_three_across_on_a_laptop():
     assert '<span class="lg:max-xl:sr-only">Share</span>' in body
 
 
+@override_settings(CHALLENGES_BETA_MEMBERS_ONLY=True)
 def test_the_beta_card_says_member_throughout():
     client = Client()
     user = UserFactory()
@@ -708,12 +709,23 @@ def test_the_deploy_checklist_carries_the_calendar():
     assert any(ln.startswith('| P |') and '0004' in ln for ln in checklist.splitlines())
 
 
-def test_the_beta_launch_is_the_newest_announcement():
+def test_the_public_release_is_the_newest_announcement():
     from core import whats_new
 
-    top = whats_new.ENTRIES[0]
-    assert top.id == '2026-10-challenges-beta'
+    top, beta = whats_new.ENTRIES[0], whats_new.ENTRIES[1]
+    assert top.id == '2026-10-challenges-open' and beta.id == '2026-10-challenges-beta'
     assert top.link_url == '/community/challenges/', 'a signed-out archive reader would be sent to login'
+
+
+def test_the_beta_is_over_by_default():
+    # The release IS the deploy: no env var to remember, and the announcement lands with it.
+    import os
+    from django.conf import settings
+    from challenges.services import challenge_service, tutorials
+    if 'CHALLENGES_BETA_MEMBERS_ONLY' not in os.environ:
+        assert settings.CHALLENGES_BETA_MEMBERS_ONLY is False
+        assert challenge_service.creation_is_open_to(None) is True
+        assert tutorials.current_intro_version() == tutorials.INTRO_LIVE
 
 
 def test_the_membership_perk_no_longer_says_challenges_are_coming():
@@ -721,6 +733,15 @@ def test_the_membership_perk_no_longer_says_challenges_are_coming():
 
     beta = next(p for p in PREMIUM_PERKS if p['slug'] == 'beta')
     assert 'returns' not in beta['example'] and 'Challenges' in beta['example']
+    assert 'while it is in beta' not in beta['example'], 'the perk still says Challenges is in beta'
+
+
+def test_the_optimizer_perk_matches_the_allowance():
+    from challenges.services.allowance import FREE_PLAN_WINDOW
+    from users.constants import PREMIUM_PERKS
+
+    perk = next(p for p in PREMIUM_PERKS if p['slug'] == 'optimizer')
+    assert FREE_PLAN_WINDOW.days == 7 and 'a week' in perk['everyone']
 
 
 def test_the_completion_notification_promises_nothing_it_may_not_give():

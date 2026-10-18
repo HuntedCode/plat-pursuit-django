@@ -124,12 +124,12 @@ def creation_is_open_to(profile):
 
     The beta gate, and it is a DIAL rather than a door: the hub and every run on it are public to
     everyone from day one, and what members get during the beta is to go FIRST. That is what the
-    storefront already sells by name -- "First through the door on Challenges" (it read "when Challenges returns" before launch) against an
-    everyone-side of "Everything, when it ships" -- so members-create-first honours the words as
-    written, and beta's end opens creation to everybody without taking anything back.
+    storefront sold by name -- "First through the door on Challenges" against an everyone-side of
+    "Everything, when it ships" -- so members-create-first honoured the words as written, and beta's end
+    opened creation to everybody without taking anything back.
 
-    Flipped by `CHALLENGES_BETA_MEMBERS_ONLY`, an env var rather than a code constant, so ending the
-    beta is a Render setting change and not a deploy.
+    Read from `CHALLENGES_BETA_MEMBERS_ONLY`. The beta ended with the public release, which flipped the
+    setting's default to off; the switch stays so a future members-first type can use it.
     """
     if not beta_is_on():
         return True

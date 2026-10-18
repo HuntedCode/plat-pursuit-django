@@ -61,7 +61,7 @@
         <h2 class="supw__h2">What you now hold</h2>
         <div class="sup-perks-grid">
             {% for perk in premium_perks %}
-            <div class="sup-perk{% if perk.wide %} sup-perk--wide{% endif %} pp-arrive__it" style="--perk-c: {{ perk.colour }}; --i: {{ forloop.counter0 }}">
+            <div class="sup-perk pp-arrive__it" style="--perk-c: {{ perk.colour }}; --i: {{ forloop.counter0 }}">
                 <span class="rm-feat__icon sup-perk__icon" aria-hidden="true">{% include 'support/_perk_icon.html' with key=perk.slug %}</span>
                 <div class="sup-perk__body">
                     <h3 class="sup-perk__name"{% if perk.asterisk %} aria-describedby="supw-perks-fn"{% endif %}>{{ perk.name }}{% if perk.asterisk %}<span class="sup-perk__ast" aria-hidden="true">*</span>{% endif %}</h3>

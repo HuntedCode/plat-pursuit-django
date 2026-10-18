@@ -147,6 +147,7 @@ SUPPORT_TIERS_ARE_PLACEHOLDERS = False
 #   mark       -> `.pp-supname`/`.pp-supstar` (the successor pair; site-wide wiring pending the
 #                 Profile tier denorm) -- `.legendary-title` is LEGACY and being removed
 #   beta       -> trophies/mixins.py -> beta_access_required
+#   optimizer  -> challenges/services/allowance.py: FREE_PLAN_WINDOW (one plan a week) vs members unlimited
 #   polls      -> Discord-side, like the channel: run as native Discord polls in #supporter-chat
 #                 (NOT built ballots -- premium-proposal.md's no-ballot-features decision stands;
 #                 a rename of the channel in Discord must rename the example here too)
@@ -178,13 +179,16 @@ PREMIUM_PERKS = [
      'everyone': 'A voice in the Discord, any day',
      'member': 'Everyone has a voice in the Discord. Yours becomes a counted vote in what gets built next, including the badge polls.',
      'example': 'Which badge series gets artwork next.'},
-    # The wide closer: spans the modal's full width (perk.wide -> .sup-perk--wide).
     {'slug': 'beta', 'colour': '#e55dd9',
      'name': 'Beta access',
      'everyone': 'Everything, when it ships',
      'member': 'Try upcoming features while they are still taking shape, before anyone else.',
-     'example': 'First through the door on Challenges, members-first while it is in beta.',
-     'wide': True},
+     'example': 'Members started Challenges before anyone else.'},
+    {'slug': 'optimizer', 'colour': '#f56a9e',
+     'name': 'Unlimited optimizer plans',
+     'everyone': 'One Challenge Optimizer plan a week',
+     'member': 'Plan your A-Z and Job Coverage runs as often as you like, instead of once a week.',
+     'example': 'A fresh plan every time a new game catches your eye.'},
 ]
 
 # Stripe Product ID Mappings

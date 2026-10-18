@@ -46,6 +46,14 @@ pytestmark = pytest.mark.django_db
 
 open_beta = override_settings(CHALLENGES_BETA_MEMBERS_ONLY=False)
 
+
+@pytest.fixture(autouse=True)
+def _beta_on():
+    """These tests cover the members-first gate, so it is ON here unless a test says `open_beta`. The
+    setting's own default has been off since the public release."""
+    with override_settings(CHALLENGES_BETA_MEMBERS_ONLY=True):
+        yield
+
 ROOT = Path(__file__).resolve().parents[2]
 
 _SEQ = {'n': 0}

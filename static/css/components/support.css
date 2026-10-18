@@ -953,14 +953,6 @@
     .sup-perk { padding: 10px; }
 }
 
-/* The wide closer (beta access): full row. Border deliberately NEUTRAL -- a magenta-tinted
-   border on the emphasis tile made the top ramp hue read as a top-tier perk, on a page whose
-   lede says levels change nothing. */
-.sup-perk--wide {
-    grid-column: 1 / -1;
-    padding: 14px;
-}
-
 /* The icon wears its perk's stop from the giving ramp: tinted stroke, whisper fill, tinted
    border -- colour without the tiles shouting. COMPOUND selector on purpose: the base
    .rm-feat__icon rule lives in support-roadmap.css, which loads AFTER this file, so a bare
