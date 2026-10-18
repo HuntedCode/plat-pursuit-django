@@ -41,6 +41,19 @@ _SECTION_LABELS = {
 _PALETTES = ['cobalt', 'amber', 'emerald', 'violet']
 
 
+#: The same seven in the singular, for naming ONE badge's type ("Franchise · Legacy HD") beside chips that use
+#: the plurals above.
+_TYPE_LABELS = {
+    'series': 'Series', 'franchise': 'Franchise', 'collection': 'Collection',
+    'megamix': 'Mega Mix', 'developer': 'Developer', 'user': 'Community', 'event': 'Event',
+}
+
+
+def badge_type_label(badge_type):
+    """One badge's type in the Collection's words (`user` reads "Community", `megamix` "Mega Mix")."""
+    return _TYPE_LABELS.get(badge_type, str(badge_type).capitalize())
+
+
 def badge_type_sections():
     """[(badge_type, plural label)] in the Collection's section order. PUBLIC so the Challenge Optimizer's badge
     step names whole types the way the Collection's Set filter does ("Franchises", "Mega Mixes")."""

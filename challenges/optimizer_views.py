@@ -56,10 +56,10 @@ from challenges.views import (
     start_from_request,
 )
 from trophies.constants import PLATFORM_LABELS
-from trophies.models import Contract, GroupBadge, PlatformGroup
+from trophies.models import Contract, GroupBadge, PlatformGroup, UserGroupBadge
 from trophies.services.badge_list_service import build_list_cards, live_editions
 from trophies.services.badge_xp import edition_display_state
-from trophies.services.collection_service import badge_type_sections
+from trophies.services.collection_service import badge_type_label, badge_type_sections
 from trophies.util_modules.constants import ALL_PLATFORMS, MODERN_PLATFORMS
 
 logger = logging.getLogger(__name__)
@@ -157,17 +157,27 @@ def run_option(profile, challenge_type):
     }
 
 
+def pick_name(series_name, badge_type, edition):
+    """A picked badge as its chip names it: "God of War (Franchise, Legacy HD)". The type is what tells a Franchise
+    badge from a Series badge of the same name (owner, 2026-10-18). One builder for the live chip (the card's
+    `data-name`) and the saved one (`_with_pick_names`)."""
+    return f'{series_name} ({badge_type_label(badge_type)}, {edition})'
+
+
 def badge_cards(group_badges, profile):
     """Picker cards for a page of editions: the badge list's own batched cards (`build_list_cards`: art, edition,
     the hunter's per-edition progress, two bulk queries), with the medallion's state set from that progress by
-    the Collection's shared rule (`edition_display_state`): earned is bright, in progress fills, unearned is grey.
-    The list page shows everything full-colour because it is a showcase; a picker is about the hunter's own
-    standing, so it uses the Collection's reading instead."""
+    the Collection's shared rule (`edition_display_state`): in progress fills, untouched is grey (the picker never
+    shows an edition the hunter holds). The list page shows everything full-colour because it is a showcase; a
+    picker is about the hunter's own standing, so it uses the Collection's reading instead. Each card also carries
+    its `type_label` and its chip's `pick_name`."""
     cards = build_list_cards(group_badges, profile)
     for card in cards:
         frame = card['frame']
         frame['state'], frame['progress_pct'] = edition_display_state(
             card['earned'], frame['stages_done'], frame['stages_total'])
+        card['type_label'] = badge_type_label(card['series'].badge_type)
+        card['pick_name'] = pick_name(card['series'].name, card['series'].badge_type, card['platform_group'].name)
     return cards
 
 
@@ -272,8 +282,8 @@ def _with_pick_names(answers):
     picks = answers.get('badge_picks')
     picks = [gid for gid in picks if isinstance(gid, int)] if isinstance(picks, list) else []
     if picks:
-        names = {gid: f'{series} ({group})' for gid, series, group in GroupBadge.objects.filter(
-            pk__in=picks).values_list('id', 'series__name', 'platform_group__name')}
+        names = {gid: pick_name(series, kind, group) for gid, series, kind, group in GroupBadge.objects
+                 .filter(pk__in=picks).values_list('id', 'series__name', 'series__badge_type', 'platform_group__name')}
         answers['badge_pick_names'] = {str(gid): names[gid] for gid in picks if gid in names}
     return answers
 
@@ -716,7 +726,10 @@ class OptimizerBadgesView(_OptimizerJsonView):
 
     GET `?q=` `?type=` (repeatable) `?group=` (repeatable, edition keys) `?page=`. Answers `{html, more, total,
     page}`. The cards come back unpressed; the script marks the ones in its selection. A read on the picker's own
-    read bucket, like the must-have search."""
+    read bucket, like the must-have search.
+
+    EDITIONS THE HUNTER HOLDS ARE LEFT OUT (owner, 2026-10-18): an earned badge has no stage left to plan toward.
+    Not-started editions stay, so a hunter can still pick a new badge to work on."""
 
     @method_decorator(ratelimit(group=CHALLENGE_READ_RATELIMIT_GROUP, key='user', rate='90/m',
                                 method=('GET', 'HEAD'), block=False))
@@ -727,7 +740,8 @@ class OptimizerBadgesView(_OptimizerJsonView):
             groups=request.GET.getlist('group'),
             badge_types=[t for t in request.GET.getlist('type') if t in planner.BADGE_TYPES],
             query=picker.clean_term(request.GET.get('q', '')),
-        ).select_related('series__submitted_by').order_by(Lower('series__name'), 'platform_group__sort_order', 'pk')
+        ).exclude(pk__in=UserGroupBadge.objects.filter(profile=profile).values('group_badge_id')).select_related(
+            'series__submitted_by').order_by(Lower('series__name'), 'platform_group__sort_order', 'pk')
         try:
             page = max(1, min(int(request.GET.get('page', 1)), MAX_BADGE_PAGES))
         except (TypeError, ValueError):
