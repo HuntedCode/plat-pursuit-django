@@ -841,6 +841,49 @@ def test_the_badge_picker_reports_progress_in_the_cards(client):
     assert '2 of 5 stages' in _body(_badges(client))['html']
 
 
+def test_the_badge_picker_hides_badges_the_hunter_holds(client):
+    from trophies.models import UserGroupBadge
+    profile = _hunter(client)
+    held, untouched = _edition('Uncharted'), _edition('Bloodborne')
+    UserGroupBadge.objects.create(profile=profile, group_badge=held)
+
+    body = _body(_badges(client))
+
+    assert body['total'] == 1 and f'data-cplan-badge="{untouched.id}"' in body['html']
+    assert f'data-cplan-badge="{held.id}"' not in body['html']
+
+
+def test_another_hunters_badge_still_shows(client):
+    from trophies.models import UserGroupBadge
+    from tests.factories import ProfileFactory
+    _hunter(client)
+    gb = _edition('Uncharted')
+    UserGroupBadge.objects.create(profile=ProfileFactory(), group_badge=gb)
+    assert _body(_badges(client))['total'] == 1
+
+
+def test_the_badge_picker_names_each_badges_type(client):
+    _hunter(client)
+    franchise = _edition('God of War', badge_type='franchise')
+    series = _edition('God of War', badge_type='series')
+
+    html = _body(_badges(client))['html']
+
+    for gb, label in ((franchise, 'Franchise'), (series, 'Series')):
+        card = html[html.index(f'data-badge-id="{gb.id}"'):]
+        card = card[:card.index('</li>')]
+        assert f'{label} <span aria-hidden="true">&middot;</span> {gb.platform_group.name}' in card
+        assert f'data-name="God of War ({label}, {gb.platform_group.name})"' in card
+        assert f'aria-label="God of War, {label}, {gb.platform_group.name}"' in card
+
+
+def test_saved_badge_picks_are_named_with_their_type():
+    from challenges.optimizer_views import _with_pick_names
+    gb = _edition('God of War', badge_type='franchise')
+    answers = _with_pick_names({'badge_picks': [gb.id]})
+    assert answers['badge_pick_names'] == {str(gb.id): f'God of War (Franchise, {gb.platform_group.name})'}
+
+
 def test_the_badge_picker_refuses_strangers_in_json(client):
     resp = _badges(client)
     assert resp.status_code in (401, 403) and resp['Content-Type'].startswith('application/json')
