@@ -51,7 +51,7 @@ def to_reopen(profile, spent_answers=None, active_types=()):
     hunter has typed rather than wiping them. Must-haves come back as `[{slug, name}]`, for their chips.
 
     A FREE HUNTER WHOSE WEEK IS IN USE reopens THAT plan (`spent_answers`): the draft only lends it its tweaks
-    (and its weight) when it is the same plan, because any other answers are locked until next week."""
+    (and its weight and `picks`) when it is the same plan, because any other answers are locked until next week."""
     draft = OptimizerDraft.objects.filter(profile=profile).first()
     if spent_answers is not None:
         if draft is not None and allowance.same_plan(draft.answers, spent_answers, active_types):

@@ -391,8 +391,9 @@ The **Challenge Optimizer** (`/my-challenges/optimizer/`, renamed from "planner"
 plans a hunter's open A-Z and Job Coverage squares **together** into one optimal plan. Its copy is written for
 "your challenges", not two named ones, so a future plannable type slots in. The service modules keep the name
 `planner` (`services/planner.py`, `services/plan_solver.py`): planning is what they compute.
-It is a five-step wizard (which runs, platforms, backlog/new/both, badges, must-haves), then a plan the hunter
-adjusts and applies. The Plat Calendar is left out: it fills itself and has no squares to choose.
+It is a five-step wizard (which runs and what to do with games already picked, platforms, backlog/new/both,
+badges, must-haves), then a plan the hunter adjusts and applies. The Plat Calendar is left out: it fills itself
+and has no squares to choose.
 
 | Piece | Where | What it owns |
 |---|---|---|
@@ -578,13 +579,27 @@ change: the wizard folds (180ms, ease-in) and the summary, stats and first five 
 BUSY until that reveal lands, or a second Plan it would start a second solve. A re-solve is not: its lines glide
 to their new places (one `lineFlip`, shared with the Letter/Job view switch) and the stats tick from their old values.
 
+**Games already picked** (owner, 2026-10-18): a square holding a game the hunter has not finished is theirs, so
+step 1 says plainly what the plan does with it. Each run card reads "8 open squares · 5 picked" (`run_option`'s
+`picked`, `filled_count - completed_count`), and while an included run has a pick it asks **Keep them** (the
+default: plan the open squares, suggest swaps) or **Replan them too** (the answer `picks`, `keep` / `replan`).
+Replan is ONE solve over the open AND unfinished squares, each occupant a candidate that may stay (the swap solve's
+keep tier), so a pick changes only when the swap rule would have suggested it: a pin, a filled square, a saved game,
+and under Priority a badge game. A pick that stays is no line; a changed one is an ordinary line (it locks) whose
+**Keep [game]** (on the line, or the sheet's foot) puts it back: the `left_open` tweak on an unfinished square,
+listed under **Keeping** with **Replan it** (or "Keeping ..." in its discipline shelf). Nothing is offered as a
+swap under Replan, and the stats add "picks changed". A must-have whose only square holds a kept pick is unplaced
+as `kept`; one that IS a pick and stays put is reported `in_run`, not silently dropped. Like the weight, `picks` is
+an answer that is NOT in the pool digest or the weekly allowance's same-plan key: it changes how the plan is
+solved, not the pool, so a free hunter can flip it on this week's plan.
+
 **Leave a square open** (owner, 2026-10-17): the Other options sheet's foot offers "Leave C open" for each OPEN
 square of the line (both on a C + Gunslinger line; an unfinished square is left out, Undo swap is its way back).
 It is a tweak, `left_open: [{type, key}]`, autosaved with the rest: `make_plan` keeps it out of both solves, it
 beats a square pin on the same square, and the plan returns it as `left_open`, drawn with **Plan it** (under Still
 open, or in its discipline shelf in the Job view). Only an OPEN square can be left open: one the hunter has since
 filled by hand drops out (the door saves only what the plan returns), and a must-have whose only open squares are
-left open is unplaced as `left_open`.
+left open is unplaced as `left_open`. Under Replan an unfinished square can be left as it is too (Keep, above).
 
 **The Letter / Job view** (owner, 2026-10-17): the switch sits above the plan, shown when both boards are planned
 and there is more than one game, because Job regroups ALL of it (a remembered Job never applies while the switch is

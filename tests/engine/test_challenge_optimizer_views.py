@@ -90,8 +90,8 @@ def test_the_page_seeds_runs_platforms_and_series(client):
 
     assert resp.status_code == 200
     runs = {r['type']: r for r in resp.context['runs']}
-    assert runs[AZ]['run'] is not None and runs[AZ]['open'] == 26
-    assert runs[JOBS]['run'] is None
+    assert runs[AZ]['run'] is not None and runs[AZ]['open'] == 26 and runs[AZ]['picked'] == 0
+    assert runs[JOBS]['run'] is None and runs[JOBS]['picked'] == 0
     checked = {p['code'] for p in resp.context['platforms'] if p['checked']}
     assert checked == {'PS4'}
 
@@ -877,6 +877,38 @@ def test_badge_sources_and_weight_are_read_from_the_body_strictly():
     assert options.badge_types == ('developer',)
     assert options.picked_badges == (3, 7)                                 # deduplicated; bool and junk dropped
     assert options.badge_weight == planner.WEIGHT_PRIORITY
+
+
+def test_the_picks_choice_is_read_from_the_body(client):
+    from challenges.optimizer_views import _OptimizerJsonView
+    assert _OptimizerJsonView().options({'types': [AZ]}).picks == planner.PICKS_KEEP
+    assert _OptimizerJsonView().options({'types': [AZ], 'picks': 'replan'}).replan_picks
+    profile = _hunter(client)
+    svc.start(profile, AZ)
+    assert _plan(client, types=[AZ], picks='everything').status_code == 400
+
+
+def test_step_one_counts_the_squares_already_picked(client):
+    profile = _hunter(client)
+    run = svc.start(profile, AZ)
+    svc.assign(run, profile, 'B', _contract('Bastion'))
+    resp = client.get(reverse('challenge_optimizer'))
+    runs = {r['type']: r for r in resp.context['runs']}
+    assert runs[AZ]['open'] == 25 and runs[AZ]['picked'] == 1
+    html = resp.content.decode()
+    picked = html[html.index('data-cplan-picked-for="az"'):]
+    picked = picked[:picked.index('1 picked</span>')]
+    assert 'data-picked="1" >' in picked   # no `hidden` on the count
+
+
+def test_a_kept_pick_comes_back_with_the_game_it_keeps(client):
+    profile = _hunter(client)
+    run = svc.start(profile, AZ)
+    svc.assign(run, profile, 'B', _contract('Bastion'))
+    _contract('Apex')
+    body = _body(_plan(client, types=[AZ], picks='replan',
+                       tweaks={'left_open': [{'type': AZ, 'key': 'A'}, {'type': AZ, 'key': 'B'}]}))
+    assert {s['key']: s['kept'] for s in body['left_open']} == {'A': None, 'B': 'Bastion'}
 
 
 def test_an_unknown_badge_weight_is_refused(client):

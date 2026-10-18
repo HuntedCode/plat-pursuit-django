@@ -91,7 +91,9 @@
     display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
     margin-top: auto; padding-top: 10px; border-top: 1px solid var(--pp-divider);
 }
-.pp-cplan__opt-open { font-size: 0.8rem; font-weight: 600; color: var(--pp-text-mute); }
+/* Its counts: the open squares, then the picks step 1 asks about (owner, 2026-10-18). */
+.pp-cplan__opt-counts { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px; }
+.pp-cplan__opt-open, .pp-cplan__opt-picked { font-size: 0.8rem; font-weight: 600; color: var(--pp-text-mute); }
 /* The card's content block keeps 12px above the action row even when the row's auto margin collapses to 0. */
 .pp-cplan__opt-body { margin-bottom: 12px; }
 
@@ -171,7 +173,10 @@
 .pp-cplan.is-busy .pp-cplan__review { opacity: 0.6; }
 
 .pp-cplan__stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 16px; }
-@media (min-width: 768px) { .pp-cplan__stats { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; } }
+/* One row from md however many cells the plan has (two to five: "cover both" and "picks changed" come and go). */
+@media (min-width: 768px) {
+    .pp-cplan__stats { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 12px; }
+}
 /* The design system's stat cell (theme-safe 3% white on a 5% content border), centred. */
 .pp-cplan__stat {
     display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 10px; text-align: center;
@@ -254,7 +259,13 @@ button.pp-cplan__sq:focus-visible { outline: 2px solid var(--disc); outline-offs
 .pp-cplan__slot-note { flex: 1; min-width: 0; font-size: 0.8rem; color: var(--pp-text-mute); }
 /* Still open's "leaving these open" squares, each with its Plan it. */
 .pp-cplan__left-open { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
-.pp-cplan__left-open-item { display: inline-flex; align-items: center; gap: 6px; }
+.pp-cplan__left-open-item { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+/* Keeping's game name (Replan): one line, so a long title never pushes Replan it off the row. */
+.pp-cplan__kept-name {
+    min-width: 0; max-width: 14rem; font-size: 0.8rem; font-weight: 600;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.pp-cplan__left-open-item .pp-cplan__act { flex: none; white-space: nowrap; }
 
 /* A swap card's Both / Only A / Only Gunslinger choice: the house switch, hugging its chips (a card's column would
    stretch it) with tighter chips so three fit a phone card on one row more often. */

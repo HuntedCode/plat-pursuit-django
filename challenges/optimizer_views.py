@@ -150,6 +150,10 @@ def run_option(profile, challenge_type):
         # FROM THE RUN'S OWN COUNTS, not a slot query: the same definition the script uses after an Apply
         # (`total_slots - filled_count`), so the two cannot drift.
         'open': (run.total_slots - run.filled_count) if run else 0,
+        # Squares holding a game not finished yet: what step 1's "Games you've already picked" asks about. The
+        # card's own count (a square whose contract was since deleted still counts there, though no plan
+        # touches it: rare, and the number matches the run page).
+        'picked': card['planned'] if run else 0,
     }
 
 
@@ -243,7 +247,7 @@ def _start_preview_week(request, door, context):
         'types': [r['type'] for r in context['runs'] if r['run']],
         'platforms': [p['code'] for p in context['platforms'] if p['checked']],
         'source': planner.SOURCE_BOTH, 'badge_started': bool(context['started_count']), 'badge_all': False,
-        'badge_types': [], 'badge_picks': [], 'badge_weight': planner.WEIGHT_BONUS,
+        'badge_types': [], 'badge_picks': [], 'badge_weight': planner.WEIGHT_BONUS, 'picks': planner.PICKS_KEEP,
     }
     answers.pop('badge_pick_names', None)
     request.session[PREVIEW_WEEK_SESSION_KEY] = {'answers': answers, 'at': timezone.now().isoformat()}
@@ -351,7 +355,9 @@ class _OptimizerJsonView(_ChallengeJsonView):
             raise PlanRequestError('Pick at least one challenge to plan.')
         source = data.get('source', planner.SOURCE_BOTH)
         weight = data.get('badge_weight', planner.WEIGHT_BONUS)
-        if source not in planner.SOURCES or weight not in planner.BADGE_WEIGHTS:
+        unfinished = data.get('picks', planner.PICKS_KEEP)
+        if (source not in planner.SOURCES or weight not in planner.BADGE_WEIGHTS
+                or unfinished not in planner.PICKS_CHOICES):
             raise PlanRequestError('That request could not be read.')
         # Deduplicated BEFORE the cap, so repeated ids cannot push real picks out.
         picks = tuple(dict.fromkeys(_int_list(data.get('badge_picks'))))[:planner.MAX_PICKED_BADGES]
@@ -364,6 +370,7 @@ class _OptimizerJsonView(_ChallengeJsonView):
             badge_types=tuple(t for t in _str_list(data.get('badge_types')) if t in planner.BADGE_TYPES),
             badge_picks=picks,
             badge_weight=weight,
+            picks=unfinished,
         )
 
     def tweaks(self, data):
@@ -945,7 +952,8 @@ def _plan_json(plan, pool, states, tweaks, built, badges_only=False):
             # live slug would then never match.
             'replacing': {sq[0]: states[sq[0]].snapshots[sq[1]]
                           for sq in squares if sq[1] in states[sq[0]].snapshots},
-            # What an accepted swap will overwrite, said on the line itself: the swap row is gone once accepted.
+            # What the line will overwrite, said on the line itself: an accepted swap (its row is gone once
+            # accepted), or a pick Replan changes.
             'replaces': [{**_square(sq, labels), 'name': states[sq[0]].names.get(sq[1], '')}
                          for sq in squares if sq[1] in states[sq[0]].snapshots],
             'stages': cand.get('stages', []),
@@ -994,7 +1002,10 @@ def _plan_json(plan, pool, states, tweaks, built, badges_only=False):
         'unplaced': [{**{k: rows.get(cid, {}).get(k, '') for k in ('slug', 'name')}, 'reason': reason}
                      for cid, reason in plan.unplaced_pins.items()],
         'empty': [_square(sq, labels) for sq in sorted(plan.empty, key=order.__getitem__)],
-        'left_open': [_square(sq, labels) for sq in sorted(plan.left_open, key=order.__getitem__)],
+        # A kept pick (Replan's "Keep") carries the game it keeps, for its row; an open square has none.
+        'left_open': [{**_square(sq, labels), 'kept': states[sq[0]].names.get(sq[1], '')
+                       if sq[1] in states[sq[0]].unfinished else None}
+                      for sq in sorted(plan.left_open, key=order.__getitem__)],
         'job_groups': _job_groups(labels),
         'notes': {
             'hatch': {t: [_square((t, k), labels) for k in keys] for t, keys in plan.hatch_keys.items() if keys},

@@ -71,6 +71,12 @@ WEIGHT_PRIORITY = 'priority'
 WEIGHT_ONLY = 'only'
 BADGE_WEIGHTS = (WEIGHT_BONUS, WEIGHT_PRIORITY, WEIGHT_ONLY)
 
+#: What the plan does with squares that already hold a game the hunter has not finished (owner, 2026-10-18).
+#: KEEP plans the open squares and suggests swaps; REPLAN puts every unfinished square in the plan too.
+PICKS_KEEP = 'keep'
+PICKS_REPLAN = 'replan'
+PICKS_CHOICES = (PICKS_KEEP, PICKS_REPLAN)
+
 #: Every badge type a hunter can select as a whole, in the Collection's own section order.
 BADGE_TYPES = tuple(key for key, _ in BadgeSeries.BADGE_TYPES)
 
@@ -97,11 +103,12 @@ KEEP_SINGLES = 4
 
 UNPLACED_FINISHED = 'finished'       # the hunter has completed it
 UNPLACED_GONE = 'gone'               # no longer on the Job Board
-UNPLACED_NO_SQUARE = 'no_square'     # fits no open square (or not the square it was pinned to)
-UNPLACED_IN_RUN = 'in_run'           # the only open squares it fits are in runs that already hold it
+UNPLACED_NO_SQUARE = 'no_square'     # fits no square the plan fills (or not the square it was pinned to)
+UNPLACED_IN_RUN = 'in_run'           # the only squares it fits are in runs that already hold it
 UNPLACED_CONFLICT = 'conflict'       # fits, but other pins or better uses took its squares
 UNPLACED_SQUARE_CLOSED = 'square_closed'   # pinned to a square that is no longer open or unfinished
 UNPLACED_LEFT_OPEN = 'left_open'     # the only open squares it fits are ones the hunter is leaving open
+UNPLACED_KEPT = 'kept'               # (Replan) the only squares it fits hold picks the hunter is keeping
 
 
 @dataclass(frozen=True)
@@ -117,6 +124,11 @@ class PlannerOptions:
     badge_types: tuple = ()
     badge_picks: tuple = ()            # GroupBadge ids
     badge_weight: str = WEIGHT_BONUS
+    picks: str = PICKS_KEEP
+
+    @property
+    def replan_picks(self):
+        return self.picks == PICKS_REPLAN
 
     @property
     def picked_badges(self):
@@ -144,8 +156,8 @@ class PlannerOptions:
         return self.badges_on and self.badge_weight in (WEIGHT_PRIORITY, WEIGHT_ONLY)
 
     def digest(self):
-        """A stable key for the pool cache. Sorted, so chip order in a request cannot split it. The weight is NOT
-        in it: it changes how the solver ranks, not what the pool holds."""
+        """A stable key for the pool cache. Sorted, so chip order in a request cannot split it. The weight and
+        `picks` are NOT in it: they change how the solver plans, not what the pool holds."""
         payload = json.dumps({
             'types': sorted(self.types), 'platforms': sorted(self.platforms), 'source': self.source,
             # "All badges" COVERS started and every type, so with it on those two say nothing about the pool:
@@ -159,7 +171,8 @@ class PlannerOptions:
 @dataclass(frozen=True)
 class Tweaks:
     """The review-step adjustments. All are contract ids, except `square_pins` ({(type, key): id}) and
-    `left_open` ({(type, key)}): squares the hunter is leaving open to fill themselves (owner, 2026-10-17)."""
+    `left_open` ({(type, key)}): squares the hunter is leaving open to fill themselves (owner, 2026-10-17), and
+    under Replan unfinished squares whose pick they are keeping (owner, 2026-10-18)."""
     pins: frozenset = frozenset()
     square_pins: dict = field(default_factory=dict)
     excluded: frozenset = frozenset()
@@ -179,7 +192,8 @@ class RunState:
 
 @dataclass
 class Plan:
-    #: {(type, key): contract id} for open squares (and unfinished squares the hunter pinned a swap into).
+    #: {(type, key): contract id} for open squares, unfinished squares the hunter pinned a swap into, and under
+    #: Replan unfinished squares whose pick the plan changes (never one whose pick stays).
     assignments: dict
     #: {(type, key): (current id, suggested id, [other squares the suggested game holds])} for unfinished
     #: squares. Solved ON TOP of `assignments`, so a plan square it lists is the plan's own. It may also list
@@ -190,7 +204,8 @@ class Plan:
     unplaced_pins: dict
     #: Open squares the plan leaves empty: nothing on the hunter's terms is left for them.
     empty: list
-    #: Open squares the hunter is leaving open (`Tweaks.left_open`) that are still open today.
+    #: Squares the hunter is leaving as they are (`Tweaks.left_open`): open squares still open today, and under
+    #: Replan unfinished squares whose game they are keeping.
     left_open: list
     #: {type: [keys]} open squares where the <=3 hatch is open (notes, never auto-applied).
     hatch_keys: dict
@@ -490,26 +505,32 @@ def run_states(profile, types):
 
 def make_plan(profile, options, pool, states, tweaks=Tweaks()):
     """Solve the open squares, then (if any square is unfinished) a second solve ON TOP of that plan that may
-    suggest swapping unfinished squares.
+    suggest swapping unfinished squares. Under Replan (`options.replan_picks`) it is ONE solve instead, over the
+    open AND unfinished squares: see below.
 
     `pool` is `get_pool`'s hydrated pool; pins missing from it are fetched by `pin_candidates`.
 
     SQUARE PINS, three cases. On an open square: the hunter's pick for it. On an unfinished square: an
     accepted swap, so that square joins the primary solve as if it were open, holding the pinned game (its old
     occupant stays in `in_run` and is never planned into another square of that run: Apply replaces games in
-    place). Naming the square's own occupant means "keep it" and is dropped. On a square that is no longer open
-    or unfinished: reported as `UNPLACED_SQUARE_CLOSED`."""
+    place). Under Replan the same pin is simply the hunter's pick for that square. Naming the square's own occupant
+    means "keep it" and is dropped. On a square that is no longer open or unfinished: reported as
+    `UNPLACED_SQUARE_CLOSED`."""
     occupants = {(t, k): cid for t, s in states.items() for k, cid in s.unfinished.items()}
     open_squares = [(t, k) for t, s in states.items() for k in s.open_keys]
     plannable = set(open_squares) | set(occupants)
+    replan = options.replan_picks
     # LEFT OPEN (owner, 2026-10-17): the hunter will fill these themselves, so neither solve touches them. It
     # beats a square pin on the same square (the latest word wins, as with "not this one"). Only an OPEN square
     # can be left open: once the hunter fills it by hand it is theirs, planned like any unfinished square, and
-    # the entry is forgotten (the plan door saves only what `Plan.left_open` returns).
-    open_set = set(open_squares)
-    left_open = [sq for sq in sorted(tweaks.left_open) if sq in open_set]
+    # the entry is forgotten (the plan door saves only what `Plan.left_open` returns). Under Replan an
+    # unfinished square can be left as it is too ("Keep" its game): it leaves the solve, its game staying put. So
+    # there a square left open and then filled by hand becomes a Keep of the hunter's own game.
+    leavable = plannable if replan else set(open_squares)
+    left_open = [sq for sq in sorted(tweaks.left_open) if sq in leavable]
     skipped = set(left_open)
     open_squares = [sq for sq in open_squares if sq not in skipped]
+    occupants = {sq: cid for sq, cid in occupants.items() if sq not in skipped}
 
     square_pins, closed = {}, set()
     for square, cid in tweaks.square_pins.items():
@@ -536,41 +557,62 @@ def make_plan(profile, options, pool, states, tweaks=Tweaks()):
     prefer = _prefers_progress(options.source)
     stages_first = options.stages_first
 
-    primary = solve(Problem(
-        squares=tuple(open_squares),
-        candidates=_prune(candidates, open_squares, all_pins, tweaks.penalized, in_run, square_pins),
-        pins=pins, square_pins=square_pins, in_run=in_run,
-        penalized=frozenset(tweaks.penalized), prefer_progress=prefer, stages_first=stages_first,
-    ))
-
-    swaps = {}
-    if occupants:
-        # THE PRIMARY PLAN IS FIXED: every square it filled is square-pinned here, so a suggested game's other
-        # squares are the plan's own and a swap can never contradict a line the hunter sees above it.
-        held = {**primary.assignments, **square_pins}
-        swap_squares = open_squares + list(occupants)
-        pruned = _prune(candidates, swap_squares, all_pins | set(held.values()), tweaks.penalized, in_run, held)
-        swap = solve(Problem(
-            squares=tuple(swap_squares),
+    def occupant_solve(held, keep):
+        """The open AND unfinished squares, each occupant a candidate that may stay (the keep tier). `held`: the
+        square pins it must honour; `keep`: the pins pruning must keep."""
+        squares = open_squares + list(occupants)
+        pruned = _prune(candidates, squares, keep, tweaks.penalized, in_run, held)
+        return solve(Problem(
+            squares=tuple(squares),
             candidates=_with_occupants(pruned, occupants, {**by_id, **_occupants_outside(profile, options, pool,
                                                                                          occupants, by_id)}),
             pins=pins, square_pins=held, in_run=in_run, occupants=occupants,
             penalized=frozenset(tweaks.penalized), prefer_progress=prefer, stages_first=stages_first,
         ))
+
+    stayed = {}
+    if replan:
+        # REPLAN (owner, 2026-10-18): every unfinished square joins the one solve as if it were open, its game a
+        # candidate that may stay. So a pick changes only when a higher tier wants its square, exactly as a swap
+        # is suggested: a pin, a filled square, a saved game, and under Priority a badge game. A square whose game
+        # stays is not a line (nothing to apply), and nothing is left to suggest.
+        primary = occupant_solve(square_pins, all_pins)
+        assignments = {sq: cid for sq, cid in primary.assignments.items() if occupants.get(sq) != cid}
+        # A MUST-HAVE THAT IS ALREADY A PICK honours itself by staying, so it is no line; said, not silently gone.
+        placed_now = set(assignments.values())
+        stayed_put = {cid for sq, cid in occupants.items() if primary.assignments.get(sq) == cid}
+        stayed = {cid: UNPLACED_IN_RUN for cid in pins & stayed_put if cid not in placed_now}
+    else:
+        primary = solve(Problem(
+            squares=tuple(open_squares),
+            candidates=_prune(candidates, open_squares, all_pins, tweaks.penalized, in_run, square_pins),
+            pins=pins, square_pins=square_pins, in_run=in_run,
+            penalized=frozenset(tweaks.penalized), prefer_progress=prefer, stages_first=stages_first,
+        ))
+        assignments = primary.assignments
+
+    swaps = {}
+    if occupants and not replan:
+        # THE PRIMARY PLAN IS FIXED: every square it filled is square-pinned here, so a suggested game's other
+        # squares are the plan's own and a swap can never contradict a line the hunter sees above it.
+        held = {**primary.assignments, **square_pins}
+        swap = occupant_solve(held, all_pins | set(held.values()))
         for sq, cid in occupants.items():
             new = swap.assignments.get(sq, cid)
             if new != cid:
                 also = [other for other, placed in swap.assignments.items() if placed == new and other != sq]
                 swaps[sq] = (cid, new, also)
 
-    unplaced = {cid: _why_unplaced(cid, by_id, states, square_pins, skipped) for cid in primary.unplaced_pins}
+    unplaced = {cid: _why_unplaced(cid, by_id, states, square_pins, skipped, replan)
+                for cid in primary.unplaced_pins}
+    unplaced.update(stayed)
     unplaced.update(_missing_reasons(profile, [cid for cid in unplaced if cid not in by_id]))
     placed = set(primary.assignments.values())
     unplaced.update({cid: UNPLACED_SQUARE_CLOSED for cid in closed if cid not in placed})
 
-    mentioned = set(primary.assignments.values()) | {new for _, new, _ in swaps.values()}
+    mentioned = set(assignments.values()) | {new for _, new, _ in swaps.values()}
     return Plan(
-        assignments=primary.assignments,
+        assignments=assignments,
         swaps=swaps,
         unplaced_pins=unplaced,
         # A pinned unfinished square the pin could not take still holds its game, so it is not "empty".
@@ -592,8 +634,8 @@ def _allowed(cand, options):
 def alternatives(pool, states, square, excluded=frozenset(), options=None, partners=(), left_open=frozenset(),
                  badge_only=False):
     """{'both': [...], 'rest': [...], 'partner': [...]} of (candidate dict, [open squares it also fits in the
-    OTHER run]) for one square and its line, EVERY one of them (owner, 2026-10-17: the sheet shows everything,
-    paged by its door). Reads only the cached pool and the run state: the "Other options" sheet costs no pool scan.
+    OTHER run, and under Replan its picks]) for one square and its line, EVERY one of them (owner, 2026-10-17:
+    the sheet shows everything, paged by its door). Reads only the cached pool and the run state: the "Other options" sheet costs no pool scan.
 
     PARTNERS are the other squares of the plan line the hunter opened it from (owner, 2026-10-17), one at most (a
     line holds one square per run). `both`: games that fit the square AND the partner (the sheet pins one to the
@@ -618,9 +660,12 @@ def alternatives(pool, states, square, excluded=frozenset(), options=None, partn
         return (cand['id'] not in excluded and (options is None or _allowed(cand, options))
                 and (not badge_only or cand['stages']))
 
+    replan = options is not None and options.replan_picks
+
     def also_of(cand, own_run, skip):
+        # Under Replan the other run's picks are squares the plan fills too (a kept one is in `left_open`).
         return [(t, k) for t, s in states.items() if t != own_run and cand['id'] not in s.in_run
-                for k in s.open_keys
+                for k in (list(s.open_keys) + sorted(s.unfinished) if replan else s.open_keys)
                 if k in cand['fits'].get(t, ()) and (t, k) not in skip and (t, k) not in left_open]
 
     found = []
@@ -721,28 +766,34 @@ def _with_occupants(pruned, occupants, by_id):
     return tuple(out)
 
 
-def _why_unplaced(contract_id, by_id, states, square_pins, left_open=frozenset()):
+def _why_unplaced(contract_id, by_id, states, square_pins, left_open=frozenset(), replan=False):
     """Why a pin the solver held did not land. A contract absent from `by_id` is answered by
     `_missing_reasons` instead (it never reached the solver). A square the hunter is leaving open is not one it
-    could have taken, so a pin whose only open squares are those says so rather than blaming other picks."""
+    could have taken, so a pin whose only open squares are those says so rather than blaming other picks. Under
+    Replan an unfinished square is one it could have taken too, unless the hunter is keeping its pick."""
     cand = by_id.get(contract_id)
     if cand is None:
         return UNPLACED_NO_SQUARE
     for (t, k), cid in square_pins.items():
         if cid == contract_id and k not in cand['fits'].get(t, ()):
             return UNPLACED_NO_SQUARE
-    fits_somewhere = fits_left_open = False
+    fits_somewhere = fits_left_open = fits_kept = False
     for t, state in states.items():
-        keys = set(cand['fits'].get(t, ())) & set(state.open_keys)
+        keys = set(cand['fits'].get(t, ())) & (set(state.open_keys) | (set(state.unfinished) if replan else set()))
         plannable = {k for k in keys if (t, k) not in left_open}
         if plannable:
             if contract_id not in state.in_run:
                 return UNPLACED_CONFLICT
             fits_somewhere = True
         elif keys and contract_id not in state.in_run:
-            fits_left_open = True
+            if keys & set(state.open_keys):
+                fits_left_open = True
+            else:
+                fits_kept = True
     if fits_left_open:
         return UNPLACED_LEFT_OPEN
+    if fits_kept:
+        return UNPLACED_KEPT
     return UNPLACED_IN_RUN if fits_somewhere else UNPLACED_NO_SQUARE
 
 
