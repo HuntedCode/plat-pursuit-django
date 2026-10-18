@@ -49,6 +49,7 @@ from trophies.models import (
     BadgeSeries, Contract, EarnedContract, GroupBadge, PlatformGroup, SeriesBadgeStanding, UserGroupBadge,
 )
 from trophies.services import badge_orchestrator
+from trophies.services.collection_service import badge_type_label
 from trophies.services.contract_service import contract_by_concept_map
 from trophies.services.contracts_service import max_progress_expression
 
@@ -92,8 +93,8 @@ MAX_PICKED_BADGES = 60
 POOL_TTL = 15 * 60
 POOL_CACHE_PREFIX = 'planner:pool'
 #: Bumped whenever the cached payload's shape, or what it may hold, changes, so a deploy never reads an old pool
-#: (5: unobtainable contracts left out, 2026-10-17).
-POOL_SCHEMA = 5
+#: (5: unobtainable contracts left out, 2026-10-17; 6: stages carry their badge's `type_label`, 2026-10-18).
+POOL_SCHEMA = 6
 
 #: Pruning before the solve: how many candidates each open square keeps, in pool order, unpenalized first.
 #: Doubles (a game that fits an open square in BOTH runs) are what the optimisation is about, so they get the
@@ -250,7 +251,7 @@ def get_pool(profile, options, *, build_if_missing=True, line_ticket=None, join_
 
 def build_pool(profile, options, line_ticket=None, join_line=True):
     """The STORED form: {'candidates': [[id, progress, fits]] in preference order, 'stages': [[id, [stage ref]]],
-    'stage_names': {key: [series, series name, number, title]}, 'unobtainable': [id]} (the unobtainable contracts
+    'stage_names': {key: [series, series name, number, title, type label]}, 'unobtainable': [id]} (the unobtainable contracts
     that passed the filters and were left out, so the plan can tell them from ones outside the filters).
 
     The stage map is kept whole beside the list so a pin from outside the pool gets its stages without a
@@ -282,7 +283,7 @@ def _build_pool(profile, options):
         row = []
         for st in items:
             key = f"{st['series']}#{st['stage']}"
-            names[key] = [st['series'], st['series_name'], st['stage'], st['title']]
+            names[key] = [st['series'], st['series_name'], st['stage'], st['title'], st['type_label']]
             row.append([key, st['part'], st['editions']])
         refs.append([cid, row])
     return {'candidates': [[c['id'], c['progress'], c['fits']] for c in rows], 'stages': refs, 'stage_names': names,
@@ -295,9 +296,9 @@ def _hydrate(stored):
 
     def expand(ref):
         key, part, editions = ref
-        series, series_name, number, title = names[key]
+        series, series_name, number, title, type_label = names[key]
         return {'series': series, 'series_name': series_name, 'stage': number, 'title': title, 'part': part,
-                'editions': editions}
+                'editions': editions, 'type_label': type_label}
 
     stages = {int(cid): [expand(ref) for ref in refs] for cid, refs in stored['stages']}
     candidates = [{'id': cid, 'progress': progress, 'fits': fits, 'stages': stages.get(cid, [])}
@@ -448,6 +449,8 @@ def _stages_for(profile, group_badges, *, whole_catalogue):
         return {}
 
     names = {gb.series.series_slug: gb.series.name for gb in group_badges}
+    # A Franchise and a Series badge can share a name, so a stage row names its badge's type too (owner, 2026-10-18).
+    types = {gb.series.series_slug: badge_type_label(gb.series.badge_type) for gb in group_badges}
     members = {}   # concept id -> [(stage key, via bundle)]
     titles = {}
     for st in catalog['stages']:
@@ -469,8 +472,8 @@ def _stages_for(profile, group_badges, *, whole_catalogue):
             seen[stage_key] = seen.get(stage_key, True) and via_bundle
     return {
         contract_id: [
-            {'series': slug, 'series_name': names[slug], 'stage': number, 'title': titles[(slug, number)],
-             'part': part, 'editions': sorted(set(uncleared[(slug, number)]))}
+            {'series': slug, 'series_name': names[slug], 'type_label': types[slug], 'stage': number,
+             'title': titles[(slug, number)], 'part': part, 'editions': sorted(set(uncleared[(slug, number)]))}
             for (slug, number), part in sorted(stage_map.items())
         ]
         for contract_id, stage_map in by_contract.items()

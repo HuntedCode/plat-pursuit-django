@@ -280,7 +280,7 @@ def test_the_page_names_a_saved_plans_picked_badges():
     gb = GroupBadgeFactory()
     allowance.spend(profile, _options(badge_picks=(gb.id,)), ACTIVE)
     names = allowance_context(profile)['allowance_saved']['badge_pick_names']
-    assert names == {str(gb.id): f'{gb.series.name} ({gb.platform_group.name})'}
+    assert names == {str(gb.id): f'{gb.series.name} (Series, {gb.platform_group.name})'}
 
 
 def test_replanning_the_picks_is_the_same_plan():

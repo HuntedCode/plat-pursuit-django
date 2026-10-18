@@ -948,3 +948,11 @@ def test_none_greys_and_disables_what_it_turns_off():
 def test_saved_answers_with_no_source_come_back_as_none():
     apply = _between('function applyAnswers(a) {', 'root.querySelectorAll(\'[data-cplan-open-saved]\')')
     assert 'els.badgeNone.checked = !a.badge_started && !a.badge_all' in apply
+
+
+def test_badge_names_carry_their_type():
+    # The live chip's name is the card's data-name (the server's pick_name), and a stage row names its badge's type.
+    assert "togglePick(parseInt(btn.dataset.cplanBadge, 10), btn.dataset.name," in JS
+    row = JS[JS.index('function stageRow('):]
+    assert "var detail = [group.type, group.editions].filter(Boolean).join(', ');" in row
+    assert "type: s.type_label || ''" in JS[JS.index('function stageList('):JS.index('function stageRow(')]

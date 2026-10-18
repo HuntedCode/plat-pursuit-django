@@ -170,6 +170,7 @@ def test_uncleared_stages_ride_on_their_contracts_and_cleared_ones_do_not():
     by_id = {c['id']: c for c in pool['candidates']}
     [stage] = by_id[todo.id]['stages']
     assert stage['stage'] == 1 and stage['editions'] == [series.edition.platform_group.name]
+    assert stage['type_label'] == 'Series'   # survives the compact pool, so a stage row can name it
     assert by_id[done.id]['stages'] == []
 
 

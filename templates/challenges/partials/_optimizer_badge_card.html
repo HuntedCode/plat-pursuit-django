@@ -1,9 +1,11 @@
 {% comment %}One badge EDITION as a Challenge Optimizer card: its medallion (the house component, in the hunter's own
-state: bright when earned, filling while in progress, grey when untouched), its series and edition, and their
-progress in it. Takes `card` (`optimizer_views.badge_cards`) and `selectable`.
+state: filling while in progress, grey when untouched; editions they hold are never shown), its series, TYPE and
+edition, and their progress in it. The type is what tells a Franchise badge from a Series badge of the same name
+(owner, 2026-10-18), in the Collection's words like the step's type chips. Takes `card`
+(`optimizer_views.badge_cards`: `type_label`, `pick_name`) and `selectable`.
 
 SELECTABLE CARDS ARE A STRETCHED TOGGLE BUTTON, not a label or a button around the card: the medallion renders
-`<div>`s, which neither may contain. The button holds only the name (its accessible name adds the edition), and
+`<div>`s, which neither may contain. The button holds only the name (its accessible name adds the type and edition), and
 its `::after` covers the card so a tap anywhere selects it. `aria-pressed` is the selection; the script owns it.
 The medallion's own alt text is hidden with it, so a screen reader hears the name once.{% endcomment %}
 {% with gb=card.group_badge frame=card.frame %}
@@ -14,14 +16,14 @@ The medallion's own alt text is hidden with it, so a screen reader hears the nam
     <div class="pp-cplan__badge-text">
         {% if selectable %}
         <button type="button" class="pp-cplan__badge-hit" aria-pressed="false" data-cplan-badge="{{ gb.id }}"
-                data-name="{{ card.series.name }} ({{ card.platform_group.name }})"
-                aria-label="{{ card.series.name }}, {{ card.platform_group.name }}">{{ card.series.name }}</button>
+                data-name="{{ card.pick_name }}"
+                aria-label="{{ card.series.name }}, {{ card.type_label }}, {{ card.platform_group.name }}">{{ card.series.name }}</button>
         {% else %}
         <span class="pp-cplan__badge-name">{{ card.series.name }}</span>
         {% endif %}
-        <span class="pp-cplan__badge-edition">{{ card.platform_group.name }}</span>
+        <span class="pp-cplan__badge-edition">{{ card.type_label }}&nbsp;<span aria-hidden="true">&middot;</span> {{ card.platform_group.name }}</span>
         <span class="pp-cplan__badge-progress">
-            {% if card.earned %}Earned{% elif frame.stages_done %}{{ frame.stages_done }} of {{ frame.stages_total }} stages{% elif frame.stages_total %}{{ frame.stages_total }} stage{{ frame.stages_total|pluralize }} to go{% endif %}
+            {% if frame.stages_done %}{{ frame.stages_done }} of {{ frame.stages_total }} stages{% elif frame.stages_total %}{{ frame.stages_total }} stage{{ frame.stages_total|pluralize }} to go{% endif %}
         </span>
     </div>
     {% if selectable %}

@@ -502,7 +502,11 @@ and a square's own occupant still stay, and a must-have that clears no stage is 
 game fits. The weight is not in the pool's cache key or the allowance's "same plan"; it changes ranking.
 
 **The gallery** (`OptimizerBadgesView`) pages medallion cards filtered by `badge_list_service.live_editions`, the
-Browse Gallery's own filter body, lifted out so both filter alike. Cards come from `build_list_cards` (art,
+Browse Gallery's own filter body, lifted out so both filter alike, minus the editions the hunter already holds
+(owner, 2026-10-18: nothing left to plan toward; not-started editions stay pickable). Each card, chip and plan
+stage row names the badge's TYPE beside its edition ("Franchise · Legacy HD"), in the Collection's singular words
+(`collection_service.badge_type_label`: `user` is "Community"), so a Franchise and a Series badge of one name are
+tellable apart. Cards come from `build_list_cards` (art,
 edition, per-edition progress, two bulk queries) with the medallion state set by the Collection's
 `edition_display_state`. Editions default to step 2's platforms on first open. A card is a STRETCHED toggle
 button (`aria-pressed`) beside the medallion, because the medallion's `<div>`s may not sit inside a label or a
