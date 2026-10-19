@@ -1,80 +1,8 @@
-/* Badge detail page — section components. The header is first, then the tier selector; leaderboard /
-   stage sections follow. Bespoke, token-driven, DaisyUI-free. Tokens: var(--pp-*) from input.css. */
-
-/* ── Rebuild header (badge detail, v3) ──────────────────────────────────────
-   Derived from the Career / Collection header language, not the old page: a Medallion hero + neutral
-   identity + a LEAN at-a-glance readout. Colour is restrained (neutral by default; the one primary accent
-   is the Earners Tally + the progress Horizon; Difficulty / Avg-Hours carry the single earned semantic
-   traffic-light). Everything else is shared components + Tailwind utilities -- the only bespoke bits are the
-   medallion sizing and the compact facts strip (which mirrors Collection's tier-composition strip). */
-.bdh-med { display: flex; justify-content: center; position: relative; }
-.bdh-med .pp-med { --sz: 116px; cursor: pointer; }   /* tap to inspect (pick-up / put-down peek) */
-
-/* One-shot specular sheen on an EARNED hero medallion (JS adds .is-sheen once per session). A single
-   diagonal light band sweeps across -- the canonical PlatPursuit reward gesture, calm (not the Earn Moment).
-   Clipped to a circle (medallions are ~round) so the light reads as crossing the badge. */
-.bdh-med__sheen { position: absolute; inset: 0; z-index: 4; border-radius: 50%; overflow: hidden; pointer-events: none; opacity: 0; }
-.bdh-med.is-sheen .bdh-med__sheen { opacity: 1; }
-.bdh-med.is-sheen .bdh-med__sheen::before {
-    content: ""; position: absolute; top: -25%; left: 0; width: 42%; height: 150%;
-    background: linear-gradient(100deg, transparent, oklch(1 0 0 / 0.5), transparent);
-    transform: translateX(-170%) rotate(8deg); mix-blend-mode: screen;
-    animation: bdhSheen 900ms cubic-bezier(0.3, 0.7, 0.4, 1) forwards;
-}
-@keyframes bdhSheen { to { transform: translateX(360%) rotate(8deg); } }
-@media (prefers-reduced-motion: reduce) { .bdh-med.is-sheen .bdh-med__sheen { opacity: 0; } }
-
-/* Earn-rank engraving directly under the medallion -- a faux-deboss serial ("Earn #47"), with a rare-earn
-   flourish: first-to-earn (gold + crown + a one-time glow pulse) or a top-1% early earner (accent + star). */
-/* Earn rank (provenance serial) -- a quiet inline label below the identity/description, not under the
-   medallion, so the earned header stays the same height as the unearned (no extra row grows the medallion
-   column; the identity column absorbs it against the taller medallion beside it). */
-.bdh-earnrank {
-    display: inline-flex; align-items: center; gap: 4px; margin-top: 12px;
-    font-size: 0.62rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
-    color: var(--pp-text-mute); text-shadow: 0 1px 0 oklch(1 0 0 / 0.06);
-}
-.bdh-earnrank .pp-tally { font-size: 0.82rem; font-weight: 800; letter-spacing: 0; color: var(--pp-text-dim); }
-.bdh-earnrank__ico { width: 13px; height: 13px; }
-.bdh-earnrank__tag {
-    font-size: 0.56rem; font-weight: 800; padding: 1px 6px; border-radius: 999px; letter-spacing: 0.05em;
-    background: color-mix(in oklab, currentColor 15%, transparent); border: 1px solid color-mix(in oklab, currentColor 34%, transparent);
-}
-.bdh-earnrank--first { color: #e7c25c; --first-glow: color-mix(in oklab, #e7c25c 60%, transparent); }
-.bdh-earnrank--first .pp-tally { color: #e7c25c; }
-.bdh-earnrank--early { color: var(--pp-accent); }
-.bdh-earnrank--early .pp-tally { color: var(--pp-accent); }
-/* One-time celebratory glow for the first-to-earn (colour hoisted -- never color-mix inside @keyframes). */
-@keyframes bdhFirstPulse {
-    0%, 100% { text-shadow: 0 1px 0 oklch(1 0 0 / 0.06); }
-    45% { text-shadow: 0 1px 0 oklch(1 0 0 / 0.06), 0 0 11px var(--first-glow); }
-}
-@media (prefers-reduced-motion: no-preference) { .bdh-earnrank--first { animation: bdhFirstPulse 1.7s ease-out 0.7s; } }
-@media (min-width: 768px) { .bdh-med .pp-med { --sz: 140px; } }
-/* the substance band carries progress; keep the object itself clean (no meter/count stacked under it) */
-.bdh-med .pp-med__count, .bdh-med .pp-med__meter { display: none; }
-.bdh-headline { text-decoration: none; color: inherit; }
-
-/* Header progress bar tinted with the SELECTED tier's colour (via the Horizon --horizon-accent), so it
-   matches the medallion's own meter + the badge-list Series tiles rather than a generic accent. */
-.bdh-progress[data-tier="bronze"]   { --horizon-accent: #cf9160; }
-.bdh-progress[data-tier="silver"]   { --horizon-accent: #b9c6d6; }
-.bdh-progress[data-tier="gold"]     { --horizon-accent: #e7c25c; }
-.bdh-progress[data-tier="platinum"] { --horizon-accent: #8fd2ea; }
-
-/* "Viewing someone else's progress" banner (the /<slug>/<username>/ variant) -- secondary accent so it
-   clearly reads as NOT your own. */
-
-/* At-a-glance facts: a row of stacked mini-facts (value over micro-label), echoing the Collection header's
-   tier-composition strip. Values are neutral; only Difficulty / Avg-Hours are tinted (traffic-light). */
-.bdh-facts { display: flex; flex-wrap: wrap; gap: 12px 22px; }
-.bdh-fact { display: flex; flex-direction: column; gap: 3px; }
-.bdh-fact__v { font-size: 1.15rem; font-weight: 800; line-height: 1; font-variation-settings: "opsz" 18, "wght" 800; }   /* engage the Tally optical-size axis */
-.bdh-fact__u { font-size: 0.72rem; font-weight: 600; color: var(--pp-text-mute); margin-left: 1px; }
-.bdh-fact__k { font-size: 0.6rem; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--pp-text-mute); }
+/* Badge detail page: section components. Bespoke, token-driven, DaisyUI-free. Tokens: var(--pp-*) from
+   input.css. */
 
 /* ── Shared "matted board" surface ──────────────────────────────────────────
-   The same material as .bd-hero, reused by every post-hero section so the page
+   The page's one card material, shared by every section so the page
    reads as one framed set: light-catch top edge + faint surface body. No glow —
    glow is earned by STATE, never painted on resting chrome. */
 .bd-card {
@@ -90,65 +18,7 @@
   border-top-left-radius: inherit; border-top-right-radius: inherit;
 }
 
-/* ── Tier selector (rebuild) ────────────────────────────────────────────────
-   A colour-forward tier LADDER (not a segmented switcher -- the tiers are a collectible progression). Tier
-   colour is the one accent, using the rebuild's medallion tier family (bronze/silver/gold/platinum) scoped
-   to the ladder steps + the requirements' left accent; everything else is neutral, with success-green only
-   on completed stages (real info). */
-.bd-tiers { scroll-margin-top: 1rem; }
-
-/* Tier swap settle: dim the island while the tier request is in flight (hx-indicator="#badge-tier-view"),
-   so the swap reads as a deliberate update rather than a hard flash. Motion-gated (reduced-motion = instant). */
-@media (prefers-reduced-motion: no-preference) {
-    #badge-tier-view { transition: opacity 0.18s ease; }
-    #badge-tier-view.htmx-request { opacity: 0.55; }
-}
-
-/* The ladder: four equal tier steps, read left-to-right as the progression. */
-/* Tier ascent rail: a slim shared .pgl (progression ladder, --static so no mount choreography inside the
-   swap island) above the tier steps -- filled through the tiers you've EARNED, each rung in its tier
-   colour. An at-a-glance "how high have I climbed" that the four big steps below don't give on their own. */
-.bd-tierrail { margin: 0 0 10px; }
-.bd-tierrail .pgl__rung { height: 6px; }
-.bd-tierrail .pgl__rung--bronze   { --rung-c: #cf9160; }
-.bd-tierrail .pgl__rung--silver   { --rung-c: #b9c6d6; }
-.bd-tierrail .pgl__rung--gold     { --rung-c: #e7c25c; }
-.bd-tierrail .pgl__rung--platinum { --rung-c: #8fd2ea; }
-.bd-tierlad { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-bottom: 14px; }
-.bd-tierstep {
-    --tier-c: var(--pp-text-mute);
-    position: relative; display: flex; flex-direction: column; align-items: center; gap: 5px;
-    padding: 12px 8px 10px; border-radius: var(--pp-radius-lg);
-    border: 1px solid var(--pp-border); background: var(--pp-bg-2); text-decoration: none;
-    transition: border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease, transform 0.12s ease;
-}
-.bd-tierstep--bronze   { --tier-c: #cf9160; }
-.bd-tierstep--silver   { --tier-c: #b9c6d6; }
-.bd-tierstep--gold     { --tier-c: #e7c25c; }
-.bd-tierstep--platinum { --tier-c: #8fd2ea; }
-.bd-tierstep__mark {
-    width: 22px; height: 22px; border-radius: 999px; display: grid; place-items: center;
-    border: 2px solid color-mix(in oklab, var(--tier-c) 50%, var(--pp-border)); color: var(--pp-bg-0);
-}
-.bd-tierstep__mark svg { width: 12px; height: 12px; }
-.bd-tierstep.is-earned .bd-tierstep__mark { background: var(--tier-c); border-color: var(--tier-c); }
-/* Held-but-lapsed rung: a red "M" disc instead of the tier-filled earned check (site-wide maintenance red). */
-.bd-tierstep.is-maintenance .bd-tierstep__mark {
-    background: var(--pp-maint, #e23026); border-color: var(--pp-maint, #e23026);
-    color: #fff; font-size: 0.72rem; font-weight: 800; line-height: 1;
-}
-.bd-tierstep__name { font-size: 0.82rem; font-weight: 800; color: var(--pp-text-dim); }
-.bd-tierstep__req { font-size: 0.58rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--pp-text-mute); }
-@media (hover: hover) { .bd-tierstep:hover { border-color: color-mix(in oklab, var(--tier-c) 45%, var(--pp-border)); transform: translateY(-1px); } }
-.bd-tierstep.is-active {
-    border-color: color-mix(in oklab, var(--tier-c) 60%, var(--pp-border));
-    background: linear-gradient(180deg, color-mix(in oklab, var(--tier-c) 15%, var(--pp-bg-2)), var(--pp-bg-2));
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 0 0 1px color-mix(in oklab, var(--tier-c) 30%, transparent), 0 6px 18px -10px color-mix(in oklab, var(--tier-c) 50%, #000);
-}
-.bd-tierstep.is-active .bd-tierstep__name { color: var(--tier-c); }
-.bd-tierstep:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
-
-/* ── Selected tier's requirements ───────────────────────────────────────────
+/* ── Edition requirements ──────────────────────────────────────────────────
    A panel with the tier-colour left accent (the one accent); neutral text, success-green only on the
    completed-stage checks. */
 /* A discrete SECTION of the page (the Ask headline, a quiet progress/XP line, then the stage-tile grid) --
@@ -172,7 +42,6 @@
 .bd-req__ask { display: flex; align-items: center; gap: 10px; }
 .bd-req__ask-ico { display: grid; place-items: center; width: 30px; height: 30px; flex-shrink: 0; }
 .bd-req__ask-ico img { width: 24px; height: 24px; }
-.bd-req__pct { font-size: 0.72rem; font-weight: 800; letter-spacing: -0.02em; color: var(--tier-c); }
 .bd-req__ask-text { font-size: 0.98rem; font-weight: 700; line-height: 1.25; color: var(--pp-text); }
 .bd-req__ask-text b { font-family: var(--pp-font-display); font-weight: 800; color: var(--tier-c); }
 /* Quiet supporting line: stage progress + the XP reward (breakdown in the title tooltip). */
@@ -215,16 +84,6 @@
 .bd-mystats__big-v--xp { color: var(--pp-primary); }
 .bd-mystats__big-u { font-size: 0.85rem; font-weight: 700; color: var(--pp-text-mute); margin-left: 1px; }
 .bd-mystats__big-k { font-size: 0.6rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--pp-text-dim); }
-/* Standing chip: one earned insight (earner percentile). The ONE accent in the modal's readout -- brand
-   primary, quiet, a single line that turns the raw numbers into "where you stand". */
-.bd-mystats__standing {
-    display: inline-flex; align-items: center; gap: 7px; margin-top: 12px; padding: 6px 12px;
-    border-radius: 999px; font-size: 0.8rem; color: var(--pp-text-dim);
-    background: color-mix(in oklab, var(--pp-primary) 10%, transparent);
-    border: 1px solid color-mix(in oklab, var(--pp-primary) 28%, transparent);
-}
-.bd-mystats__standing svg { width: 15px; height: 15px; flex: none; color: var(--pp-primary); }
-.bd-mystats__standing b { color: var(--pp-primary); font-weight: 800; }
 /* Progress + haul rows. */
 .bd-mystats__row { display: flex; flex-direction: column; gap: 7px; }
 .bd-mystats__row-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
@@ -249,68 +108,6 @@
 .bd-mystats__ctx-label { font-size: 0.58rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--pp-text-mute); }
 .bd-mystats__ctx-items { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 0.76rem; color: var(--pp-text-mute); }
 .bd-mystats__ctx-items span { white-space: nowrap; }
-
-/* ── Section header (generic, reusable across sections) ─────────────────────── */
-.bd-head {
-    display: flex; align-items: center; gap: 7px;
-    font-size: 0.68rem; font-weight: 700; letter-spacing: 0.12em;
-    text-transform: uppercase; color: var(--pp-text-dim);
-}
-.bd-head::before {
-    content: ""; width: 3px; height: 12px; border-radius: 2px;
-    background: var(--pp-text-mute);
-}
-
-/* ── Context band ────────────────────────────────────────────────────────────
-   Condensed competitive/rarity layer below the header: ONE stacked rarity bar (per-tier earn distribution)
-   + legend, then a foot row of your ranks + the Leaderboards CTA + a My Stats button. Depth-pass card. */
-.bd-band { padding: 14px 16px; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 6px 20px rgba(0, 0, 0, 0.30); }
-.bd-band__rarity { display: flex; flex-direction: column; gap: 9px; }
-
-/* The stacked bar: each segment's width is that tier's share of all tier-earns (tiers are independent, so
-   every tier earned counts). A thin inner seam separates tiers without gaps that would distort proportions. */
-.bd-rbar { display: flex; height: 14px; border-radius: 7px; overflow: hidden; background: var(--pp-bg-3); }
-.bd-rbar__seg { height: 100%; min-width: 5px; box-shadow: inset -1px 0 0 rgba(2, 4, 8, 0.35); }
-.bd-rbar__seg:last-child { box-shadow: none; }
-.bd-rbar__seg--bronze   { background: #cf9160; }
-.bd-rbar__seg--silver   { background: #b9c6d6; }
-.bd-rbar__seg--gold     { background: #e7c25c; }
-.bd-rbar__seg--platinum { background: #8fd2ea; }
-/* Selected tier: an inner ring (not clipped by the bar's overflow) + a touch brighter, tying it to the switcher. */
-.bd-rbar__seg.is-selected { box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.9); filter: brightness(1.08); }
-
-/* Legend: tier swatch + name + count (matching the bar's per-tier earn counts). */
-.bd-rlegend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.72rem; color: var(--pp-text-mute); }
-.bd-rlegend__item { display: inline-flex; align-items: center; gap: 5px; }
-.bd-rlegend__dot { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
-.bd-rlegend__item--bronze   .bd-rlegend__dot { background: #cf9160; }
-.bd-rlegend__item--silver   .bd-rlegend__dot { background: #b9c6d6; }
-.bd-rlegend__item--gold     .bd-rlegend__dot { background: #e7c25c; }
-.bd-rlegend__item--platinum .bd-rlegend__dot { background: #8fd2ea; }
-.bd-rlegend__item b { color: var(--pp-text-dim); font-family: var(--pp-font-display); font-weight: 800; font-variant-numeric: tabular-nums; }
-
-/* Foot: ranks (left) + actions (right) -- one row on tablet+, stacked on mobile. */
-.bd-band__foot { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--pp-divider); display: flex; flex-direction: column; gap: 12px; }
-@media (min-width: 640px) { .bd-band__foot { flex-direction: row; align-items: center; justify-content: space-between; gap: 18px; } }
-.bd-band__ranks { display: flex; flex-wrap: wrap; gap: 5px 20px; }
-.bd-rank { font-size: 0.8rem; color: var(--pp-text-mute); white-space: nowrap; }
-.bd-rank b { font-family: var(--pp-font-display); font-weight: 800; font-size: 0.95rem; color: var(--pp-primary); font-variant-numeric: tabular-nums; }
-.bd-rank__of { color: var(--pp-text-mute); }
-.bd-band__actions { display: flex; gap: 8px; flex-shrink: 0; }
-/* Leaderboards CTA + My Stats: matched compact buttons; the cyan action accent is earned on hover. */
-.bd-band__cta, .bd-band__stats-btn {
-    display: inline-flex; align-items: center; gap: 7px;
-    padding: 8px 12px; border-radius: var(--pp-radius-md);
-    border: 1px solid var(--pp-border); background: var(--pp-bg-2); color: var(--pp-text-dim);
-    font-size: 0.8rem; font-weight: 700; text-decoration: none; cursor: pointer;
-    transition: border-color var(--pp-dur) var(--pp-ease), color var(--pp-dur) var(--pp-ease), background var(--pp-dur) var(--pp-ease);
-}
-.bd-band__cta svg, .bd-band__stats-btn svg { width: 15px; height: 15px; flex-shrink: 0; }
-.bd-band__cta-arrow { width: 13px; height: 13px; color: var(--pp-text-mute); transition: transform var(--pp-dur) var(--pp-ease); }
-@media (hover: hover) {
-    .bd-band__cta:hover, .bd-band__stats-btn:hover { border-color: color-mix(in oklch, var(--pp-primary) 45%, transparent); color: var(--pp-text); background: color-mix(in oklab, var(--pp-primary) 6%, var(--pp-bg-2)); }
-    .bd-band__cta:hover .bd-band__cta-arrow { transform: translateX(2px); color: var(--pp-primary); }
-}
 
 /* ── Stage game card (rebuilt: cover-forward + a CONTRACT footer band) ────────
    Curated to what a hunter needs at a glance -- cover (state overlay + one progress bar), name, your % +
@@ -406,9 +203,9 @@
 .bd-ctrmodal__alt a:hover { text-decoration: underline; }
 
 /* ── Stage section ──────────────────────────────────────────────────────────
-   A stage is a .bd-card holding a clickable header (collapse toggle), an
-   optional stats row, and a collapsible body of game cards / bundles. Complete
-   stages earn a success tint on the header. */
+   A stage is a .bd-card holding a clickable header (collapse toggle) and a
+   collapsible body of game cards / bundles. Complete stages earn a success tint
+   on the header. */
 .bd-stage { scroll-margin-top: 1rem; }
 
 .bd-stage__head {
@@ -429,7 +226,7 @@
 /* object-position: top keeps a portrait cover's logo in the square crop (CLAUDE.md game-art rule). */
 .bd-stage__ico img { width: 100%; height: 100%; object-fit: cover; object-position: top; }
 
-/* Identity: eyebrow over the title + a quiet stats caption. */
+/* Identity: eyebrow over the title. */
 .bd-stage__id { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 1px; }
 .bd-stage__eyebrow { font-size: 0.56rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: var(--pp-accent); }
 .bd-stage--done .bd-stage__eyebrow { color: var(--pp-success); }
@@ -437,34 +234,12 @@
 .bd-stage__eyebrow--next { color: var(--pp-primary); }
 .bd-stage__title { font-size: 0.92rem; font-weight: 700; color: var(--pp-text); line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* Dots + pill share a wrapper (a row on desktop -- looks as before; a right-aligned column on mobile). */
+/* The header's trailing meta: the bar reached (cleared stages) + the game count. */
 .bd-stage__meta { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
 
-/* Tiers this stage feeds -- small tier-colour dots, filled when done for that tier. */
-.bd-stage__tiers { display: flex; gap: 4px; flex-shrink: 0; }
-.bd-stage__tier { width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--tier-c); }
-.bd-stage__tier.is-done { background: var(--tier-c); box-shadow: 0 0 5px color-mix(in oklab, var(--tier-c) 55%, transparent); }
-.bd-stage__tier--bronze   { --tier-c: #cf9160; }
-.bd-stage__tier--silver   { --tier-c: #b9c6d6; }
-.bd-stage__tier--gold     { --tier-c: #e7c25c; }
-.bd-stage__tier--platinum { --tier-c: #8fd2ea; }
-
-/* X/Y state pill (games meeting this tier's requirement). */
-.bd-stage__pill { font-family: var(--pp-font-display); font-weight: 800; font-size: 0.72rem; padding: 2px 9px; border-radius: 999px; flex-shrink: 0; font-variant-numeric: tabular-nums; }
-.bd-stage__pill--done { background: color-mix(in oklab, var(--pp-success) 15%, var(--pp-bg-2)); color: var(--pp-success); border: 1px solid color-mix(in oklab, var(--pp-success) 32%, transparent); }
-.bd-stage__pill--partial { background: color-mix(in oklab, var(--pp-warning) 13%, var(--pp-bg-2)); color: var(--pp-warning); border: 1px solid color-mix(in oklab, var(--pp-warning) 30%, transparent); }
-.bd-stage__pill--todo { background: var(--pp-bg-2); color: var(--pp-text-mute); border: 1px solid var(--pp-border); }
-
-/* Static game-count pill -- the always-present slot shown for anon viewers and bonus stages (the signed-in
-   X/Y progress pill takes its place otherwise). No JS toggles it; kept present so expanding never shifts. */
+/* Static game-count pill, on every stage. No JS toggles it, so expanding never shifts the header. */
 .bd-stage__count { font-size: 0.6rem; font-weight: 700; color: var(--pp-text-mute); padding: 1px 7px; border-radius: 999px; background: var(--pp-bg-2); flex-shrink: 0; }
 .bd-stage__chevron { width: 18px; height: 18px; color: var(--pp-text-mute); flex-shrink: 0; transition: transform var(--pp-dur) var(--pp-ease); }
-
-/* Per-stage personal metrics -- a quiet caption under the title (muted so it never competes with the
-   completed-green header). */
-.bd-stage__stats { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-top: 2px; }
-.bd-stage__stat { display: inline-flex; align-items: center; gap: 3px; font-size: 0.62rem; font-weight: 600; color: var(--pp-text-mute); }
-.bd-stage__stat svg { width: 10px; height: 10px; flex-shrink: 0; }
 
 /* Collapse body — the grid-rows trick (JS toggles grid-template-rows on
    [data-stage-games]). The inner grid is padded so card hover-glows breathe
@@ -481,7 +256,7 @@
 @media (min-width: 1280px) { .bd-stage__grid { grid-template-columns: repeat(5, 1fr); } }
 
 /* Unobtainable / delisted titles — a quiet, collapsible strip above the grid. These can't be earned
-   anymore, so they read muted; the summary icon + a hairline left rail carry the done/partial state. */
+   anymore, so they read muted, with a hairline left rail. */
 .bd-delisted {
     margin: 0 14px; border: 1px solid var(--pp-border); border-radius: var(--pp-radius-md);
     background: color-mix(in oklch, var(--pp-bg-1) 60%, transparent);
@@ -491,19 +266,14 @@
     content: ""; position: absolute; inset: 0 auto 0 0; width: 2px;
     background: var(--pp-text-mute); opacity: 0.5;
 }
-.bd-delisted.is-done::before { background: var(--pp-success); opacity: 0.8; }
-.bd-delisted.is-partial::before { background: var(--pp-warning); opacity: 0.8; }
 .bd-delisted__summary {
     list-style: none; cursor: pointer; display: flex; align-items: center; gap: 8px;
     padding: 8px 11px 8px 13px; font-size: 0.74rem; font-weight: 600; color: var(--pp-text-dim);
 }
 .bd-delisted__summary::-webkit-details-marker { display: none; }
 .bd-delisted__ico { display: grid; place-items: center; width: 15px; height: 15px; flex-shrink: 0; color: var(--pp-text-mute); }
-.bd-delisted.is-done .bd-delisted__ico { color: var(--pp-success); }
-.bd-delisted.is-partial .bd-delisted__ico { color: var(--pp-warning); }
 .bd-delisted__ico svg { width: 100%; height: 100%; }
 .bd-delisted__label { flex: 1; min-width: 0; }
-.bd-delisted__count { font-family: var(--pp-font-display); font-weight: 800; font-size: 0.66rem; color: var(--pp-text-mute); flex-shrink: 0; letter-spacing: 0.02em; }
 .bd-delisted__caret { width: 14px; height: 14px; color: var(--pp-text-mute); flex-shrink: 0; transition: transform var(--pp-dur) var(--pp-ease); }
 .bd-delisted[open] .bd-delisted__caret { transform: rotate(180deg); }
 .bd-delisted__list { display: flex; flex-direction: column; gap: 2px; padding: 0 8px 8px 11px; }
@@ -513,9 +283,6 @@
     transition: background var(--pp-dur-fast) var(--pp-ease);
 }
 @media (hover: hover) { .bd-delisted__row:hover { background: oklch(1 0 0 / 0.05); } }
-.bd-delisted__status { display: grid; place-items: center; width: 15px; height: 15px; flex-shrink: 0; }
-.bd-delisted__status svg { width: 14px; height: 14px; }
-.bd-delisted__status--done { color: var(--pp-success); }
 .bd-delisted__thumb { width: 22px; height: 22px; border-radius: var(--pp-radius-sm); overflow: hidden; flex-shrink: 0; }
 .bd-delisted__thumb img { width: 100%; height: 100%; object-fit: cover; object-position: top; }
 .bd-delisted__thumb.is-dim img { opacity: 0.4; }
@@ -563,7 +330,7 @@
    (it shows through the gaps between cards) with a NUMBERED milestone node per
    stage. Stages complete in ANY order, so the rail never encodes progress — each
    node is independent: a green check when done, the plain number when to-do, a
-   cyan "up next" pulse on the lowest open stage, a star for bonus stages. */
+   cyan "up next" pulse on the lowest open stage. */
 .bd-stages { position: relative; padding-left: 52px; }
 .bd-stages > .bd-stage { position: relative; z-index: 1; }
 /* Connector rail: runs from below this node down to the next stage's node. Uses ::after (NOT ::before --
@@ -594,12 +361,6 @@
        "oklch only over transparent" holds everywhere in this file without exemptions. */
     background: color-mix(in oklab, var(--pp-primary) 12%, var(--pp-bg-2));
     --pulse-col: var(--pp-primary); animation: bd-node-pulse 2.2s var(--pp-ease) infinite;
-}
-.bd-node--bonus {
-    border-style: dashed; border-color: var(--pp-accent); color: var(--pp-accent);
-    /* oklab: this one DID drift -- rgb(44,51,66), a cool blue-grey, for a tint meant to be warm
-       amber. oklab gives rgb(53,50,53). Subtle at 8%, but in the wrong direction. */
-    background: color-mix(in oklab, var(--pp-accent) 8%, var(--pp-bg-2));
 }
 /* Pulse colour comes from a hoisted var (never color-mix inside a keyframe). */
 @keyframes bd-node-pulse {
@@ -661,7 +422,8 @@ a.bd-studio__ico:hover { box-shadow: 0 0 0 2px color-mix(in oklab, var(--pp-prim
 }
 
 /* Mobile stage journey: the ladder gutter + node shrink to reclaim horizontal space, the head tightens,
-   and the tier dots + games pill stack into a right-aligned column -- all so the title gets more room. */
+   and the header meta (bar reached + game count) stacks into a right-aligned column, so the title gets
+   more room. */
 @media (max-width: 640px) {
     /* Slimmer ladder gutter (52 -> 34) + node (34 -> 28); connector re-centres on the smaller node. */
     .bd-stages { padding-left: 34px; }
@@ -674,10 +436,8 @@ a.bd-studio__ico:hover { box-shadow: 0 0 0 2px color-mix(in oklab, var(--pp-prim
     .bd-stage__head { gap: 10px; padding: 10px 12px; }
     .bd-stage__ico { width: 38px; height: 38px; }
 
-    /* Stack the dots over the pill, right-aligned, so the title reclaims the horizontal band. */
+    /* Stack the bar over the count, right-aligned, so the title reclaims the horizontal band. */
     .bd-stage__meta { flex-direction: column; align-items: flex-end; gap: 5px; }
-    /* Dial the X/Y pill down a notch -- stacked on its own it reads large at phone sizes. */
-    .bd-stage__pill { font-size: 0.64rem; padding: 2px 8px; }
 }
 
 /* Bulk "collapse/expand all" toggle (a quiet text button). */
@@ -691,44 +451,15 @@ a.bd-studio__ico:hover { box-shadow: 0 0 0 2px color-mix(in oklab, var(--pp-prim
 .bd-collapse-all:hover { color: var(--pp-text); background: oklch(1 0 0 / 0.04); }
 .bd-collapse-all svg { width: 14px; height: 14px; transition: transform var(--pp-dur) var(--pp-ease); }
 
-/* "Stages required only for higher tiers" disclosure. */
-.bd-other-tiers__summary {
-    list-style: none; cursor: pointer; display: flex; align-items: center; gap: 6px;
-    padding: 9px 14px; font-size: 0.78rem; font-weight: 600; color: var(--pp-text-dim);
-    background: var(--pp-bg-1); border: var(--pp-border-w) solid var(--pp-border);
-    border-radius: var(--pp-radius-lg);
-}
-.bd-other-tiers__summary::-webkit-details-marker { display: none; }
-.bd-other-tiers__summary::after {
-    content: ""; width: 7px; height: 7px; margin-left: auto;
-    border-right: 2px solid currentColor; border-bottom: 2px solid currentColor;
-    transform: rotate(45deg); transition: transform var(--pp-dur) var(--pp-ease);
-}
-.bd-other-tiers[open] .bd-other-tiers__summary::after { transform: rotate(-135deg); }
-
 /* ── Accessibility ──────────────────────────────────────────────────────────
-   A consistent keyboard focus ring across the page's interactive controls (matches .bd-tierstep /
-   .bd-stage__head, which already define their own). Without this they fall back to the low-contrast UA
-   default on our dark surfaces. */
-.bdh-med:focus-visible,
-.bdh-headline:focus-visible,
-.bd-gcard__main:focus-visible,
-.bd-gcard__ctr:focus-visible,
-.bd-req__tile:focus-visible,
-.bd-delisted__row:focus-visible,
-.bd-delisted__summary:focus-visible,
-.bd-other-tiers__summary:focus-visible,
-.bd-band__cta:focus-visible,
-.bd-band__stats-btn:focus-visible,
-.bd-collapse-all:focus-visible,
-.bd-ctrmodal__more:focus-visible {
+   A consistent keyboard focus ring across the page's interactive controls (matches .bd-stage__head, which
+   defines its own). Without this they fall back to the low-contrast UA default on our dark surfaces. */
+.bd-gcard__main:focus-visible, .bd-gcard__ctr:focus-visible, .bd-req__tile:focus-visible, .bd-delisted__row:focus-visible, .bd-delisted__summary:focus-visible, .bd-collapse-all:focus-visible, .bd-ctrmodal__more:focus-visible {
     outline: 2px solid var(--pp-primary); outline-offset: 2px;
 }
-/* The hero medallion is round -- give its focus ring room to clear the art. */
-.bdh-med:focus-visible { outline-offset: 4px; border-radius: 50%; }
 
-/* Respect reduced motion for the stage collapse + chevron (the pulse, tier-swap dim, modal entrance,
-   count-up, and the contract reveal are already gated at their own definitions). */
+/* Respect reduced motion for the stage collapse + chevron (the pulse, modal entrance, count-up, and the
+   contract reveal are already gated at their own definitions). */
 @media (prefers-reduced-motion: reduce) {
     .bd-stage__collapse { transition: none; }
     .bd-stage__chevron { transition: none; }
@@ -744,17 +475,7 @@ a.bd-studio__ico:hover { box-shadow: 0 0 0 2px color-mix(in oklab, var(--pp-prim
 #badge-stats-modal.is-closing:not([hidden]) .pp-detail-modal__scrim,
 #badge-contract-modal.is-closing:not([hidden]) .pp-detail-modal__scrim { animation: ppDetailScrimOut 0.22s ease forwards; }
 
-/* ── Premium pass v2 ─────────────────────────────────────────────────────────
-
-   V2.1 Tier-switch ignite: a one-shot tier-tinted glow bloom on the step that just became active (fades to
-   flat -- the sanctioned selection acknowledgment). A ::after so the step's resting active box-shadow is
-   untouched; z-index -1 blooms behind the content. */
-.bd-tierstep.is-igniting::after {
-    content: ""; position: absolute; inset: -1px; z-index: -1; border-radius: inherit; pointer-events: none;
-    box-shadow: 0 0 20px 3px color-mix(in oklab, var(--tier-c) 55%, transparent);
-    animation: bdTierIgnite 0.6s ease-out forwards;
-}
-@keyframes bdTierIgnite { 0% { opacity: 0; } 30% { opacity: 1; } 100% { opacity: 0; } }
+/* ── Premium pass v2 ───────────────────────────────────────────────────────── */
 
 /* V2.2 Stats-modal reveal-on-open: the numbers count up (JS) and the two Horizons wipe in from the left, a
    beat after, so the modal tells the journey instead of opening fully formed. (The dialog's will-change
@@ -771,101 +492,16 @@ a.bd-studio__ico:hover { box-shadow: 0 0 0 2px color-mix(in oklab, var(--pp-prim
 .bd-gcard__ctr.is-loading::after { animation: bdCtrSheen 0.9s var(--pp-ease) infinite; }
 
 @media (prefers-reduced-motion: reduce) {
-    .bd-tierstep.is-igniting::after,
     .bd-gcard__ctr.is-loading::after { animation: none; }
 }
 
-/* ── Sticky mini-header: a condensed proxy that pins when the full header scrolls under the chrome ── */
-/* Fixed below the pinned chrome (var(--sticky-top)); frosted like the navbar. visibility:hidden at rest so
-   its duplicate title/tier controls stay out of the tab order + AT tree until it's actually pinned. */
-.bd-minihead {
-    position: fixed; top: var(--sticky-top, 3.625rem); left: 0; right: 0; z-index: 30;
-    background: color-mix(in oklab, var(--pp-bg-1) 92%, transparent);
-    backdrop-filter: blur(12px);   /* standard only -- lightningcss autoprefixes; hand-writing -webkit- makes it drop the standard */
-    border-bottom: 1px solid var(--pp-border);
-    visibility: hidden; opacity: 0; transform: translateY(-100%);
-    transition: opacity 0.28s var(--pp-ease), transform 0.28s var(--pp-ease), visibility 0s linear 0.28s;
-}
-.bd-minihead.is-pinned { visibility: visible; opacity: 1; transform: none;
-    transition: opacity 0.28s var(--pp-ease), transform 0.28s var(--pp-ease); }
-.bd-minihead__inner { display: flex; align-items: center; gap: 12px; height: 52px; padding: 0 16px; }
 
-/* Small medallion: the object only -- suppress the component's in-progress meter + count readout. */
-.bd-minihead__med { flex-shrink: 0; }
-.bd-minihead__med .pp-med { --sz: 32px; }
-.bd-minihead__med .pp-med__meter, .bd-minihead__med .pp-med__count { display: none; }
 
-.bd-minihead__id { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 3px; }
-.bd-minihead__title { font-family: var(--pp-font-display); font-weight: 800; font-size: 0.92rem; color: var(--pp-text);
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; letter-spacing: -0.01em; }
-.bd-minihead__prog { display: none; max-width: 260px; }
-@media (min-width: 768px) { .bd-minihead__prog { display: block; } }
-
-/* Tier chips: the tier ladder condensed to colour-forward initials; the same hx-get swap as the full ladder. */
-.bd-minihead__tiers { display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
-.bd-minitier {
-    width: 28px; height: 28px; border-radius: var(--pp-radius-md); display: grid; place-items: center;
-    font-size: 0.72rem; font-weight: 800; text-decoration: none; border: 1.5px solid transparent;
-    color: var(--pp-text-mute); background: oklch(1 0 0 / 0.05); position: relative;
-    transition: color var(--pp-dur) var(--pp-ease), background var(--pp-dur) var(--pp-ease), border-color var(--pp-dur) var(--pp-ease);
-}
-.bd-minitier--bronze   { --tc: #cf9160; }
-.bd-minitier--silver   { --tc: #b9c6d6; }
-.bd-minitier--gold     { --tc: #e7c25c; }
-.bd-minitier--platinum { --tc: #8fd2ea; }
-@media (hover: hover) { .bd-minitier:hover { color: var(--pp-text); background: oklch(1 0 0 / 0.09); } }
-.bd-minitier:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
-/* Earned tiers carry a quiet tint of their colour; the active tier is the full tier-forward chip. */
-.bd-minitier.is-earned { color: var(--tc); background: color-mix(in oklab, var(--tc) 12%, transparent); }
-.bd-minitier.is-active { color: #05101c; background: var(--tc); border-color: var(--tc);
-    box-shadow: 0 0 10px color-mix(in oklab, var(--tc) 45%, transparent); }
-
-/* Stage jumper: a "Stages" dropdown whose items reuse the page's data-stage-link jump. */
-.bd-minijump { position: relative; flex-shrink: 0; }
-.bd-minijump__btn {
-    display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 9px; border-radius: var(--pp-radius-md);
-    font-size: 0.72rem; font-weight: 700; color: var(--pp-text-mute); background: oklch(1 0 0 / 0.05);
-    border: 1px solid var(--pp-border); cursor: pointer;
-    transition: color var(--pp-dur) var(--pp-ease), background var(--pp-dur) var(--pp-ease);
-}
-@media (hover: hover) { .bd-minijump__btn:hover { color: var(--pp-text); background: oklch(1 0 0 / 0.09); } }
-.bd-minijump__btn:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
-.bd-minijump__btn > svg:first-child { width: 13px; height: 13px; }
-.bd-minijump__chev { width: 12px; height: 12px; transition: transform var(--pp-dur) var(--pp-ease); }
-.bd-minijump__btn[aria-expanded="true"] .bd-minijump__chev { transform: rotate(180deg); }
-@media (max-width: 767px) { .bd-minijump__lbl { display: none; } }
-
-.bd-minijump__menu {
-    position: absolute; top: calc(100% + 8px); right: 0; z-index: 100; min-width: 230px; max-height: 62vh; overflow-y: auto; padding: 6px;
-    background: var(--pp-bg-2); border: 1px solid var(--pp-border); border-radius: var(--pp-radius-lg);
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 18px 44px rgba(0,0,0,0.45);
-}
-.bd-minijump__menu[hidden] { display: none; }
-.bd-minijump__item {
-    display: flex; align-items: center; gap: 9px; padding: 6px 8px; border-radius: var(--pp-radius-md);
-    text-decoration: none; color: var(--pp-text-dim); transition: background var(--pp-dur-fast) var(--pp-ease), color var(--pp-dur-fast) var(--pp-ease);
-}
-@media (hover: hover) { .bd-minijump__item:hover { background: oklch(1 0 0 / 0.06); color: var(--pp-text); } }
-.bd-minijump__item:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: -2px; }
-.bd-minijump__num {
-    width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; flex-shrink: 0;
-    font-size: 0.7rem; font-weight: 800; background: var(--pp-bg-3); color: var(--pp-text-mute);
-}
-.bd-minijump__num svg { width: 12px; height: 12px; }
-.bd-minijump__item.is-done .bd-minijump__num { background: color-mix(in oklab, var(--pp-success) 22%, transparent); color: var(--pp-success); }
-.bd-minijump__item.is-next .bd-minijump__num { background: color-mix(in oklab, var(--pp-primary) 22%, transparent); color: var(--pp-primary); }
-.bd-minijump__name { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.8rem; font-weight: 600; }
-
-@media (prefers-reduced-motion: reduce) {
-    .bd-minihead { transition: opacity 0.2s linear, visibility 0s linear 0.2s; transform: none; }
-    .bd-minihead.is-pinned { transition: opacity 0.2s linear; transform: none; }
-    .bd-minitier, .bd-minijump__chev { transition: none; }
-}
 
 /* =====================================================================================================
    BADGE DETAIL (rebuild, Phase 1) -- platform-group model. The page composes entirely from standard
    utilities + shared primitives (card / badge / .pp-switch / .pp-med / .pp-horizon / .scard / pp-tally);
-   the only bespoke rule left is the client-side panel-swap visibility hook.
+   the rules below are the bespoke additions it needed (panel swap, hero medallion, group switcher, ...).
    ===================================================================================================== */
 .bd2-panel.is-hidden { display: none; }
 /* Size the hero medallion via --sz (the .pp-med contract), like .pp-case__slot -- NOT width/height utilities,
@@ -1140,8 +776,7 @@ a.bd-studio__ico:hover { box-shadow: 0 0 0 2px color-mix(in oklab, var(--pp-prim
 }
 
 /* Narrow: the chip drops to one word so the stage TITLE keeps the room. The distinction survives -- the
-   colour, the node and the screen-reader text all still carry it, and the full wording returns above 640px.
-   Same move the existing max-width:640px block makes for .bd-stage__pill, for the same reason. */
+   colour, the node and the screen-reader text all still carry it, and the full wording returns above 640px. */
 @media (max-width: 640px) {
     .bd-stage__bar { font-size: 0.64rem; padding: 2px 6px; letter-spacing: 0.03em; }
     .bd-stage__bar--plat .bd-stage__bar-long { display: none; }

@@ -78,9 +78,8 @@ not a move of the whole card — the staggered rise reads livelier and more deli
 **`.pp-head-cascade`** (`components/motion.css`) on the header's **card-body**; its direct children fade +
 rise (9px) in sequence (title, then stats, then the rest — three beats, then the rest share the last).
 `backwards` fill = no flash; reduced-motion gated. Career runs it on **both** its stacked cards (hero +
-summary). If the header lives inside an HTMX swap island (badge detail rides `#badge-tier-view`), gate the
-class to first load only — `{% if not is_tier_swap %} pp-head-cascade{% endif %}` — or it replays on every
-swap. Live on Career, Collection, Badges list, Badge detail.
+summary). If the header lives inside an HTMX swap island, gate the class on a flag the swap render sets,
+so swaps omit it, or it replays on every swap. Live on Career, Collection, Badges list, Badge detail.
 
 ### Directional view switch (shared axis)
 When a view/tab toggle swaps content, slide the incoming panel in **from the side it lives on** — forward

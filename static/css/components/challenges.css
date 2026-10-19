@@ -4614,9 +4614,9 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
         rgb(5 8 16 / 0.30) 6px 12px);
 }
 
-/* THE YEAR, STRUCK. `.bdh-earnrank`'s recipe: uppercase, tracked, tabular, with a one-pixel highlight
-   below so it reads as pressed into the shelf rather than printed on it. 12px is the file's floor and
-   this sits on it -- the badge version runs smaller, which this file's guard would refuse. */
+/* THE YEAR, STRUCK. An engraving recipe: uppercase, tracked, tabular, with a one-pixel highlight below
+   so it reads as pressed into the shelf rather than printed on it. 12px is the file's floor and this sits
+   on it. */
 .pp-cday__year {
     font-size: 12px;
     font-weight: 800;
