@@ -6,17 +6,23 @@ engine pass (badge_orchestrator.evaluate_with_catalog); XP/progress are computed
 they match the per-group numbers); live RANKS come from badge_leaderboards (stored standings).
 """
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from itertools import groupby
 from typing import Optional
 
+from django.urls import NoReverseMatch, reverse
 
-from trophies.models import UserGroupBadge, SeriesBadgeStanding, Game, ProfileGame
+from trophies.models import Company, UserGroupBadge, SeriesBadgeStanding, Game, ProfileGame
 from trophies.services.badge_engine import GroupInput, _gates as engine_gates, _qualifies as engine_qualifies
 from trophies.services.badge_orchestrator import (
     build_catalog, evaluate_with_catalog, _bundle_state, _catalog_game_state,
 )
 from trophies.services.badge_xp import compute_series_standings, edition_display_state, XP_PER_STAGE, XP_BADGE_COMPLETION_BONUS
 from trophies.services.badge_rarity import group_rarity
+from trophies.services.developer_family_service import (
+    concepts_filing_studio, developer_family_ids, family_developer_credits, is_developer_badge,
+    studio_filing_map, studio_sort_key,
+)
 from trophies.services.rarity import community_size
 from trophies.services.rating_service import RatingService
 from trophies.services import badge_leaderboards as lb
@@ -29,6 +35,8 @@ logger = logging.getLogger(__name__)
 _GROUP_BACKING = {'legacy-hd': 'gold', 'ultra-hd': 'platinum'}
 # Legacy tier backdrops double as the group plates for now (bronze/silver/gold/platinum = 1..4).
 _TIER_BACKDROP = {'bronze': 1, 'silver': 2, 'gold': 3, 'platinum': 4}
+# The studio section for a developer badge's stages that no family studio is credited as developing.
+OTHER_STUDIOS_LABEL = 'Other studios'
 
 
 @dataclass
@@ -60,6 +68,14 @@ class GroupView:
     #: carry no stage number, but they still PAY whoever cleared them, so they are shown in their own
     #: labelled section below the ladder rather than dropped.
     retired_stages: list
+    #: A developer badge whose stages in this edition span 2+ studios: the same stages as `stages` /
+    #: `retired_stages`, split into `[{'name', 'stages', 'cleared'}]` by filing studio (the developer first,
+    #: then its studios A-Z, then "Other studios"). Each section also carries `company` (the Company, for
+    #: its logo; None for "Other studios") and `url` (its company page, or None). None when the page shows
+    #: one flat ladder, when that ladder is empty, or when the caller did not ask for sections
+    #: (`get_badge_detail(studio_sections=)`).
+    studio_sections: Optional[list]
+    retired_studio_sections: Optional[list]
     #: Nothing left to gate -- the badge cannot be earned by anyone any more. Held rows are revoked and the
     #: page has to say so, because every "0 of 0 stages / N Points on offer" figure around it otherwise
     #: reads as a live chase.
@@ -323,8 +339,84 @@ def _stage_units(st, games_map) -> list:
     return units
 
 
-def _group_journey(gb, result, catalog, games_map, profile_games, ratings_map, contract_map) -> tuple:
-    """The stage spine for THIS group, split into `(required, retired)`.
+def _stage_concept_ids(st) -> set:
+    """Every concept on a stage, direct or inside a bundle. Reads the catalogue's prefetch: no queries."""
+    ids = {c.id for c in st.concepts.all()}
+    for b in st.concept_bundles.all():
+        ids.update(c.id for c in b.concepts.all())
+    return ids
+
+
+@dataclass(frozen=True)
+class _Studio:
+    """A stage's filing studio. `key` orders the sections (`studio_sort_key`); `company` is None for
+    OTHER_STUDIOS_LABEL. Equality is by key and name, so it groups and counts like the studio it names."""
+    key: tuple
+    name: str
+    company: Optional[Company] = field(default=None, compare=False)
+
+
+def _stage_studios(series, stages) -> dict:
+    """{stage id: _Studio} for a developer badge, `{}` for every other badge.
+
+    Each stage is filed as ONE unit, by `concepts_filing_studio` over all of its games: the same rule
+    `generate_badge_stages` orders by, so a freshly generated badge's sections come out in its stage order
+    (stages added later with `--append` go after the last one, and the page moves them into their studio).
+    Stages no family studio developed file under OTHER_STUDIOS_LABEL, last.
+
+    Queries: the family walk and the filing map (each with one per rename hop of the developer, the walk
+    also one per tree level), the credits for the stages' own concepts only, and, when a studio other than
+    the developer files a stage, one for those studios' rows (name, slug, logo). Bounded by the badge, never
+    by the family's catalogue.
+    """
+    if not stages or not is_developer_badge(series):
+        return {}
+    developer = series.developer
+    concepts_by_stage = {st.id: _stage_concept_ids(st) for st in stages}
+    family_ids = developer_family_ids(developer)
+    filing_map = studio_filing_map(developer, family_ids)
+    credits = family_developer_credits(family_ids, set().union(*concepts_by_stage.values()))
+    filed = {
+        stage_id: concepts_filing_studio(concept_ids, credits, filing_map, developer)
+        for stage_id, concept_ids in concepts_by_stage.items()
+    }
+    other_ids = {studio[0] for studio in filed.values() if studio} - {developer.id}
+    companies = Company.objects.only('id', 'name', 'slug', 'logo_image_id').in_bulk(other_ids) if other_ids else {}
+    companies[developer.id] = developer
+    other = _Studio(studio_sort_key(None, developer), OTHER_STUDIOS_LABEL)
+    return {
+        stage_id: _Studio(studio_sort_key(studio, developer), studio[1], companies.get(studio[0])) if studio else other
+        for stage_id, studio in filed.items()
+    }
+
+
+def _company_url(company) -> Optional[str]:
+    """A studio's company page, or None. Company slugs are stored as IGDB sends them, never slugified, so
+    one the `<slug:>` converter rejects must cost this link, not raise NoReverseMatch and 500 the badge page."""
+    if company is None or not company.slug:
+        return None
+    try:
+        return reverse('company_detail', kwargs={'slug': company.slug})
+    except NoReverseMatch:
+        return None
+
+
+def _studio_sections(stages, stage_studios) -> list:
+    """Consecutive runs of `stages` (already sorted by studio) as
+    `[{'name', 'company', 'url', 'stages', 'cleared'}]`."""
+    sections = []
+    for studio, run in groupby(stages, key=lambda s: stage_studios[s['stage'].id]):
+        run = list(run)
+        sections.append({
+            'name': studio.name, 'company': studio.company, 'url': _company_url(studio.company), 'stages': run,
+            'cleared': sum(1 for s in run if s['completion_state'] == 'complete'),
+        })
+    return sections
+
+
+def _group_journey(gb, result, catalog, games_map, profile_games, ratings_map, contract_map,
+                   stage_studios) -> tuple:
+    """The stage spine for THIS group, as `(required, retired, studio_sections, retired_studio_sections)`.
 
     IN SCOPE (the stage appears at all) is platform-based: a stage with no game on this group's platforms
     credits this badge nothing and is not shown here. Once in scope, EVERY game in the stage is listed
@@ -340,6 +432,12 @@ def _group_journey(gb, result, catalog, games_map, profile_games, ratings_map, c
     Required stages carry `display_number`: a fresh 1..N over the REQUIRED ladder only, never `stage_number`.
     Authored numbers have gaps (a stage can be retired, renumbered, or authored out of order), and a badge
     that reads "Stage 1, Stage 2, Stage 5" invites the reader to hunt for the missing ones.
+
+    STUDIO SECTIONS (developer badges, `stage_studios` from `_stage_studios`): when this edition's stages
+    span 2+ studios, both ladders are reordered by studio (authored order kept within each), so the numbers
+    run 1..N continuously ACROSS the sections and "Up next" follows the order on screen. The 2+ test counts
+    retired stages too, so a studio whose only stages are retired is still named. The retired ladder keeps its
+    one fenced section; it is labelled by studio inside it, not split into a fence per studio.
     """
     platforms = set(gb.platform_group.platforms)
     exclude_delisted = gb.platform_group.exclude_delisted
@@ -393,6 +491,14 @@ def _group_journey(gb, result, catalog, games_map, profile_games, ratings_map, c
         }
         (required if gates else retired).append(entry)
 
+    studio_sections = retired_studio_sections = None
+    if stage_studios and len({stage_studios[s['stage'].id] for s in required + retired}) >= 2:
+        # sort() is stable, so each studio keeps the authored (stage_number) order the loop built.
+        required.sort(key=lambda s: stage_studios[s['stage'].id].key)
+        retired.sort(key=lambda s: stage_studios[s['stage'].id].key)
+        studio_sections = _studio_sections(required, stage_studios) or None
+        retired_studio_sections = _studio_sections(retired, stage_studios) or None
+
     for i, s in enumerate(required, start=1):
         s['display_number'] = i
     out = required
@@ -404,7 +510,7 @@ def _group_journey(gb, result, catalog, games_map, profile_games, ratings_map, c
             if s['completion_state'] != 'complete':
                 s['is_next'] = True
                 break
-    return required, retired
+    return required, retired, studio_sections, retired_studio_sections
 
 
 def _group_user_stats(profile_games, journey, target_profile) -> Optional[dict]:
@@ -490,14 +596,16 @@ def _group_user_stats(profile_games, journey, target_profile) -> Optional[dict]:
 
 
 def _group_view(gb, result, hold, target_profile, series, catalog, games_map, profile_games,
-                ratings_map, contract_map, participants) -> GroupView:
+                ratings_map, contract_map, participants, stage_studios) -> GroupView:
     is_holo = bool(hold and hold.is_holo)
     # `gb.required_stages` straight, with NO `or stage_count`. That fallback treated a correctly-computed
     # ZERO as "not computed yet" and substituted the full stage count, so an unearnable badge advertised a
     # complete chase to anonymous visitors while a signed-in viewer on the same page saw the real 0. The
     # column is a maintained denorm now (recompute_required_stages), so it is the answer, including when it
     # is zero.
-    journey, retired = _group_journey(gb, result, catalog, games_map, profile_games, ratings_map, contract_map)
+    journey, retired, studio_sections, retired_studio_sections = _group_journey(
+        gb, result, catalog, games_map, profile_games, ratings_map, contract_map, stage_studios,
+    )
     # ANON reads the LADDER, not the `required_stages` denorm. That column is written only by
     # `evaluate_badges`, so a freshly-authored badge sits at its `default=0` until the nightly -- and with
     # the falsy-zero fallback gone, anon was being shown "This badge can no longer be earned. Every game it
@@ -542,6 +650,8 @@ def _group_view(gb, result, hold, target_profile, series, catalog, games_map, pr
         avg_hours=stats['avg_hours'], xp_on_offer=xp_on_offer,
         stages=journey,
         retired_stages=retired,
+        studio_sections=studio_sections,
+        retired_studio_sections=retired_studio_sections,
         is_unearnable=(gating == 0),
         # BOTH ladders: a retired stage's games are shown on the page and its clear paid XP, so leaving
         # them out would reproduce the same "panel disagrees with the page" bug one level down.
@@ -552,8 +662,12 @@ def _group_view(gb, result, hold, target_profile, series, catalog, games_map, pr
     return gv
 
 
-def get_badge_detail(series, target_profile) -> BadgeDetail:
-    """Build the detail context for `series` (a BadgeSeries) as seen by `target_profile` (or None for anon)."""
+def get_badge_detail(series, target_profile, *, studio_sections=False) -> BadgeDetail:
+    """Build the detail context for `series` (a BadgeSeries) as seen by `target_profile` (or None for anon).
+
+    `studio_sections`: split a developer badge's ladders by studio (see `_group_journey`). Only the badge
+    page renders them, so the medallion peek and the collection modal leave it off and skip the family walk.
+    """
     group_badges = list(
         series.group_badges.filter(is_live=True)
         .select_related('series', 'series__artwork_source', 'platform_group').order_by('platform_group__sort_order', 'id')
@@ -563,7 +677,11 @@ def get_badge_detail(series, target_profile) -> BadgeDetail:
     catalog = build_catalog(group_badges) if group_badges else None
     desired, holds = {}, {}
     games_map, profile_games, ratings_map, contract_map = {}, {}, {}, {}
+    stage_studios = {}
     if catalog:
+        if studio_sections:
+            # Once per series, shared by every edition's panel: filing a stage reads its games, not its edition.
+            stage_studios = _stage_studios(series, catalog['stages'])
         # Full game rows (display fields) for the stage-journey cards -- the catalog's games are .only()'d.
         games_map = {
             g.id: g for g in Game.objects.filter(id__in=catalog['game_ids'])
@@ -594,7 +712,7 @@ def get_badge_detail(series, target_profile) -> BadgeDetail:
     participants = lb.series_board_count(series.series_slug)
 
     groups = [_group_view(gb, desired.get(gb.id), holds.get(gb.id), target_profile, series, catalog,
-                          games_map, profile_games, ratings_map, contract_map, participants)
+                          games_map, profile_games, ratings_map, contract_map, participants, stage_studios)
               for gb in group_badges]
     viewer_state = max((g.state for g in groups), key=lambda s: _STATE_ORDER[s], default='none')
 

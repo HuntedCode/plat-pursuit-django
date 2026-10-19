@@ -547,7 +547,7 @@ class BadgeDetailView(DetailView):
         # When showing SOMEONE ELSE'S progress (the /<slug>/<username>/ variant), surface whose.
         context['viewing_other_profile'] = target_profile if (target_profile and target_profile != viewer_profile) else None
 
-        detail = context['detail'] = get_badge_detail(series, target_profile)
+        detail = context['detail'] = get_badge_detail(series, target_profile, studio_sections=True)
 
         # Deep-link the platform-group tab: the list page's medallions/cells link to ?group=<key> so a click
         # lands on that edition directly. Validate against the series' live groups; default to the first.
