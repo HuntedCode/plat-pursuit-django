@@ -5,7 +5,7 @@ import logging
 
 from core.client_ip import client_ip
 
-logger = logging.getLogger('psn_api')
+logger = logging.getLogger(__name__)
 
 class CustomAccountAdapter(DefaultAccountAdapter):
     def get_client_ip(self, request):

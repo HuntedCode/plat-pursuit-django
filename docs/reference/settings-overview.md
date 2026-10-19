@@ -15,6 +15,7 @@ Key Django settings, third-party integrations, and constants files used across P
 | `DB_LOCK_TIMEOUT_MS` | `30000` default | Postgres `lock_timeout`, same per-service mechanism |
 | `CACHES` | `django-redis` | Single cache backend at `REDIS_URL` |
 | `EMAIL_BACKEND` | SendGrid (prod) / Console (debug) | `django-sendgrid-v5` in production |
+| `LOGGING` | Root handler at WARNING, our apps at INFO | One `console` handler (stdout) on the root. Our top-level logger names opt into INFO and propagate to it; third-party libraries inherit WARNING. See the logging gotcha below |
 | `STATIC_FILES_STORAGE` | WhiteNoise | S3 via `django-storages` optional |
 | `CHALLENGES_BETA_MEMBERS_ONLY` | Env var, default `False` (since the public release) | While on, only members can START a Challenge run; the hub, every run and the Hall of Fame stay public. See the beta switch under [Key Settings Gotchas](#key-settings-gotchas) |
 
@@ -108,6 +109,14 @@ The primary constants file (~235 lines). Contains:
   `True` turns the members-first gate on; the parse is `== 'True'`, so any other value (`true`, `1`, `yes`)
   leaves creation open to everyone. The flag also picks the Challenges system intro's version (`beta` or
   `live`); turning the beta off shows the live intro once to everyone who saw the beta one.
+- **A logger missing from `LOGGING` drops its INFO lines**: a name not under one of the listed
+  top-level names (`core`, `trophies`, `psn_api`, ...) inherits the root's WARNING, so its `logger.info`
+  never reaches the server logs. Until 2026-10 the root had no handler at all, and `core.*`,
+  `trophies.*` and `notifications.*` INFO (including EmailService's "Email sent successfully") were
+  silently lost. When adding an app or a new `getLogger('name')`, add its top-level name to the tuple
+  in `LOGGING['loggers']`; `tests/test_logging_config.py` scans the source and fails if you forget.
+  For whether an email actually went out, the `EmailLog` table (Django admin) and the SendGrid
+  Activity Feed are still the authoritative records, not the logs.
 - **CORS has no current consumer**: it existed for the React Native Expo dev server, and the mobile API was removed in 2026-08 (see [Mobile App](../guides/mobile-app.md)). The web app is same-origin. Left configured because it is inert without `CORS_ALLOWED_ORIGINS` set, and a mobile rebuild will want it back.
 
 ## Related Docs

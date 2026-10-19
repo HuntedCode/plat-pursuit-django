@@ -236,7 +236,7 @@ def test_impossible_payload_defers_to_our_own_rows_rather_than_inventing_complet
     assert ProfileGame.objects.get(profile=profile, game=game).progress == 91  # 34*100//37
 
 
-def test_impossible_payload_with_in_range_progress_still_defers_and_warns(monkeypatch, caplog):
+def test_impossible_payload_with_in_range_progress_still_defers_and_warns(caplog):
     # The contradiction is earned > defined; `progress` itself happens to look plausible. The
     # payload is still untrustworthy, so the same fallback applies, and the warning names both
     # totals because the overshoot is what says the title's list moved under Sony.
@@ -249,10 +249,6 @@ def test_impossible_payload_with_in_range_progress_still_defers_and_warns(monkey
         earned_trophies_count=30,
         unearned_trophies_count=0,
     )
-
-    # The psn_api logger is configured with propagate=False, so caplog's root handler cannot see
-    # it without this. Without the propagation flip the assertion below passes vacuously.
-    monkeypatch.setattr(logging.getLogger("psn_api"), "propagate", True)
 
     with caplog.at_level(logging.WARNING, logger="psn_api"):
         PsnApiService.create_or_update_profile_game(
