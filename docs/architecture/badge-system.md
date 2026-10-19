@@ -326,6 +326,10 @@ bundle members included, by `concepts_filing_studio`, the same rule `generate_ba
   collection modal leave it off. On a non-developer badge it costs nothing; on a developer badge, a few
   small queries bounded by the studio family's depth and the badge's own games, never the family's
   catalogue (`_stage_studios`).
+- **Each studio header shows its IGDB logo** (on the company page's light plate, else a building glyph) and
+  links to its company page; "Other studios" links nowhere. Company slugs are stored as IGDB sends them,
+  never slugified, so the link is built in the service (`_company_url`) and dropped when the slug makes no
+  URL, rather than raising `NoReverseMatch` and taking the whole badge page down.
 - **Two studios with the same name** (`Company.name` is not unique) get two adjacent sections with the same
   header: they are filed by company, not by name.
 - **An `--append`ed stage moves into its studio on the page** even though its stage number is after the

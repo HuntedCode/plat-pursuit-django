@@ -289,15 +289,21 @@ Collection. No extra wrapper container: a nested one would double the horizontal
             {% if g.studio_sections %}
             {% for sec in g.studio_sections %}
             <div class="bd-studio{% if not forloop.first %} mt-6{% endif %}">
+                {% comment %} The studio's IGDB logo on the same light plate its company page uses (most logos are
+                dark on transparent), else a building glyph. A studio links to its company page; the logo is a
+                second, pointer-only target for the same link, so it is hidden from keyboards and screen
+                readers, which get the name. "Other studios" is not a company, so it links nowhere. {% endcomment %}
+                {% with logo=sec.company.logo_url %}
                 <div class="bd-studio__head">
-                    <span class="bd-studio__ico" aria-hidden="true">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"></rect><path d="M9 7h.01M15 7h.01M9 11h.01M15 11h.01M9 15h.01M15 15h.01"></path><path d="M10 21v-3h4v3"></path></svg>
-                    </span>
+                    {% if sec.url %}<a href="{{ sec.url }}" class="bd-studio__ico{% if logo %} bd-studio__ico--logo{% endif %}" tabindex="-1" aria-hidden="true">{% else %}<span class="bd-studio__ico{% if logo %} bd-studio__ico--logo{% endif %}" aria-hidden="true">{% endif %}
+                        {% if logo %}<span class="co-logo__plate"><img src="{{ logo }}" alt="" loading="lazy" /></span>{% else %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"></rect><path d="M9 7h.01M15 7h.01M9 11h.01M15 11h.01M9 15h.01M15 15h.01"></path><path d="M10 21v-3h4v3"></path></svg>{% endif %}
+                    {% if sec.url %}</a>{% else %}</span>{% endif %}
                     <div class="bd-studio__id">
-                        <h3 class="bd-studio__name">{{ sec.name }}</h3>
+                        <h3 class="bd-studio__name">{% if sec.url %}<a href="{{ sec.url }}" class="bd-studio__link">{{ sec.name }}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 6 15 12 9 18"></polyline></svg></a>{% else %}{{ sec.name }}{% endif %}</h3>
                         <span class="bd-studio__meta"><b class="pp-tally">{{ sec.stages|length }}</b> stage{{ sec.stages|length|pluralize }}{% if target_profile %} &middot; <span{% if sec.cleared == sec.stages|length %} class="is-done"{% endif %}><b class="pp-tally">{{ sec.cleared }}</b> cleared</span>{% endif %}</span>
                     </div>
                 </div>
+                {% endwith %}
                 <div class="bd-stages">
                     {% for s in sec.stages %}
                     {% include 'trophies/partials/badge_detail/bd2_stage.html' with group_key=g.platform_group.key %}
@@ -336,7 +342,7 @@ Collection. No extra wrapper container: a nested one would double the horizontal
                 would break up the live ladders above and, on a dead edition, leave a stack of fences. {% endcomment %}
                 {% if g.retired_studio_sections %}
                 {% for sec in g.retired_studio_sections %}
-                <h4 class="bd-retired__studio">{{ sec.name }} &middot; {{ sec.stages|length }} stage{{ sec.stages|length|pluralize }}</h4>
+                <h4 class="bd-retired__studio">{% if sec.url %}<a href="{{ sec.url }}" class="bd-retired__studio-link">{{ sec.name }}</a>{% else %}{{ sec.name }}{% endif %} &middot; {{ sec.stages|length }} stage{{ sec.stages|length|pluralize }}</h4>
                 <div class="bd-stages bd-stages--retired">
                     {% for s in sec.stages %}
                     {% include 'trophies/partials/badge_detail/bd2_stage.html' with retired=True %}

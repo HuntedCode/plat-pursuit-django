@@ -628,6 +628,20 @@
     color: var(--pp-text-dim); background: var(--pp-bg-1); border: 1px solid var(--pp-border);
 }
 .bd-studio__ico svg { width: 16px; height: 16px; }
+/* A studio with an IGDB logo: a rounded tile holding the company page's own logo plate (.co-logo__plate,
+   group-card.css), so the logo reads the same in both places. Square, not round: a circle crops wordmarks. */
+.bd-studio__ico--logo { position: relative; overflow: hidden; border: 0; border-radius: 9px; box-shadow: 0 0 0 1px var(--pp-border); }
+a.bd-studio__ico { transition: box-shadow var(--pp-dur) var(--pp-ease); }
+a.bd-studio__ico:hover { box-shadow: 0 0 0 2px color-mix(in oklab, var(--pp-primary) 60%, transparent); }
+.bd-studio__link {
+    display: inline-flex; align-items: center; gap: 2px; color: inherit; text-decoration: none;
+    border-radius: 4px; transition: color var(--pp-dur) var(--pp-ease);
+}
+.bd-studio__link svg { width: 14px; height: 14px; flex: none; opacity: 0.45; transition: transform var(--pp-dur) var(--pp-ease), opacity var(--pp-dur) var(--pp-ease); }
+.bd-studio__link:hover, .bd-studio__head:has(a.bd-studio__ico:hover) .bd-studio__link { color: var(--pp-primary); }
+.bd-studio__link:hover svg, .bd-studio__head:has(a.bd-studio__ico:hover) .bd-studio__link svg { opacity: 1; transform: translateX(2px); }
+.bd-studio__link:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .bd-studio__link svg { transition: none; } }
 .bd-studio__id { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 10px; row-gap: 2px; min-width: 0; }
 .bd-studio__name { font-family: var(--pp-font-display); font-weight: 800; font-size: 0.95rem; color: var(--pp-text); overflow-wrap: anywhere; }
 .bd-studio__meta { font-size: 0.72rem; font-weight: 700; color: var(--pp-text-mute); white-space: nowrap; }
@@ -638,6 +652,9 @@
     margin: 14px 0 0 52px;
     font-size: 0.68rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--pp-text-mute);
 }
+.bd-retired__studio-link { color: inherit; text-decoration: none; border-radius: 3px; transition: color var(--pp-dur) var(--pp-ease); }
+.bd-retired__studio-link:hover { color: var(--pp-primary); }
+.bd-retired__studio-link:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
 @media (max-width: 640px) {
     /* Follow the slimmer mobile gutter (34px): a 28px glyph + 6. */
     .bd-studio__head { gap: 6px; }

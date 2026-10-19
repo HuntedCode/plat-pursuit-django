@@ -6,12 +6,13 @@ engine pass (badge_orchestrator.evaluate_with_catalog); XP/progress are computed
 they match the per-group numbers); live RANKS come from badge_leaderboards (stored standings).
 """
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from itertools import groupby
 from typing import Optional
 
+from django.urls import NoReverseMatch, reverse
 
-from trophies.models import UserGroupBadge, SeriesBadgeStanding, Game, ProfileGame
+from trophies.models import Company, UserGroupBadge, SeriesBadgeStanding, Game, ProfileGame
 from trophies.services.badge_engine import GroupInput, _gates as engine_gates, _qualifies as engine_qualifies
 from trophies.services.badge_orchestrator import (
     build_catalog, evaluate_with_catalog, _bundle_state, _catalog_game_state,
@@ -69,7 +70,9 @@ class GroupView:
     retired_stages: list
     #: A developer badge whose stages in this edition span 2+ studios: the same stages as `stages` /
     #: `retired_stages`, split into `[{'name', 'stages', 'cleared'}]` by filing studio (the developer first,
-    #: then its studios A-Z, then "Other studios"). None when the page shows one flat ladder, when that
+    #: then its studios A-Z, then "Other studios"). Each section also carries `company` (the Company, for
+    #: its logo; None for "Other studios") and `url` (its company page, or None). None when the page shows
+    #: one flat ladder, when that
     #: ladder is empty, or when the caller did not ask for sections (`get_badge_detail(studio_sections=)`).
     studio_sections: Optional[list]
     retired_studio_sections: Optional[list]
@@ -344,8 +347,17 @@ def _stage_concept_ids(st) -> set:
     return ids
 
 
+@dataclass(frozen=True)
+class _Studio:
+    """A stage's filing studio. `key` orders the sections (`studio_sort_key`); `company` is None for
+    OTHER_STUDIOS_LABEL. Equality is by key and name, so it groups and counts like the studio it names."""
+    key: tuple
+    name: str
+    company: Optional[Company] = field(default=None, compare=False)
+
+
 def _stage_studios(series, stages) -> dict:
-    """{stage id: (sort key, studio name)} for a developer badge, `{}` for every other badge.
+    """{stage id: _Studio} for a developer badge, `{}` for every other badge.
 
     Each stage is filed as ONE unit, by `concepts_filing_studio` over all of its games: the same rule
     `generate_badge_stages` orders by, so a freshly generated badge's sections come out in its stage order
@@ -353,8 +365,9 @@ def _stage_studios(series, stages) -> dict:
     Stages no family studio developed file under OTHER_STUDIOS_LABEL, last.
 
     Queries: the family walk and the filing map (each with one per rename hop of the developer, the walk
-    also one per tree level), then the credits for the stages' own concepts only. Bounded by the badge,
-    never by the family's catalogue.
+    also one per tree level), the credits for the stages' own concepts only, and, when a studio other than
+    the developer files a stage, one for those studios' rows (name, slug, logo). Bounded by the badge, never
+    by the family's catalogue.
     """
     if not stages or not is_developer_badge(series):
         return {}
@@ -363,20 +376,39 @@ def _stage_studios(series, stages) -> dict:
     family_ids = developer_family_ids(developer)
     filing_map = studio_filing_map(developer, family_ids)
     credits = family_developer_credits(family_ids, set().union(*concepts_by_stage.values()))
-    out = {}
-    for stage_id, concept_ids in concepts_by_stage.items():
-        studio = concepts_filing_studio(concept_ids, credits, filing_map, developer)
-        out[stage_id] = (studio_sort_key(studio, developer), studio[1] if studio else OTHER_STUDIOS_LABEL)
-    return out
+    filed = {
+        stage_id: concepts_filing_studio(concept_ids, credits, filing_map, developer)
+        for stage_id, concept_ids in concepts_by_stage.items()
+    }
+    other_ids = {studio[0] for studio in filed.values() if studio} - {developer.id}
+    companies = Company.objects.only('id', 'name', 'slug', 'logo_image_id').in_bulk(other_ids) if other_ids else {}
+    companies[developer.id] = developer
+    other = _Studio(studio_sort_key(None, developer), OTHER_STUDIOS_LABEL)
+    return {
+        stage_id: _Studio(studio_sort_key(studio, developer), studio[1], companies.get(studio[0])) if studio else other
+        for stage_id, studio in filed.items()
+    }
+
+
+def _company_url(company) -> Optional[str]:
+    """A studio's company page, or None. Company slugs are stored as IGDB sends them, never slugified, so
+    one the `<slug:>` converter rejects must cost this link, not raise NoReverseMatch and 500 the badge page."""
+    if company is None or not company.slug:
+        return None
+    try:
+        return reverse('company_detail', kwargs={'slug': company.slug})
+    except NoReverseMatch:
+        return None
 
 
 def _studio_sections(stages, stage_studios) -> list:
-    """Consecutive runs of `stages` (already sorted by studio) as `[{'name', 'stages', 'cleared'}]`."""
+    """Consecutive runs of `stages` (already sorted by studio) as
+    `[{'name', 'company', 'url', 'stages', 'cleared'}]`."""
     sections = []
-    for (_, name), run in groupby(stages, key=lambda s: stage_studios[s['stage'].id]):
+    for studio, run in groupby(stages, key=lambda s: stage_studios[s['stage'].id]):
         run = list(run)
         sections.append({
-            'name': name, 'stages': run,
+            'name': studio.name, 'company': studio.company, 'url': _company_url(studio.company), 'stages': run,
             'cleared': sum(1 for s in run if s['completion_state'] == 'complete'),
         })
     return sections
@@ -462,8 +494,8 @@ def _group_journey(gb, result, catalog, games_map, profile_games, ratings_map, c
     studio_sections = retired_studio_sections = None
     if stage_studios and len({stage_studios[s['stage'].id] for s in required + retired}) >= 2:
         # sort() is stable, so each studio keeps the authored (stage_number) order the loop built.
-        required.sort(key=lambda s: stage_studios[s['stage'].id][0])
-        retired.sort(key=lambda s: stage_studios[s['stage'].id][0])
+        required.sort(key=lambda s: stage_studios[s['stage'].id].key)
+        retired.sort(key=lambda s: stage_studios[s['stage'].id].key)
         studio_sections = _studio_sections(required, stage_studios) or None
         retired_studio_sections = _studio_sections(retired, stage_studios) or None
 

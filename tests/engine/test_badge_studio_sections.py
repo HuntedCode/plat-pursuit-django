@@ -102,6 +102,34 @@ def test_a_co_credited_stage_files_under_the_developer_else_the_a_to_z_first_stu
     assert _shape(_group(series).studio_sections) == [('Rockstar Games', [1]), ('Rockstar North', [2])]
 
 
+def test_each_section_carries_its_company_for_the_logo_and_link(rockstar):
+    series = _badge('rs-company', rockstar['dev'])
+    _stage('rs-company', 1, rockstar['dev'])
+    _stage('rs-company', 2, rockstar['north'])
+    _stage('rs-company', 3, rockstar['outsider'])
+
+    assert [sec['company'] for sec in _group(series).studio_sections] == [rockstar['dev'], rockstar['north'], None]
+
+
+@pytest.mark.parametrize('slug', ['', 'ctg-(core-technology-group)'])
+def test_a_studio_whose_slug_makes_no_url_shows_its_logo_without_a_link(client, rockstar, slug):
+    # Company slugs are stored as IGDB sends them, never slugified: one the URL converter rejects must cost
+    # the link, not 500 the page. The logo tile keeps its plate styling without the link.
+    north = rockstar['north']
+    north.slug, north.logo_image_id = slug, 'northlogo'
+    north.save()
+    series = _badge('rs-badslug', rockstar['dev'])
+    _stage('rs-badslug', 1, rockstar['dev'])
+    _stage('rs-badslug', 2, north)
+
+    response = client.get(f'/badges/{series.series_slug}/')
+    html = response.content.decode()
+
+    assert response.status_code == 200
+    assert '<h3 class="bd-studio__name">Rockstar North</h3>' in html
+    assert '<span class="bd-studio__ico bd-studio__ico--logo" aria-hidden="true">' in html
+
+
 def test_a_bundle_members_credits_file_the_stage(rockstar):
     series = _badge('rs-bundle', rockstar['dev'])
     _stage('rs-bundle', 1, rockstar['dev'])
@@ -246,21 +274,34 @@ def test_credits_can_be_limited_to_the_badges_own_games(rockstar):
 
 
 def test_the_page_renders_a_header_per_studio_and_a_label_per_retired_run(client, rockstar):
+    rockstar['dev'].logo_image_id = 'devlogo'
+    rockstar['dev'].save()
     series = _badge('rs-render', rockstar['dev'])
     _stage('rs-render', 1, rockstar['north'])
     _stage('rs-render', 2, rockstar['dev'])
     _stage('rs-render', 3, rockstar['sd'], obtainable=False)
+    _stage('rs-render', 4, rockstar['outsider'])
 
     html = client.get(f'/badges/{series.series_slug}/').content.decode()
 
-    assert '<h3 class="bd-studio__name">Rockstar Games</h3>' in html
-    assert '<h3 class="bd-studio__name">Rockstar North</h3>' in html
-    assert html.index('bd-studio__name">Rockstar Games') < html.index('bd-studio__name">Rockstar North')
-    assert '<h4 class="bd-retired__studio">Rockstar San Diego &middot; 1 stage</h4>' in html
+    dev_url, north_url = f"/companies/{rockstar['dev'].slug}/", f"/companies/{rockstar['north'].slug}/"
+    # Each family studio's name links to its company page...
+    assert f'<a href="{dev_url}" class="bd-studio__link">Rockstar Games<svg' in html
+    assert f'<a href="{north_url}" class="bd-studio__link">Rockstar North<svg' in html
+    assert html.index('bd-studio__link">Rockstar Games') < html.index('bd-studio__link">Rockstar North')
+    # ...its logo tile (pointer-only) shows the IGDB logo when it has one, else the building glyph...
+    assert (f'<a href="{dev_url}" class="bd-studio__ico bd-studio__ico--logo" tabindex="-1" aria-hidden="true">'
+            in html)
+    assert '<img src="https://images.igdb.com/igdb/image/upload/t_logo_med/devlogo.png" alt=""' in html
+    assert f'<a href="{north_url}" class="bd-studio__ico" tabindex="-1" aria-hidden="true">' in html
+    # ...and "Other studios" is not a company, so it links nowhere.
+    assert '<h3 class="bd-studio__name">Other studios</h3>' in html
+    assert ('<h4 class="bd-retired__studio"><a href="/companies/{}/" class="bd-retired__studio-link">'
+            'Rockstar San Diego</a> &middot; 1 stage</h4>').format(rockstar['sd'].slug) in html
     # Anonymous: nothing has been cleared by anyone on display, so the header offers no "cleared" count.
     assert '<span class="bd-studio__meta"><b class="pp-tally">1</b> stage</span>' in html
     # The tile jump anchors still run 1..N in display order: the developer's stage is Stage 1.
-    north_header = html.index('bd-studio__name">Rockstar North')
+    north_header = html.index('bd-studio__link">Rockstar North')
     assert html.index('id="bd2-stage-rs-render-u-1"') < north_header < html.index('id="bd2-stage-rs-render-u-2"')
 
 
