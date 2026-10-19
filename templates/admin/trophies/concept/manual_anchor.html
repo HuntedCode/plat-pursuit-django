@@ -9,8 +9,8 @@
 <p>
   For each Concept below, enter the IGDB game id you believe is the correct
   canonical match. The system will fetch IGDB data for that id, resolve it to
-  its canonical form (Director's Cut / Standalone Expansion entries get
-  collapsed to their parent), find or create the target Concept at
+  its canonical form (Director's Cut / remaster / port entries get
+  collapsed to their parent; a Standalone Expansion is its own game), find or create the target Concept at
   <code>concept_id = str(canonical_id)</code>, refresh its IGDBMatch (capturing
   media + Tier 1 fields), and then run the same vetting the
   <code>anchor_concepts</code> migration uses on each Game: trophy-fingerprint

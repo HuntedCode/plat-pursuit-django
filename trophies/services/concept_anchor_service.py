@@ -603,7 +603,7 @@ def anchor_concept_to_canonical(source_concept, canonical_igdb_id, *, user=None)
         source_concept: the deferred Concept whose Games should be anchored.
         canonical_igdb_id: the IGDB id staff believes is correct. Will be run
             through `_resolve_canonical_igdb_id` in case staff provided a
-            Director's Cut / Standalone Expansion id that should collapse to
+            Director's Cut / remaster / port id that should collapse to
             its parent.
         user: the staff user driving the action (for audit on any reviews).
 
@@ -656,7 +656,7 @@ def anchor_concept_to_canonical(source_concept, canonical_igdb_id, *, user=None)
         return result
 
     # Resolve canonical for the FAMILY link (canonical resolution collapses
-    # Director's Cut / Standalone Expansion / Expanded Game / Port / Remake
+    # Director's Cut / Expanded Game / Port / Remake / Remaster
     # ids into their parent for family grouping). The target Concept itself
     # still represents the SPECIFIC version (raw id), not canonical.
     resolved_canonical = IGDBService._resolve_canonical_igdb_id(
