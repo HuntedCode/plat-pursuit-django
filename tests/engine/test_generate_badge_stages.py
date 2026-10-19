@@ -396,11 +396,8 @@ def test_append_adds_new_versions_to_their_stage_and_new_games_after_the_last():
     badge, fran = _franchise_badge("gen-append")
     old_family = _family("Old Game", 1401, year=2000)
     in_stage = _concept("Old Game PS3", family=old_family)
-    stage_two = StageFactory(
-        series_slug=badge.series_slug, stage_number=2, title="Hand Titled", stage_icon="https://x.test/hand.png",
-    )
+    stage_two = StageFactory(series_slug=badge.series_slug, stage_number=2, title="Hand Titled")
     stage_two.concepts.add(in_stage)
-    Stage.objects.filter(pk=stage_two.pk).update(stage_icon="https://x.test/hand.png")  # the signal re-derived it
 
     new_version = _concept("Old Game PS5", family=old_family)
     brand_new = _concept("Brand New", family=_family("Brand New", 1403, year=2020))
@@ -413,19 +410,14 @@ def test_append_adds_new_versions_to_their_stage_and_new_games_after_the_last():
         (2, "Hand Titled", sorted([in_stage.id, new_version.id])),
         (3, "Brand New", [brand_new.id]),
     ]
-    # Appending only adds concepts: the hand-set icon survives the add's icon signal.
-    stage_two.refresh_from_db()
-    assert stage_two.stage_icon == "https://x.test/hand.png"
 
 
-def test_append_keeps_a_hand_set_icon_when_two_origins_join_one_stage():
-    # The icon signal rewrites the SHARED in-memory stage on each add; the restore must use the original.
+def test_append_counts_a_stage_two_origins_join_once():
     badge, fran = _franchise_badge("gen-append-two")
     first, second = _family("Trilogy One", 1410, year=2001), _family("Trilogy Two", 1411, year=2002)
     one, two = _concept("Trilogy One", family=first), _concept("Trilogy Two", family=second)
     stage = StageFactory(series_slug=badge.series_slug, stage_number=1, title="Trilogy")
     stage.concepts.add(one, two)
-    Stage.objects.filter(pk=stage.pk).update(stage_icon="https://x.test/trilogy.png")
     remaster_one = _concept("Trilogy One Remastered", family=first)
     remaster_two = _concept("Trilogy Two Remastered", family=second)
     for c in (one, two, remaster_one, remaster_two):
@@ -433,8 +425,6 @@ def test_append_keeps_a_hand_set_icon_when_two_origins_join_one_stage():
 
     out = _run(badge.series_slug, '--append')
 
-    stage.refresh_from_db()
-    assert stage.stage_icon == "https://x.test/trilogy.png"
     assert sorted(stage.concepts.values_list('id', flat=True)) == sorted([one.id, two.id, remaster_one.id, remaster_two.id])
     assert "0 new stage(s), 1 existing stage(s) extended" in out
 

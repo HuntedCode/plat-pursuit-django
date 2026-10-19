@@ -281,7 +281,7 @@ fails open, with no error, is the reason this lives on the field now. Other `Fra
 **Stages duplicate onto a new slug.** `Stage` joins to a series by a bare `series_slug` string, so a
 franchise badge that mirrors a series badge means re-entering the same concept picks stage by stage.
 `StageAdmin`'s "Duplicate selected stages under a new series slug" action copies a selection wholesale:
-number, title, icon, the standalone concepts, and each `ConceptBundle`
+number, title, the standalone concepts, and each `ConceptBundle`
 with its own members. The originals are untouched, the whole run is one transaction (a committed stage
 with no concepts reads to the engine as instantly satisfied, not as broken), and a stage number already
 present on the target slug is SKIPPED and named in the message rather than renumbered -- renumbering would
@@ -296,9 +296,15 @@ audit gap, except one whose origin sits in a bundle stage, which it lists for a 
 are never generated. See
 [management-commands](../guides/management-commands.md) and `trophies/services/badge_stage_service.py`.
 
-`stage_icon` is copied and then re-derived: it is a denorm of the first concept's cover, maintained by
-`auto_populate_stage_icon`, and setting the copy's concepts fires that signal. The copy is what preserves
-a hand-set icon on a stage with no concepts to re-derive from, the one case the signal never touches.
+**Stage icons are derived, not stored.** The badge page draws each stage's icon from its most recently
+released version (that version's trusted IGDB first PlayStation release, else its PSN date), preferring
+one that is still obtainable on that edition (the same `_display_playable` rule as the stage's grid, so the
+icon can differ between edition tabs) and one with real cover art over the generic PlayStation title icon.
+Bundle members count like any other version (`badge_detail_service._stage_icon_url`). Every game it reads is already loaded for the stage's cards, so it
+costs no queries. It replaced a stored `Stage.stage_icon` that two m2m signals kept as a copy of whichever
+concept came first, which made the icon arbitrary and made every stage edit (a duplicate, an append)
+fight the signal to keep a hand-set one. There is no way to hand-set an icon now: to change it, change the
+stage's games.
 
 ## Management Commands
 

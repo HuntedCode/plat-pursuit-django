@@ -2,7 +2,7 @@
 {% comment %}
 Stage-journey node (rebuild, per platform group). Reuses the bd-stage / bd-node / bd-gcard visual language;
 fed by badge_detail_service._group_journey. `s` = a stage dict (stage, obtainable_games, delisted_games,
-bundles, completion_state, is_next, display_number); `target_profile` from the page context.
+bundles, icon_url, completion_state, is_next, display_number); `target_profile` from the page context.
 
 `display_number` is a fresh 1..N over the REQUIRED ladder, never `stage.stage_number` -- authored numbers
 have gaps (stages get retired, renumbered, authored out of order) and "Stage 1, Stage 2, Stage 5" sends the
@@ -24,7 +24,7 @@ badge" and they are explicitly not steps -- the section they sit in says so once
     {% comment %} Header = the collapse toggle. Default: the "up next" stage open, the rest collapsed. The JS
     finds the collapse body + chevron relative to this header (stage numbers aren't unique across groups). {% endcomment %}
     <div class="bd-stage__head" data-stage-toggle role="button" aria-expanded="{% if s.is_next %}true{% else %}false{% endif %}" tabindex="0">
-        {% if stage.stage_icon %}<span class="bd-stage__ico"><img src="{{ stage.stage_icon }}" alt="" loading="lazy" /></span>{% endif %}
+        {% if s.icon_url %}<span class="bd-stage__ico"><img src="{{ s.icon_url }}" alt="" loading="lazy" /></span>{% endif %}
         <div class="bd-stage__id">
             {% comment %} A retired stage is named, never numbered. With no title it falls back to its own
             games rather than rendering an empty line. {% endcomment %}

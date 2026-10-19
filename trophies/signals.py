@@ -1,10 +1,10 @@
 import logging
-from django.db.models.signals import post_save, post_delete, m2m_changed, pre_save, pre_delete
+from django.db.models.signals import post_save, post_delete, pre_save, pre_delete
 from django.dispatch import receiver
 from django.db.models import F, Value
 from django.db.models.functions import Greatest
 from trophies.models import (
-    Stage, ConceptBundle, Profile, EarnedTrophy, ProfileGame,
+    Profile, EarnedTrophy, ProfileGame,
     GroupBadge, UserGroupBadge,
 )
 
@@ -324,66 +324,3 @@ def reconcile_group_badge_earned_counts_on_profile_delete(sender, instance, **kw
     )
     if gb_ids:
         GroupBadge.objects.filter(pk__in=gb_ids, earned_count__gt=0).update(earned_count=F('earned_count') - 1)
-
-
-
-# --- Stage Icon Auto-Population ---
-
-def _compute_stage_icon(stage):
-    """Resolve a Stage's icon source by precedence.
-
-    Standalone Stage.concepts win over ConceptBundle members so a stage with
-    both qualifier types keeps its original icon. Bundles provide the icon for
-    bundle-only stages (e.g. PS3-episodic-only games where no full-list concept
-    is attached). Returns the icon URL string or None.
-
-    Uses `Concept.cover_url` (the shared IGDB-first chain: trusted IGDB
-    cover -> PSN MASTER, skipping `PP_*` stubs) rather than reading
-    `concept_icon_url` directly. The new IGDB-anchored concepts often have
-    no PSN MASTER URL because their identity comes from IGDB, not PSN; the
-    direct field read returned empty for them and broke this auto-fill.
-    """
-    first_standalone = stage.concepts.first()
-    if first_standalone:
-        return first_standalone.cover_url or None
-    for bundle in stage.concept_bundles.order_by('sort_order', 'id'):
-        first_member = bundle.concepts.first()
-        if first_member:
-            return first_member.cover_url or None
-    return None
-
-
-def _refresh_stage_icon(stage):
-    new_icon = _compute_stage_icon(stage)
-    if stage.stage_icon != new_icon:
-        stage.stage_icon = new_icon
-        stage.save(update_fields=['stage_icon'])
-
-
-@receiver(m2m_changed, sender=Stage.concepts.through, dispatch_uid="auto_populate_stage_icon")
-def auto_populate_stage_icon(sender, instance, action, **kwargs):
-    """Auto-populate Stage.stage_icon when Stage.concepts changes.
-
-    Falls back to ConceptBundle members when no standalone Concept is attached.
-    """
-    if action not in ('post_add', 'post_clear'):
-        return
-    try:
-        _refresh_stage_icon(instance)
-    except Exception:
-        logger.exception(f"Failed to refresh stage_icon for {instance}")
-
-
-@receiver(m2m_changed, sender=ConceptBundle.concepts.through, dispatch_uid="auto_populate_stage_icon_bundle")
-def auto_populate_stage_icon_from_bundle(sender, instance, action, **kwargs):
-    """Auto-populate Stage.stage_icon when a bundle's members change.
-
-    Bundle changes only matter for the icon when the Stage has no standalone
-    Concept; _refresh_stage_icon enforces that precedence.
-    """
-    if action not in ('post_add', 'post_clear'):
-        return
-    try:
-        _refresh_stage_icon(instance.stage)
-    except Exception:
-        logger.exception(f"Failed to refresh stage_icon from bundle {instance}")

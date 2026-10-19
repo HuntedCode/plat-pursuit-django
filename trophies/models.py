@@ -3268,7 +3268,8 @@ class Stage(models.Model):
     series_slug = models.SlugField(max_length=100, db_index=True, help_text="Series slug this stage applies to.")
     stage_number = models.IntegerField(validators=[MinValueValidator(0)], help_text="Stage number (0 for optional/tangential concepts.)")
     title = models.CharField(max_length=255, blank=True, help_text="Optional stage title")
-    stage_icon = models.URLField(null=True, blank=True)
+    # No stored icon: the badge page derives it from the stage's newest version
+    # (badge_detail_service._stage_icon_url).
     concepts = models.ManyToManyField(Concept, related_name='stages', blank=True, help_text='Concepts required for this stage.')
 
     class Meta:

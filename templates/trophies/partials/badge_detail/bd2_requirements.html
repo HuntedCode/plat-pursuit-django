@@ -27,7 +27,7 @@ new per-group data. Expects: g (GroupView), target_profile. The base bar is the 
         <a href="#bd2-stage-{{ g.platform_group.key }}-{{ s.display_number }}" data-stage-jump
            title="Stage {{ s.display_number }}{% if s.stage.title %}: {{ s.stage.title }}{% endif %}{% if s.completion_state == 'complete' %}{% if s.is_mastered %} (100%){% else %} (platinum, not 100%){% endif %}{% endif %}"
            class="bd-req__tile{% if s.completion_state == 'complete' %} is-done{% endif %}{% if s.is_mastered %} is-mastered{% endif %}">
-            {% if s.stage.stage_icon %}<img src="{{ s.stage.stage_icon }}" alt="" class="bd-req__tile-ico" loading="lazy" />{% endif %}
+            {% if s.icon_url %}<img src="{{ s.icon_url }}" alt="" class="bd-req__tile-ico" loading="lazy" />{% endif %}
             <span class="bd-req__tile-meta">
                 <span class="bd-req__tile-num">Stage {{ s.display_number }}</span>
                 <span class="bd-req__tile-name">{{ s.stage.title }}</span>
