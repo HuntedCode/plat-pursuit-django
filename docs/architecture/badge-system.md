@@ -127,7 +127,7 @@ member must meet them — see the `ConceptBundle` docstring in `trophies/models.
 | `trophies/services/collection_service.py` | The hunter's Collection wall + `closest_badge` |
 | `trophies/services/badge_coverage_service.py` | Curator audit: games missing from a series' stages. `series_candidates()` is THE definition of a series' games (audit + stage generator) |
 | `trophies/services/badge_stage_service.py` | `generate_badge_stages`: plans/writes one stage per origin game |
-| `trophies/services/developer_family_service.py` | A developer badge's studio family (`developer_family_ids`), its developer credits, and which studio a game is filed under (`filing_studio`) |
+| `trophies/services/developer_family_service.py` | A developer badge's studio family (`developer_family_ids`), its developer credits, and which studio a game or stage is filed under (`filing_studio`, `concepts_filing_studio`). Shared by the audit, the stage generator and the badge page's studio sections |
 | `trophies/management/commands/evaluate_badges.py` | The only runner: one hunter, `--all`, `--series`, `--dry-run` |
 
 ## Entry points
@@ -311,6 +311,26 @@ Every game it reads is already loaded for the stage's cards, so it costs no quer
 `Stage.stage_icon` that two m2m signals kept as a copy of whichever concept came first, which made the icon
 arbitrary and made every stage edit (a duplicate, an append) fight the signal to keep a hand-set one. There
 is no way to hand-set an icon now: to change it, change the stage's games.
+
+**Developer badge pages split by studio.** On a developer badge (`is_developer_badge`), an edition whose
+stages span 2+ studios shows one ladder per filing studio: the developer first, then its studios A-Z, then
+"Other studios" for stages no family studio developed. A stage is filed as one unit over all its games,
+bundle members included, by `concepts_filing_studio`, the same rule `generate_badge_stages` orders by.
+
+- **Numbers run on across the sections**, in the order shown, and "Up next" follows that order. The
+  requirements tile grid stays one flat grid in the same order. Within a studio, the authored order holds.
+- **Retired stages keep their one fenced section**, labelled by studio inside it (owner's call: a fence per
+  studio would break up the live ladders and, on a dead edition, leave nothing but fences). The 2+ studio
+  test counts retired stages, so a studio whose only stages are retired is still named.
+- **Only the badge page pays for it**: `get_badge_detail(studio_sections=True)`. The medallion peek and the
+  collection modal leave it off. On a non-developer badge it costs nothing; on a developer badge, a few
+  small queries bounded by the studio family's depth and the badge's own games, never the family's
+  catalogue (`_stage_studios`).
+- **Two studios with the same name** (`Company.name` is not unique) get two adjacent sections with the same
+  header: they are filed by company, not by name.
+- **An `--append`ed stage moves into its studio on the page** even though its stage number is after the
+  last one, so on an appended badge the display order and the authored numbers differ.
+
 ## Management Commands
 
 | Command | Usage | Purpose |

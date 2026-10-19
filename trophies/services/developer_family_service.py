@@ -5,16 +5,22 @@ IGDB credits the studio that did the work (Rockstar North, Rockstar San Diego), 
 (Rockstar Games) is usually credited only as publisher, so a developer badge has to see the whole family
 rather than the one Company row on `BadgeSeries.developer`.
 
-Used by the nightly coverage audit (what is missing) and `generate_badge_stages` (what to build, ordered by
-filing studio). The badge detail page's planned per-studio sections are meant to file stages with the same
-`filing_studio`, so the generator's studio order and the page's sections agree.
+Used by the nightly coverage audit (what is missing), `generate_badge_stages` (what to build, ordered by
+filing studio) and the badge detail page's per-studio sections. The generator and the page file with the same
+`concepts_filing_studio`, so the generator's studio order and the page's sections agree.
 """
 
 from collections import Counter
 
 from django.db.models import Q
 
+from trophies.constants import BADGE_TYPE_DEVELOPER
 from trophies.models import Company, ConceptCompany
+
+
+def is_developer_badge(series):
+    """Does `series` file its stages by studio? A developer badge with a developer set."""
+    return series.badge_type == BADGE_TYPE_DEVELOPER and bool(series.developer_id)
 
 
 def developer_family_ids(company):
@@ -51,14 +57,17 @@ def developer_family_ids(company):
     return seen
 
 
-def family_developer_credits(family_ids):
-    """{concept_id: {company_id: company name}} for every family studio credited as DEVELOPER.
+def family_developer_credits(family_ids, concept_ids=None):
+    """{concept_id: {company_id: company name}} for every family studio credited as DEVELOPER, limited to
+    `concept_ids` when given (the badge page needs only its stages' games, not the family's whole catalogue).
 
     Querying ConceptCompany directly keeps "family company" and "is_developer" on the SAME row, so a game the
     umbrella only published (and an outside studio developed) has no entry. A row that is developer AND
     publisher (a studio that self-publishes) still counts; publish/port/support-only rows never do.
     """
     rows = ConceptCompany.objects.filter(company_id__in=family_ids, is_developer=True)
+    if concept_ids is not None:
+        rows = rows.filter(concept_id__in=concept_ids)
     credits = {}
     for concept_id, company_id, name in rows.values_list('concept_id', 'company_id', 'company__name'):
         credits.setdefault(concept_id, {})[company_id] = name
@@ -118,6 +127,15 @@ def filing_studio(studios, filing_map, developer):
     if developer_row in filed:
         return developer_row
     return min(filed, key=lambda row: (row[1].lower(), row[0]))
+
+
+def concepts_filing_studio(concept_ids, credits, filing_map, developer):
+    """`filing_studio` for a set of concepts filed as ONE unit (an origin game's versions, or a stage's games):
+    every family studio credited on any of them counts. `credits` is `family_developer_credits()`."""
+    studios = {}
+    for concept_id in concept_ids:
+        studios.update(credits.get(concept_id, {}))
+    return filing_studio(studios, filing_map, developer)
 
 
 def studio_sort_key(studio, developer):

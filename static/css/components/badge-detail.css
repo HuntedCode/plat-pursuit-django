@@ -616,6 +616,37 @@
 }
 @media (prefers-reduced-motion: reduce) { .bd-node { animation: none !important; } }
 
+/* Studio sections (developer badges spanning 2+ studios): one ladder per filing studio under a header.
+   The header's glyph sits in the NODE column and its name lines up with the cards' left edge, so it reads
+   as a chapter of the same spine rather than a new card. Each section is its own .bd-stages, so the
+   connector rail stops at a section's last stage instead of running through the next header. */
+.bd-studio__head { display: flex; align-items: center; gap: 18px; }   /* 34px glyph + 18 = the 52px gutter */
+/* A 1px ring on bg-1, lighter than the 2px stage nodes on purpose (the same weight as the retired header's
+   glyph): it marks a chapter of the spine without reading as one more stage. */
+.bd-studio__ico {
+    display: grid; place-items: center; width: 34px; height: 34px; flex: none; border-radius: 50%;
+    color: var(--pp-text-dim); background: var(--pp-bg-1); border: 1px solid var(--pp-border);
+}
+.bd-studio__ico svg { width: 16px; height: 16px; }
+.bd-studio__id { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 10px; row-gap: 2px; min-width: 0; }
+.bd-studio__name { font-family: var(--pp-font-display); font-weight: 800; font-size: 0.95rem; color: var(--pp-text); overflow-wrap: anywhere; }
+.bd-studio__meta { font-size: 0.72rem; font-weight: 700; color: var(--pp-text-mute); white-space: nowrap; }
+.bd-studio__meta .pp-tally { font-weight: 800; color: var(--pp-text-dim); }
+.bd-studio__meta .is-done, .bd-studio__meta .is-done .pp-tally { color: var(--pp-success); }
+/* Inside the retired fence: a quiet label per studio, aligned with the cards. */
+.bd-retired__studio {
+    margin: 14px 0 0 52px;
+    font-size: 0.68rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--pp-text-mute);
+}
+@media (max-width: 640px) {
+    /* Follow the slimmer mobile gutter (34px): a 28px glyph + 6. */
+    .bd-studio__head { gap: 6px; }
+    .bd-studio__ico { width: 28px; height: 28px; }
+    .bd-studio__ico svg { width: 13px; height: 13px; }
+    .bd-studio__name { font-size: 0.88rem; }
+    .bd-retired__studio { margin-left: 34px; }
+}
+
 /* Mobile stage journey: the ladder gutter + node shrink to reclaim horizontal space, the head tightens,
    and the tier dots + games pill stack into a right-aligned column -- all so the title gets more room. */
 @media (max-width: 640px) {

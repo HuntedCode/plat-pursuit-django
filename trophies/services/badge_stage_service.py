@@ -35,11 +35,10 @@ from dataclasses import dataclass, field
 from django.db import transaction
 from django.db.models import Max, Prefetch
 
-from trophies.constants import BADGE_TYPE_DEVELOPER
 from trophies.models import Concept, Stage
 from trophies.services.badge_coverage_service import covered_concept_ids, series_candidates
 from trophies.services.developer_family_service import (
-    developer_family_ids, filing_studio, studio_filing_map, studio_sort_key,
+    concepts_filing_studio, developer_family_ids, is_developer_badge, studio_filing_map, studio_sort_key,
 )
 
 _TITLE_MAX = Stage._meta.get_field('title').max_length
@@ -133,13 +132,6 @@ def _group_date(group):
     return min(dates) if dates else None
 
 
-def _group_studio(group, credits, filing_map, developer):
-    studios = {}
-    for concept in group.concepts:
-        studios.update(credits.get(concept.pk, {}))
-    return filing_studio(studios, filing_map, developer)
-
-
 def _existing_stage_by_origin(series_slug):
     """{origin key: (stage, bundled)} for the existing stage an uncovered concept of that origin should join.
 
@@ -194,10 +186,8 @@ def plan_stages(series, append=False):
         groups.setdefault(key, _OriginGroup(key)).concepts.append(concept)
 
     existing_by_origin = _existing_stage_by_origin(series.series_slug) if existing_count else {}
-    is_developer_badge = bool(series.badge_type == BADGE_TYPE_DEVELOPER and series.developer_id)
-    filing_map = (
-        studio_filing_map(series.developer, developer_family_ids(series.developer)) if is_developer_badge else {}
-    )
+    by_studio = is_developer_badge(series)
+    filing_map = studio_filing_map(series.developer, developer_family_ids(series.developer)) if by_studio else {}
 
     additions, new_stages = [], []
     for group in groups.values():
@@ -206,7 +196,8 @@ def plan_stages(series, append=False):
             title=_group_title(group),
             concepts=group.concepts,
             studio=(
-                _group_studio(group, credits, filing_map, series.developer) if is_developer_badge else None
+                concepts_filing_studio([c.pk for c in group.concepts], credits, filing_map, series.developer)
+                if by_studio else None
             ),
         )
         if group.key in existing_by_origin:
@@ -215,10 +206,10 @@ def plan_stages(series, append=False):
         else:
             new_stages.append((group, planned))
 
-    if is_developer_badge:
-        def by_studio(gp):
+    if by_studio:
+        def studio_order(gp):
             return (studio_sort_key(gp[1].studio, series.developer), gp[1].title.lower(), str(gp[0].key))
-        new_stages.sort(key=by_studio)
+        new_stages.sort(key=studio_order)
     else:
         def chronological(gp):
             date = _group_date(gp[0])
