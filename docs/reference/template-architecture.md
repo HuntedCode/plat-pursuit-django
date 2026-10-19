@@ -133,7 +133,7 @@ Defined in `trophies/mixins.py`:
 
 | Mixin | Purpose | Behavior |
 |-------|---------|----------|
-| `PremiumRequiredMixin` | Enforce premium membership | Redirects non-premium to `beta_access_required` |
+| `PremiumRequiredMixin` | Enforce premium membership | Redirects non-premium to `beta_access_required`. Unused (2026-10): while no beta runs, the page says "No betas running right now". Give the page its beta's copy back when a beta adopts the mixin |
 | `StaffRequiredMixin` | Staff gate for page views | Unauthenticated to login, non-staff to home |
 | `StaffRequiredAPIMixin` | Staff gate for JSON APIs | Returns 401/403 JSON responses |
 | `RecapSyncGateMixin` | Gate recap until sync complete | Shows gated template if no profile or not synced |
