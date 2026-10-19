@@ -54,10 +54,7 @@ view for a fixed-size blob of geometry, and leaving the page one `{% templatetag
                         Every finished run. Still going?
                         <a href="{% url 'challenges' %}" class="link link-hover">See what is in flight</a>.
                     </p>
-                    <button type="button" class="pp-edhint mt-2" data-ctut-open="challenges-intro">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
-                        How Challenges work
-                    </button>
+                    {% include 'challenges/partials/_browse_header_actions.html' %}
                 </div>
 
                 <div class="text-right flex items-baseline gap-1 whitespace-nowrap md:block shrink-0">
