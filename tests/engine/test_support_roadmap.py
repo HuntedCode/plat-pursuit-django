@@ -213,3 +213,9 @@ def test_the_band_sits_inside_the_pitch(client):
     body = _flat(client, 'support_hub')
 
     assert body.index('data-sup-road') < body.index('data-sup-paid')
+
+
+def test_shipped_features_leave_the_roadmap():
+    # Challenges went public and Game Lists shipped (2026-10); the roadmap only says what is still to come.
+    keys = {f['key'] for f in ROADMAP_FEATURES}
+    assert not keys & {'challenges', 'lists'}
