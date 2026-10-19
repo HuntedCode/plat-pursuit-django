@@ -246,8 +246,8 @@ def _badge_items(client, q):
 def test_site_suggest_badge_suggests_one_row_per_series(client):
     # A series has one edition per platform group, but one page (badge_detail is keyed on series_slug).
     series = BadgeSeriesFactory(name='Trophy Titan', series_slug='trophy-titan')
-    GroupBadgeFactory(series=series, platform_group=PlatformGroupFactory(key='legacy'))
-    GroupBadgeFactory(series=series, platform_group=PlatformGroupFactory(key='ultra-hd'))
+    GroupBadgeFactory(series=series, platform_group=PlatformGroupFactory(key='titan-a'))
+    GroupBadgeFactory(series=series, platform_group=PlatformGroupFactory(key='titan-b'))
     items = _badge_items(client, 'trophy titan')
     assert len(items) == 1
     assert items[0]['url'] == reverse('badge_detail', kwargs={'series_slug': 'trophy-titan'})
@@ -317,17 +317,21 @@ def test_site_suggest_user_badge_reads_community_and_wears_the_submitters_avatar
     GroupBadgeFactory(series=BadgeSeriesFactory(name='Fan Made', badge_type='user', submitted_by=author))
     GroupBadgeFactory(series=BadgeSeriesFactory(name='Fan Bare', badge_type='user',
                                                 submitted_by=ProfileFactory(avatar_url='')))
-    items = {i['label']: i for i in _badge_items(client, 'fan ')}
+    items = {i['label']: i for i in _badge_items(client, 'fan')}
 
+    assert set(items) == {'Fan Made', 'Fan Bare'}
     assert items['Fan Made']['sublabel'] == 'Community'   # the Collection's word, not the raw "User"
     assert items['Fan Made']['image'] == 'https://cdn.example/author.png'
     assert items['Fan Bare']['image'] == ''               # no avatar either: the glyph
 
 
 def test_site_suggest_badges_stop_at_five_sorted_ignoring_case(client):
-    for name in ('cap e', 'Cap B', 'cap a', 'Cap D', 'cap c', 'Cap F'):
+    # 'Cap A' and 'cap a' differ only in case, so ignoring case they tie and the older row wins. A
+    # case-aware sort decides the tie itself (en_US puts lowercase first, C puts capitals before every
+    # lowercase letter), and the other letters catch a C collation.
+    for name in ('Cap A', 'cap a', 'cap e', 'Cap B', 'Cap D', 'cap c', 'Cap F'):
         GroupBadgeFactory(series=BadgeSeriesFactory(name=name))
-    assert [i['label'] for i in _badge_items(client, 'cap')] == ['cap a', 'Cap B', 'cap c', 'Cap D', 'cap e']
+    assert [i['label'] for i in _badge_items(client, 'cap')] == ['Cap A', 'cap a', 'Cap B', 'cap c', 'Cap D']
 
 
 def test_site_suggest_badge_without_art_falls_back_to_the_glyph(client):

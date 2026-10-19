@@ -310,7 +310,7 @@ document.addEventListener('DOMContentLoaded', () => {
         a.id = 'navsearch-opt-' + i;
         a.setAttribute('role', 'option');
 
-        // Leading media: real artwork when we have it (game/franchise cover, badge medallion,
+        // Leading media: real artwork when we have it (game/franchise cover, badge art,
         // hunter avatar), else the per-type glyph.
         const art = item.image || (type === 'profile' ? item.avatar_url : '');
         if (art) { a.appendChild(thumb(art)); }
