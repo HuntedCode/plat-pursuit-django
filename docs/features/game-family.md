@@ -177,9 +177,9 @@ since the admin is explicitly going outside IGDB's model.
 - **Concept.absorb()**: migrates family FK from `other` to `self` if `self`
   has no family but `other` does. The GameFamilyProposal M2M branch that
   used to live here was removed in Phase 2.6.
-- **Badge Stage system**: Stages can reference GameFamily for cross-gen
-  badge grouping (unchanged by Phase 2.6 — the API is the same; only the
-  data population changed).
+- **Badge Stage system**: `Stage` has no family field. `generate_badge_stages`
+  uses the family as its "origin game" key, building one stage per family
+  (see `trophies/services/badge_stage_service.py`).
 - **Sync pipeline**: `_apply_enrichment` is the single point of population.
   `refresh_match` handles IGDB-side id merges. `approve_match` fires the
   same hook when admin resolves a pending match.

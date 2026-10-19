@@ -125,7 +125,9 @@ member must meet them — see the `ConceptBundle` docstring in `trophies/models.
 | `trophies/services/badge_adapters.py` | Side effects: titles, events, the Discord announcement |
 | `trophies/services/badge_leaderboards.py` | All board reads ("Lane B") |
 | `trophies/services/collection_service.py` | The hunter's Collection wall + `closest_badge` |
-| `trophies/services/badge_coverage_service.py` | Curator audit: games missing from a series' stages |
+| `trophies/services/badge_coverage_service.py` | Curator audit: games missing from a series' stages. `series_candidates()` is THE definition of a series' games (audit + stage generator) |
+| `trophies/services/badge_stage_service.py` | `generate_badge_stages`: plans/writes one stage per origin game |
+| `trophies/services/developer_family_service.py` | A developer badge's studio family (`developer_family_ids`), its developer credits, and which studio a game is filed under (`filing_studio`) |
 | `trophies/management/commands/evaluate_badges.py` | The only runner: one hunter, `--all`, `--series`, `--dry-run` |
 
 ## Entry points
@@ -286,6 +288,14 @@ present on the target slug is SKIPPED and named in the message rather than renum
 quietly produce a stage list that is not the one the curator copied. The slug is re-slugified on the way
 in, because `SlugField` accepts uppercase and `FromSoft` would save fine and then join to nothing.
 
+**Stages can be generated.** For franchise, series and developer badges the stage list follows a formula
+(one stage per origin game, oldest first or by studio), so `generate_badge_stages <series_slug>` builds it
+from the series' franchise/collection/developer and the curator tweaks from there. It reads the same
+`series_candidates()` the nightly audit checks, so a generated badge audits clean, and `--append` closes an
+audit gap, except one whose origin sits in a bundle stage, which it lists for a hand edit instead. Bundles
+are never generated. See
+[management-commands](../guides/management-commands.md) and `trophies/services/badge_stage_service.py`.
+
 `stage_icon` is copied and then re-derived: it is a denorm of the first concept's cover, maintained by
 `auto_populate_stage_icon`, and setting the copy's concepts fires that signal. The copy is what preserves
 a hand-set icon on a stage with no concepts to re-derive from, the one case the signal never touches.
@@ -296,6 +306,7 @@ a hand-set icon on a stage with no concepts to re-derive from, the one case the 
 |---|---|---|
 | `evaluate_badges` | `<username>`, `--all`, `--series <slug>`, `--dry-run`, `--compare-legacy` | The runner. Nightly `--all` is the reconcile that keeps every figure honest |
 | `audit_badge_coverage` | `--dry-run`, `--always` | Emails franchise/collection/developer series that are missing games (developer = studio + subsidiaries + former identities, developed credits only), plus developer series pinned to a renamed company |
+| `generate_badge_stages` | `<series_slug>`, `--append`, `--dry-run` | Builds a series' stages, one per origin game (see [management-commands](../guides/management-commands.md)) |
 | `convert_series_to_groups` | see `--help` | Cutover seeding: builds `BadgeSeries` + `GroupBadge` from the legacy rows |
 
 ## Related Docs
