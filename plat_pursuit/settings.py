@@ -635,36 +635,33 @@ LOGGING = {
             "filters": ["suppress_bot_magnet_405"],
         },
     },
+    # The root owns the one handler. Third-party libraries inherit WARNING, so their INFO
+    # chatter stays out; our own loggers below opt into INFO and propagate up to it. Before
+    # this, only the listed names had a handler and every other logger (core.*, trophies.*,
+    # notifications.*, ...) fell to Python's last-resort handler: INFO silently dropped,
+    # errors printed unformatted to stderr.
+    "root": {
+        "handlers": ["console"],
+        "level": "WARNING",
+    },
     "loggers": {
-        "psn_api": {
-            "handlers": ["console"],
-            "level": "INFO",
-            "propagate": False,
+        # Our code: every top-level logger name it uses. Adding a new app or a new named
+        # logger? Add it here, or its INFO lines vanish (tests/test_logging_config.py fails).
+        **{
+            name: {"level": "INFO"}
+            for name in (
+                "api", "art_reveal", "challenges", "core", "deferred_notifications",
+                "fundraiser", "milestones", "notifications", "plat_pursuit", "psn_api",
+                "trophies", "users",
+            )
         },
         "django": {
             "handlers": ["console"],
             "level": "INFO",
             "propagate": False,
         },
-        'storages': {
-            'handlers': ['console'],
-            'level': 'ERROR',
-            'propagate': False,
-        },
-        'users': {
-            'handlers': ['console'],
-            'level': 'INFO',
-            'propagate': False,
-        },
-        'plat_pursuit': {
-            'handlers': ['console'],
-            'level': 'INFO',
-            'propagate': False,
-        },
-        'milestones': {
-            'handlers': ['console'],
-            'level': 'INFO',
-            'propagate': False,
+        "storages": {
+            "level": "ERROR",
         },
     },
 }
