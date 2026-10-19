@@ -275,3 +275,51 @@ def test_query_count_invariant_across_size(client):
     big = _q({'query': 'Big'})
 
     assert small == big   # 4x the tiles, same query count -> no per-tile cover/logo/country N+1
+
+
+# ── Badge series filter (grouping-badge system) ───────────────────────────────────────────────────────────
+
+def _badge_series(slug, name, *, live=True, concepts=()):
+    from tests.factories import BadgeSeriesFactory, GroupBadgeFactory, StageFactory
+    series = BadgeSeriesFactory(series_slug=slug, name=name)
+    GroupBadgeFactory(series=series, is_live=live)
+    stage = StageFactory(series_slug=slug, stage_number=1)
+    stage.concepts.add(*concepts)
+    return series
+
+
+def test_badge_series_dropdown_lists_series_with_a_live_edition(client):
+    # It read the retired legacy Badge model, so on a site with only grouping badges it offered nothing.
+    _badge_series('rockstar-badge', 'Rockstar Games')
+    _badge_series('dormant-badge', 'Dormant Series', live=False)
+
+    content = client.get(reverse('companies_list')).content.decode()
+
+    assert '<option value="rockstar-badge" >Rockstar Games</option>' in content
+    assert 'dormant-badge' not in content
+
+
+def test_badge_series_filter_keeps_companies_with_a_game_in_that_series(client):
+    north = _company('Rockstar North', 'rockstar-north')
+    in_badge = _link(north, 'Grand Theft Auto V')
+    other = _company('Elsewhere Studio', 'elsewhere-studio')
+    _link(other, 'Unrelated Game')
+    _badge_series('rockstar-badge', 'Rockstar Games', concepts=[in_badge])
+
+    content = client.get(reverse('companies_list'), {'badge_series': 'rockstar-badge'}).content.decode()
+
+    assert 'Rockstar North' in content
+    assert 'Elsewhere Studio' not in content
+
+
+def test_a_badge_series_that_is_not_live_is_refused_not_a_500(client):
+    # The choices are the live series, so a dormant or legacy slug fails form validation: the page still
+    # renders, unfiltered, as every other choice filter on this form does with a bad value.
+    a = _company('Alpha Studio', 'alpha-studio')
+    _link(a, 'Alpha Game')
+    _badge_series('dormant-badge', 'Dormant Series', live=False)
+
+    resp = client.get(reverse('companies_list'), {'badge_series': 'dormant-badge'})
+
+    assert resp.status_code == 200
+    assert 'Alpha Studio' in resp.content.decode()

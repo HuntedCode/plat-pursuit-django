@@ -39,13 +39,17 @@ Three notable departures from the franchise pattern, each driven by what compani
 
 ### Browse Page Query
 
-[`CompanyListView.get_queryset`](../../trophies/views/company_views.py) runs one annotated query:
+[`CompanyListView.get_queryset`](../../trophies/views/company_views.py) reads **stored columns**, not live aggregates. Since 2026-08-31 the nightly `recompute_tag_covers` (03:45 UTC) fills them; the live correlated subqueries they replaced ran for every company row on the paginator count, the page and every scroll fetch.
 
-- `game_count` — distinct concepts (IGDB-unified games). This is what the card label "X games" means to users.
-- `version_count` — distinct Games (individual PSN trophy lists). A game on both PS4 and PS5 counts as 2 versions of 1 game.
-- Three cover-art subqueries (`representative_title_image`, `representative_igdb_cover_id`, `representative_title_icon`) ordered newest-first, built via `game_grouping_service.representative_*_subquery` factories so they share code with franchise pages.
+| Column | Meaning |
+|---|---|
+| `game_count` | Distinct IGDB ids across the company's links. What the card's "X games" means |
+| `version_count` | Distinct Games (PSN trophy lists). A game on PS4 and PS5 is 2 versions of 1 game |
+| `representative_game` | The tile's cover game, read through one `select_related` |
 
-Filters from `CompanySearchForm` then layer on: text search on name, role checkboxes, country (ISO numeric dropdown populated from companies that actually have a country recorded), platform, genres, badge series. Sort options include alphabetical, most/fewest games, highest avg rating, most players, most plats earned.
+The page lists only companies with `version_count > 0`. **A company enriched today therefore appears after the next nightly run**, not when its game is enriched. On dev, where the nightly does not run, run `python manage.py recompute_tag_covers` after adding games, or the browse page stays empty of new companies.
+
+Filters from `CompanySearchForm` then layer on: text search on name, role checkboxes, country (ISO numeric dropdown populated from companies that actually have a country recorded), platform, genres, badge series. The badge series dropdown lists series with a live edition (`BadgeSeries` with a live `GroupBadge`, the same set the badge pages serve) and keeps companies with a game on one of that series' stages. Sort options include alphabetical, most/fewest games (the stored `game_count`), highest avg rating, most players, most plats earned (live `Subquery` sorts, below).
 
 ### Browse Filter Performance
 
@@ -79,6 +83,7 @@ Anonymous users (or users without a linked profile) get `user_progress_stats = N
 
 ## Gotchas and Pitfalls
 
+- **Company slugs are slugified and unique.** IGDB slugs used to be stored as sent; one with characters the `<slug:>` converter rejects raised `NoReverseMatch` wherever that company was linked, which takes down the whole page doing the linking, and the column was not unique, so a duplicate 500'd the company page itself. `IGDBService._company_slug` now slugifies on every write (IGDB slug, else name, else `company-<igdb id>`); on a clash with another company it tries `-<igdb id>` appended, then `company-<igdb id>`. A company IGDB sends with no slug now takes its slugified name on its next refresh rather than keeping `company-<igdb id>` (IGDB normally sends one); migration `0343` cleaned existing rows and `0344` added the unique constraint. Write a Company's slug through that helper, never from the raw IGDB payload.
 - **Don't add "Developer" / "Publisher" badges to the page.** Users don't care about IGDB's taxonomy — they care about the games. The role is the section header, not a chip on every card.
 - **Country codes are ISO 3166-1 numeric, not alpha-2 or name.** IGDB stores `Company.country` as integers like 840 (US) and 392 (Japan). Never compare against a string name or alpha-2 directly — use `country_info()` / `country_display()` from `trophies.util_modules.countries`. Unknown codes return empty, so the template must tolerate that (it does via the `{% if object.country_display %}` guard).
 - **Flag emojis are derived at call time, not stored.** The alpha-2 code in the country table is the source of truth; the emoji is `chr(0x1F1E6 + ord(c) - ord('A'))` for each letter. This works on every modern OS/browser via Unicode regional indicator symbols. Don't store the emoji as a field — it'd double the memory footprint for zero gain.

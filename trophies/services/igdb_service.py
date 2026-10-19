@@ -1,3 +1,4 @@
+import itertools
 import logging
 import re
 import time
@@ -2298,6 +2299,69 @@ class IGDBService:
                 logger.warning(f'Duplicate ConceptCompany for concept={concept.pk}, company={company.pk}')
 
     @classmethod
+    def _company_slug(cls, raw_slug, name, igdb_id):
+        """A URL-safe, unique slug for the Company with `igdb_id`.
+
+        Some IGDB slugs carry characters the `<slug:>` URL converter rejects, which raised NoReverseMatch
+        wherever that company page was linked. So the IGDB slug goes through slugify() (idempotent for clean
+        ones), falling back to the name, then to `company-<id>`. `Company.slug` is unique: the first
+        candidate no OTHER company holds wins (the slug, `-<igdb id>` appended, `company-<igdb id>`: the same
+        first three as migration 0343), so a refresh keeps the slug the migration gave it. The company's own
+        row never counts as a clash. One query on the normal path.
+        """
+        from trophies.models import Company
+        max_length = Company._meta.get_field('slug').max_length
+
+        def fit(slug, suffix=''):
+            # A cut can leave a trailing separator, which slugify would not produce.
+            return slug[:max_length - len(suffix)].rstrip('-_') + suffix
+
+        base = fit(slugify(raw_slug or '') or slugify(name or '') or f'company-{igdb_id}')
+        candidates = [base, fit(base, f'-{igdb_id}'), f'company-{igdb_id}']
+        taken = set(
+            Company.objects.filter(slug__in=candidates).exclude(igdb_id=igdb_id).values_list('slug', flat=True)
+        )
+        free = next((slug for slug in candidates if slug not in taken), None)
+        if free is not None:
+            return free
+        # Practically unreachable: another company holds all three. Keep this company's own `company-<id>-N`
+        # (0343 may have given it `company-<igdb id>-<pk>`) rather than move its URL on every refresh.
+        prefix = f'company-{igdb_id}-'
+        own = Company.objects.filter(igdb_id=igdb_id, slug__startswith=prefix).values_list('slug', flat=True).first()
+        if own:
+            return own
+        taken = set(
+            Company.objects.filter(slug__startswith=prefix).exclude(igdb_id=igdb_id).values_list('slug', flat=True)
+        )
+        return next(f'{prefix}{n}' for n in itertools.count(2) if f'{prefix}{n}' not in taken)
+
+    @classmethod
+    def _upsert_company(cls, igdb_id, raw_slug, name, defaults, *, update):
+        """`update_or_create` (or `get_or_create`) a Company with a unique slug, retrying once.
+
+        The slug is checked, then written, so two enrichments creating clashing companies at once (or two
+        creating the SAME company) can both pass the check and one hits the unique constraint. Django's
+        get_or_create / update_or_create already write inside their own savepoint, so the failure does not
+        poison a surrounding transaction; the retry re-reads, then finds the company the other run made or
+        picks the next free slug. Without it the IntegrityError escaped the live enrichment path after the
+        concept's old enrichment was already wiped.
+
+        The slug is passed as a callable: Django resolves it only when it writes the row, so a get_or_create
+        that finds the company (the common parent case) never pays for the slug query."""
+        from trophies.models import Company
+        method = Company.objects.update_or_create if update else Company.objects.get_or_create
+        for attempt in range(2):
+            try:
+                company, _ = method(
+                    igdb_id=igdb_id,
+                    defaults={**defaults, 'slug': lambda: cls._company_slug(raw_slug, name, igdb_id)},
+                )
+                return company
+            except IntegrityError:
+                if attempt:
+                    raise
+
+    @classmethod
     def _get_or_create_company(cls, company_data):
         """Get or create a Company record from IGDB company data.
 
@@ -2314,12 +2378,9 @@ class IGDBService:
         parent = None
         parent_data = company_data.get('parent')
         if isinstance(parent_data, dict) and parent_data.get('id'):
-            parent, _ = Company.objects.get_or_create(
-                igdb_id=parent_data['id'],
-                defaults={
-                    'name': parent_data.get('name', f'Company {parent_data["id"]}'),
-                    'slug': parent_data.get('slug', f'company-{parent_data["id"]}'),
-                },
+            parent = cls._upsert_company(
+                parent_data['id'], parent_data.get('slug'), parent_data.get('name'),
+                {'name': parent_data.get('name', f'Company {parent_data["id"]}')}, update=False,
             )
 
         # Parse start_date from IGDB timestamp
@@ -2348,7 +2409,6 @@ class IGDBService:
 
         defaults = {
             'name': company_data.get('name', f'Company {igdb_id}'),
-            'slug': company_data.get('slug', f'company-{igdb_id}'),
             'description': company_data.get('description', ''),
             'country': company_data.get('country'),
             'logo_image_id': logo_image_id,
@@ -2367,11 +2427,9 @@ class IGDBService:
             if changed_company:
                 defaults['changed_company'] = changed_company
 
-        company, created = Company.objects.update_or_create(
-            igdb_id=igdb_id,
-            defaults=defaults,
+        return cls._upsert_company(
+            igdb_id, company_data.get('slug'), company_data.get('name'), defaults, update=True,
         )
-        return company
 
     @classmethod
     def _update_concept_fields(cls, concept, igdb_data):
