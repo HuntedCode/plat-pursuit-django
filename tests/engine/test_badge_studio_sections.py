@@ -6,6 +6,8 @@ developed), filed by the same rule `generate_badge_stages` orders by. Stage numb
 sections. Retired stages keep their one fenced section, labelled by studio inside it. The requirements
 tile grid stays flat, in the same order.
 """
+import re
+
 import pytest
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
@@ -308,6 +310,25 @@ def test_the_page_renders_a_header_per_studio_and_a_label_per_retired_run(client
     # The tile jump anchors still run 1..N in display order: the developer's stage is Stage 1.
     north_header = html.index('bd-studio__link">Rockstar North')
     assert html.index('id="bd2-stage-rs-render-u-1"') < north_header < html.index('id="bd2-stage-rs-render-u-2"')
+
+
+def test_the_studio_headings_sit_under_the_editions_own_h2(client, rockstar):
+    # The studio and retired headings are h3s, and the edition panel had no h2 of its own, so in the
+    # outline they nested under the h2 before them: "Rarity & Community". The requirements line is now
+    # the panel's h2.
+    series = _badge('rs-outline', rockstar['dev'])
+    _stage('rs-outline', 1, rockstar['north'])
+    _stage('rs-outline', 2, rockstar['dev'])
+    _stage('rs-outline', 3, rockstar['sd'], obtainable=False)
+
+    html = client.get(f'/badges/{series.series_slug}/').content.decode()
+    page = html[html.index('<h1'):]
+    levels = [int(n) for n in re.findall(r'<h([1-6])[\s>]', page)]
+
+    for h3 in ('<h3 class="bd-studio__name"', '<h3 class="bd-retired__title"'):
+        at = page.index(h3)
+        assert page.startswith('<h2 class="bd-req__ask"', page.rfind('<h2', 0, at)), h3
+    assert [(a, b) for a, b in zip(levels, levels[1:]) if b > a + 1] == [], 'a heading level is skipped'
 
 
 def test_a_signed_in_hunter_sees_each_studios_cleared_count(client, rockstar):

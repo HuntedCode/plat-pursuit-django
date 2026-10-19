@@ -588,14 +588,6 @@
 }
 .bd-node svg { width: 16px; height: 16px; }
 .bd-node--done { background: var(--pp-success); border-color: var(--pp-success); color: #06140d; }
-/* The done node's check DRAWS itself as its stage scrolls in -- reuses the shared ppDrawIn keyframe
-   (components/motion.css); pathLength="1" on the polyline normalizes the dash. Gated on the stage reveal
-   (.is-inview) and delayed a beat so the stage rises first, THEN the check ticks. Reduced-motion / pre-
-   reveal / no-JS: the check is drawn solid (dashoffset 0). */
-.bd-node--done svg * { stroke-dasharray: 1; }
-@media (prefers-reduced-motion: no-preference) {
-    .bd-stages--armed.is-inview .bd-stage--done .bd-node--done svg * { animation: ppDrawIn 0.5s var(--pp-ease, ease) 0.28s both; }
-}
 .bd-node--next {
     border-color: var(--pp-primary); color: var(--pp-primary);
     /* oklab: barely distinguishable at 12% (rgb 45,60,74 vs 42,62,70), corrected anyway so the rule
@@ -752,21 +744,6 @@ a.bd-studio__ico:hover { box-shadow: 0 0 0 2px color-mix(in oklab, var(--pp-prim
 #badge-stats-modal.is-closing:not([hidden]) .pp-detail-modal__scrim,
 #badge-contract-modal.is-closing:not([hidden]) .pp-detail-modal__scrim { animation: ppDetailScrimOut 0.22s ease forwards; }
 
-/* Stage-stack reveal: settles in as one set (reuses the shipped ppRevealIn). Fires when the journey scrolls
-   INTO view (JS adds .is-inview) rather than on load -- it's usually below the fold, so a load-time reveal is
-   missed. Armed by JS (.bd-stages--armed) so no-JS keeps the stages visible; default-collapsed = headers only
-   animate, so it stays cheap; `both` fill holds the from-state so there's no FOUC once armed. */
-@media (prefers-reduced-motion: no-preference) {
-    .bd-stages--armed > .bd-stage { opacity: 0; }
-    .bd-stages--armed.is-inview > .bd-stage { animation: ppRevealIn 0.5s cubic-bezier(0.22, 1, 0.36, 1) both; }
-    .bd-stages--armed.is-inview > .bd-stage:nth-child(2) { animation-delay: 0.05s; }
-    .bd-stages--armed.is-inview > .bd-stage:nth-child(3) { animation-delay: 0.1s; }
-    .bd-stages--armed.is-inview > .bd-stage:nth-child(4) { animation-delay: 0.15s; }
-    .bd-stages--armed.is-inview > .bd-stage:nth-child(5) { animation-delay: 0.2s; }
-    .bd-stages--armed.is-inview > .bd-stage:nth-child(6) { animation-delay: 0.25s; }
-    .bd-stages--armed.is-inview > .bd-stage:nth-child(n+7) { animation-delay: 0.3s; }
-}
-
 /* ── Premium pass v2 ─────────────────────────────────────────────────────────
 
    V2.1 Tier-switch ignite: a one-shot tier-tinted glow bloom on the step that just became active (fades to
@@ -793,26 +770,9 @@ a.bd-studio__ico:hover { box-shadow: 0 0 0 2px color-mix(in oklab, var(--pp-prim
 .bd-gcard__ctr.is-loading { cursor: progress; }
 .bd-gcard__ctr.is-loading::after { animation: bdCtrSheen 0.9s var(--pp-ease) infinite; }
 
-/* V2.4 Landing flash: a one-shot cyan glow bloom around a stage card you JUST jumped to (from a requirement
-   tile), so the eye catches where it landed. z-index lifts it over the neighbouring cards' edges. */
-/* Landing flash: glow the whole stage CARD border when you jump to it from a requirement tile (fired AFTER
-   the card is revealed + expanded -- see the JS timing). A box-shadow TRANSITION, NOT a keyframe animation,
-   deliberately: the section already carries a lingering `animation: ppRevealIn ... both` from the reveal
-   rule (fill-mode never releases the slot), so a competing keyframe would never apply. box-shadow rides a
-   separate transition, unaffected. color-mix is fine here (not inside @keyframes). Fade-out uses the base
-   0.55s; the .is-landing rule's own 0.22s is the quicker fade-IN. */
-.bd-stage { transition: box-shadow 0.55s var(--pp-ease); }
-.bd-stage.is-landing {
-    --land-ring: color-mix(in oklab, var(--pp-primary) 55%, transparent);
-    --land-halo: color-mix(in oklab, var(--pp-primary) 42%, transparent);
-    z-index: 3;
-    box-shadow: 0 0 0 2px var(--land-ring), 0 0 26px 5px var(--land-halo);
-    transition: box-shadow 0.22s var(--pp-ease);
-}
 @media (prefers-reduced-motion: reduce) {
     .bd-tierstep.is-igniting::after,
     .bd-gcard__ctr.is-loading::after { animation: none; }
-    .bd-stage, .bd-stage.is-landing { transition: none; }
 }
 
 /* ── Sticky mini-header: a condensed proxy that pins when the full header scrolls under the chrome ── */

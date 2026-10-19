@@ -18,7 +18,7 @@ badge" and they are explicitly not steps -- the section they sit in says so once
     order). A retired stage gets a struck-circle instead of a number: it has none, and a blank node would
     read as a rendering fault. {% endcomment %}
     <span class="bd-node bd-node--{% if s.completion_state == 'complete' %}done{% elif retired %}retired{% elif s.is_next %}next{% else %}todo{% endif %}{% if s.completion_state == 'complete' and s.is_mastered %} bd-node--mastered{% endif %}" aria-hidden="true">
-        {% if s.completion_state == 'complete' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12" pathLength="1"></polyline></svg>{% elif retired %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><line x1="5.6" y1="5.6" x2="18.4" y2="18.4"></line></svg>{% else %}{{ s.display_number }}{% endif %}
+        {% if s.completion_state == 'complete' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>{% elif retired %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><line x1="5.6" y1="5.6" x2="18.4" y2="18.4"></line></svg>{% else %}{{ s.display_number }}{% endif %}
     </span>
 
     {% comment %} Header = the collapse toggle. Default: the "up next" stage open, the rest collapsed. The JS
