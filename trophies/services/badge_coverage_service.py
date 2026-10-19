@@ -166,3 +166,34 @@ def audit_badge_coverage():
             })
 
     return findings
+
+
+def stale_developer_pins():
+    """Developer badge series pinned to a company IGDB has since renamed or merged into another.
+
+    Reported on its own, NOT as part of a coverage gap, because a stale pin is exactly what HIDES gaps: once
+    IGDB re-parents the studios onto the new identity, they leave the old name's tree (see
+    `developer_family_ids`), their new games stop being candidates, and the audit goes quiet instead of
+    flagging them. So the alert has to fire with zero missing games.
+
+    Returns a list (sorted by series name) of dicts:
+        {'series': BadgeSeries, 'developer': Company, 'current': Company, 'is_loop': bool}
+    `current` is the end of `developer.rename_chain()`. `is_loop` is True when the chain loops back on itself
+    in IGDB data, so there is no clean current identity to point at and the company records need a look.
+    """
+    pins = []
+    series_qs = (
+        BadgeSeries.objects
+        .filter(developer__changed_company__isnull=False)
+        .select_related('developer__changed_company')
+        .order_by(Lower('name'))
+    )
+    for series in series_qs:
+        current = series.developer.current_company
+        pins.append({
+            'series': series,
+            'developer': series.developer,
+            'current': current,
+            'is_loop': current.changed_company_id is not None,
+        })
+    return pins

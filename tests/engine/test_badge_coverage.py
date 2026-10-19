@@ -12,11 +12,15 @@ because franchise/collection/developer lived on the base badge and were inherite
 belong to the series and every edition works the same list -- so nothing here needs a GroupBadge.
 """
 
+from io import StringIO
+
 import pytest
 from django.core.management import call_command
 
 from trophies.models import ConceptFranchise, Franchise
-from trophies.services.badge_coverage_service import audit_badge_coverage, developer_family_ids
+from trophies.services.badge_coverage_service import (
+    audit_badge_coverage, developer_family_ids, stale_developer_pins,
+)
 from tests.factories import (
     BadgeSeriesFactory, CompanyFactory, ConceptBundleFactory, ConceptCompanyFactory,
     ConceptFactory, GameFactory, StageFactory,
@@ -361,6 +365,59 @@ def test_franchise_only_finding_has_no_credited_developers():
     assert audit_badge_coverage()[0]['credited_developers'] == {}
 
 
+def test_stale_pin_is_reported_with_zero_coverage_gaps():
+    # Two hops: the pin points at the END of the chain, not the next name.
+    current = CompanyFactory(name="Pin Now")
+    middle = CompanyFactory(name="Pin Then", changed_company=current)
+    old = CompanyFactory(name="Pin Was", changed_company=middle)
+    badge = _developer_badge("cov-pin-stale", old)
+
+    assert audit_badge_coverage() == []
+    assert stale_developer_pins() == [
+        {'series': badge, 'developer': old, 'current': current, 'is_loop': False},
+    ]
+
+
+def test_stale_pins_ignore_current_companies_and_non_developer_series():
+    _developer_badge("cov-pin-current", CompanyFactory(name="Pin Current"))
+    badge = BadgeSeriesFactory(series_slug="cov-pin-fran")
+    badge.franchise = _franchise(slug="cov-pin-fran-f")
+    badge.save()
+
+    assert stale_developer_pins() == []
+
+
+def test_stale_pin_on_a_rename_loop_is_flagged_as_a_loop():
+    a = CompanyFactory(name="Pin Loop A")
+    b = CompanyFactory(name="Pin Loop B", changed_company=a)
+    a.changed_company = b
+    a.save()
+    _developer_badge("cov-pin-loop", a)
+
+    [pin] = stale_developer_pins()
+    assert pin['is_loop'] is True
+
+
+def test_stale_pin_loop_detection_covers_self_loops_and_tails():
+    # A self-loop (A -> A) and a tail into a cycle (X -> A -> B -> A) both have no clean current name.
+    self_loop = CompanyFactory(name="Pin Self")
+    self_loop.changed_company = self_loop
+    self_loop.save()
+    a = CompanyFactory(name="Pin Ring A")
+    b = CompanyFactory(name="Pin Ring B", changed_company=a)
+    a.changed_company = b
+    a.save()
+    tail = CompanyFactory(name="Pin Tail", changed_company=a)
+    _developer_badge("cov-pin-self", self_loop)
+    _developer_badge("cov-pin-tail", tail)
+
+    pins = {p['developer'].id: p for p in stale_developer_pins()}
+
+    assert pins[self_loop.id]['is_loop'] is True
+    assert pins[tail.id]['is_loop'] is True
+    assert pins[tail.id]['current'] == b
+
+
 def test_collection_badge_flags_uncovered_member_via_any_link():
     # Every non-excluded linked concept is a collection member -- an
     # uncovered collection member must be flagged.
@@ -657,30 +714,82 @@ def test_command_email_lists_co_developers_and_leaves_franchise_gaps_unlabelled(
     assert 'developed by' not in franchise_line
 
 
-def test_command_email_flags_a_badge_pinned_to_a_former_identity(mailoutbox):
+def test_command_emails_a_stale_pin_even_with_no_gaps(mailoutbox):
+    # The rename case: the badge has NO missing games (a stale pin is what hides them), yet must alert.
     current = CompanyFactory(name="Now Studio")
     old = CompanyFactory(name="Was Studio", changed_company=current)
     _developer_badge("cov-dev-cmd-old", old)
-    gap = _concept_with_game("Was Studio Game")
+
+    call_command('audit_badge_coverage')
+
+    assert len(mailoutbox) == 1
+    msg = mailoutbox[0]
+    assert msg.subject == "[PlatPursuit] Badge coverage: 1 badge to repoint"
+    assert msg.body.startswith("1 developer badge needs its company checked.")
+    assert "repoint developer from Was Studio to Now Studio" in msg.body
+    assert "No coverage gaps found." in msg.body
+
+
+def test_command_subject_names_both_gaps_and_stale_pins(mailoutbox):
+    current = CompanyFactory(name="Both Now")
+    old = CompanyFactory(name="Both Was", changed_company=current)
+    _developer_badge("cov-dev-cmd-both", old)
+    gap = _concept_with_game("Both Was Game")
     ConceptCompanyFactory(concept=gap, company=old, is_developer=True)
 
     call_command('audit_badge_coverage')
 
-    assert (
-        "note: Was Studio is a former identity; point the badge at Now Studio "
-        "to also cover the studios under it."
-    ) in mailoutbox[0].body
+    msg = mailoutbox[0]
+    assert msg.subject == (
+        "[PlatPursuit] Badge coverage: 1 unassigned concept across 1 series; 1 badge to repoint"
+    )
+    # The repoint section leads the email, above the gaps.
+    assert msg.body.index("repoint developer from Both Was to Both Now") < msg.body.index("Both Was Game")
 
 
-def test_command_email_has_no_former_identity_note_for_a_current_company(mailoutbox):
-    umbrella = CompanyFactory(name="Present Studio")
-    _developer_badge("cov-dev-cmd-current", umbrella)
-    gap = _concept_with_game("Present Studio Game")
-    ConceptCompanyFactory(concept=gap, company=umbrella, is_developer=True)
+def test_command_pluralises_several_stale_pins(mailoutbox):
+    for i in range(2):
+        current = CompanyFactory(name=f"Plural Now {i}")
+        _developer_badge(f"cov-dev-cmd-plural-{i}", CompanyFactory(name=f"Plural Was {i}", changed_company=current))
 
     call_command('audit_badge_coverage')
 
-    assert 'former identity' not in mailoutbox[0].body
+    msg = mailoutbox[0]
+    assert msg.subject == "[PlatPursuit] Badge coverage: 2 badges to repoint"
+    assert msg.body.startswith("2 developer badges need their company checked.")
+
+
+def test_command_email_flags_a_rename_loop_instead_of_a_target(mailoutbox):
+    a = CompanyFactory(name="Loop One")
+    b = CompanyFactory(name="Loop Two", changed_company=a)
+    a.changed_company = b
+    a.save()
+    _developer_badge("cov-dev-cmd-loop", a)
+
+    call_command('audit_badge_coverage')
+
+    body = mailoutbox[0].body
+    assert "IGDB's rename chain for Loop One loops; check the company records" in body
+    assert "repoint developer" not in body
+
+
+def test_command_dry_run_with_a_stale_pin_prints_it_and_sends_no_email(mailoutbox):
+    current = CompanyFactory(name="Dry Now")
+    _developer_badge("cov-dev-cmd-dry", CompanyFactory(name="Dry Was", changed_company=current))
+    out = StringIO()
+
+    call_command('audit_badge_coverage', '--dry-run', stdout=out)
+
+    assert "repoint developer from Dry Was to Dry Now" in out.getvalue()
+    assert len(mailoutbox) == 0
+
+
+def test_command_sends_nothing_for_a_current_company_with_no_gaps(mailoutbox):
+    _developer_badge("cov-dev-cmd-current", CompanyFactory(name="Present Studio"))
+
+    call_command('audit_badge_coverage')
+
+    assert len(mailoutbox) == 0
 
 
 def test_command_sends_nothing_when_clean(mailoutbox):

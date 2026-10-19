@@ -295,7 +295,7 @@ a hand-set icon on a stage with no concepts to re-derive from, the one case the 
 | Command | Usage | Purpose |
 |---|---|---|
 | `evaluate_badges` | `<username>`, `--all`, `--series <slug>`, `--dry-run`, `--compare-legacy` | The runner. Nightly `--all` is the reconcile that keeps every figure honest |
-| `audit_badge_coverage` | `--dry-run`, `--always` | Emails franchise/collection/developer series that are missing games (developer = studio + subsidiaries + former identities, developed credits only) |
+| `audit_badge_coverage` | `--dry-run`, `--always` | Emails franchise/collection/developer series that are missing games (developer = studio + subsidiaries + former identities, developed credits only), plus developer series pinned to a renamed company |
 | `convert_series_to_groups` | see `--help` | Cutover seeding: builds `BadgeSeries` + `GroupBadge` from the legacy rows |
 
 ## Related Docs
