@@ -161,14 +161,12 @@ def test_duplicate_copies_every_field_and_both_qualifier_paths(client):
     source.concepts.add(standalone)
     bundle = ConceptBundle.objects.create(stage=source, label='PS3 Episodic', sort_order=3)
     bundle.concepts.set([episodic_a, episodic_b])
-    source.refresh_from_db()   # `concepts.add` re-derived stage_icon under us
 
     _duplicate(client, [source], 'fromsoft')
 
     copy = Stage.objects.get(series_slug='fromsoft', stage_number=2)
     assert copy.pk != source.pk
     assert copy.title == 'Bloodborne'
-    assert copy.stage_icon == source.stage_icon
     assert list(copy.concepts.all()) == [standalone]
 
     copied_bundle = copy.concept_bundles.get()
@@ -176,20 +174,6 @@ def test_duplicate_copies_every_field_and_both_qualifier_paths(client):
     assert copied_bundle.label == 'PS3 Episodic'
     assert copied_bundle.sort_order == 3
     assert set(copied_bundle.concepts.all()) == {episodic_a, episodic_b}
-
-
-def test_hand_set_icon_survives_on_a_stage_with_nothing_to_re_derive_from(client):
-    """`stage_icon` is normally derived from the first concept and refreshed by a signal, so the copy
-    gets the right icon for free -- EXCEPT on a stage with no concepts and no bundles, where the
-    signal never fires and a curator's hand-set icon is the only value there is."""
-    _owner(client)
-    source = _stage('soulsborne', 1)
-    Stage.objects.filter(pk=source.pk).update(stage_icon='https://example.test/hand-set.png')
-
-    _duplicate(client, [source], 'fromsoft')
-
-    copy = Stage.objects.get(series_slug='fromsoft', stage_number=1)
-    assert copy.stage_icon == 'https://example.test/hand-set.png'
 
 
 def test_originals_are_untouched(client):

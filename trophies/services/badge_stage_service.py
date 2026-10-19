@@ -21,7 +21,7 @@ nothing in the data says which concepts are episodes, so a fresh run puts them i
 ordinary concepts, where any ONE of them satisfies the stage.
 
 A series that already has stages is refused unless `append=True`. Appending only adds concepts: it never
-renames, renumbers, removes, or replaces the icon of what is there. An uncovered concept whose origin game already has a
+renames, renumbers or removes what is there. An uncovered concept whose origin game already has a
 stage (a new remaster of a game in stage 4) is ADDED to that stage, preferring a gating stage over the
 optional stage 0. When that stage holds the origin only inside a BUNDLE, nothing is added and the stage is
 reported for a curator instead: adding the concept directly would let it satisfy the stage on its own,
@@ -237,16 +237,8 @@ def write_stages(series, plan):
     """Write a `plan_stages` result in ONE transaction. Bundled additions are skipped (reported only).
 
     A stage is its concepts: a row committed without its `concepts.set()` would be a stage that gates on
-    nothing. `concepts.set()` / `.add()` fire `auto_populate_stage_icon`, which gives a NEW stage its icon
-    but would also re-derive an EXISTING stage's (overwriting a hand-set one). So every existing stage's icon
-    is snapshotted ONCE, before any add, and put back afterwards. Once, because several origins can join one
-    stage and the signal rewrites the shared in-memory Stage each time: re-reading it per add would "restore"
-    the icon the previous add derived. A stage that had no icon keeps whatever the add derived.
+    nothing.
     """
-    icons = {
-        planned.existing.pk: planned.existing.stage_icon
-        for planned in plan if planned.existing is not None and not planned.bundled
-    }
     with transaction.atomic():
         for planned in plan:
             if planned.bundled:
@@ -260,6 +252,3 @@ def write_stages(series, plan):
                 title=planned.title,
             )
             stage.concepts.set(planned.concepts)
-        for stage_pk, icon in icons.items():
-            if icon:
-                Stage.objects.filter(pk=stage_pk).update(stage_icon=icon)

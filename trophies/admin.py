@@ -1308,7 +1308,7 @@ class UserConceptRatingAdmin(admin.ModelAdmin):
 class StageInline(admin.TabularInline):
     model = Stage
     extra = 1
-    fields = ('stage_number', 'title', 'stage_icon', 'concepts')
+    fields = ('stage_number', 'title', 'concepts')
     autocomplete_fields = ['concepts']
 
 class ConceptBundleInlineFormSet(BaseInlineFormSet):
@@ -1425,14 +1425,9 @@ class StageAdmin(admin.ModelAdmin):
         megamix that reuses another series' stage list) means re-entering the same concept picks one
         stage at a time. The stages themselves are identical; only the slug they join on differs.
 
-        Everything that makes a stage a stage travels: number, title, icon, the standalone
-        concepts, and each ConceptBundle with its own members. Nothing is MOVED -- the originals
-        are untouched.
-
-        `stage_icon` is copied AND then recomputed: it is derived from the first concept
-        (`auto_populate_stage_icon`), and `concepts.set()` on the copy fires that signal. Copying it
-        first is what preserves a hand-set icon on a stage with no concepts to re-derive from, which
-        is the only case the signal never touches.
+        Everything that makes a stage a stage travels: number, title, the standalone concepts, and
+        each ConceptBundle with its own members (the icon is derived from those on the badge page, so
+        it follows). Nothing is MOVED -- the originals are untouched.
 
         A stage whose `(new slug, stage_number)` already exists is SKIPPED and named in the message
         rather than renumbered. Renumbering would quietly produce a stage list that does not match
@@ -1511,7 +1506,6 @@ class StageAdmin(admin.ModelAdmin):
                     series_slug=new_slug,
                     stage_number=stage.stage_number,
                     title=stage.title,
-                    stage_icon=stage.stage_icon,
                 )
                 copy.concepts.set(stage.concepts.all())
                 for bundle in stage.concept_bundles.all():

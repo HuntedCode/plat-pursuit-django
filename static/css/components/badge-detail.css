@@ -193,7 +193,7 @@
     transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
 }
 @media (hover: hover) { .bd-req__tile:hover { border-color: color-mix(in oklab, var(--tier-c) 45%, var(--pp-border)); color: var(--pp-text); } }
-.bd-req__tile-ico { width: 40px; height: 40px; border-radius: var(--pp-radius-sm); object-fit: cover; flex-shrink: 0; }
+.bd-req__tile-ico { width: 40px; height: 40px; border-radius: var(--pp-radius-sm); object-fit: cover; object-position: top; flex-shrink: 0; }
 .bd-req__tile-meta { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .bd-req__tile-num { font-size: 0.58rem; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; color: var(--pp-text-mute); }
 .bd-req__tile-name { font-size: 0.8rem; font-weight: 600; line-height: 1.15; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
@@ -426,7 +426,8 @@
 /* Stage art */
 .bd-stage__ico { width: 44px; height: 44px; border-radius: var(--pp-radius-md); overflow: hidden; border: 1px solid var(--pp-border); flex-shrink: 0; }
 .bd-stage--done .bd-stage__ico { border-color: color-mix(in oklch, var(--pp-success) 40%, transparent); }
-.bd-stage__ico img { width: 100%; height: 100%; object-fit: cover; }
+/* object-position: top keeps a portrait cover's logo in the square crop (CLAUDE.md game-art rule). */
+.bd-stage__ico img { width: 100%; height: 100%; object-fit: cover; object-position: top; }
 
 /* Identity: eyebrow over the title + a quiet stats caption. */
 .bd-stage__id { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 1px; }

@@ -238,6 +238,48 @@ def _stage_bundles(st, games_map, profile_games, ratings_map, contract_map) -> l
     return bundles
 
 
+def _version_date(game):
+    """A version's OWN release date for the stage-icon pick: its trusted IGDB first PlayStation release
+    (a PS4 remaster's 2015, not the 2001 original's), else the concept's PSN date. None when neither is known."""
+    match = getattr(game.concept, 'igdb_match', None)
+    igdb_date = match.igdb_first_release_date if match is not None and match.is_trusted else None
+    return igdb_date or game.concept.release_date
+
+
+def _stage_icon_url(obtainable, delisted, bundles, platforms, exclude_delisted) -> Optional[str]:
+    """The stage's icon, picked from its versions in this order (owner's call):
+
+    1. REAL cover art (`has_cover_art`) only. The icon is a picture of the game, so a delisted version's real
+       cover beats the generic PlayStation title icon. With no real art anywhere the stage gets NO icon, as
+       the stored icon it replaced never showed the placeholder (which would also crop badly in the square).
+    2. Still obtainable on this edition, by the SAME rule as the stage's own grid (`_display_playable`),
+       bundle members included, so a delisted episode cannot outrank a live game where delisted titles are
+       excluded.
+    3. Most recently released (`_version_date`), undated last, ties to the highest game id so the pick is
+       stable.
+
+    Derived at render time instead of stored: every game here is already loaded for the stage's cards, so
+    this costs no queries, and the icon can never drift from the stage's games the way a stored copy did
+    (it was set from whichever concept happened to come first, and re-derived on every edit).
+    """
+    versions = [(e['game'], True) for e in obtainable] + [(e['game'], False) for e in delisted]
+    for bundle in bundles:
+        for member in bundle['members']:
+            for e in member['games']:
+                versions.append((e['game'], _display_playable(e['game'], platforms, exclude_delisted)))
+
+    with_art = [(game, playable) for game, playable in versions if game.has_cover_art]
+    if not with_art:
+        return None
+
+    def rank(version):
+        game, playable = version
+        date = _version_date(game)
+        return (playable, date.timestamp() if date else float('-inf'), game.id)
+
+    return max(with_art, key=rank)[0].display_image_url or None
+
+
 def _display_playable(game, platforms, exclude_delisted) -> bool:
     """Does this game go in the stage's main grid, or in the collapsed "unobtainable / delisted" list?
 
@@ -333,7 +375,9 @@ def _group_journey(gb, result, catalog, games_map, profile_games, ratings_map, c
         state = 'complete' if (sr and sr.base_satisfied) else ('partial' if any_progress else 'todo')
         entry = {
             'stage': st, 'obtainable_games': obtainable, 'delisted_games': delisted,
-            'bundles': bundles, 'completion_state': state, 'is_next': False,
+            'bundles': bundles,
+            'icon_url': _stage_icon_url(obtainable, delisted, bundles, platforms, exclude_delisted),
+            'completion_state': state, 'is_next': False,
             'display_number': None,
             # Counted HERE, not in the template. `{{ a|length|add:b|length }}` is not valid Django -- a
             # filter argument cannot itself be filtered -- and it silently evaluated to 0, so every stage
