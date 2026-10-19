@@ -47,7 +47,7 @@ notification system this release -- so the tab is the feature, not decoration on
                 level as the number and the two competed.{% endcomment %}
                 <div class="text-right flex items-baseline gap-1 whitespace-nowrap md:block shrink-0">
                     <span class="pp-tally text-primary leading-none font-bold text-sm md:text-3xl">{{ list_count }}<span class="text-base-content/40">/{{ list_cap }}</span></span>
-                    <span class="text-[0.65rem] md:text-xs text-base-content/50 md:mt-1 md:block md:uppercase md:tracking-wider">lists</span>
+                    <span class="text-xs text-base-content/50 md:mt-1 md:block md:uppercase md:tracking-wider">lists</span>
                 </div>
             </div>
         </div>
@@ -69,7 +69,7 @@ notification system this release -- so the tab is the feature, not decoration on
     franchise list, the share picker), and that consistency is worth more than a generic toolbar
     convention. A reader who has learned where the switcher lives should find it in the same place
     on every page that has one.{% endcomment %}
-    <div class="flex items-center justify-between gap-3 mt-5 mb-3">
+    <div class="flex flex-wrap items-center justify-between gap-3 mt-5 mb-3">
         {% comment %}`aria-disabled`, NOT `disabled`. A truly disabled button takes no pointer events
         (so its title never renders as a tooltip) and leaves the tab order (so it can never be focused
         or announced) -- the at-cap explanation was unreachable by every route including the mouse.
@@ -78,17 +78,16 @@ notification system this release -- so the tab is the feature, not decoration on
 
         `.pp-cta`, the shared button primitive, rather than DaisyUI's `btn`: it carries the house
         glow-on-hover and focus ring, and it is what the modal's own actions use, so the button and
-        the thing it opens speak the same language. The label is hidden below `md` because this row
-        also holds the switcher, and two labelled controls do not fit at 375px -- which is why the
-        `aria-label` is unconditional, since `hidden` drops the span from the accessibility tree and
-        would leave the page's primary action announced as a bare "button".{% endcomment %}
-        <button type="button" class="pp-cta shrink-0" data-gl-open
-                aria-label="New list"{% if at_cap %} aria-disabled="true"{% endif %}>
+        the thing it opens speak the same language. LABELLED AT EVERY WIDTH, with a 44px touch height
+        (owner, 2026-10-18): icon-only on a phone, the page's primary action was easy to miss. The row
+        wraps, and the switcher keeps to the right (`ml-auto`) if it ever has to drop a line.{% endcomment %}
+        <button type="button" class="pp-cta min-h-11 shrink-0" data-gl-open
+                {% if at_cap %}aria-disabled="true"{% endif %}>
             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-            <span class="hidden md:inline">New list</span>
+            New list
         </button>
 
-        <div class="pp-switch" role="tablist" aria-label="Which lists to show" data-gl-scopes>
+        <div class="pp-switch ml-auto" role="tablist" aria-label="Which lists to show" data-gl-scopes>
             {% for value, label in scopes %}
             <a href="?scope={{ value }}"
                hx-get="{% url 'my_lists' %}?scope={{ value }}"
