@@ -1896,7 +1896,8 @@ def test_the_edit_control_never_states_a_state_it_does_not_keep():
 def test_the_header_card_holds_no_page_action(client):
     """Every other rebuilt header on the site is identity plus its headline number and nothing else.
     A button sharing the tally's slot sits at the same optical level as a display number and the two
-    compete -- which is why browse's "My lists" and My Lists' "New list" moved to their toolbars.
+    compete -- which is why My Lists' "New list" moved to its toolbar, and why browse's "My lists" sits in the
+    header's LEFT column, under the subtitle, rather than in the tally's slot.
 
     The detail page's actions are the exception ON PURPOSE: they act on the very thing the header
     describes, and the toolbar below is about the games. So they stay, in their own band with a rule
