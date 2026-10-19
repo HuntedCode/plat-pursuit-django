@@ -61,8 +61,8 @@ def _defined_names(css):
 
 def test_every_animation_reference_resolves_to_a_keyframe():
     """Checked against the whole components tree at once, because keyframes are shared ACROSS files --
-    `ppRevealIn` is used by two components and defined in a third. A per-file check would flag every
-    legitimate cross-file use, so the bundle is the only honest unit here.
+    `ppRevealIn` is used by many components and defined in another (motion.css). A per-file check would
+    flag every legitimate cross-file use, so the bundle is the only honest unit here.
     """
     css = '\n'.join(p.read_text(encoding='utf-8') for p in sorted(COMPONENTS.glob('*.css')))
     missing = sorted(_referenced_names(css) - _defined_names(css))
@@ -79,7 +79,7 @@ def test_the_shared_settle_in_keyframe_survives_the_build():
 
     Worth its own test because lightningcss is an active participant in this file's history: it silently
     drops frames containing `color-mix()`, and it rewrites units. A keyframe can be present in source and
-    absent (or gutted) in `output.css`, and the two consumers here would go static exactly as before.
+    absent (or gutted) in `output.css`, and its consumers would go static exactly as before.
     """
     out = OUTPUT_CSS.read_text(encoding='utf-8')
     assert '@keyframes ppRevealIn' in out, 'the settle-in keyframe did not survive the CSS build'
@@ -92,9 +92,8 @@ def test_the_shared_settle_in_keyframe_survives_the_build():
 
 @pytest.mark.parametrize('consumer, selector', [
     ('collection-gallery.css', '.pp-gallery.is-revealing .pp-gallery__card'),
-    ('badge-detail.css', '.bd-stages--armed.is-inview > .bd-stage'),
 ])
-def test_both_consumers_still_reference_the_shared_keyframe(consumer, selector):
+def test_named_consumers_still_reference_the_shared_keyframe(consumer, selector):
     """Named individually so that retiring one of these surfaces is a deliberate act. If a consumer goes
     away the keyframe may be able to go with it -- but that has to be noticed, which is the whole lesson
     of how it disappeared the first time: a file was deleted and nobody checked who was still using it.

@@ -7,10 +7,11 @@ new per-group data. Expects: g (GroupView), target_profile. The base bar is the 
 (the platinum for plat games), so the Ask reads "Platinum every stage".
 {% endcomment %}
 <div class="bd-req bd-req--{{ g.frame.tier }} mb-3">
-    <p class="bd-req__ask">
+    {% comment %} The edition panel's heading (h2): the studio and retired-stage headings below are h3s under it. {% endcomment %}
+    <h2 class="bd-req__ask">
         <span class="bd-req__ask-ico" aria-hidden="true"><img src="{% static 'images/plat.png' %}" alt="" loading="lazy" /></span>
         <span class="bd-req__ask-text">Platinum every stage on <b>{{ g.platform_group.name }}</b></span>
-    </p>
+    </h2>
 
     <p class="bd-req__meta">
         <span class="bd-req__plats">{{ g.platform_group.platforms|join:" &middot; " }}</span>

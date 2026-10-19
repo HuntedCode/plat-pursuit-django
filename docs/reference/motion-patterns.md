@@ -141,8 +141,7 @@ A line that *draws itself* reads as craft (Reminders/Things checkboxes live on t
 **`.pp-draw-in`** (`components/motion.css`) on the `<svg>` traces its shapes via `stroke-dashoffset`; the
 shapes need **`pathLength="1"`** so the dash math is uniform regardless of real path length, and multi-shape
 icons trace in order via an nth-child stagger. `.pp-draw-in` triggers on render — for a **scroll- or
-state-gated** draw, reuse the shared **`ppDrawIn`** keyframe under your own trigger instead (e.g. the badge
-stage check draws under `.bd-stages--armed.is-inview .bd-node--done svg *`, a beat after the stage rises).
+state-gated** draw, reuse the shared **`ppDrawIn`** keyframe under your own trigger instead.
 At rest / reduced-motion the stroke is simply drawn solid (dasharray 1 + offset 0). Generalized from the
 Career job-glyph draw; reuse for any "line drawing itself" beat.
 

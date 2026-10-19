@@ -482,6 +482,10 @@ def test_an_unearnable_edition_says_it_once(client):
 
     assert html.count('bd-dead__title') == 1
     assert 'bd-req__ask' not in html, 'the requirements card rendered alongside the banner'
+    # With no requirements card, the banner is the edition panel's h2: the retired fence's h3 nests under it,
+    # not under "Rarity & Community".
+    fence = html.index('<h3 class="bd-retired__title"')
+    assert html.startswith('<h2 class="bd-dead__title"', html.rfind('<h2', 0, fence))
     # NOT `'No longer earnable' not in html`: that string is also the HERO's state label, which is
     # deliberate and correct. Scoped to the requirements card's own element instead -- the duplication
     # that mattered was the card repeating the banner, not the hero naming the state.
