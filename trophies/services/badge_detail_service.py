@@ -72,8 +72,8 @@ class GroupView:
     #: `retired_stages`, split into `[{'name', 'stages', 'cleared'}]` by filing studio (the developer first,
     #: then its studios A-Z, then "Other studios"). Each section also carries `company` (the Company, for
     #: its logo; None for "Other studios") and `url` (its company page, or None). None when the page shows
-    #: one flat ladder, when that
-    #: ladder is empty, or when the caller did not ask for sections (`get_badge_detail(studio_sections=)`).
+    #: one flat ladder, when that ladder is empty, or when the caller did not ask for sections
+    #: (`get_badge_detail(studio_sections=)`).
     studio_sections: Optional[list]
     retired_studio_sections: Optional[list]
     #: Nothing left to gate -- the badge cannot be earned by anyone any more. Held rows are revoked and the

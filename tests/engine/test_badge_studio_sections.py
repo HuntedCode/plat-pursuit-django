@@ -108,7 +108,12 @@ def test_each_section_carries_its_company_for_the_logo_and_link(rockstar):
     _stage('rs-company', 2, rockstar['north'])
     _stage('rs-company', 3, rockstar['outsider'])
 
-    assert [sec['company'] for sec in _group(series).studio_sections] == [rockstar['dev'], rockstar['north'], None]
+    sections = _group(series).studio_sections
+
+    assert [sec['company'] for sec in sections] == [rockstar['dev'], rockstar['north'], None]
+    assert [sec['url'] for sec in sections] == [
+        f"/companies/{rockstar['dev'].slug}/", f"/companies/{rockstar['north'].slug}/", None,
+    ]
 
 
 @pytest.mark.parametrize('slug', ['', 'ctg-(core-technology-group)'])

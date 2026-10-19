@@ -638,8 +638,12 @@ a.bd-studio__ico:hover { box-shadow: 0 0 0 2px color-mix(in oklab, var(--pp-prim
     border-radius: 4px; transition: color var(--pp-dur) var(--pp-ease);
 }
 .bd-studio__link svg { width: 14px; height: 14px; flex: none; opacity: 0.45; transition: transform var(--pp-dur) var(--pp-ease), opacity var(--pp-dur) var(--pp-ease); }
-.bd-studio__link:hover, .bd-studio__head:has(a.bd-studio__ico:hover) .bd-studio__link { color: var(--pp-primary); }
-.bd-studio__link:hover svg, .bd-studio__head:has(a.bd-studio__ico:hover) .bd-studio__link svg { opacity: 1; transform: translateX(2px); }
+.bd-studio__link:hover { color: var(--pp-primary); }
+.bd-studio__link:hover svg { opacity: 1; transform: translateX(2px); }
+/* Hovering the logo lights the name too. Its own rules: a browser without :has() drops the whole selector
+   list, which would take the plain name hover above down with it. */
+.bd-studio__head:has(a.bd-studio__ico:hover) .bd-studio__link { color: var(--pp-primary); }
+.bd-studio__head:has(a.bd-studio__ico:hover) .bd-studio__link svg { opacity: 1; transform: translateX(2px); }
 .bd-studio__link:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { .bd-studio__link svg { transition: none; } }
 .bd-studio__id { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 10px; row-gap: 2px; min-width: 0; }
