@@ -902,3 +902,21 @@ def test_every_list_surface_can_reach_the_others(client):
     assert reverse('my_lists') in browse, 'browse cannot reach My Lists'
     assert reverse('lists_browse') in mine, 'My Lists cannot reach browse'
     assert reverse('lists_browse') in detail, 'a list page cannot reach browse'
+
+
+def test_new_list_is_labelled_on_a_phone_with_a_full_tap_target(client):
+    # Icon-only below md, the page's primary action was easy to miss (owner, 2026-10-18).
+    _staff_hunter(client)
+    body = client.get(MY_LISTS).content.decode()
+    tag_start = body.rindex('<button', 0, body.index('data-gl-open'))
+    button = body[tag_start:body.index('</button>', tag_start)]
+    assert 'New list' in button and 'hidden md:inline' not in button and 'min-h-11' in button
+
+
+def test_no_lists_page_sets_a_header_label_below_the_type_floor():
+    # 10.4px (`text-[0.65rem]`) is below the 12px floor; the Challenges headers moved to `text-xs` first.
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[2]
+    for name in ('browse.html', 'detail.html', 'my_lists.html'):
+        markup = (root / 'templates' / 'gamelists' / name).read_text(encoding='utf-8')
+        assert 'text-[0.65rem]' not in markup, name
