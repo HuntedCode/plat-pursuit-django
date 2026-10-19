@@ -252,7 +252,7 @@ GameFamily is keyed on IGDB id (Phase 2.6), but IGDB assigns distinct ids to eac
 `IGDBService._resolve_canonical_igdb_id(raw_response, fallback_id)` resolves derivative releases up to their canonical entry before the family lookup:
 
 - **`version_parent`** always takes priority when set (editions like Deluxe, GOTY, Anniversary). Note: Director's Cuts and other Expanded Editions are *not* in this category — IGDB models those as game_type 10 with `parent_game` instead.
-- **`parent_game`** is honoured only when `game_type.id ∈ {4=Standalone Expansion, 8=Remake, 9=Remaster, 10=Expanded Game, 11=Port}`. DLC (1) and Expansion (2) also populate `parent_game` but must NOT collapse into the base game's family — the game_type gate prevents that.
+- **`parent_game`** is honoured only when `game_type.id ∈ {8=Remake, 9=Remaster, 10=Expanded Game, 11=Port}`. DLC (1) and Expansion (2) also populate `parent_game` but must NOT collapse into the base game's family — the game_type gate prevents that. Neither does a **Standalone Expansion (4)** since 2026-10: it is its own game, so the walk stops at it (a remaster or port OF one resolves to the expansion). See [Game Family](../features/game-family.md#gotchas-and-pitfalls).
 - Both absent → use the match's own `igdb_id` (the game is its own canonical entry).
 
 Example: Jak and Daxter: The Precursor Legacy has three IGDB entries — #1528 (PS2 original), #302690 (PS3 HD remaster with `parent_game=1528`, `game_type=Remaster`), and #325261 (PS4 port with `parent_game=1528`, `game_type=Port`). With canonical resolution they all key on family `igdb_id=1528`, but each keeps its own `IGDBMatch` row so platform/release-date/company data stays release-specific.

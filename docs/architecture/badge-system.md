@@ -289,7 +289,8 @@ quietly produce a stage list that is not the one the curator copied. The slug is
 in, because `SlugField` accepts uppercase and `FromSoft` would save fine and then join to nothing.
 
 **Stages can be generated.** For franchise, series and developer badges the stage list follows a formula
-(one stage per origin game, oldest first or by studio), so `generate_badge_stages <series_slug>` builds it
+(one stage per origin game, oldest first or by studio; a standalone expansion such as Death of the
+Outsider is its own origin game, so its own stage), so `generate_badge_stages <series_slug>` builds it
 from the series' franchise/collection/developer and the curator tweaks from there. It reads the same
 `series_candidates()` the nightly audit checks, so a generated badge audits clean, and `--append` closes an
 audit gap, except one whose origin sits in a bundle stage, which it lists for a hand edit instead. Bundles

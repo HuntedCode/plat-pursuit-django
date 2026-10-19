@@ -1131,8 +1131,8 @@ class IGDBService:
                 - igdb_data: full IGDB game response
                 - raw_igdb_id: the IGDB id the matcher returned
                 - canonical_igdb_id: id after `_resolve_canonical_igdb_id`
-                  (collapses Director's Cut / Standalone Expansion / port
-                  variants up to their base game's id)
+                  (collapses Director's Cut / remaster / port variants up
+                  to their base game's id; a Standalone Expansion is its own)
                 - confidence: float 0..1
                 - match_method: string ('exact_name', 'fuzzy_name', etc.)
                 - trophy_group_title: the title we matched against
@@ -2865,13 +2865,20 @@ class IGDBService:
         return chosen
 
     # game_type ids that indicate a derivative release pointing at a canonical
-    # original via parent_game: 4=Standalone Expansion, 8=Remake, 9=Remaster,
-    # 10=Expanded Game (Director's Cut / GOTY-style extended editions),
-    # 11=Port. DLC (1) and Expansion (2) also populate parent_game but we
-    # don't want to collapse those into the base game's family — the
-    # matcher's main-game filter should already prevent DLC from reaching
-    # family linking, but we gate on this set anyway for belt-and-suspenders.
-    _CANONICAL_PARENT_GAME_TYPES = frozenset({4, 8, 9, 10, 11})
+    # original via parent_game: 8=Remake, 9=Remaster, 10=Expanded Game
+    # (Director's Cut / GOTY-style extended editions), 11=Port. DLC (1) and
+    # Expansion (2) also populate parent_game but we don't want to collapse
+    # those into the base game's family — the matcher's main-game filter
+    # should already prevent DLC from reaching family linking, but we gate on
+    # this set anyway for belt-and-suspenders.
+    #
+    # 4=Standalone Expansion is deliberately NOT here (owner's call, 2026-10):
+    # it is a separate game sold on its own (Dishonored: Death of the
+    # Outsider, Marvel's Spider-Man: Miles Morales), not another release of
+    # its parent, so it is the canonical entry of its OWN family. The walk
+    # stops there, which also means a remaster or port OF a standalone
+    # expansion resolves to the expansion, never past it to the parent.
+    _CANONICAL_PARENT_GAME_TYPES = frozenset({8, 9, 10, 11})
 
     # Cap on recursive parent walks. IGDB ancestry chains observed in the
     # wild rarely exceed 3 (e.g. PS5 Port -> PS3 Remake -> original), so
@@ -2901,9 +2908,11 @@ class IGDBService:
 
         IGDB models "same game, different release" via two fields:
 
-          * `parent_game` — set on Standalone Expansions (game_type 4),
-            Remakes (8), Remasters (9), Expanded Games / Director's Cuts
-            (10), and Ports (11), pointing at the original entry.
+          * `parent_game` — followed on Remakes (8), Remasters (9),
+            Expanded Games / Director's Cuts (10), and Ports (11), pointing
+            at the original entry. IGDB also sets it on Standalone
+            Expansions (4), but those are their own game, so the walk stops
+            at one (see `_CANONICAL_PARENT_GAME_TYPES`).
           * `version_parent` — set on editions (Deluxe, GOTY, Anniversary
             etc.) that aren't a distinct release but a repackaging of
             another entry. Note: Director's Cuts use `parent_game` +

@@ -28,8 +28,8 @@ For every concept with an accepted IGDBMatch:
 
 The `_resolve_canonical_igdb_id` step collapses versions/releases of the
 same underlying game. IGDB models "same game, different release" via
-`parent_game` (set on Standalone Expansions, Remakes, Remasters, Expanded
-Games / Director's Cuts, and Ports — game_type 4/8/9/10/11) and
+`parent_game` (followed on Remakes, Remasters, Expanded Games / Director's
+Cuts, and Ports — game_type 8/9/10/11) and
 `version_parent` (set on editions like Deluxe/GOTY/Anniversary). The
 resolver walks these references **recursively** so multi-tier chains
 collapse onto the topmost ancestor: Tomb Raider: Anniversary PS5 (Port,
@@ -185,6 +185,16 @@ since the admin is explicitly going outside IGDB's model.
   same hook when admin resolves a pending match.
 
 ## Gotchas and Pitfalls
+
+- **A Standalone Expansion is its own family** (owner's call, 2026-10). IGDB
+  sets `parent_game` on a Standalone Expansion (game_type 4) too, but it is a
+  separate game sold on its own (Dishonored: Death of the Outsider, Marvel's
+  Spider-Man: Miles Morales), so the resolver stops there instead of folding it
+  into its parent. A remaster, port or edition OF an expansion still resolves to
+  the expansion. Until then they shared the parent's family, which made
+  `generate_badge_stages` give them one stage and listed them as versions of
+  the parent on franchise/company pages. `relink_standalone_expansion_families`
+  re-homes the families linked before the change (prod deploy checklist row V).
 
 - **IGDB id is the contract**: don't write code that creates `GameFamily`
   rows from PlatPursuit-side signals (name matching, trophy overlap,
