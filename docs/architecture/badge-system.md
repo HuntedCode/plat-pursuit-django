@@ -288,6 +288,10 @@ present on the target slug is SKIPPED and named in the message rather than renum
 quietly produce a stage list that is not the one the curator copied. The slug is re-slugified on the way
 in, because `SlugField` accepts uppercase and `FromSoft` would save fine and then join to nothing.
 
+`stage_icon` is copied and then re-derived: it is a denorm of the first concept's cover, maintained by
+`auto_populate_stage_icon`, and setting the copy's concepts fires that signal. The copy is what preserves
+a hand-set icon on a stage with no concepts to re-derive from, the one case the signal never touches.
+
 **Stages can be generated.** For franchise, series and developer badges the stage list follows a formula
 (one stage per origin game, oldest first or by studio), so `generate_badge_stages <series_slug>` builds it
 from the series' franchise/collection/developer and the curator tweaks from there. It reads the same
@@ -295,10 +299,6 @@ from the series' franchise/collection/developer and the curator tweaks from ther
 audit gap, except one whose origin sits in a bundle stage, which it lists for a hand edit instead. Bundles
 are never generated. See
 [management-commands](../guides/management-commands.md) and `trophies/services/badge_stage_service.py`.
-
-`stage_icon` is copied and then re-derived: it is a denorm of the first concept's cover, maintained by
-`auto_populate_stage_icon`, and setting the copy's concepts fires that signal. The copy is what preserves
-a hand-set icon on a stage with no concepts to re-derive from, the one case the signal never touches.
 
 ## Management Commands
 

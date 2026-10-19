@@ -84,13 +84,13 @@ class Command(BaseCommand):
         if manual:
             summary += f" ({len(manual)} bundle stage(s) left for you to update by hand)"
 
-        if options['dry_run']:
-            self.stdout.write(self.style.WARNING(f"Dry run: would write {summary}. Nothing written."))
-            return
         if not new_count and not extended:
             self.stdout.write(self.style.WARNING(
                 f"Nothing written: every addition is for a bundle stage ({len(manual)}), listed above."
             ))
+            return
+        if options['dry_run']:
+            self.stdout.write(self.style.WARNING(f"Dry run: would write {summary}. Nothing written."))
             return
 
         try:
