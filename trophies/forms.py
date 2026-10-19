@@ -173,18 +173,20 @@ class CompanySearchForm(forms.Form):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        from trophies.models import Genre, Badge, Company
+        from trophies.models import BadgeSeries, Company, Genre
         from trophies.util_modules.countries import country_info
         try:
             self.fields['genres'].choices = list(
                 Genre.objects.values_list('id', 'name').order_by('name')
             )
-            badge_qs = Badge.objects.filter(
-                is_live=True, tier=1, series_slug__isnull=False,
-            ).exclude(series_slug='').order_by('display_series', 'name')
+            # Series with a LIVE edition (the grouping-badge system), the same set the badge pages serve.
+            # This read the retired legacy `Badge` model, so it offered nothing once that table emptied.
+            live_series = (
+                BadgeSeries.objects.filter(group_badges__is_live=True).distinct()
+                .order_by('display_series', 'name').values_list('series_slug', 'display_series', 'name')
+            )
             self.fields['badge_series'].choices = [('', 'Any Badge')] + [
-                (b.series_slug, b.display_series or b.name)
-                for b in badge_qs
+                (slug, display or name) for slug, display, name in live_series
             ]
 
             # Country choices: only countries that actually have a company,

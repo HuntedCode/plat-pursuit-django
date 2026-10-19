@@ -391,8 +391,9 @@ def _stage_studios(series, stages) -> dict:
 
 
 def _company_url(company) -> Optional[str]:
-    """A studio's company page, or None. Company slugs are stored as IGDB sends them, never slugified, so
-    one the `<slug:>` converter rejects must cost this link, not raise NoReverseMatch and 500 the badge page."""
+    """A studio's company page, or None. Company slugs are slugified on write now (`IGDBService._company_slug`,
+    migration 0343), so this is a backstop: a slug the `<slug:>` converter rejects costs this link, never a
+    NoReverseMatch that 500s the badge page."""
     if company is None or not company.slug:
         return None
     try:

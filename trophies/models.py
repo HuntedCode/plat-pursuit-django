@@ -7033,7 +7033,9 @@ class Company(models.Model):
 
     igdb_id = models.IntegerField(unique=True, db_index=True)
     name = models.CharField(max_length=255)
-    slug = models.SlugField(max_length=255)
+    # Unique, and always slugified on write (`IGDBService._company_slug`): the company page is looked up by
+    # slug, so a duplicate 500s it, and an unclean IGDB slug raised NoReverseMatch wherever it was linked.
+    slug = models.SlugField(max_length=255, unique=True)
     description = models.TextField(blank=True)
     country = models.IntegerField(null=True, blank=True, help_text='ISO 3166-1 numeric code')
     logo_image_id = models.CharField(max_length=100, blank=True, help_text='IGDB image hash')
