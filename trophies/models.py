@@ -7102,17 +7102,26 @@ class Company(models.Model):
     def is_active(self):
         return self.changed_company is None
 
-    @property
-    def current_company(self):
-        """Follow the merger/rename chain to find the current company identity."""
-        company = self
+    def rename_chain(self):
+        """``[self, next identity, ..., current identity]``, following ``changed_company``.
+
+        Cycle-guarded: a rename loop in IGDB data stops at the first repeat. One query per hop.
+        """
+        chain = [self]
         seen = {self.pk}
+        company = self
         while company.changed_company_id is not None:
             if company.changed_company_id in seen:
                 break
             seen.add(company.changed_company_id)
             company = company.changed_company
-        return company
+            chain.append(company)
+        return chain
+
+    @property
+    def current_company(self):
+        """Follow the merger/rename chain to find the current company identity."""
+        return self.rename_chain()[-1]
 
     def __str__(self):
         return self.name

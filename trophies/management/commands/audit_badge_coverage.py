@@ -3,6 +3,8 @@
 For each badge SERIES that tracks a franchise, collection, and/or developer, finds
 concepts of that source not covered by the series' stages and emails the findings to
 the badge-alerts inbox. A gap usually means a new game needs adding to the series.
+A developer source includes its subsidiaries and former identities, and each
+developer-side gap names the family studio(s) IGDB credits as its developer.
 
 Series-level, not per-edition: stages belong to the series, and every edition works the
 same stage list, so coverage is one question per series regardless of how many editions
@@ -49,9 +51,21 @@ def format_report(findings):
         if finding['developer']:
             sources.append(f"developer: {finding['developer'].name}")
         lines.append(f"{series.name}  ({'; '.join(sources)})  [series: {series.series_slug}]")
+        developer = finding['developer']
+        if developer and developer.changed_company_id:
+            # An old-name pin covers the new name's own games but not the studios under it (IGDB parents
+            # subsidiaries to the CURRENT identity), so tell the curator how to widen it.
+            lines.append(
+                f"    note: {developer.name} is a former identity; point the badge at "
+                f"{developer.current_company.name} to also cover the studios under it."
+            )
+        credited = finding['credited_developers']
         for concept in finding['missing']:
             title = concept.unified_title or concept.concept_id
-            lines.append(f"    - {title}  (slug: {concept.slug or 'none'}, concept_id: {concept.concept_id})")
+            line = f"    - {title}  (slug: {concept.slug or 'none'}, concept_id: {concept.concept_id})"
+            if concept.id in credited:
+                line += f"  [developed by: {', '.join(credited[concept.id])}]"
+            lines.append(line)
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"
 
