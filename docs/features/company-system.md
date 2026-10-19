@@ -75,7 +75,7 @@ Anonymous users (or users without a linked profile) get `user_progress_stats = N
 - [Franchise System](franchise-system.md): companion page that uses the same shared grouping/stats service and game-groups-list partial
 - [IA and Sub-Nav](../architecture/ia-and-subnav.md): "Companies" sub-nav item in the Browse hub
 - [Design System](../reference/design-system.md): cover-art fallback chain, poster-hero proportions, dashboard-style stat cells
-- [Badge coverage audit](../guides/cron-jobs.md#audit_badge_coverage): the only code that walks the company tree DOWN. `badge_coverage_service.developer_family_ids()` follows `subsidiaries` + `previous_identities` from a developer badge's company (the detail header only reads UP, via `parent` and `current_company`)
+- [Badge coverage audit](../guides/cron-jobs.md#audit_badge_coverage) and `generate_badge_stages`: both walk the company tree DOWN through `trophies/services/developer_family_service.py`, the one place that does. `developer_family_ids()` follows `subsidiaries` + `previous_identities` from a developer badge's company, and `studio_filing_map()` files plain renames under their current name (mergers keep each predecessor). The detail header only reads UP, via `parent` and `current_company`
 
 ## Gotchas and Pitfalls
 

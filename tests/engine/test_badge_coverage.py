@@ -18,9 +18,8 @@ import pytest
 from django.core.management import call_command
 
 from trophies.models import ConceptFranchise, Franchise
-from trophies.services.badge_coverage_service import (
-    audit_badge_coverage, developer_family_ids, stale_developer_pins,
-)
+from trophies.services.badge_coverage_service import audit_badge_coverage, stale_developer_pins
+from trophies.services.developer_family_service import developer_family_ids
 from tests.factories import (
     BadgeSeriesFactory, CompanyFactory, ConceptBundleFactory, ConceptCompanyFactory,
     ConceptFactory, GameFactory, StageFactory,
@@ -353,6 +352,19 @@ def test_developer_finding_names_the_credited_studios():
 
     # Family developers only, sorted: the outside co-developer and the publish-only umbrella are left out.
     assert findings[0]['credited_developers'] == {co_dev.id: ["Credit Leeds", "Credit North"]}
+
+
+def test_credited_developer_names_are_distinct():
+    # Company.name is not unique: two family studios with one name list it once.
+    umbrella = CompanyFactory(name="Twin Umbrella")
+    twin_a = CompanyFactory(name="Twin", parent=umbrella)
+    twin_b = CompanyFactory(name="Twin", parent=umbrella)
+    _developer_badge("cov-dev-twin", umbrella)
+    gap = _concept_with_game("Twin Game")
+    ConceptCompanyFactory(concept=gap, company=twin_a, is_developer=True)
+    ConceptCompanyFactory(concept=gap, company=twin_b, is_developer=True)
+
+    assert audit_badge_coverage()[0]['credited_developers'] == {gap.id: ["Twin"]}
 
 
 def test_franchise_only_finding_has_no_credited_developers():
