@@ -27,12 +27,23 @@ the canonical page. `follow` so the tiles still pass authority to the lists them
                     <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1">
                         A backlog, a ranking, a run in order. Lists other hunters made and published.
                     </p>
+                    {% comment %}MY LISTS LIVES IN THE HEADER (owner, 2026-10-18), as My Challenges does on the
+                    Challenges pages: at the end of the toolbar, icon-only on a phone, it was easy to miss. The
+                    default (not ghost) `.pp-cta` with its label at every width and a 44px touch height, in the LEFT
+                    column under the subtitle, so it never shares the tally's slot (see below).{% endcomment %}
+                    {% if user.is_authenticated and user.profile %}
+                    <div class="flex flex-wrap items-center gap-x-4 gap-y-2 mt-3">
+                        <a href="{% url 'my_lists' %}" class="pp-cta min-h-11" data-my-lists>
+                            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                            My lists
+                        </a>
+                    </div>
+                    {% endif %}
                 </div>
 
-                {% comment %}The tally stands ALONE here. Every other rebuilt header on the site is
-                identity plus its headline number and nothing else, and a button sharing that slot
-                puts a control at the same optical level as a display number, so the two compete.
-                The action moved to the toolbar row, where controls live.{% endcomment %}
+                {% comment %}The tally stands ALONE on the right. A button sharing that slot puts a control at
+                the same optical level as a display number, so the two compete; My lists sits in the left
+                column instead.{% endcomment %}
                 <div class="text-right flex items-baseline gap-1 whitespace-nowrap md:block shrink-0">
                     <span id="gl-count" class="pp-tally text-primary leading-none font-bold text-sm md:text-3xl" data-countup="{{ paginator.count }}">{{ paginator.count|intcomma }}</span>
                     <span class="text-xs text-base-content/50 md:mt-1 md:block md:uppercase md:tracking-wider">lists shown</span>
@@ -110,17 +121,6 @@ the canonical page. `follow` so the tiles still pass authority to the lists them
                     <input type="number" name="max_games" value="{{ request.GET.max_games }}" min="0" inputmode="numeric" placeholder="max" aria-label="Maximum games" />
                 </span>
 
-                {% comment %}Primary destination at the right end of the control row -- the convention
-                every filter toolbar worth copying uses, and the reason it is here rather than in the
-                header card. It is a NAVIGATION, not a filter, so it is separated from them and does
-                not participate in the form. When the Community hub is re-formed this becomes a
-                subnav item and this link goes away.{% endcomment %}
-                {% if user.is_authenticated and user.profile %}
-                <a href="{% url 'my_lists' %}" class="pp-cta pp-cta--ghost shrink-0" aria-label="My lists">
-                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-                    <span class="hidden md:inline">My lists</span>
-                </a>
-                {% endif %}
             </div>
         </div>
 

@@ -352,7 +352,10 @@ concepts has a listed stack. A concept with no games on record yet counts as unk
 (`member_concepts_by_contract` is its flattened union). A contract with no member games on record shows none. Same
 `Game` query as the platforms, so no extra cost.
 
-The Challenges browse page's toolbar also links **My Challenges** (`show_my_challenges`, browse page only).
+The Challenges page and the Hall of Fame link **My Challenges** from their header (owner, 2026-10-18), a solid
+button beside "How Challenges work" (`partials/_browse_header_actions.html`). It used to sit at the end of the
+browse toolbar, icon-only on a phone and gone whenever nothing was in flight. Game Lists' browse moved **My lists**
+into its header the same way.
 
 **On a phone, a search result's square buttons are a two-column grid under the cover**, not pills beside it.
 Beside a 56px cover each 44px pill took its own line, so a six-job game stood six tall (hunters' screenshots).
