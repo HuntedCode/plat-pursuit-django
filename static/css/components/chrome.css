@@ -391,7 +391,7 @@
 .pp-navsearch__opt--game .pp-navsearch__ph { color: var(--pp-info); }
 .pp-navsearch__opt--badge .pp-navsearch__ph { color: var(--color-trophy-platinum); }
 .pp-navsearch__opt--franchise .pp-navsearch__ph { color: var(--pp-accent); }
-/* Franchise "Series/Franchise" type tag (trailing pill). */
+/* Franchise and badge type tag (trailing pill). */
 .pp-navsearch__sub {
     font-size: 0.6rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; flex-shrink: 0;
     color: var(--pp-text-dim); background: var(--pp-bg-3); border: 1px solid var(--pp-border); padding: 2px 6px; border-radius: 999px;

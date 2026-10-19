@@ -2,7 +2,7 @@ from django.contrib.sitemaps import Sitemap
 from django.urls import reverse
 from challenges.models import Challenge
 from gamelists.models import GameList as RebuiltGameList
-from trophies.models import Game, Profile, Badge, Checklist, GameList, Roadmap
+from trophies.models import Game, Profile, Checklist, Roadmap
 
 
 class StaticViewSitemap(Sitemap):
