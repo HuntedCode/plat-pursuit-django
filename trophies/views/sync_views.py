@@ -3,7 +3,8 @@ import logging
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.cache import cache
-from django.db.models import OuterRef, Q, Subquery
+from django.db.models import Exists, OuterRef, Prefetch, Q, Subquery
+from django.db.models.functions import Lower
 from django.http import JsonResponse
 from django.urls import reverse
 from django.utils.decorators import method_decorator
@@ -13,10 +14,11 @@ from django_ratelimit.decorators import ratelimit
 
 from core.services.tracking import track_site_event
 from trophies.psn_manager import PSNManager
+from trophies.services.collection_service import badge_type_label
 from trophies.services.game_grouping_service import representative_concept_icon_subquery
 from trophies.services.sync_service import RefreshOutcome, SyncService
 from trophies.util_modules.cache import redis_client
-from ..models import Badge, Concept, Franchise, Game, Profile
+from ..models import BadgeSeries, Concept, Franchise, Game, GroupBadge, Profile
 
 logger = logging.getLogger("psn_api")
 
@@ -234,15 +236,16 @@ class ProfileSuggestView(View):
         return JsonResponse({'results': results})
 
 
-def _badge_main_image(badge):
-    """The badge medallion's main image URL: its own art, else the inherited base-badge
-    art, else '' (client falls back to the badge glyph). Mirrors Badge.get_badge_layers()
-    and the Discord notifier -- the base_badge is select_related by the caller."""
-    if badge.badge_image:
-        return badge.badge_image.url
-    if badge.base_badge and badge.base_badge.badge_image:
-        return badge.base_badge.badge_image.url
-    return ''
+def _badge_art(series):
+    """The subject art of the series' representative live edition, else '' (client falls back to
+    the badge glyph). Resolved on the edition because an edition can override its series' image
+    and a series can borrow another's; art_layers() answers both. Its static placeholder is
+    dropped rather than shown: the glyph is the dropdown's no-art state."""
+    edition = series.representative_group_badge
+    if edition is None:
+        return ''
+    art = edition.art_layers()
+    return art['main'] if art['has_custom_image'] else ''
 
 
 class SiteSuggestView(View):
@@ -258,8 +261,9 @@ class SiteSuggestView(View):
     normalized query for a short TTL, so hot prefixes never touch Postgres.
 
     Title matching is substring (icontains), served sub-ms by the pg_trgm GIN
-    indexes on Concept.unified_title / Badge.name / Franchise.name (migration
-    0257). Hunters stay prefix (istartswith), like ProfileSuggestView.
+    indexes on Concept.unified_title / Franchise.name (migration 0257). BadgeSeries.name
+    has no such index: it is one row per badge, small enough to scan. Hunters stay
+    prefix (istartswith), like ProfileSuggestView.
     """
     PER_GROUP = 5
     CACHE_TTL = 60  # seconds; global catalog, a short lag on freshly-synced profiles is fine.
@@ -287,7 +291,7 @@ class SiteSuggestView(View):
 
         # Hash the normalized query so spaces/unicode/length can't produce an invalid
         # or oversized cache key (the response is identical for every viewer).
-        cache_key = f'sitesuggest:v1:{hashlib.md5(q.lower().encode()).hexdigest()}'
+        cache_key = f'sitesuggest:v2:{hashlib.md5(q.lower().encode()).hexdigest()}'
         cached = cache.get(cache_key)
         if cached is not None:
             return JsonResponse(cached)
@@ -335,27 +339,32 @@ class SiteSuggestView(View):
         return {'type': 'game', 'label': 'Games', 'items': items}
 
     def _badges(self, q):
-        # One row per series: the tier-1 badge is the series' canonical entry, and
-        # badge_detail is keyed on series_slug (all tiers collapse to one page).
-        # series_slug is nullable/blank; a null/'' slug would raise NoReverseMatch on
-        # badge_detail and 500 the whole endpoint, so exclude those (as the rest of the
-        # codebase does) -- an unlinkable badge can't be a suggestion anyway.
-        # Fetch instances (not .values()) so the medallion image URL resolves through the
-        # ImageField storage; select_related the base_badge for the inherited-icon fallback.
-        badges = (
-            Badge.objects.live()
-            .filter(name__icontains=q, tier=1)
-            .exclude(series_slug__isnull=True).exclude(series_slug='')
-            .select_related('base_badge')
-            .order_by('name')[:self.PER_GROUP]
+        # One row per BadgeSeries with a live edition: the set BadgeDetailView serves (it
+        # 404s a series with none), and the page is keyed on series_slug. A '' slug can
+        # still be written past the SlugField, and would NoReverseMatch the whole endpoint,
+        # so it is excluded. The type tag tells same-named sister badges apart (a
+        # franchise badge and a series badge for one subject).
+        # The editions are prefetched with their platform_group (representative_group_badge
+        # picks the live one in Python), and the series carries the borrowed art and a user
+        # badge's submitter, so _badge_art reads no further rows: two queries for the group.
+        series = (
+            BadgeSeries.objects
+            .filter(Exists(GroupBadge.objects.filter(series=OuterRef('pk'), is_live=True)),
+                    name__icontains=q)
+            .exclude(series_slug='')
+            .select_related('artwork_source', 'submitted_by')
+            .prefetch_related(Prefetch('group_badges',
+                                       queryset=GroupBadge.objects.select_related('platform_group')))
+            .order_by(Lower('name'), 'id')[:self.PER_GROUP]
         )
         items = [
             {
-                'label': b.name,
-                'image': _badge_main_image(b),
-                'url': reverse('badge_detail', kwargs={'series_slug': b.series_slug}),
+                'label': s.name,
+                'sublabel': badge_type_label(s.badge_type),   # the Collection's words: user -> "Community"
+                'image': _badge_art(s),
+                'url': reverse('badge_detail', kwargs={'series_slug': s.series_slug}),
             }
-            for b in badges
+            for s in series
         ]
         return {'type': 'badge', 'label': 'Badges', 'items': items}
 

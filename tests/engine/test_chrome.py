@@ -11,8 +11,11 @@ from django.test import RequestFactory
 from django.urls import reverse
 
 from plat_pursuit.context_processors import navsync
-from tests.factories import BadgeFactory, ConceptFactory, GameFactory, IGDBMatchFactory, ProfileFactory
-from trophies.models import Franchise
+from tests.factories import (
+    BadgeFactory, BadgeSeriesFactory, ConceptFactory, GameFactory, GroupBadgeFactory, IGDBMatchFactory,
+    PlatformGroupFactory, ProfileFactory,
+)
+from trophies.models import BadgeSeries, Franchise
 
 pytestmark = pytest.mark.django_db
 
@@ -180,7 +183,7 @@ def _groups(resp):
 def test_site_suggest_groups_all_entity_types(client):
     concept = ConceptFactory(unified_title='Elden Ring')
     GameFactory(concept=concept, played_count=100, np_communication_id='NPWR_ELDEN_00')
-    BadgeFactory(name='Elden Lord', series_slug='elden-lord', tier=1, is_live=True)
+    GroupBadgeFactory(series=BadgeSeriesFactory(name='Elden Lord', series_slug='elden-lord'))
     Franchise.objects.create(igdb_id=9001, name='Elden Ring', slug='elden-ring-fr', source_type='franchise')
     ProfileFactory(psn_username='eldenlord', total_plats=42)
 
@@ -236,30 +239,105 @@ def test_site_suggest_game_falls_back_to_psn_icon(client):
     assert item['image'] == 'https://cdn.example/psn.png'
 
 
+def _badge_items(client, q):
+    return _groups(client.get(reverse('site_suggest'), {'q': q}))['badge']['items']
+
+
 def test_site_suggest_badge_suggests_one_row_per_series(client):
-    # Only the tier-1 badge represents a series (badge_detail is keyed on series_slug).
-    BadgeFactory(name='Trophy Titan', series_slug='trophy-titan', tier=1, is_live=True)
-    BadgeFactory(name='Trophy Titan', series_slug='trophy-titan', tier=2, is_live=True)  # higher tier: not its own row
-    items = _groups(client.get(reverse('site_suggest'), {'q': 'trophy titan'}))['badge']['items']
+    # A series has one edition per platform group, but one page (badge_detail is keyed on series_slug).
+    series = BadgeSeriesFactory(name='Trophy Titan', series_slug='trophy-titan')
+    GroupBadgeFactory(series=series, platform_group=PlatformGroupFactory(key='titan-a'))
+    GroupBadgeFactory(series=series, platform_group=PlatformGroupFactory(key='titan-b'))
+    items = _badge_items(client, 'trophy titan')
     assert len(items) == 1
     assert items[0]['url'] == reverse('badge_detail', kwargs={'series_slug': 'trophy-titan'})
 
 
-def test_site_suggest_hides_unreleased_badges(client):
-    BadgeFactory(name='Secret Badge', series_slug='secret', tier=1, is_live=False)
-    resp = client.get(reverse('site_suggest'), {'q': 'secret'})
-    assert 'badge' not in _groups(resp)   # .live() gate keeps hidden badges out
+def test_site_suggest_tags_each_badge_with_its_type(client):
+    # Sister badges share a subject and a name; the type tag is what tells the two rows apart.
+    GroupBadgeFactory(series=BadgeSeriesFactory(name='Dishonored', series_slug='dishonored-fr', badge_type='franchise'))
+    GroupBadgeFactory(series=BadgeSeriesFactory(name='Dishonored', series_slug='dishonored', badge_type='series'))
+    items = _badge_items(client, 'dishonored')
+    assert sorted((i['sublabel'], i['url']) for i in items) == [
+        ('Franchise', reverse('badge_detail', kwargs={'series_slug': 'dishonored-fr'})),
+        ('Series', reverse('badge_detail', kwargs={'series_slug': 'dishonored'})),
+    ]
+
+
+def test_site_suggest_hides_series_without_a_live_edition(client):
+    # A dormant series 404s on its badge page, so it must not be suggested.
+    GroupBadgeFactory(series=BadgeSeriesFactory(name='Secret Badge', series_slug='secret'), is_live=False)
+    BadgeSeriesFactory(name='Secret Plans', series_slug='secret-plans')   # no editions at all
+    assert 'badge' not in _groups(client.get(reverse('site_suggest'), {'q': 'secret'}))
+
+
+def test_site_suggest_ignores_the_retired_legacy_badges(client):
+    # The search read the legacy Badge model and so found nothing on a site of grouping badges.
+    BadgeFactory(name='Legacy Lord', series_slug='legacy-lord', tier=1, is_live=True)
+    assert 'badge' not in _groups(client.get(reverse('site_suggest'), {'q': 'legacy lord'}))
 
 
 def test_site_suggest_skips_badge_with_blank_series_slug(client):
-    # An unlinkable badge (blank series_slug) must be EXCLUDED, not 500 the whole endpoint
-    # via NoReverseMatch on badge_detail. Force '' past save() with .update().
-    from trophies.models import Badge
-    b = BadgeFactory(name='Orphan Badge', series_slug='orphan', tier=1, is_live=True)
-    Badge.objects.filter(pk=b.pk).update(series_slug='')
+    # An unlinkable series (blank series_slug) must be EXCLUDED, not 500 the whole endpoint
+    # via NoReverseMatch on badge_detail. Force '' past the SlugField with .update().
+    gb = GroupBadgeFactory(series=BadgeSeriesFactory(name='Orphan Badge', series_slug='orphan'))
+    BadgeSeries.objects.filter(pk=gb.series_id).update(series_slug='')
     resp = client.get(reverse('site_suggest'), {'q': 'orphan'})
     assert resp.status_code == 200            # no NoReverseMatch crash
-    assert 'badge' not in _groups(resp)       # the unlinkable badge is dropped
+    assert 'badge' not in _groups(resp)       # the unlinkable series is dropped
+
+
+def test_site_suggest_badge_shows_the_series_art(client):
+    GroupBadgeFactory(series=BadgeSeriesFactory(name='Arty', badge_image='badges/series/arty.png'))
+    assert _badge_items(client, 'arty')[0]['image'].endswith('badges/series/arty.png')
+
+
+def test_site_suggest_badge_art_follows_the_edition_and_borrowed_art(client):
+    # An edition's own override beats its series' art; a series with none borrows its source's.
+    GroupBadgeFactory(series=BadgeSeriesFactory(name='Override Me', badge_image='badges/series/plain.png'),
+                      badge_image_override='badges/group/special.png')
+    lender = BadgeSeriesFactory(name='Lender', badge_image='badges/series/lent.png')
+    GroupBadgeFactory(series=BadgeSeriesFactory(name='Borrower Badge', artwork_source=lender))
+
+    assert _badge_items(client, 'override me')[0]['image'].endswith('badges/group/special.png')
+    assert _badge_items(client, 'borrower badge')[0]['image'].endswith('badges/series/lent.png')
+
+
+def test_site_suggest_badge_art_comes_from_a_live_edition(client):
+    # A dormant edition's art is not what the badge page shows, even when its group sorts first.
+    series = BadgeSeriesFactory(name='Two Editions', badge_image='badges/series/live.png')
+    GroupBadgeFactory(series=series, is_live=False, badge_image_override='badges/group/dormant.png',
+                      platform_group=PlatformGroupFactory(key='first', sort_order=0))
+    GroupBadgeFactory(series=series, platform_group=PlatformGroupFactory(key='second', sort_order=1))
+    assert _badge_items(client, 'two editions')[0]['image'].endswith('badges/series/live.png')
+
+
+def test_site_suggest_user_badge_reads_community_and_wears_the_submitters_avatar(client):
+    author = ProfileFactory(avatar_url='https://cdn.example/author.png')
+    GroupBadgeFactory(series=BadgeSeriesFactory(name='Fan Made', badge_type='user', submitted_by=author))
+    GroupBadgeFactory(series=BadgeSeriesFactory(name='Fan Bare', badge_type='user',
+                                                submitted_by=ProfileFactory(avatar_url='')))
+    items = {i['label']: i for i in _badge_items(client, 'fan')}
+
+    assert set(items) == {'Fan Made', 'Fan Bare'}
+    assert items['Fan Made']['sublabel'] == 'Community'   # the Collection's word, not the raw "User"
+    assert items['Fan Made']['image'] == 'https://cdn.example/author.png'
+    assert items['Fan Bare']['image'] == ''               # no avatar either: the glyph
+
+
+def test_site_suggest_badges_stop_at_five_sorted_ignoring_case(client):
+    # 'Cap A' and 'cap a' differ only in case, so ignoring case they tie and the older row wins. A
+    # case-aware sort decides the tie itself (en_US puts lowercase first, C puts capitals before every
+    # lowercase letter), and the other letters catch a C collation.
+    for name in ('Cap A', 'cap a', 'cap e', 'Cap B', 'Cap D', 'cap c', 'Cap F'):
+        GroupBadgeFactory(series=BadgeSeriesFactory(name=name))
+    assert [i['label'] for i in _badge_items(client, 'cap')] == ['Cap A', 'cap a', 'Cap B', 'cap c', 'Cap D']
+
+
+def test_site_suggest_badge_without_art_falls_back_to_the_glyph(client):
+    # Not the static placeholder medallion: '' is the client's cue to draw the badge glyph.
+    GroupBadgeFactory(series=BadgeSeriesFactory(name='Bare Badge'))
+    assert _badge_items(client, 'bare badge')[0]['image'] == ''
 
 
 def test_site_suggest_franchise_sublabel_distinguishes_series(client):
@@ -313,14 +391,25 @@ def test_site_suggest_games_no_n_plus_one(django_assert_num_queries):
 
 
 def test_site_suggest_badges_no_n_plus_one(django_assert_num_queries):
-    # _badges reads badge_image / base_badge.badge_image per row; base_badge is
-    # select_related, so 5 badges -> ONE query.
+    # Each row resolves its art through an edition, its platform group, a borrowed series and a
+    # user badge's submitter. All of it is select_related or prefetched: 5 series -> TWO queries.
     from trophies.views.sync_views import SiteSuggestView
+    legacy, ultra = PlatformGroupFactory(key='np-legacy'), PlatformGroupFactory(key='np-ultra')
+    lender = BadgeSeriesFactory(name='Lender', badge_image='badges/series/lent.png')
+    author = ProfileFactory(avatar_url='https://cdn.example/author.png')
     for i in range(5):
-        BadgeFactory(name=f'Nplus Badge {i}', series_slug=f'np-badge-{i}', tier=1, is_live=True)
-    with django_assert_num_queries(1):
+        series = BadgeSeriesFactory(
+            name=f'Nplus Badge {i}',
+            artwork_source=lender if i == 0 else None,
+            badge_type='user' if i == 1 else 'series', submitted_by=author if i == 1 else None,
+        )
+        GroupBadgeFactory(series=series, platform_group=legacy)
+        GroupBadgeFactory(series=series, platform_group=ultra)
+    with django_assert_num_queries(2):
         result = SiteSuggestView()._badges('nplus badge')
     assert len(result['items']) == 5
+    images = [it['image'] for it in result['items']]
+    assert images[0].endswith('badges/series/lent.png') and images[1] == 'https://cdn.example/author.png'
 
 
 def test_site_suggest_short_query_returns_empty(client):

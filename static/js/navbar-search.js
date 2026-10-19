@@ -278,8 +278,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // ---- Typeahead rendering ----
-    // Per-type fallback glyph, shown when a row has no image (badges/franchises always;
-    // games/profiles when their art/avatar is missing).
+    // Per-type fallback glyph, shown when a row has no image (a badge with no art, a
+    // franchise with no cover, a game or hunter missing its art/avatar).
     const GLYPHS = {
         profile: '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
         game: '<rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 12h4M8 10v4"/><circle cx="16" cy="11" r="1"/><circle cx="18" cy="14" r="1"/>',
@@ -310,7 +310,7 @@ document.addEventListener('DOMContentLoaded', () => {
         a.id = 'navsearch-opt-' + i;
         a.setAttribute('role', 'option');
 
-        // Leading media: real artwork when we have it (game/franchise cover, badge medallion,
+        // Leading media: real artwork when we have it (game/franchise cover, badge art,
         // hunter avatar), else the per-type glyph.
         const art = item.image || (type === 'profile' ? item.avatar_url : '');
         if (art) { a.appendChild(thumb(art)); }
@@ -320,7 +320,7 @@ document.addEventListener('DOMContentLoaded', () => {
         name.textContent = item.label;          // textContent: safe
         a.appendChild(name);
 
-        // Trailing metadata: platinum count for hunters, a type tag for franchises.
+        // Trailing metadata: platinum count for hunters, a type tag for franchises and badges.
         if (type === 'profile') {
             const plats = document.createElement('span');
             plats.className = 'pp-navsearch__plats';
