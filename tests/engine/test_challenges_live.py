@@ -3553,3 +3553,24 @@ def test_the_discipline_highlight_has_one_implementation(client):
     assert 'lab-dna-pair' not in hero, (
         'the plaque is rendering the legend wrapper, which it has no legend for -- the wrapper rules would '
         'then dim its arcs with no legend to correlate against')
+
+
+# ── My Challenges in the header (owner, 2026-10-18) ──────────────────────────────────────────────
+
+@pytest.mark.parametrize('page', ['challenges', 'challenges_hall_of_fame'])
+def test_my_challenges_is_a_labelled_button_in_the_header(client, page):
+    # Nothing in flight, so the browse toolbar is not drawn at all: the old toolbar button vanished here.
+    client.force_login(_hunter().user)
+    body = client.get(reverse(page)).content.decode()
+    header = body[:body.index('id="browse-results"')]
+    link = header[header.index('data-my-challenges'):]
+    link = link[:link.index('</a>')]
+    assert f'href="{reverse("my_challenges")}"' in body[body.index('data-my-challenges') - 120:body.index('data-my-challenges')]
+    assert 'My Challenges' in link and 'hidden md:inline' not in link, 'the label must show on a phone'
+    assert body.count('data-my-challenges') == 1
+
+
+@pytest.mark.parametrize('page', ['challenges', 'challenges_hall_of_fame'])
+def test_a_signed_out_visitor_gets_no_my_challenges_button(client, page):
+    body = client.get(reverse(page)).content.decode()
+    assert 'data-my-challenges' not in body and 'How Challenges work' in body

@@ -42,7 +42,7 @@ renaming a list you were looking at cost three round trips.
 |---|---|---|
 | Browse | `/community/lists/` | Every public list. Filter, sort, infinite scroll. |
 | Detail | `/community/lists/<id>/` | One list. **The owner edits here, in place.** |
-| My Lists | `/my-lists/` | Your lists and the ones you follow. Create is a modal. |
+| My Lists | `/my-lists/` | Your lists and the ones you follow. Create is a modal. Reached from a **My lists** button in the browse page's header (2026-10-18). |
 
 **A service owns every write.** `gamelists/services/game_list_service.py` is the only thing that
 writes to these tables. The legacy system had no service — its writes lived inline across twelve API
