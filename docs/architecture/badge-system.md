@@ -296,16 +296,21 @@ audit gap, except one whose origin sits in a bundle stage, which it lists for a 
 are never generated. See
 [management-commands](../guides/management-commands.md) and `trophies/services/badge_stage_service.py`.
 
-**Stage icons are derived, not stored.** The badge page draws each stage's icon from its most recently
-released version (that version's trusted IGDB first PlayStation release, else its PSN date), preferring
-one that is still obtainable on that edition (the same `_display_playable` rule as the stage's grid, so the
-icon can differ between edition tabs) and one with real cover art over the generic PlayStation title icon.
-Bundle members count like any other version (`badge_detail_service._stage_icon_url`). Every game it reads is already loaded for the stage's cards, so it
-costs no queries. It replaced a stored `Stage.stage_icon` that two m2m signals kept as a copy of whichever
-concept came first, which made the icon arbitrary and made every stage edit (a duplicate, an append)
-fight the signal to keep a hand-set one. There is no way to hand-set an icon now: to change it, change the
-stage's games.
+**Stage icons are derived, not stored.** The badge page draws each stage's icon from one of its versions
+(`badge_detail_service._stage_icon_url`), ranked in this order (owner's call):
 
+1. **Real cover art** (`Game.has_cover_art`). The icon is a picture of the game, so a delisted version's
+   real cover beats the generic PlayStation title icon. If NO version has real art, the stage shows no
+   icon at all, rather than a placeholder cropped into the small square.
+2. **Still obtainable on that edition**, by the same `_display_playable` rule as the stage's grid (bundle
+   members included), so the icon can differ between edition tabs.
+3. **Most recently released**: that version's trusted IGDB first PlayStation release, else its PSN date,
+   undated last. Ties go to the highest game id.
+
+Every game it reads is already loaded for the stage's cards, so it costs no queries. It replaced a stored
+`Stage.stage_icon` that two m2m signals kept as a copy of whichever concept came first, which made the icon
+arbitrary and made every stage edit (a duplicate, an append) fight the signal to keep a hand-set one. There
+is no way to hand-set an icon now: to change it, change the stage's games.
 ## Management Commands
 
 | Command | Usage | Purpose |

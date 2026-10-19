@@ -1,4 +1,3 @@
-import logging
 from django.db.models.signals import post_save, post_delete, pre_save, pre_delete
 from django.dispatch import receiver
 from django.db.models import F, Value
@@ -7,8 +6,6 @@ from trophies.models import (
     Profile, EarnedTrophy, ProfileGame,
     GroupBadge, UserGroupBadge,
 )
-
-logger = logging.getLogger(__name__)
 
 
 # ──────────────────────────────────────────────────────────────────────

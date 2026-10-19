@@ -16,6 +16,7 @@ from django.core.management.base import CommandError
 from trophies.models import ConceptFranchise, Franchise, GameFamily, Stage
 from trophies.services.badge_coverage_service import audit_badge_coverage
 from trophies.services.badge_stage_service import plan_stages
+from trophies.services.developer_family_service import developer_family_ids, studio_filing_map
 from tests.factories import (
     BadgeSeriesFactory, CompanyFactory, ConceptBundleFactory, ConceptCompanyFactory, ConceptFactory,
     GroupBadgeFactory, IGDBMatchFactory, StageFactory,
@@ -380,6 +381,62 @@ def test_developer_newer_identity_credit_files_under_the_developer():
     ]
 
 
+def test_a_co_credit_through_the_developers_newer_name_still_files_under_the_developer():
+    # Credits to "New Name" (the developer's newer identity) and "Aaa Sub": the developer must win, which
+    # needs the identity mapping, not a raw `developer.id in studios` check.
+    current = CompanyFactory(name="Co New Name")
+    old = CompanyFactory(name="Co Old Name", changed_company=current)
+    sub = CompanyFactory(name="Aaa Co Sub", parent=old)
+    badge = _developer_badge("gen-co-renamed", old)
+    game = _concept("Co Game", family=_family("Co Game", 1203))
+    _developed(game, current, sub)
+
+    [planned] = plan_stages(badge)
+
+    assert planned.studio == (old.id, "Co Old Name")
+
+
+def test_a_multi_step_rename_chain_files_under_the_last_name():
+    umbrella = CompanyFactory(name="Chain Umbrella")
+    north = CompanyFactory(name="Chain North", parent=umbrella)
+    middle = CompanyFactory(name="Chain Middle", changed_company=north)
+    oldest = CompanyFactory(name="Chain Oldest", changed_company=middle)
+    badge = _developer_badge("gen-chain", umbrella)
+    game = _concept("Oldest Era Game", family=_family("Oldest Era Game", 1204))
+    _developed(game, oldest)
+
+    [planned] = plan_stages(badge)
+
+    assert planned.studio == (north.id, "Chain North")
+
+
+def test_a_rename_into_a_merger_predecessor_stops_at_that_predecessor():
+    # A -> B (rename), then B + D -> C (merger): A's games file under B, and B and D keep their own rows.
+    umbrella = CompanyFactory(name="Depth Umbrella")
+    merged = CompanyFactory(name="Depth Merged", parent=umbrella)
+    b = CompanyFactory(name="Depth B", changed_company=merged)
+    d = CompanyFactory(name="Depth D", changed_company=merged)
+    a = CompanyFactory(name="Depth A", changed_company=b)
+
+    filing = studio_filing_map(umbrella, developer_family_ids(umbrella))
+
+    assert filing[a.id] == (b.id, "Depth B")
+    assert filing[b.id] == (b.id, "Depth B")
+    assert filing[d.id] == (d.id, "Depth D")
+
+
+def test_the_filing_map_terminates_on_a_rename_loop():
+    umbrella = CompanyFactory(name="Loop Umbrella")
+    x = CompanyFactory(name="Loop X", parent=umbrella)
+    y = CompanyFactory(name="Loop Y", changed_company=x)
+    x.changed_company = y
+    x.save()
+
+    filing = studio_filing_map(umbrella, developer_family_ids(umbrella))
+
+    assert set(filing) == {umbrella.id, x.id, y.id}
+
+
 # --- existing stages: refuse / append ------------------------------------------
 
 
@@ -427,6 +484,21 @@ def test_append_counts_a_stage_two_origins_join_once():
 
     assert sorted(stage.concepts.values_list('id', flat=True)) == sorted([one.id, two.id, remaster_one.id, remaster_two.id])
     assert "0 new stage(s), 1 existing stage(s) extended" in out
+
+
+def test_a_dry_run_where_every_addition_is_a_bundle_stage_says_nothing_would_be_written():
+    badge, fran = _franchise_badge("gen-dry-bundle")
+    family = _family("Dry Episodic", 1413, year=2001)
+    episode_one = _concept("Dry Episode 1", family=family)
+    stage = StageFactory(series_slug=badge.series_slug, stage_number=1)
+    ConceptBundleFactory(stage=stage).concepts.add(episode_one)
+    _link(episode_one, fran)
+    _link(_concept("Dry Episode 2", family=family), fran)
+
+    out = _run(badge.series_slug, '--append', '--dry-run')
+
+    assert "Nothing written: every addition is for a bundle stage (1)" in out
+    assert "Dry run: would write" not in out
 
 
 def test_append_never_adds_to_a_bundle_stage_and_reports_it_instead():

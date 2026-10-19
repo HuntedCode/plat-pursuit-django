@@ -1,10 +1,10 @@
 """The badge page's stage icon: DERIVED from the stage's games, never stored.
 
-Owner rule (2026-10): the icon is the cover of the stage's most recently released version, preferring one a
-hunter can still get. "Released" is that version's OWN date: its trusted IGDB first PlayStation release (a
-PS4 remaster's 2015, not the 2001 original's), else its PSN date. Real cover art beats the generic
-PlayStation title icon. The stored `Stage.stage_icon` it replaces was set from whichever concept happened to
-come first and re-derived by a signal on every edit.
+Owner rule (2026-10), in order: real cover art only (no art anywhere -> no icon), then a version a hunter can
+still get, then the most recently released. "Released" is that version's OWN date: its trusted IGDB first
+PlayStation release (a PS4 remaster's 2015, not the 2001 original's), else its PSN date. The stored
+`Stage.stage_icon` it replaces was set from whichever concept happened to come first and re-derived by a
+signal on every edit.
 
 Every ordering test creates its expected winner FIRST, so it has the LOWEST game id: the final tie-break is
 the highest id, and a winner created last would pass even if the date ordering were deleted.
@@ -120,12 +120,23 @@ def test_real_cover_art_beats_a_newer_version_with_only_the_generic_icon():
     assert _icon(series) == 'https://img.test/has-art.png'
 
 
-def test_with_no_real_art_anywhere_the_newest_generic_icon_is_used():
+def test_with_no_real_art_anywhere_the_stage_shows_no_icon():
+    # The generic title icon is never used: it would crop badly in the square, and the stored icon this
+    # replaced never showed it either.
     series, stage = _series('icon-no-art')
     _version(stage, 'newer', igdb_year=2020, art=False)
     _version(stage, 'older', igdb_year=2005, art=False)
 
-    assert _icon(series) == 'https://img.test/newer-icon.png'
+    assert _icon(series) is None
+
+
+def test_real_art_on_a_delisted_version_beats_an_obtainable_one_with_none():
+    # Owner's order: real art first, THEN obtainability. The icon is a picture of the game.
+    series, stage = _series('icon-art-over-obtainable')
+    _version(stage, 'delisted-with-art', igdb_year=2005, obtainable=False)
+    _version(stage, 'live-no-art', igdb_year=2020, art=False)
+
+    assert _icon(series) == 'https://img.test/delisted-with-art.png'
 
 
 def test_a_bundle_only_stage_takes_its_icon_from_the_newest_member():
@@ -171,6 +182,7 @@ def test_the_icon_pick_adds_no_queries_to_the_page(monkeypatch):
     bundle = ConceptBundleFactory(stage=stage)
     for year in (2001, 2008):
         _version(stage, f'v{year}', igdb_year=year)
+    _version(stage, 'no-match', psn_year=2003)   # no IGDBMatch: the missing reverse one-to-one path
     _version(stage, 'episode', igdb_year=2012, bundle=bundle)
 
     _icon(series)  # warm the page's own caches, so both measured runs start from the same state
@@ -178,7 +190,7 @@ def test_the_icon_pick_adds_no_queries_to_the_page(monkeypatch):
         assert _icon(series) == 'https://img.test/episode.png'
     monkeypatch.setattr(badge_detail_service, '_stage_icon_url', lambda *args: None)
     with CaptureQueriesContext(connection) as without_pick:
-        _icon(series)
+        assert _icon(series) is None   # the stub took effect, so this measures the page WITHOUT the pick
 
     assert len(with_pick) == len(without_pick)
 

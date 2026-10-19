@@ -247,36 +247,37 @@ def _version_date(game):
 
 
 def _stage_icon_url(obtainable, delisted, bundles, platforms, exclude_delisted) -> Optional[str]:
-    """The stage's icon: the cover of its most recently released version, preferring one a hunter can still
-    get (owner's call). Bundle members count like any other version of the stage, sorted into "can still
-    get" by the SAME edition-aware rule as the stage's own games (`_display_playable`), so a delisted
-    episode cannot outrank a live game on an edition that excludes delisted titles.
+    """The stage's icon, picked from its versions in this order (owner's call):
 
-    Within a pool, real cover art (`has_cover_art`) beats the generic PlayStation title icon: the newest
-    version can have nothing but the placeholder while an older one has proper art, and the stored icon this
-    replaced never showed the placeholder. Then newest first, undated below dated, and ties to the highest
-    game id so the pick is stable.
+    1. REAL cover art (`has_cover_art`) only. The icon is a picture of the game, so a delisted version's real
+       cover beats the generic PlayStation title icon. With no real art anywhere the stage gets NO icon, as
+       the stored icon it replaced never showed the placeholder (which would also crop badly in the square).
+    2. Still obtainable on this edition, by the SAME rule as the stage's own grid (`_display_playable`),
+       bundle members included, so a delisted episode cannot outrank a live game where delisted titles are
+       excluded.
+    3. Most recently released (`_version_date`), undated last, ties to the highest game id so the pick is
+       stable.
 
     Derived at render time instead of stored: every game here is already loaded for the stage's cards, so
     this costs no queries, and the icon can never drift from the stage's games the way a stored copy did
     (it was set from whichever concept happened to come first, and re-derived on every edit).
     """
-    current = [e['game'] for e in obtainable]
-    gone = [e['game'] for e in delisted]
+    versions = [(e['game'], True) for e in obtainable] + [(e['game'], False) for e in delisted]
     for bundle in bundles:
         for member in bundle['members']:
             for e in member['games']:
-                playable = _display_playable(e['game'], platforms, exclude_delisted)
-                (current if playable else gone).append(e['game'])
+                versions.append((e['game'], _display_playable(e['game'], platforms, exclude_delisted)))
 
-    def newest(game):
+    with_art = [(game, playable) for game, playable in versions if game.has_cover_art]
+    if not with_art:
+        return None
+
+    def rank(version):
+        game, playable = version
         date = _version_date(game)
-        return (game.has_cover_art, date.timestamp() if date else float('-inf'), game.id)
+        return (playable, date.timestamp() if date else float('-inf'), game.id)
 
-    for pool in (current, gone):
-        if pool:
-            return max(pool, key=newest).display_image_url or None
-    return None
+    return max(with_art, key=rank)[0].display_image_url or None
 
 
 def _display_playable(game, platforms, exclude_delisted) -> bool:
