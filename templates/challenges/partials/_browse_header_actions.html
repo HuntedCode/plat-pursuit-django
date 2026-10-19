@@ -2,9 +2,9 @@
 SHARED by the Challenges page and the Hall of Fame, so the two headers stay one shape.
 
 MY CHALLENGES LIVES IN THE HEADER (owner, 2026-10-18). It sat at the end of the filter row, icon-only on a phone, and
-the row is not drawn at all when nothing is in flight, so the page's main way in to your own runs was easy to miss. A
-solid button with its label at every width, in the left column, so it never shares the tally's slot. Signed in with a
-profile only: My Challenges needs both.
+the row is not drawn at all when nothing is in flight, so the page's main way in to your own runs was easy to miss. The
+default (not ghost) `.pp-cta` with its label at every width and a 44px touch height, in the left column, so it never
+shares the tally's slot. Signed in with a profile only: My Challenges needs both.
 
 THE INTRO, ON REQUEST ONLY. These pages are public and browsed by people who may never start a run, so it never opens
 itself here; My Challenges is where it auto-opens.{% endcomment %}
@@ -14,7 +14,7 @@ itself here; My Challenges is where it auto-opens.{% endcomment %}
         How Challenges work
     </button>
     {% if user.is_authenticated and user.profile %}
-    <a href="{% url 'my_challenges' %}" class="pp-cta" data-my-challenges>
+    <a href="{% url 'my_challenges' %}" class="pp-cta min-h-11" data-my-challenges>
         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
         My Challenges
     </a>

@@ -903,7 +903,8 @@ def test_every_list_surface_can_reach_the_others(client):
     # From the header, labelled at every width (owner, 2026-10-18), not the end of the toolbar.
     header = browse[:browse.index('id="gl-form"')]
     link = header[header.index('data-my-lists'):]
-    assert 'My lists' in link[:link.index('</a>')] and 'hidden md:inline' not in link[:link.index('</a>')]
+    link = link[:link.index('</a>')]
+    assert 'My lists' in link and 'hidden md:inline' not in link and 'min-h-11' in header
     assert browse.count('data-my-lists') == 1
     assert reverse('lists_browse') in mine, 'My Lists cannot reach browse'
     assert reverse('lists_browse') in detail, 'a list page cannot reach browse'
