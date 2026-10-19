@@ -236,6 +236,11 @@ Every rebuilt page should have a header card that establishes context and houses
 </div>
 ```
 
+**A page's main destination link** (My Challenges, My lists) goes in the LEFT column under the subtitle, as a
+default `.pp-cta min-h-11` with its label at every width, never in the right column beside a headline number: a
+control in the tally's slot reads at the same level as the number and the two compete (owner, 2026-10-18; it used
+to sit at the end of the filter toolbar, icon-only on a phone, and was easy to miss).
+
 **Subtitle guidelines**: The subtitle should be dynamic and contextual, not generic. Change based on active filters, current sort, result count, or user state. Add personality (flavor text, playful phrasing) per the Platinum Pursuit Standard.
 
 ### Tab Group / View Switcher (site-wide standard, 2026-07)

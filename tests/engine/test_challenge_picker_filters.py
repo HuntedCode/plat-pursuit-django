@@ -487,21 +487,22 @@ def test_a_page_lands_only_on_the_panel_that_asked_for_it():
     assert "root: els.body || null" in JS
 
 
-def test_the_browse_page_links_my_challenges_and_the_hall_of_fame_does_not(client):
-    # A RUN, so the toolbar renders: an empty hub shows its empty state instead, whose own "Start a challenge"
-    # is the way to My Challenges there.
+def test_with_a_run_in_flight_my_challenges_is_in_the_header_once_and_not_the_toolbar(client):
+    # A RUN, so the toolbar renders too: the button lives in the header (owner, 2026-10-18), exactly once.
     svc.start(_hunter(client), CHALLENGE_TYPE_AZ)
-    browse = client.get(reverse('challenges')).content.decode()
-    hof = client.get(reverse('challenges_hall_of_fame')).content.decode()
-    assert 'href="%s"' % reverse('my_challenges') in browse[browse.index('data-browse-form'):]
-    assert 'aria-label="My Challenges"' in browse
-    assert 'aria-label="My Challenges"' not in hof
+    for page in ('challenges', 'challenges_hall_of_fame'):
+        body = client.get(reverse(page)).content.decode()
+        if page == 'challenges':
+            assert 'data-browse-form' in body, 'the toolbar must render'   # the Hall of Fame has nothing finished
+        header = body[:body.index('</section>')]
+        assert body.count('data-my-challenges') == 1 and 'data-my-challenges' in header, page
 
 
 def test_an_anonymous_browse_page_offers_no_my_challenges_button(client):
     svc.start(_hunter(), CHALLENGE_TYPE_AZ)
-    assert 'data-browse-form' in client.get(reverse('challenges')).content.decode(), 'the toolbar must render'
-    assert 'aria-label="My Challenges"' not in client.get(reverse('challenges')).content.decode()
+    body = client.get(reverse('challenges')).content.decode()
+    assert 'data-browse-form' in body, 'the toolbar must render'
+    assert 'data-my-challenges' not in body
 
 
 # ── the job buttons on a phone ────────────────────────────────────────────────────────────────────

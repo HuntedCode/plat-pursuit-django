@@ -175,13 +175,13 @@ below with no outer wrapper.
                 <div class="flex items-center gap-4 shrink-0 text-right" data-gl-tallies>
                     <div>
                         <span class="pp-tally text-primary leading-none font-bold text-xl md:text-3xl" data-game-count>{{ game_list.game_count|intcomma }}</span>
-                        <span class="text-[0.65rem] md:text-xs text-base-content/50 md:mt-1 md:block md:uppercase md:tracking-wider">games</span>
+                        <span class="text-xs text-base-content/50 md:mt-1 md:block md:uppercase md:tracking-wider">games</span>
                     </div>
                     {% comment %}Hidden rather than absent while private, so publishing reveals the
                     tally in place instead of leaving the header a reload behind.{% endcomment %}
                     <div data-gl-tally-likes {% if not game_list.is_public %}hidden{% endif %}>
                         <span class="pp-tally leading-none font-bold text-xl md:text-3xl" data-like-count>{{ game_list.like_count|intcomma }}</span>
-                        <span class="text-[0.65rem] md:text-xs text-base-content/50 md:mt-1 md:block md:uppercase md:tracking-wider">likes</span>
+                        <span class="text-xs text-base-content/50 md:mt-1 md:block md:uppercase md:tracking-wider">likes</span>
                     </div>
                 </div>
             </div>

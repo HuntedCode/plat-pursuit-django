@@ -447,19 +447,17 @@ def test_a_signed_in_reader_without_a_profile_is_offered_nothing_they_cannot_do(
     assert 'Make a list' not in resp.content.decode()
 
 
-def test_the_browse_action_sits_in_the_toolbar_not_the_header(linked_staff_client):
-    """The tally slot is a DISPLAY register. A control in it reads at the same optical level as the
-    number, so the two compete -- and no other rebuilt header on the site does it. The destination
-    belongs at the right end of the control row, which is where every filter toolbar worth copying
-    puts it."""
+def test_my_lists_sits_in_the_header_left_column_not_the_toolbar(linked_staff_client):
+    """In the header since 2026-10-18 (owner): at the end of the toolbar, icon-only on a phone, it was easy to
+    miss. Still never in the tally's slot: a control there reads at the same optical level as the number, so
+    the two compete. It sits under the subtitle instead."""
     body = linked_staff_client.get(BROWSE).content.decode()
 
-    header_end = body.index('</section>')
-    assert 'My lists' not in body[:header_end], 'the action is back in the header card'
-    assert 'My lists' in body[header_end:]
-    # And it is inside the toolbar's control row rather than floating between the two.
+    header = body[:body.index('</section>')]
+    assert 'data-my-lists' in header, 'the action left the header card'
+    assert header.index('data-my-lists') < header.index('id="gl-count"'), 'the action is in the tally slot'
     bar = body[body.index('pp-gbrowse__bar'):]
-    assert 'My lists' in bar[:bar.index('</form>')]
+    assert 'My lists' not in bar[:bar.index('</form>')], 'the toolbar still carries it'
 
 
 def test_the_game_count_range_actually_submits(linked_staff_client):
