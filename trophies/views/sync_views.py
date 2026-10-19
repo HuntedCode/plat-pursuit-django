@@ -3,7 +3,7 @@ import logging
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.cache import cache
-from django.db.models import Exists, OuterRef, Prefetch, Q, Subquery
+from django.db.models import OuterRef, Prefetch, Q, Subquery
 from django.db.models.functions import Lower
 from django.http import JsonResponse
 from django.urls import reverse
@@ -348,9 +348,8 @@ class SiteSuggestView(View):
         # picks the live one in Python), and the series carries the borrowed art and a user
         # badge's submitter, so _badge_art reads no further rows: two queries for the group.
         series = (
-            BadgeSeries.objects
-            .filter(Exists(GroupBadge.objects.filter(series=OuterRef('pk'), is_live=True)),
-                    name__icontains=q)
+            BadgeSeries.objects.live()
+            .filter(name__icontains=q)
             .exclude(series_slug='')
             .select_related('artwork_source', 'submitted_by')
             .prefetch_related(Prefetch('group_badges',
@@ -360,7 +359,7 @@ class SiteSuggestView(View):
         items = [
             {
                 'label': s.name,
-                'sublabel': badge_type_label(s.badge_type),   # the Collection's words: user -> "Community"
+                'sublabel': badge_type_label(s.badge_type),
                 'image': _badge_art(s),
                 'url': reverse('badge_detail', kwargs={'series_slug': s.series_slug}),
             }

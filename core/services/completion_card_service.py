@@ -263,7 +263,7 @@ def _badge_lines(profile, concept, game):
     if not concept:
         return []
 
-    live_slugs = BadgeSeries.objects.filter(group_badges__is_live=True).values_list('series_slug', flat=True)
+    live_slugs = BadgeSeries.objects.live().values_list('series_slug', flat=True)
     slugs = set(
         Stage.objects
         .filter(concepts=concept, series_slug__in=live_slugs)

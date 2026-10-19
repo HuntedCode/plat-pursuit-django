@@ -323,8 +323,7 @@ class DonationService:
         from trophies.models import BadgeSeries
 
         qs = (
-            BadgeSeries.objects
-            .filter(group_badges__is_live=True)
+            BadgeSeries.objects.live()
             .filter(Q(badge_image__isnull=True) | Q(badge_image=''))
             .exclude(badge_type='user')
             # A series that BORROWS its artwork is not commissionable -- it already displays the
@@ -337,7 +336,7 @@ class DonationService:
         )
         if not include_claimed:
             qs = qs.exclude(artwork_claim__isnull=False)
-        return qs.distinct()
+        return qs
 
     @staticmethod
     def claim_badge(donation, profile, series_id):

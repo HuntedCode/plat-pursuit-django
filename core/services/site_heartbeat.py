@@ -144,8 +144,7 @@ def compute_site_heartbeat() -> dict:
         # A series is live when it has at least one live GROUP badge -- liveness moved from the badge row
         # to the per-edition GroupBadge in the 2026-08 cutover.
         _live_series = (
-            BadgeSeries.objects.filter(group_badges__is_live=True)
-            .distinct().values_list('series_slug', flat=True)
+            BadgeSeries.objects.live().values_list('series_slug', flat=True)
         )
         games_in_badges = Game.objects.filter(concept__stages__series_slug__in=_live_series).distinct().count()
     except Exception:

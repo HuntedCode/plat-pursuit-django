@@ -142,6 +142,25 @@ def test_the_badge_sitemap_serves_the_live_badge_system():
     assert 'dormant-series' not in slugs
 
 
+def test_the_badge_sitemap_lists_a_series_once_and_skips_a_blank_slug(client):
+    # Two live editions are still one URL; a '' slug (writable past the SlugField) would NoReverseMatch
+    # the badge section for every crawler, so it is left out rather than taking the map down. The section,
+    # not /sitemap.xml: that is an index and never reverses a badge URL.
+    from trophies.models import BadgeSeries
+    from core.sitemaps import BadgeSitemap
+
+    twice = BadgeSeriesFactory(series_slug='two-editions')
+    GroupBadgeFactory(series=twice, platform_group=PlatformGroupFactory(key='sm-a'))
+    GroupBadgeFactory(series=twice, platform_group=PlatformGroupFactory(key='sm-b'))
+    blank = GroupBadgeFactory(series=BadgeSeriesFactory(series_slug='soon-blank')).series
+    BadgeSeries.objects.filter(pk=blank.pk).update(series_slug='')
+
+    assert [s.series_slug for s in BadgeSitemap().items()] == ['two-editions']
+    resp = client.get('/sitemap-badges.xml')
+    assert resp.status_code == 200
+    assert b'/badges/two-editions/' in resp.content
+
+
 def test_the_game_sitemap_excludes_shovelware():
     from tests.factories import GameFactory
     from core.sitemaps import GameSitemap

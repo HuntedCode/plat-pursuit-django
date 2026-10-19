@@ -202,9 +202,8 @@ class BadgeSitemap(Sitemap):
     def items(self):
         from trophies.models import BadgeSeries
         return (
-            BadgeSeries.objects
-            .filter(group_badges__is_live=True)
-            .distinct()
+            BadgeSeries.objects.live()
+            .exclude(series_slug='')   # a '' slug can be written past the SlugField; it would NoReverseMatch the map
             .only('series_slug', 'created_at')
             .order_by('-id')
         )
@@ -218,7 +217,7 @@ class BadgeSitemap(Sitemap):
     def get_latest_lastmod(self):
         from trophies.models import BadgeSeries
         return (
-            BadgeSeries.objects.filter(group_badges__is_live=True)
+            BadgeSeries.objects.live()
             .order_by('-created_at')
             .values_list('created_at', flat=True)
             .first()

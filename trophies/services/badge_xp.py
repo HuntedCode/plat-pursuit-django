@@ -413,7 +413,7 @@ def _live_standings(profile_id):
     """
     from trophies.models import BadgeSeries, SeriesBadgeStanding
 
-    live_slugs = BadgeSeries.objects.filter(group_badges__is_live=True).values_list('series_slug', flat=True)
+    live_slugs = BadgeSeries.objects.live().values_list('series_slug', flat=True)
     return SeriesBadgeStanding.objects.filter(profile_id=profile_id, series_slug__in=live_slugs)
 
 

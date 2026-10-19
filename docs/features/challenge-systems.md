@@ -488,7 +488,7 @@ preview refusal block a Resume, which its own comment says it must not, so decid
 | Source | What it adds | Platform-scoped? |
 |---|---|---|
 | Badges I've started | live editions with 0 < cleared < gating in `SeriesBadgeStanding.group_progress`, minus editions the hunter holds (the read-model can go stale once held). Per edition: the series-level `progress_bp` is the BEST edition's and hid an unfinished Ultra HD behind a finished Legacy HD | yes |
-| A whole badge type | every live edition of Series, Franchises, Collections, Mega Mixes, Developers, Community or Events | yes |
+| A whole badge type | every live edition of one type: Series, Franchise, Collection, Megamix, Developer, User or Event (the model's own labels) | yes |
 | All badges | every live edition | yes |
 | Picked by hand | up to `MAX_PICKED_BADGES` editions from the step's gallery | **no**: a pick is meant, like a must-have |
 
@@ -507,8 +507,8 @@ game fits. The weight is not in the pool's cache key or the allowance's "same pl
 **The gallery** (`OptimizerBadgesView`) pages medallion cards filtered by `badge_list_service.live_editions`, the
 Browse Gallery's own filter body, lifted out so both filter alike, minus the editions the hunter already holds
 (owner, 2026-10-18: nothing left to plan toward; not-started editions stay pickable). Each card, chip and plan
-stage row names the badge's TYPE beside its edition ("Franchise · Legacy HD"), in the Collection's singular words
-(`collection_service.badge_type_label`: `user` is "Community"), so a Franchise and a Series badge of one name are
+stage row names the badge's TYPE beside its edition ("Franchise · Legacy HD"), in the model's own labels
+(`collection_service.badge_type_label`, from `BadgeSeries.BADGE_TYPES`: `user` is "User"), so a Franchise and a Series badge of one name are
 tellable apart. Cards come from `build_list_cards` (art,
 edition, per-edition progress, two bulk queries) with the medallion state set by the Collection's
 `edition_display_state`. Editions default to step 2's platforms on first open. A card is a STRETCHED toggle

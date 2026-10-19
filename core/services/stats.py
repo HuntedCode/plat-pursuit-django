@@ -42,10 +42,9 @@ def compute_community_stats():
     # the series' own created_at, not the group badge's: adding an Ultra HD edition to an existing series is
     # not a new badge on the ribbon.
     live_series_slugs = list(
-        BadgeSeries.objects.filter(group_badges__is_live=True)
-        .distinct().values_list('series_slug', flat=True)
+        BadgeSeries.objects.live().values_list('series_slug', flat=True)
     )
-    badge_series_counts = BadgeSeries.objects.filter(series_slug__in=live_series_slugs).aggregate(
+    badge_series_counts = BadgeSeries.objects.live().aggregate(
         total=Count('id'),
         weekly=Count('id', filter=Q(created_at__gte=week_ago)),
     )

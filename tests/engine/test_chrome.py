@@ -312,7 +312,7 @@ def test_site_suggest_badge_art_comes_from_a_live_edition(client):
     assert _badge_items(client, 'two editions')[0]['image'].endswith('badges/series/live.png')
 
 
-def test_site_suggest_user_badge_reads_community_and_wears_the_submitters_avatar(client):
+def test_site_suggest_user_badge_is_tagged_user_and_wears_the_submitters_avatar(client):
     author = ProfileFactory(avatar_url='https://cdn.example/author.png')
     GroupBadgeFactory(series=BadgeSeriesFactory(name='Fan Made', badge_type='user', submitted_by=author))
     GroupBadgeFactory(series=BadgeSeriesFactory(name='Fan Bare', badge_type='user',
@@ -320,7 +320,7 @@ def test_site_suggest_user_badge_reads_community_and_wears_the_submitters_avatar
     items = {i['label']: i for i in _badge_items(client, 'fan')}
 
     assert set(items) == {'Fan Made', 'Fan Bare'}
-    assert items['Fan Made']['sublabel'] == 'Community'   # the Collection's word, not the raw "User"
+    assert items['Fan Made']['sublabel'] == 'User'
     assert items['Fan Made']['image'] == 'https://cdn.example/author.png'
     assert items['Fan Bare']['image'] == ''               # no avatar either: the glyph
 

@@ -200,9 +200,9 @@ def build_game_card_context(page_games, request, condensed=False):
     if all_slugs:
         series_badge = {
             b['series_slug']: {**b, 'label': b['display_series'] or b['name']}
-            for b in BadgeSeries.objects.filter(series_slug__in=all_slugs, group_badges__is_live=True)
+            for b in BadgeSeries.objects.live().filter(series_slug__in=all_slugs)
             .values('series_slug', 'name', 'display_series', 'badge_type',
-                    'collection_id', 'franchise_id', 'developer_id').distinct()
+                    'collection_id', 'franchise_id', 'developer_id')
         }
 
     badge_map = {}

@@ -17,7 +17,7 @@ having a linked profile IS the eligibility.
 """
 import logging
 
-from trophies.models import EarnedTrophy, GroupBadge, UserGroupBadge
+from trophies.models import BadgeSeries, EarnedTrophy, GroupBadge, UserGroupBadge
 from trophies.services import career_service, profile_stats_service
 from trophies.services.badge_detail_service import group_medallion_layers
 from users.services.marks import mark_style
@@ -67,7 +67,7 @@ def _badge_summary(profile):
     chasing = (
         SeriesBadgeStanding.objects
         .filter(profile=profile, progress_bp__lt=10000,
-                series_slug__in=GroupBadge.objects.filter(is_live=True).values('series__series_slug'))
+                series_slug__in=BadgeSeries.objects.live().values('series_slug'))
         .exclude(series_slug__in=held_slugs)
         .count()
     )
