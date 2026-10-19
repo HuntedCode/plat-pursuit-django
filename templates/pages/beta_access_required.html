@@ -1,28 +1,32 @@
 {% extends 'base.html' %}
 {% load static %}
 
-{% block title %}Beta Feature{% endblock %}
+{% block title %}Beta Access{% endblock %}
+{% block robots %}noindex, follow{% endblock %}
 {% block content %}
+{% comment %}`/beta-access/`, KEPT FOR THE NEXT BETA (owner, 2026-10-18). `trophies.mixins.PremiumRequiredMixin` redirects
+here, and nothing uses it while no feature is in a members-first beta, so the page says so plainly instead of claiming
+"the feature you're trying to access is in beta". When a future beta adopts the mixin, give this page that beta's
+copy back (or have the view pass it in).{% endcomment %}
 <div class="container mx-auto p-4 max-w-2xl flex items-center justify-center mt-12">
-    <div class="card bg-base-100 border-2 border-base-300 shadow-lg shadow-neutral text-center">
-        <div class="card-body">
+    <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral text-center">
+        <div class="card-body p-5 md:p-7">
             <figure class="mb-4">
-                <img src="{% static 'images/logo.png' %}" alt="PlatPursuit logo" class="w-24 mx-auto" loading="lazy" decoding="async" />
+                <img src="{% static 'images/logo.png' %}" alt="Platinum Pursuit logo" class="w-24 mx-auto" loading="lazy" decoding="async" />
             </figure>
-            <div class="badge badge-warning badge-lg mb-4">Beta Feature</div>
-            <h2 class="card-title text-3xl mb-2 justify-center">Premium Access Required</h2>
-            <p class="text-lg mb-4">
-                The feature you're trying to access is currently in beta testing and is exclusively available to our premium members.
+            <h1 class="text-2xl md:text-3xl font-bold mb-2">No betas running right now</h1>
+            <p class="text-base md:text-lg mb-3">
+                Nothing is in a members-first beta at the moment, so there is nothing to unlock here today.
             </p>
-            <p class="text-base-content/70 mb-6">
-                As a premium member, you'll get early access to new features, help shape the future of Platinum Pursuit, and support the continued development of the platform.
+            <p class="text-sm md:text-base text-base-content/70 mb-6">
+                When the next feature is ready to try, members get in first while it is still taking shape, and
+                everyone gets it when it ships.
             </p>
-            <div class="space-y-4">
-                <a href="{% url 'support_hub' %}" class="btn btn-primary w-full">Become a Premium Member</a>
-                <a href="{% url 'home' %}" class="btn btn-ghost w-full">Back to Home</a>
+            <div class="flex flex-col gap-3">
+                <a href="{% url 'support_hub' %}" class="pp-cta min-h-11 w-full">See what members get</a>
+                <a href="{% url 'home' %}" class="pp-cta pp-cta--ghost min-h-11 w-full">Back to Home</a>
             </div>
         </div>
     </div>
 </div>
 {% endblock %}
-
