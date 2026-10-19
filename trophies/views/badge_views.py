@@ -611,8 +611,7 @@ class BadgeRanksPanelView(View):
             if series is None:
                 raise Http404("Series not found")
         else:
-            series = BadgeSeries.objects.filter(
-                series_slug=series_slug, group_badges__is_live=True).first()
+            series = BadgeSeries.objects.live().filter(series_slug=series_slug).first()
             if series is None:
                 raise Http404("Series not found")
 

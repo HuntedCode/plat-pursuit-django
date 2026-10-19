@@ -104,7 +104,9 @@ Key fields: `key` (unique), `name`, `platforms` (ArrayField of PSN `title_platfo
 
 #### BadgeSeries
 The abstract series-level definition, one row per `series_slug`. Holds the shared identity and the
-DEFAULTS each edition inherits. **No `is_live` and no `tier`** -- liveness is per-edition.
+DEFAULTS each edition inherits. **No `is_live` and no `tier`** -- liveness is per-edition. "Series with a
+live edition" (the set the badge pages serve) is `BadgeSeries.objects.live()`; use it rather than a
+`group_badges__is_live` join, which duplicates a series per live edition.
 
 Key fields: `series_slug` (unique), `name`, `badge_type`, `completion_policy` (`all` / `min_count`),
 `min_required`, `description`, `display_series`, `badge_image`, `holo_badge_image`.

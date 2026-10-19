@@ -220,7 +220,7 @@ def in_live_badge(contracts):
     `catchup_offers` still count and decide over the whole pool, so turning the toggle on can never change
     which rule a square is under.
     """
-    live = BadgeSeries.objects.filter(group_badges__is_live=True).values('series_slug')
+    live = BadgeSeries.objects.live().values('series_slug')
     staged = Stage.objects.filter(series_slug__in=live)
     return contracts.filter(
         Q(Exists(staged.filter(

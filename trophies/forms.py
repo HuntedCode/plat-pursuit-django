@@ -182,7 +182,7 @@ class CompanySearchForm(forms.Form):
             # Series with a LIVE edition (the grouping-badge system), the same set the badge pages serve.
             # This read the retired legacy `Badge` model, so it offered nothing once that table emptied.
             live_series = (
-                BadgeSeries.objects.filter(group_badges__is_live=True).distinct()
+                BadgeSeries.objects.live()
                 .order_by('display_series', 'name').values_list('series_slug', 'display_series', 'name')
             )
             self.fields['badge_series'].choices = [('', 'Any Badge')] + [

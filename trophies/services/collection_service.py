@@ -22,7 +22,7 @@ from datetime import timedelta
 from django.db.models import Count
 from django.utils import timezone
 
-from trophies.models import GroupBadge, UserGroupBadge, SeriesBadgeStanding
+from trophies.models import BadgeSeries, GroupBadge, UserGroupBadge, SeriesBadgeStanding
 from trophies.services.badge_detail_service import group_medallion_layers
 from trophies.services.badge_rarity import group_rarity
 from trophies.services.rarity import community_size
@@ -32,32 +32,24 @@ logger = logging.getLogger(__name__)
 
 _RECENT_DAYS = 7   # window for the header's "+N this week" pill + the per-badge "new" ping
 
-# Badge-type sections (for the Set filter) + the palettes that cycle per section.
+# Badge-type sections (for the Set filter) in the Collection's order + the palettes that cycle per section.
 _SECTION_ORDER = ['series', 'franchise', 'collection', 'megamix', 'developer', 'user', 'event']
-_SECTION_LABELS = {
-    'series': 'Series', 'franchise': 'Franchises', 'collection': 'Collections',
-    'megamix': 'Mega Mixes', 'developer': 'Developers', 'user': 'Community', 'event': 'Events',
-}
 _PALETTES = ['cobalt', 'amber', 'emerald', 'violet']
 
-
-#: The same seven in the singular, for naming ONE badge's type ("Franchise · Legacy HD") beside chips that use
-#: the plurals above.
-_TYPE_LABELS = {
-    'series': 'Series', 'franchise': 'Franchise', 'collection': 'Collection',
-    'megamix': 'Mega Mix', 'developer': 'Developer', 'user': 'Community', 'event': 'Event',
-}
+#: The model's own choice labels ("User", "Megamix"): the words the Browse Badges chips and game-page badge
+#: cards already show, so every badge surface names a type the same way. Singular everywhere, sections included.
+_TYPE_LABELS = dict(BadgeSeries.BADGE_TYPES)
 
 
 def badge_type_label(badge_type):
-    """One badge's type in the Collection's words (`user` reads "Community", `megamix` "Mega Mix")."""
+    """One badge type's display label, from BadgeSeries.BADGE_TYPES."""
     return _TYPE_LABELS.get(badge_type, str(badge_type).capitalize())
 
 
 def badge_type_sections():
-    """[(badge_type, plural label)] in the Collection's section order. PUBLIC so the Challenge Optimizer's badge
-    step names whole types the way the Collection's Set filter does ("Franchises", "Mega Mixes")."""
-    return [(key, _SECTION_LABELS[key]) for key in _SECTION_ORDER]
+    """[(badge_type, label)] in the Collection's section order. PUBLIC so the Challenge Optimizer's badge step
+    names whole types the way the Collection's Set filter does."""
+    return [(key, badge_type_label(key)) for key in _SECTION_ORDER]
 
 # Gallery sort options (client-side, applied by collection.js). Progress-forward by default so "what am I close
 # on" is the first answer. (key, label) -- order = dropdown order.
@@ -213,7 +205,7 @@ def build_collection_context(profile, sort=DEFAULT_SORT):
         for gb in group_badges:
             fr = _badge_frame(gb, holds, standings, participants)
             btype = gb.series.badge_type
-            fr['theme'] = _SECTION_LABELS.get(btype, btype.title())
+            fr['theme'] = badge_type_label(btype)
             fr['palette'] = palette_of.get(btype, _PALETTES[0])
             ea = earned_at.get(gb.id)
             fr['earned_ts'] = int(ea.timestamp()) if ea else 0
@@ -267,7 +259,7 @@ def build_collection_context(profile, sort=DEFAULT_SORT):
 
         # Counted from the filtered wall so the header cannot claim more badges than are shown.
         total = len(list_badges)
-        themes = [{'name': _SECTION_LABELS.get(t, t.title()), 'palette': palette_of[t]} for t in ordered_types]
+        themes = [{'name': badge_type_label(t), 'palette': palette_of[t]} for t in ordered_types]
         context.update({
             'list_badges': list_badges,
             'themes': themes,
@@ -323,18 +315,12 @@ def closest_badge(profile):
     Bounded, catalog-scoped reads: the profile's standings (indexed by the `(profile, series_slug)` unique
     constraint), two small slug sets, and one name lookup.
     """
-    from trophies.models import BadgeSeries, UserGroupBadge
-
     held_slugs = set(
         UserGroupBadge.objects
         .filter(profile=profile)
         .values_list('group_badge__series__series_slug', flat=True)
     )
-    live_slugs = set(
-        BadgeSeries.objects
-        .filter(group_badges__is_live=True)
-        .values_list('series_slug', flat=True)
-    )
+    live_slugs = set(BadgeSeries.objects.live().values_list('series_slug', flat=True))
     candidate_slugs = live_slugs - held_slugs
     if not candidate_slugs:
         return None

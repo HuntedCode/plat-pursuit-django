@@ -214,9 +214,7 @@ def apply_game_browse_filters(qs, form, sort_val=''):
     if form.cleaned_data.get('in_badge'):
         # Series that ship a live GROUP badge (grouping-badge system); a game is "in a badge" if its concept
         # has a stage in one of those series.
-        live_slugs = BadgeSeries.objects.filter(
-            group_badges__is_live=True,
-        ).values_list('series_slug', flat=True).distinct()
+        live_slugs = BadgeSeries.objects.live().values_list('series_slug', flat=True)
         qs = qs.filter(Exists(
             Stage.objects.filter(
                 concepts=OuterRef('concept_id'),

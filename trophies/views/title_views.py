@@ -51,9 +51,8 @@ class MyTitlesView(LoginRequiredMixin, TemplateView):
         # `live_editions` is prefetched (ordered, so the representative art pick is deterministic) --
         # the medallion needs a GroupBadge, and a series' editions share the subject artwork.
         series_list = list(
-            BadgeSeries.objects
-            .filter(title__isnull=False, group_badges__is_live=True)
-            .distinct()
+            BadgeSeries.objects.live()
+            .filter(title__isnull=False)
             .select_related('title')
             .prefetch_related(Prefetch(
                 'group_badges',

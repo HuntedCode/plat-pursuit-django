@@ -333,7 +333,7 @@ def test_themes_reflect_badge_types():
     ctx = build_collection_context(profile)
 
     names = {t['name'] for t in ctx['themes']}
-    assert names == {'Series', 'Franchises'}
+    assert names == {'Series', 'Franchise'}   # the model's own labels, singular like the Browse chips
     assert all(t['palette'] for t in ctx['themes'])
 
 

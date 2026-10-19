@@ -866,11 +866,11 @@ def test_the_badge_picker_names_each_badges_type(client):
     _hunter(client)
     franchise = _edition('God of War', badge_type='franchise')
     series = _edition('God of War', badge_type='series')
-    community = _edition('God of War', badge_type='user')   # the Collection's word, not the model's "User"
+    user = _edition('God of War', badge_type='user')
 
     html = _body(_badges(client))['html']
 
-    for gb, label in ((franchise, 'Franchise'), (series, 'Series'), (community, 'Community')):
+    for gb, label in ((franchise, 'Franchise'), (series, 'Series'), (user, 'User')):
         card = html[html.index(f'data-badge-id="{gb.id}"'):]
         card = card[:card.index('</li>')]
         assert f'{label}&nbsp;<span aria-hidden="true">&middot;</span> {gb.platform_group.name}' in card

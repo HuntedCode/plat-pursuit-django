@@ -398,6 +398,18 @@ class BadgeQuerySet(models.QuerySet):
         return self.select_related('most_recent_concept')
 
 
+class BadgeSeriesQuerySet(models.QuerySet):
+    """Custom queryset for BadgeSeries (the grouping-badge system)."""
+
+    def live(self):
+        """Series with at least one live edition: the set the badge pages serve (a series with none 404s).
+
+        An EXISTS rather than a join on `group_badges`, so a series with several live editions is still one
+        row and callers need no `.distinct()`."""
+        from trophies.models import GroupBadge
+        return self.filter(Exists(GroupBadge.objects.filter(series=OuterRef('pk'), is_live=True)))
+
+
 class BadgeManager(models.Manager):
     """Custom manager for Badge model."""
 

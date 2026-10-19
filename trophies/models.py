@@ -23,7 +23,7 @@ from trophies.util_modules.constants import (
 )
 from trophies.managers import (
     ProfileManager, GameManager, ProfileGameManager,
-    BadgeManager, CommentManager, ChecklistManager,
+    BadgeManager, BadgeSeriesQuerySet, CommentManager, ChecklistManager,
 )
 import re
 
@@ -3440,6 +3440,7 @@ class BadgeSeries(models.Model):
 
     created_at = models.DateTimeField(auto_now_add=True)
 
+    objects = BadgeSeriesQuerySet.as_manager()
 
     class Meta:
         ordering = ['name']
