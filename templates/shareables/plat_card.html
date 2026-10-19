@@ -354,9 +354,9 @@ Context: see core/services/completion_card_service.get_card_data + api/shareable
                     {% comment %}The bar FLEXES so the row ends flush with the title+edition above it --
                     a short fixed bar left the column looking ragged. Its own max-content is tiny, so
                     row 1 still sets the column width and the bar simply takes what's left. It fills in
-                    the badge's BACKING METAL, not the card's variant accent, matching
-                    `.bdh-progress[data-tier]` on badge detail -- this bar measures badge progress, so
-                    it belongs to the badge.{% endcomment %}
+                    the badge's BACKING METAL, not the card's variant accent, matching the metal
+                    tints of badge detail's edition switcher (`--gbtn-metal`) -- this bar measures badge
+                    progress, so it belongs to the badge.{% endcomment %}
                     <div style="display: flex; align-items: center; gap: 9px; margin-top: 6px;">
                         <span style="position: relative; display: block; flex: 1; min-width: 60px; height: 5px; border-radius: 3px; background: #2f363f; overflow: hidden;">
                             <span style="position: absolute; inset: 0; width: {% widthratio line.stages_cleared line.stages_total 100 %}%; background: {{ line.medallion_colour|default:"#e7c25c" }}; border-radius: 3px;"></span>
