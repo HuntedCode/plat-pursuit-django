@@ -326,6 +326,42 @@ def test_a_job_with_no_contracts_reports_zero_rather_than_nothing(client):
     assert '0</b> XP' in client.get(reverse('jobs_browse')).content.decode()
 
 
+def _browse_queryset():
+    from django.test import RequestFactory
+    from trophies.views.career_views import JobsBrowseView
+
+    view = JobsBrowseView()
+    view.request, view.kwargs = RequestFactory().get('/jobs/'), {}
+    return view.get_queryset()
+
+
+def test_the_catalogue_query_runs_its_subqueries_once_per_job_not_once_per_link():
+    """THE 2026-10 OUTAGE: `/jobs/` hit prod's 15s statement timeout and 500'd.
+
+    `contract_count` was an outer `Count('contracts')`, which gave the query a GROUP BY, and Postgres
+    then evaluated the `xp_supply` subquery once per job-CONTRACT LINK, each run scanning every contract:
+    quadratic in the catalogue (279 dev contracts took 137ms; prod's grew past the timeout). Both counts
+    are subqueries now, so there is no GROUP BY and each subquery runs once per job.
+
+    Pinned two ways: the query structure (no outer GROUP BY), and the plan itself, read from Postgres, on
+    a catalogue where links outnumber jobs ten to one."""
+    import re as _re
+
+    _solo()
+    jobs = [_job(f'j{i}', f'J{i}') for i in range(3)]
+    for n in range(10):
+        _contract(f'Shared {n}', jobs)
+
+    qs = _browse_queryset()
+    assert qs.query.group_by is None, 'an outer aggregate is back: the supply subquery joins the GROUP BY'
+
+    plan = qs.explain(analyze=True).split('\n')
+    top = [line for line in plan if _re.match(r'\s{8}SubPlan', line)]  # subplans of the job scan itself
+    assert top, 'no subqueries in the plan; the catalogue no longer reads its counts the way this pins'
+    loops = [int(_re.search(r'loops=(\d+)', plan[plan.index(line) + 1]).group(1)) for line in top]
+    assert all(n == len(jobs) for n in loops), f'subqueries ran {loops} times for {len(jobs)} jobs (30 links)'
+
+
 def test_the_second_figure_costs_no_extra_query(client):
     """It is a correlated subquery on the SAME queryset, not a second pass. Asserted against the count with
     the annotation removed being identical -- a per-card evaluation would scale with the catalogue, which

@@ -246,6 +246,11 @@ class ContractModalPreviewView(View):
                       {'p': p, 'profile': None, 'is_preview': True})
 
 
+#: The Contract <-> Job link table. Both supply subqueries read it directly: it is indexed on both columns,
+#: so every lookup is a probe rather than a scan of `trophies_contract`.
+_ContractJob = Contract.jobs.through
+
+
 def _job_xp_supply():
     """Total contract XP that FEEDS one job: a correlated subquery for `JobsBrowseView`.
 
@@ -273,17 +278,35 @@ def _job_xp_supply():
     2. The job count as its own correlated subquery. `Count('jobs')` on the queryset already filtered by
        `jobs=OuterRef('pk')` raises `FieldError: Cannot compute Sum('share'): 'share' is an aggregate` --
        so this is not a defence against a wrong number, it is the only way to express the count at all.
-    3. `.order_by()`. `Contract.Meta.ordering` is inherited by the subquery and leaks `name` into its
-       GROUP BY, which Postgres rejects outright.
+    3. `.order_by()`, so no model ordering leaks into the subquery's GROUP BY (Postgres rejects it).
+
+    AND IT READS THE LINK TABLE, NOT `Contract` (2026-10 outage). The first version filtered `Contract`
+    by `jobs=OuterRef('pk')` and counted each contract's jobs through `Contract` again, and Postgres ran
+    it with a scan of EVERY contract per evaluation. Worse, the outer `Count('contracts')` beside it put
+    this subquery into the GROUP BY, so it was evaluated once per job-contract LINK rather than once per
+    job: quadratic in the catalogue. 279 dev contracts took 137ms; prod's catalogue grew past the 15s
+    statement timeout and `/jobs/` 500'd. Now every lookup is an index probe on the link table, and the
+    browse view counts contracts with `_job_contract_count()` instead of an outer aggregate, so there is
+    no GROUP BY to drag this into (pinned by test_jobs_surface's query-plan test).
     """
-    per_contract_jobs = (Contract.objects.filter(pk=OuterRef('pk'))
-                         .annotate(n=Count('jobs')).values('n')[:1])
-    return (Contract.objects
-            .filter(is_live=True, jobs=OuterRef('pk'))
+    per_contract_jobs = (_ContractJob.objects.filter(contract_id=OuterRef('contract_id'))
+                         .order_by().values('contract_id').annotate(n=Count('job_id')).values('n')[:1])
+    return (_ContractJob.objects
+            .filter(job_id=OuterRef('pk'), contract__is_live=True)
             .annotate(nj=Subquery(per_contract_jobs, output_field=IntegerField()))
-            .annotate(share=Coalesce('xp_total_override', Value(CONTRACT_XP_TOTAL)) / F('nj'))
+            .annotate(share=Coalesce('contract__xp_total_override', Value(CONTRACT_XP_TOTAL)) / F('nj'))
             .order_by()
-            .values(one=Value(1)).annotate(total=Sum('share')).values('total')[:1])
+            .values('job_id').annotate(total=Sum('share')).values('total')[:1])
+
+
+def _job_contract_count():
+    """How many LIVE contracts feed one job: a correlated subquery over the link table.
+
+    A subquery rather than `Count('contracts')` on the job queryset, and that is the point: an outer
+    aggregate gives the browse query a GROUP BY, and Postgres then evaluates `_job_xp_supply()` once per
+    joined row instead of once per job (see its docstring for the outage that caused)."""
+    return (_ContractJob.objects.filter(job_id=OuterRef('pk'), contract__is_live=True)
+            .order_by().values('job_id').annotate(c=Count('contract_id')).values('c')[:1])
 
 
 class JobsBrowseView(HtmxListMixin, ListView):
@@ -335,7 +358,7 @@ class JobsBrowseView(HtmxListMixin, ListView):
             # database. It also replaces the separate grouped query this page used to run, so gaining a
             # sort cost it a query rather than adding one. `distinct=True` because a Contract can feed
             # several jobs and the join would otherwise multiply.
-            contract_count=Count('contracts', filter=Q(contracts__is_live=True), distinct=True),
+            contract_count=Coalesce(Subquery(_job_contract_count(), output_field=IntegerField()), Value(0)),
             xp_supply=Coalesce(Subquery(_job_xp_supply(), output_field=IntegerField()), Value(0)),
         )
         q = (self.request.GET.get('q') or '').strip()
