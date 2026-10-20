@@ -336,9 +336,6 @@
   h6 {
     font-family: "Inter", ui-sans-serif, system-ui, sans-serif;
   }
-  .font-logo {
-    font-family: "Futura", "Inter", ui-sans-serif, system-ui, sans-serif;
-  }
   .card {
     @apply shadow-lg shadow-base-300 border-2 border-base-300;
   }
@@ -346,116 +343,10 @@
   /* (The legacy ZoomScaler sub-768px transform-scale system was removed -- it had no callers.
      #zoom-container / #zoom-wrapper remain as the modal/ceremony recede host, see #page-recede.) */
 
-  .card-img-container {
-    @apply border-2 border-base-300 group-hover:scale-105 group-focus-within:scale-105 hover:animate-pulse;
-  }
-
-  /* Section container - outer page sections */
-  .section-container {
-    @apply shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 p-0 lg:p-4;
-  }
-
-  /* Guide edit: ensure content is not hidden behind sticky toolbar */
-  #checklist-edit-container {
-    padding-bottom: 4rem;
-  }
-
-  /* Guide edit: details chevron rotation */
-  details[open] .details-chevron {
-    transform: rotate(180deg);
-  }
-
   /* Toolbar card - filter/sort/search bars (Career Contracts, Collection gallery, badge Series + Gallery).
      The header card's surface (bg-base-200/90 + border-2 base-300) with a lighter shadow and no accent bar. */
   .pp-toolbar-card {
     @apply bg-base-200/90 rounded-2xl shadow-md shadow-neutral border-2 border-base-300;
-  }
-
-  /* Interactive card with standard hover effect */
-  .card-interactive {
-    @apply transition-all duration-300 cursor-pointer hover:scale-105;
-  }
-
-  /* Interactive card hover variants */
-  .card-hover-primary {
-    @apply hover:border-primary hover:shadow-primary;
-  }
-
-  .card-hover-accent {
-    @apply hover:border-accent hover:shadow-accent;
-  }
-
-  .card-hover-secondary {
-    @apply hover:border-secondary hover:shadow-secondary;
-  }
-  .trophy-card-bronze {
-    @apply hover:border-trophy-bronze hover:shadow-trophy-bronze focus-within:border-trophy-bronze focus-within:shadow-trophy-bronze;
-  }
-  .trophy-card-img-bronze {
-    @apply group-hover:border-trophy-bronze group-focus-within:border-trophy-bronze;
-  }
-  .trophy-card-silver {
-    @apply hover:border-trophy-silver hover:shadow-trophy-silver focus-within:border-trophy-silver focus-within:shadow-trophy-silver;
-  }
-  .trophy-card-img-silver {
-    @apply group-hover:border-trophy-silver group-focus-within:border-trophy-silver;
-  }
-  .trophy-card-gold {
-    @apply hover:border-trophy-gold hover:shadow-trophy-gold focus-within:border-trophy-gold focus-within:shadow-trophy-gold;
-  }
-  .trophy-card-img-gold {
-    @apply group-hover:border-trophy-gold group-focus-within:border-trophy-gold;
-  }
-  .trophy-card-platinum {
-    @apply hover:border-trophy-platinum hover:shadow-trophy-platinum focus-within:border-trophy-platinum focus-within:shadow-trophy-platinum;
-  }
-  .trophy-card-img-platinum {
-    @apply group-hover:border-trophy-platinum group-focus-within:border-trophy-platinum;
-  }
-
-  /* Trophy badge styles for checklists */
-  .badge-bronze {
-    background-color: #cd7f32;
-    color: white;
-    border-color: #8d4d2a;
-  }
-  .badge-silver {
-    background-color: #c0c0c0;
-    color: #1a1a1a;
-    border-color: #5f5f5f;
-  }
-  .badge-gold {
-    background-color: #ffd700;
-    color: #1a1a1a;
-    border-color: #927143;
-  }
-  .badge-platinum {
-    background-color: #67d1f8;
-    color: #1a1a1a;
-    border-color: #2196f3;
-  }
-
-  /* Trophy border colors for items */
-  .border-bronze {
-    border-color: #cd7f32;
-  }
-  .border-silver {
-    border-color: #c0c0c0;
-  }
-  .border-gold {
-    border-color: #ffd700;
-  }
-  .border-platinum {
-    border-color: #67d1f8;
-  }
-
-  /* Earned trophy checkbox styling */
-  .checklist-trophy-item[data-earned="true"] {
-    background-color: oklch(86.171% 0.142 166.534 / 0.1);
-  }
-  .checklist-trophy-item[data-earned="true"] .checkbox:disabled {
-    cursor: not-allowed;
-    opacity: 0.9;
   }
 
   .shimmer {
@@ -484,15 +375,6 @@
         border-color: var(--color-primary);
       }
   }
-  .shake {
-    animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both;
-  }
-  @keyframes shake {
-    10%, 90% { transform: translate3d(-1px, 0, 0); }
-    20%, 80% { transform: translate3d(2px, 0, 0); }
-    30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
-    40%, 60% { transform: translate3d(4px, 0, 0); }
-  }
 
   /* (The mobile bottom tab bar was rebuilt to the --pp-* house style in components/chrome.css.)
      (The hub sub-nav's mobile collapse moved to the rebuilt .pp-sub__sheet in components/chrome.css.) */
@@ -520,23 +402,6 @@
       padding-bottom: 3.5rem;
     }
   }
-}
-
-/* Compact stat variant for tight grid cards */
-.stat-compact .stat {
-  padding-inline: 0.5rem;
-  padding-block: 0.25rem;
-  column-gap: 0.5rem;
-}
-
-.stat-compact .stat-value {
-  white-space: normal;
-  overflow-wrap: break-word;
-}
-
-.stat-compact .stat-title,
-.stat-compact .stat-desc {
-  white-space: normal;
 }
 
 /* ===== Browse-page flag-filter pills ===== */
@@ -568,107 +433,6 @@
 
 
 
-/* Equip glow animation for My Titles page.
-   daisyUI 5 stores the full `oklch(...)` value in `--color-secondary`, so
-   the legacy `oklch(var(--s) / X)` alpha syntax doesn't work — we use
-   `color-mix(in oklab, ..., transparent X%)` instead. */
-@keyframes title-equip-glow {
-  0% { box-shadow: var(--teg-a); }
-  50% { box-shadow: var(--teg-b); }
-  100% { box-shadow: 0 0 0 0 transparent; }
-}
-.title-equip-glow {
-  --teg-a: 0 0 0 0 color-mix(in oklab, var(--color-secondary), transparent 40%);
-  --teg-b: 0 0 20px 4px color-mix(in oklab, var(--color-secondary), transparent 70%);
-  animation: title-equip-glow 0.6s ease-out;
-}
-
-/* Banner title name crossfade for equip animation */
-#equipped-title-name {
-  transition: opacity 0.25s ease;
-}
-#equipped-title-name.title-fade-out {
-  opacity: 0;
-}
-
-/* Extend DaisyUI text-rotate to support 7-10 items */
-.text-rotate > *:has(:nth-child(7)) {
-  --items: 7;
-  animation: rotator var(--duration, 10s) linear(0 0% 13%, 0.142857 14% 27%, 0.285714 28% 41%, 0.428571 42% 55%, 0.571429 56% 70%, 0.714286 71% 84%, 0.857143 85% 99%, 1 100% 100%) infinite;
-}
-.text-rotate > *:has(:nth-child(8)) {
-  --items: 8;
-  animation: rotator var(--duration, 10s) linear(0 0% 11%, 0.125 12% 23%, 0.25 24% 36%, 0.375 37% 49%, 0.5 50% 61%, 0.625 62% 74%, 0.75 75% 86%, 0.875 87% 99%, 1 100% 100%) infinite;
-}
-.text-rotate > *:has(:nth-child(9)) {
-  --items: 9;
-  animation: rotator var(--duration, 10s) linear(0 0% 10%, 0.111111 11% 21%, 0.222222 22% 32%, 0.333333 33% 43%, 0.444444 44% 54%, 0.555556 55% 65%, 0.666667 66% 76%, 0.777778 77% 87%, 0.888889 88% 99%, 1 100% 100%) infinite;
-}
-.text-rotate > *:has(:nth-child(10)) {
-  --items: 10;
-  animation: rotator var(--duration, 10s) linear(0 0% 9%, 0.1 10% 19%, 0.2 20% 29%, 0.3 30% 39%, 0.4 40% 49%, 0.5 50% 59%, 0.6 60% 69%, 0.7 70% 79%, 0.8 80% 89%, 0.9 90% 99%, 1 100% 100%) infinite;
-}
-
-/* ==========================================
-   Checklist Edit Page - Visual Design System
-   ========================================== */
-
-/* Item Type Color Coding */
-.checklist-item-edit[data-item-type="item"],
-.checklist-item[data-item-type="item"] {
-  @apply border-l-4 border-l-base-300;
-}
-
-.checklist-item-edit[data-item-type="sub_header"],
-.checklist-item[data-item-type="sub_header"] {
-  @apply border-l-4 border-l-secondary bg-secondary/5;
-}
-
-.checklist-trophy-item[data-item-type="trophy"],
-.checklist-item[data-item-type="trophy"] {
-  @apply border-l-4 border-l-warning bg-warning/5;
-}
-
-.checklist-item-edit[data-item-type="image"],
-.checklist-item[data-item-type="image"] {
-  @apply border-l-4 border-l-info bg-info/5;
-}
-
-.checklist-item-edit[data-item-type="text_area"],
-.checklist-text-area-edit[data-item-type="text_area"],
-.checklist-item[data-item-type="text_area"] {
-  @apply border-l-4 border-l-accent bg-accent/5;
-}
-
-/* Character Limit Color Coding */
-.char-counter-safe {
-  @apply text-base-content/50;
-}
-
-.char-counter-warning {
-  @apply text-warning font-medium;
-}
-
-.char-counter-danger {
-  @apply text-error font-bold;
-}
-
-/* Drag Handles */
-.item-drag-handle,
-[class*="drag-handle"] {
-  @apply cursor-grab opacity-40 hover:opacity-100 transition-opacity;
-}
-
-.item-drag-handle:active,
-[class*="drag-handle"]:active {
-  @apply cursor-grabbing;
-}
-
-.checklist-item-edit.dragging,
-.checklist-trophy-item.dragging {
-  @apply opacity-50 shadow-xl ring-2 ring-primary;
-}
-
 /* SortableJS drag states */
 .sortable-ghost {
   @apply opacity-40 rounded-box;
@@ -686,42 +450,6 @@
 .sortable-fallback {
   opacity: 0.9 !important;
   box-shadow: 0 12px 40px -10px rgba(0, 0, 0, 0.4);
-}
-
-/* Section Cards - Collapsed/Expanded States */
-.checklist-section .card {
-  @apply transition-all duration-200;
-}
-
-.section-items-content {
-  @apply transition-all duration-300 ease-in-out overflow-hidden;
-}
-
-/* Micro-Interactions */
-@keyframes flash-success {
-  0%, 100% {
-    background-color: transparent;
-  }
-  50% {
-    background-color: oklch(86.171% 0.142 166.534 / 0.2);
-  }
-}
-
-@keyframes flash-error {
-  0%, 100% {
-    background-color: transparent;
-  }
-  50% {
-    background-color: oklch(0.759 0.24 19.2 / 0.2);
-  }
-}
-
-.flash-success {
-  animation: flash-success 1s ease-in-out;
-}
-
-.flash-error {
-  animation: flash-error 1s ease-in-out;
 }
 
 /* Smooth Scrolling */
@@ -791,33 +519,6 @@ details[open]::details-content {
 .collectible-subarea-section::details-content,
 .roadmap-step-details::details-content {
   transition: none;
-}
-
-/* Unified Item Creator */
-[id^="item-creator-"] {
-  @apply transition-all duration-200;
-}
-
-/* Trophy Modal Batch Selection */
-.trophy-card.selected {
-  @apply ring-2 ring-warning bg-warning/10;
-}
-
-/* Section Toggle Icon Rotation */
-.section-toggle-icon {
-  @apply transition-transform duration-200;
-}
-
-/* Checklist Items Hover States */
-.checklist-item-edit:hover,
-.checklist-trophy-item:hover,
-.checklist-text-area-edit:hover {
-  @apply shadow-sm;
-}
-
-/* Empty State Styling */
-.empty-items-message {
-  @apply text-base-content/50 italic text-center py-4;
 }
 
 /* Easter Egg: Platinum Trophy Rain (Konami Code) */
@@ -904,151 +605,6 @@ details[open]::details-content {
   --sks-a: 0 0 8px color-mix(in oklch, var(--color-warning) 40%, transparent);
   --sks-b: 0 0 16px color-mix(in oklch, var(--color-warning) 70%, transparent);
   animation: spinner-knife-shimmer 1.2s ease-in-out infinite;
-}
-
-/* Badge Showcase Carousel - crossfade rotation */
-.badge-showcase-carousel .badge-showcase-slide {
-  opacity: 0;
-  transition: opacity 0.7s ease;
-}
-
-/* 1 badge: static, always visible */
-.badge-showcase-carousel[data-count="1"] .badge-showcase-slide {
-  opacity: 1;
-}
-
-/* 2 badges: alternate every 4s (8s cycle) */
-@keyframes badge-crossfade-2 {
-  0%, 42% { opacity: 1; }
-  50%, 92% { opacity: 0; }
-  100% { opacity: 1; }
-}
-.badge-showcase-carousel[data-count="2"] .badge-showcase-slide:nth-child(1) {
-  animation: badge-crossfade-2 8s ease-in-out infinite;
-}
-.badge-showcase-carousel[data-count="2"] .badge-showcase-slide:nth-child(2) {
-  animation: badge-crossfade-2 8s ease-in-out infinite;
-  animation-delay: 4s;
-}
-
-/* 3 badges: rotate every 4s (12s cycle) */
-@keyframes badge-crossfade-3 {
-  0%, 28% { opacity: 1; }
-  33%, 95% { opacity: 0; }
-  100% { opacity: 1; }
-}
-.badge-showcase-carousel[data-count="3"] .badge-showcase-slide:nth-child(1) {
-  animation: badge-crossfade-3 12s ease-in-out infinite;
-}
-.badge-showcase-carousel[data-count="3"] .badge-showcase-slide:nth-child(2) {
-  animation: badge-crossfade-3 12s ease-in-out infinite;
-  animation-delay: 4s;
-}
-.badge-showcase-carousel[data-count="3"] .badge-showcase-slide:nth-child(3) {
-  animation: badge-crossfade-3 12s ease-in-out infinite;
-  animation-delay: 8s;
-}
-
-/* Pause on hover */
-.badge-showcase-carousel:hover .badge-showcase-slide {
-  animation-play-state: paused;
-}
-
-/* ─── Landing Page Animations ──────────────────────────────────────── */
-
-/* Hero entrance: staggered fade-up on page load */
-@keyframes hero-enter {
-  from { opacity: 0; transform: translateY(30px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-.hero-enter { opacity: 0; animation: hero-enter 0.8s ease-out both; }
-.hero-enter-1 { animation-delay: 0.1s; }
-.hero-enter-2 { animation-delay: 0.3s; }
-.hero-enter-3 { animation-delay: 0.5s; }
-.hero-enter-4 { animation-delay: 0.7s; }
-
-/* Scroll reveal: elements start invisible, JS adds .revealed */
-.reveal {
-  opacity: 0;
-  transform: translateY(40px);
-  transition: opacity 0.7s ease-out, transform 0.7s ease-out;
-}
-.reveal.revealed {
-  opacity: 1;
-  transform: translateY(0);
-}
-.reveal-left {
-  opacity: 0;
-  transform: translateX(-40px);
-  transition: opacity 0.7s ease-out, transform 0.7s ease-out;
-}
-.reveal-left.revealed {
-  opacity: 1;
-  transform: translateX(0);
-}
-.reveal-right {
-  opacity: 0;
-  transform: translateX(40px);
-  transition: opacity 0.7s ease-out, transform 0.7s ease-out;
-}
-.reveal-right.revealed {
-  opacity: 1;
-  transform: translateX(0);
-}
-
-/* Stagger delays for grouped reveals */
-.reveal-stagger-1 { transition-delay: 0.1s; }
-.reveal-stagger-2 { transition-delay: 0.2s; }
-.reveal-stagger-3 { transition-delay: 0.3s; }
-.reveal-stagger-4 { transition-delay: 0.4s; }
-.reveal-stagger-5 { transition-delay: 0.5s; }
-.reveal-stagger-6 { transition-delay: 0.6s; }
-
-/* Animated gradient background for hero and CTA sections */
-@keyframes gradient-shift {
-  0% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
-}
-.landing-gradient {
-  background: linear-gradient(
-    135deg,
-    var(--color-primary),
-    var(--color-secondary),
-    var(--color-accent),
-    var(--color-primary)
-  );
-  background-size: 300% 300%;
-  animation: gradient-shift 15s ease infinite;
-}
-
-/* Floating decorative elements */
-@keyframes gentle-float {
-  0%, 100% { transform: translateY(0) rotate(0deg); }
-  33% { transform: translateY(-15px) rotate(3deg); }
-  66% { transform: translateY(5px) rotate(-2deg); }
-}
-.float-slow { animation: gentle-float 8s ease-in-out infinite; }
-.float-medium { animation: gentle-float 6s ease-in-out infinite; }
-.float-fast { animation: gentle-float 4s ease-in-out infinite; }
-
-/* Screenshot frame glow */
-@keyframes screenshot-glow {
-  0%, 100% { box-shadow: var(--ssg-a); }
-  50% { box-shadow: var(--ssg-b); }
-}
-.screenshot-glow {
-  --ssg-a: 0 0 30px color-mix(in oklch, var(--color-primary) 15%, transparent);
-  --ssg-b: 0 0 50px color-mix(in oklch, var(--color-primary) 30%, transparent);
-  animation: screenshot-glow 4s ease-in-out infinite;
-}
-
-/* Gradient text */
-.text-gradient {
-  background-clip: text;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-image: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
 }
 
 /* Trophy mention: inline pill for cross-references to trophy guides.
@@ -1398,12 +954,6 @@ details[open]::details-content {
 }
 .roadmap-ref-pill .roadmap-ref-pill-name {
   @apply font-semibold;
-}
-.roadmap-ref-pill .roadmap-ref-pill-badge {
-  /* Numbered "#5" badge for step refs — slightly tighter than the name. */
-  @apply font-bold tabular-nums text-[0.9em] px-1 rounded bg-current/15;
-  /* `bg-current/15` keeps the chip-on-chip in the same color family as
-     the pill itself; no need for a separate per-color rule here. */
 }
 .roadmap-ref-pill[data-color="primary"]   { @apply bg-primary/15 text-primary border-primary/30 hover:bg-primary/25; }
 .roadmap-ref-pill[data-color="secondary"] { @apply bg-secondary/15 text-secondary border-secondary/30 hover:bg-secondary/25; }
@@ -2073,71 +1623,7 @@ details[open]::details-content {
   border-radius: 0;
 }
 
-/* Scroll indicator bounce */
-@keyframes scroll-bounce {
-  0%, 100% { transform: translateY(0); opacity: 0.5; }
-  50% { transform: translateY(8px); opacity: 1; }
-}
-.scroll-indicator {
-  animation: scroll-bounce 2s ease-in-out infinite;
-}
-
-/* Shimmer sweep: one-shot diagonal light sweep on cards */
-.shimmer-sweep {
-  position: relative;
-  overflow: hidden;
-}
-.shimmer-sweep::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    105deg,
-    transparent 40%,
-    rgba(255, 255, 255, 0.06) 45%,
-    rgba(255, 255, 255, 0.1) 50%,
-    rgba(255, 255, 255, 0.06) 55%,
-    transparent 60%
-  );
-  transform: translateX(-100%);
-  pointer-events: none;
-}
-.shimmer-sweep.revealed::after {
-  animation: shimmer-sweep-move 1.2s ease-out 0.3s both;
-}
-@keyframes shimmer-sweep-move {
-  from { transform: translateX(-100%); }
-  to { transform: translateX(100%); }
-}
-
-/* Reduced motion: disable all landing animations */
 @media (prefers-reduced-motion: reduce) {
-  .hero-enter {
-    opacity: 1;
-    animation: none;
-  }
-  .reveal, .reveal-left, .reveal-right {
-    opacity: 1;
-    transform: none;
-    transition: none;
-  }
-  .landing-gradient {
-    animation: none;
-  }
-  .float-slow, .float-medium, .float-fast {
-    animation: none;
-  }
-  .screenshot-glow {
-    animation: none;
-  }
-  .scroll-indicator {
-    animation: none;
-    opacity: 0.5;
-  }
-  .shimmer-sweep::after {
-    animation: none;
-    display: none;
-  }
   /* (Sub-nav sheet RM handling now lives with .pp-sub__sheet in components/chrome.css.) */
   /* Community "live" heartbeat dot: no perpetual ping for reduced-motion users (the dot stays). */
   .animate-ping {

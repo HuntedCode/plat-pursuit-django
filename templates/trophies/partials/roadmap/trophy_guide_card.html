@@ -49,7 +49,7 @@
                 {% include 'partials/icons/trophy_cup.html' with size='w-4 h-4' color='currentColor' extra_class='shrink-0 text-orange-500' %}
                 {% endif %}
                 <span class="text-sm md:text-base font-semibold truncate {% if not earned_data.earned %}text-base-content/70{% endif %}">{{ trophy.trophy_name }}</span>
-                {% if guide.phase and trophy.trophy_type != 'platinum' %}{% with phase_meta=trophy_phases_by_key|get_item:guide.phase %}{% if phase_meta %}<span class="phase-pill badge badge-xs shrink-0 gap-0.5 {{ phase_meta.badge_class }}" title="Phase: {{ phase_meta.label }}">{{ phase_meta.emoji }} {{ phase_meta.label }}</span>{% endif %}{% endwith %}{% endif %}
+                {% if guide.phase and trophy.trophy_type != 'platinum' %}{% with phase_meta=trophy_phases_by_key|get_item:guide.phase %}{% if phase_meta %}<span class="bd-chip bd-chip--{{ phase_meta.tone }} shrink-0" title="Phase: {{ phase_meta.label }}">{{ phase_meta.emoji }} {{ phase_meta.label }}</span>{% endif %}{% endwith %}{% endif %}
             </div>
             {# Row 2: description only. Phase is back in row 1 with the title. #}
             {% if trophy.trophy_detail %}
