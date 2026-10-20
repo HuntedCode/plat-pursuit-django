@@ -19,7 +19,9 @@
     .swf__n { font-size: 1.3rem; }
     .swf__l { font-size: 0.65rem; }
 }
-.swf__stat--plat   .swf__n { color: var(--color-info); }
-.swf__stat--gold   .swf__n { color: var(--color-warning); }
+/* Trophy tiers wear the house metal tokens. They once borrowed DaisyUI's info/warning/accent, which
+   made them move whenever a STATUS colour did (2026-10, SW-01). */
+.swf__stat--plat   .swf__n { color: var(--pp-metal-platinum); }
+.swf__stat--gold   .swf__n { color: var(--pp-metal-gold); }
 .swf__stat--silver .swf__n { opacity: 0.85; }
-.swf__stat--bronze .swf__n { color: var(--color-accent); }
+.swf__stat--bronze .swf__n { color: var(--pp-metal-bronze); }
