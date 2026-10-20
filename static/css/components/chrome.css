@@ -315,7 +315,24 @@
     .pp-cta.pp-totop:hover { color: var(--pp-text); border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border)); }
 }
 @media (min-width: 1024px) { .pp-cta.pp-totop { right: 2rem; } }
-@media (prefers-reduced-motion: reduce) { .pp-cta.pp-totop { transform: none; transition: opacity 0.2s linear; } }
+/* Toasts share this corner (at every width), and the toast stack paints over the button, which then peeks
+   out above it. So while a toast is up the button steps aside. `visibility`, flipped once the fade ends,
+   also takes it out of the tab order and the accessibility tree for that moment. A keyboard user ON the
+   button keeps it: hiding it would drop their focus to <body> and lose their place. */
+body:has(.pp-toasts > .pp-toast) .pp-cta.pp-totop.is-shown:not(:focus-visible) {
+    opacity: 0;
+    transform: translateY(10px);
+    pointer-events: none;
+    visibility: hidden;
+    transition: opacity 0.2s var(--pp-ease), transform 0.25s var(--pp-ease), visibility 0s linear 0.25s;
+}
+@media (prefers-reduced-motion: reduce) {
+    .pp-cta.pp-totop { transform: none; transition: opacity 0.2s linear; }
+    body:has(.pp-toasts > .pp-toast) .pp-cta.pp-totop.is-shown:not(:focus-visible) {
+        transform: none;
+        transition: opacity 0.2s linear, visibility 0s linear 0.2s;
+    }
+}
 
 /* ── PSN profile search: persistent typeahead bar (md+), icon-collapse (<md) ── */
 /* Chrome stays calm: matte field at rest, cyan focus ring only when engaged (the one active accent). */

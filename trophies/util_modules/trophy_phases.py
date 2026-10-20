@@ -12,24 +12,27 @@ every guide. If author flexibility becomes a real need we can revisit.
 Single source of truth for:
   - TrophyGuide.phase choices (model)
   - editor dropdown options (template + JSON script)
-  - published-view sort ordering and badge styling
+  - published-view sort ordering and each phase's tone
 """
 
-# (key, label, badge_class, emoji)
+# (key, label, tone, emoji)
+# `tone` names a house colour: it picks the `.bd-chip--<tone>` pill and the `--pp-<tone>` stripe of a
+# grouped section header. The quiet phases share `ghost`, which has a chip modifier and no colour token,
+# so their stripes fall back to the muted text colour.
 # Order here = render order in grouped sort: Story first, Endgame last.
 # `key` is what gets stored in the DB; keep it stable since changing it
 # would orphan existing tagged guides.
 TROPHY_PHASES = (
-    ('story',       'Story',                 'badge-info',      '📖'),
-    ('challenge',   'Challenge',             'badge-error',     '💪'),
-    ('combat',      'Combat',                'badge-secondary', '⚔️'),
-    ('secret',      'Secret',                'badge-accent',    '🔍'),
-    ('playthrough', 'Restricted Playthrough','badge-primary',   '⏳'),
-    ('collectible', 'Collectible',           'badge-success',   '📦'),
-    ('side',        'Side / Optional',       'badge-ghost',     '🎯'),
-    ('grindy',      'Grindy',                'badge-neutral',   '⏱'),
-    ('online',      'Online / Co-op',        'badge-warning',   '🌐'),
-    ('endgame',     'Endgame / Cleanup',     'badge-warning',   '🏁'),
+    ('story',       'Story',                 'info',      '📖'),
+    ('challenge',   'Challenge',             'error',     '💪'),
+    ('combat',      'Combat',                'secondary', '⚔️'),
+    ('secret',      'Secret',                'accent',    '🔍'),
+    ('playthrough', 'Restricted Playthrough','primary',   '⏳'),
+    ('collectible', 'Collectible',           'success',   '📦'),
+    ('side',        'Side / Optional',       'ghost',     '🎯'),
+    ('grindy',      'Grindy',                'ghost',     '⏱'),
+    ('online',      'Online / Co-op',        'warning',   '🌐'),
+    ('endgame',     'Endgame / Cleanup',     'warning',   '🏁'),
 )
 
 # (key, label) tuples for Django CharField(choices=...)
@@ -43,14 +46,14 @@ PHASE_ORDER = {key: idx for idx, (key, _, _, _) in enumerate(TROPHY_PHASES)}
 def phases_for_template():
     """Return TROPHY_PHASES as a list of dicts for template/JSON consumption."""
     return [
-        {'key': key, 'label': label, 'badge_class': badge_class, 'emoji': emoji}
-        for key, label, badge_class, emoji in TROPHY_PHASES
+        {'key': key, 'label': label, 'tone': tone, 'emoji': emoji}
+        for key, label, tone, emoji in TROPHY_PHASES
     ]
 
 
 def phases_by_key():
-    """Return {key: {label, badge_class, emoji}} for fast template lookup."""
+    """Return {key: {label, tone, emoji}} for fast template lookup."""
     return {
-        key: {'label': label, 'badge_class': badge_class, 'emoji': emoji}
-        for key, label, badge_class, emoji in TROPHY_PHASES
+        key: {'label': label, 'tone': tone, 'emoji': emoji}
+        for key, label, tone, emoji in TROPHY_PHASES
     }

@@ -31,7 +31,7 @@
     const trophiesByGroup = JSON.parse(document.getElementById('roadmap-trophies-data')?.textContent || '{}');
     const profilesById = JSON.parse(document.getElementById('roadmap-profiles-data')?.textContent || '{}');
     // Phase metadata keyed by phase.key for the summary-row phase pill.
-    // Each entry has {key, label, emoji, badge_class}; we build a lookup
+    // Each entry has {key, label, emoji, tone}; we build a lookup
     // once at module load instead of querying the select option on every
     // pill update.
     const trophyPhasesList = JSON.parse(document.getElementById('roadmap-trophy-phases')?.textContent || '[]');
@@ -198,28 +198,27 @@
      *
      * Three states:
      *   - `pill === null` or platinum (caller passes `null`): hidden.
-     *   - phase set: emoji + label, tinted with the phase's badge color.
+     *   - phase set: emoji + label, a house chip in the phase's tone.
      *   - phase blank: warning-tinted "No phase" so the writer can spot
      *     un-phased rows at a glance without expanding each guide.
      *
-     * The badge_class on each phase ('badge-info', 'badge-warning', etc.)
-     * is mapped onto background + text utility classes since the pill
-     * isn't a daisyUI `.badge` (we want a rounded-pill shape with our
-     * own padding/sizing).
+     * Hidden with the `hidden` attribute, not the `.hidden` utility: the
+     * chip's own `display` outranks a utility class.
      */
     function _updatePhasePill(pillEl, phaseKey) {
         if (!pillEl) return;
-        // Wipe any prior color classes — phase swaps can change tint.
-        pillEl.className = 'trophy-guide-phase-pill items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium shrink-0 mt-1';
+        // Wipe any prior tone: phase swaps can change it.
+        pillEl.className = 'trophy-guide-phase-pill bd-chip shrink-0 mt-1';
         if (phaseKey === null || typeof phaseKey === 'undefined') {
             // Platinum or other "not applicable" case — hide entirely.
-            pillEl.classList.add('hidden');
+            pillEl.hidden = true;
             return;
         }
+        pillEl.hidden = false;
         if (!phaseKey) {
             // No phase selected — surface as a warning so missing phases
             // are visible at a glance.
-            pillEl.classList.add('inline-flex', 'bg-warning/15', 'text-warning', 'border', 'border-warning/30');
+            pillEl.classList.add('bd-chip--warning');
             pillEl.innerHTML = `
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
                 <span>No phase</span>
@@ -231,19 +230,11 @@
             // Unknown key (e.g. a removed phase still saved on an older
             // guide) — fall back to the warning treatment so it's
             // visible and the writer knows to re-select.
-            pillEl.classList.add('inline-flex', 'bg-warning/15', 'text-warning', 'border', 'border-warning/30');
+            pillEl.classList.add('bd-chip--warning');
             pillEl.textContent = phaseKey;
             return;
         }
-        // Map badge_class (e.g. 'badge-info') to bg/text/border utilities
-        // so the pill uses the phase's color story.
-        const color = (meta.badge_class || '').replace(/^badge-/, '') || 'neutral';
-        pillEl.classList.add('inline-flex');
-        pillEl.style.backgroundColor = `oklch(from var(--color-${color}) l c h / 0.15)`;
-        pillEl.style.color = `var(--color-${color})`;
-        pillEl.style.borderColor = `oklch(from var(--color-${color}) l c h / 0.3)`;
-        pillEl.style.borderWidth = '1px';
-        pillEl.style.borderStyle = 'solid';
+        pillEl.classList.add(`bd-chip--${meta.tone}`);
         pillEl.innerHTML = `<span aria-hidden="true">${meta.emoji || ''}</span><span>${meta.label || phaseKey}</span>`;
     }
 

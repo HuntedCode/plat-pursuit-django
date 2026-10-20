@@ -12,9 +12,6 @@
  "static/js/claim-ceremony.js": {
   "btn": 6
  },
- "static/js/color-grid-modal.js": {
-  "btn": 4
- },
  "static/js/fundraiser.js": {
   "badge": 4
  },
@@ -26,7 +23,6 @@
   "btn": 18
  },
  "static/js/roadmap-detail.js": {
-  "badge": 4,
   "btn": 6
  },
  "static/js/roadmap_editor.js": {
@@ -244,7 +240,7 @@
   "badge": 6
  },
  "templates/trophies/partials/roadmap/trophy_guide_card.html": {
-  "badge": 11
+  "badge": 9
  },
  "templates/trophies/reviews_archived.html": {
   "btn": 8
@@ -274,8 +270,5 @@
  },
  "templates/users/email_preferences.html": {
   "alert": 4
- },
- "trophies/util_modules/trophy_phases.py": {
-  "badge": 10
  }
 }

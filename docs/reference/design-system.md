@@ -293,6 +293,9 @@ It replaced DaisyUI `alert`, whose solid fills painted the whole block in the st
 600px and withdrawn while they scroll down, so it never sits over what they are reading or tapping, and
 it is inert (unfocusable, hidden from screen readers, no pointer events) whenever it is hidden. A page with
 its own sticky controls in that corner lifts it clear rather than hiding it (see `challenge-optimizer.css`).
+Toasts share the corner at every width and paint over it, so while one is up the button steps aside
+(`chrome.css`, keyed on `.pp-toasts > .pp-toast`) and returns once the toast leaves. A keyboard user
+focused on it keeps it (`:not(:focus-visible)`), so a toast never drops their focus to `<body>`.
 
 ### Page Header Card
 

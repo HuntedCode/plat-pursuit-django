@@ -33,6 +33,9 @@ CSS = (ROOT / 'static/css/output.css').as_uri()
 MAIN = (ROOT / 'static/js/main.js').read_text(encoding='utf-8')
 WIRE = MAIN[MAIN.index('function wireBackToTop(btn) {'):]
 BUTTON = (ROOT / 'templates/partials/back_to_top.html').read_text(encoding='utf-8').split('{% endcomment %}', 1)[1]
+UTILS = (ROOT / 'static/js/utils.js').read_text(encoding='utf-8')
+TOAST_HOSTS = ('<div id="toast-container" class="pp-toasts"></div>'
+               '<div id="toast-announcer" class="sr-only" aria-live="polite"></div>')
 
 
 def _page(tmp_path, body, script, name):
@@ -50,17 +53,19 @@ STATE = """() => { const b = document.getElementById('back-to-top'), r = b.getBo
              hit: b.contains(document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)) }; }"""
 
 
-def _open_totop(tmp_path, *, reduced):
+def _open_totop(tmp_path, *, reduced, toasts=False):
     """A long page with the real button and wiring. Reduced motion makes every state instant, so a sample
-    is the settled one; without it, the click's smooth scroll home really animates."""
+    is the settled one; without it, the click's smooth scroll home really animates. `toasts` adds the real
+    toast hosts and utils.js, in base.html's order (the hosts after the button)."""
     from playwright.sync_api import sync_playwright
     p = sync_playwright().start()
     browser = p.chromium.launch()
     page = browser.new_page(viewport={'width': 1280, 'height': 800})
     page.emulate_media(reduced_motion='reduce' if reduced else 'no-preference')
-    page.goto(_page(tmp_path, '<main id="main-content"><div style="height:6000px"></div></main>' + BUTTON,
-                    WIRE + "\nwireBackToTop(document.getElementById('back-to-top'));",
-                    f'totop-{"rm" if reduced else "motion"}.html'))
+    page.goto(_page(tmp_path, '<main id="main-content"><div style="height:6000px"></div></main>' + BUTTON
+                    + (TOAST_HOSTS if toasts else ''),
+                    (UTILS + '\n' if toasts else '') + WIRE + "\nwireBackToTop(document.getElementById('back-to-top'));",
+                    f'totop-{"rm" if reduced else "motion"}{"-toasts" if toasts else ""}.html'))
 
     def scroll_to(y):
         page.evaluate(f'window.scrollTo({{top: {y}, behavior: "instant"}})')
@@ -130,6 +135,33 @@ def test_a_click_moves_keyboard_focus_to_the_content(totop):
     assert page.evaluate('document.activeElement.id') == 'main-content', 'focus left on a now-hidden button'
 
 
+def test_focus_leaves_the_button_when_scrolling_hides_it(totop):
+    """Hidden means aria-hidden and out of the tab order, so focus must not stay parked on it."""
+    page, scroll_to = totop
+    scroll_to(2000)
+    assert scroll_to(1800)['shown']
+    page.focus('#back-to-top')
+    assert not scroll_to(2200)['shown']
+    assert page.evaluate('document.activeElement.id') != 'back-to-top', 'focus left on a hidden button'
+
+
+def test_a_rubber_band_bounce_past_the_end_does_not_offer_it(totop):
+    """iOS reports scroll positions past the end during an overscroll bounce, and the bounce back is not the
+    reader scrolling up. A desktop browser cannot overscroll, so the position the handler reads is faked."""
+    page, scroll_to = totop
+    end = page.evaluate('document.documentElement.scrollHeight - window.innerHeight')
+    assert not scroll_to(end)['shown']
+
+    def bounce_to(y):
+        page.evaluate("""y => { Object.defineProperty(window, 'scrollY', { get: () => y, configurable: true });
+                                window.dispatchEvent(new Event('scroll')); }""", y)
+        page.wait_for_timeout(80)
+        return page.evaluate(STATE)
+
+    bounce_to(end + 80)
+    assert not bounce_to(end)['shown'], 'the bounce back from an overscroll offered the button'
+
+
 def test_it_starts_hidden_and_inert(totop):
     page, _ = totop
     state = page.evaluate(STATE)
@@ -176,10 +208,6 @@ def test_a_click_takes_you_home_and_it_stays_hidden_on_the_way(totop_moving):
 
 # --- toasts ----------------------------------------------------------------------------------------------
 
-UTILS = (ROOT / 'static/js/utils.js').read_text(encoding='utf-8')
-TOAST_HOSTS = ('<div id="toast-container" class="pp-toasts"></div>'
-               '<div id="toast-announcer" class="sr-only" aria-live="polite"></div>')
-
 
 def test_a_toast_is_a_house_notice_that_announces_itself_and_leaves(tmp_path):
     from playwright.sync_api import sync_playwright
@@ -209,3 +237,56 @@ def test_a_toast_is_a_house_notice_that_announces_itself_and_leaves(tmp_path):
         page.wait_for_timeout(1800)  # both lifetimes, plus the exit
         assert page.evaluate("document.querySelectorAll('#toast-container > *').length") == 0, 'toasts never left'
         browser.close()
+
+
+@pytest.mark.parametrize('width', [390, 1280])
+def test_a_toast_moves_the_button_aside_until_it_leaves(tmp_path, width):
+    """They share the bottom-right corner at every width, and the toast stack paints over the button, which
+    then peeked out above it. While a toast is up the button steps aside, and it comes back after."""
+    page, scroll_to, close = _open_totop(tmp_path, reduced=False, toasts=True)
+    try:
+        page.set_viewport_size({'width': width, 'height': 800})
+        scroll_to(2000)
+        assert scroll_to(1800)['hit']
+        page.evaluate("PlatPursuit.ToastManager.show('Saved.', 'success', 700)")
+        page.wait_for_timeout(450)
+        aside = page.evaluate(STATE)
+        seen = page.evaluate("getComputedStyle(document.getElementById('back-to-top')).visibility")
+        # Not `hit` alone: the toast covers the button's centre whether or not it stepped aside.
+        assert seen == 'hidden' and aside['events'] == 'none', f'the button stayed out under the toast: {aside}, {seen}'
+        page.wait_for_timeout(1200)  # the toast's life, its exit, and the button's fade back in
+        assert page.evaluate("document.querySelectorAll('#toast-container > *').length") == 0
+        back = page.evaluate(STATE)
+        assert back['shown'] and back['hit'], f'the button never came back after the toast left: {back}'
+    finally:
+        close()
+
+
+def test_with_reduced_motion_a_toast_still_moves_the_button_aside(tmp_path):
+    """The reduced-motion twin of the step-aside rule swaps the transition; it must still hide."""
+    page, scroll_to, close = _open_totop(tmp_path, reduced=True, toasts=True)
+    try:
+        scroll_to(2000)
+        assert scroll_to(1800)['hit']
+        page.evaluate("PlatPursuit.ToastManager.show('Saved.', 'success', 700)")
+        page.wait_for_timeout(450)
+        seen = page.evaluate("getComputedStyle(document.getElementById('back-to-top')).visibility")
+        assert seen == 'hidden' and page.evaluate(STATE)['events'] == 'none'
+    finally:
+        close()
+
+
+def test_a_toast_does_not_take_the_button_from_a_keyboard_user_on_it(tmp_path):
+    """Stepping aside would drop their focus to <body> and lose their place on the page."""
+    page, scroll_to, close = _open_totop(tmp_path, reduced=False, toasts=True)
+    try:
+        scroll_to(2000)
+        assert scroll_to(1800)['shown']
+        page.keyboard.press('Tab')  # the only focusable control on the page, reached the keyboard way
+        assert page.evaluate('document.activeElement.id') == 'back-to-top'
+        page.evaluate("PlatPursuit.ToastManager.show('Saved.', 'success', 700)")
+        page.wait_for_timeout(450)
+        assert page.evaluate('document.activeElement.id') == 'back-to-top', 'the toast took keyboard focus away'
+        assert page.evaluate("getComputedStyle(document.getElementById('back-to-top')).visibility") == 'visible'
+    finally:
+        close()

@@ -416,6 +416,12 @@
         // Untagged trophies sort to the end under an "Other" header.
         phaseOrder[''] = phasesRaw.length;
 
+        // A phase tone's stripe colour. The quiet `ghost` tone has no colour token of its own, so it
+        // falls back to the muted text colour rather than an invalid (and so invisible) stripe.
+        function phaseStripe(tone) {
+            return `var(--pp-${tone || 'ghost'}, var(--pp-text-mute))`;
+        }
+
         function clearPhaseHeaders() {
             list.querySelectorAll('.phase-section-header').forEach(h => h.remove());
         }
@@ -468,7 +474,7 @@
                         count: el.dataset.phaseCount || '0',
                         // Carried through so the TOC header can derive the same
                         // phase-color stripe / tint as the main-page header.
-                        badgeClass: el.dataset.phaseBadgeClass || '',
+                        tone: el.dataset.phaseTone || '',
                     });
                 } else if (el.classList.contains('trophy-guide-item')) {
                     sequence.push({
@@ -495,10 +501,10 @@
                         // padding, smaller text. Inline styles drive color so
                         // dynamic class names don't need to live in source for
                         // the JIT.
-                        const phaseColor = (s.badgeClass || '').replace(/^badge-/, '') || 'neutral';
+                        const stripe = phaseStripe(s.tone);
                         li.className = 'toc-phase-header mt-2 first:mt-1 rounded-md overflow-hidden border-l-[3px]';
-                        li.style.borderLeftColor = `var(--color-${phaseColor})`;
-                        li.style.backgroundColor = `oklch(from var(--color-${phaseColor}) l c h / 0.06)`;
+                        li.style.borderLeftColor = stripe;
+                        li.style.backgroundColor = `oklch(from ${stripe} l c h / 0.06)`;
                         li.dataset.phaseKey = s.phaseKey;
                         li.innerHTML = `
                             <button type="button" class="toc-phase-toggle w-full flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-bold text-base-content/65 hover:text-base-content px-2 py-1 hover:bg-white/[0.04] transition-colors">
@@ -566,28 +572,27 @@
                 return true;
             }
 
-            function makeHeader(phaseKey, emoji, label, count, badgeClass) {
+            function makeHeader(phaseKey, emoji, label, count, tone) {
                 const header = document.createElement('div');
                 // Wider strip with the phase's color tinted into the background
-                // and a 4px left stripe — reads as a real section divider rather
-                // than a small badge in flow with the trophy cards. Color is
-                // pulled from the badge class (`badge-info` → `info`) so daisyUI
-                // theme tokens drive both the strip and the existing badge.
-                const phaseColor = (badgeClass || '').replace(/^badge-/, '') || 'neutral';
+                // and a 4px left stripe: reads as a real section divider rather
+                // than a small chip in flow with the trophy cards. The phase's
+                // `tone` drives both the stripe and the count chip.
+                const stripe = phaseStripe(tone);
                 header.className = 'phase-section-header mt-6 first:mt-2 mb-2 flex items-center gap-2.5 px-3 py-2 rounded-lg border border-base-content/10 border-l-4';
-                header.style.borderLeftColor = `var(--color-${phaseColor})`;
-                header.style.backgroundColor = `oklch(from var(--color-${phaseColor}) l c h / 0.08)`;
+                header.style.borderLeftColor = stripe;
+                header.style.backgroundColor = `oklch(from ${stripe} l c h / 0.08)`;
                 // Data attributes let the TOC sync extract metadata without parsing
                 // the visible text — and let collapse state key off a stable id.
                 header.dataset.phaseKey = phaseKey;
                 header.dataset.phaseEmoji = emoji;
                 header.dataset.phaseLabel = label;
                 header.dataset.phaseCount = count;
-                header.dataset.phaseBadgeClass = badgeClass;
+                header.dataset.phaseTone = tone;
                 header.innerHTML = `
                     <span class="text-base leading-none shrink-0" aria-hidden="true">${emoji}</span>
                     <span class="text-sm font-bold uppercase tracking-wider text-base-content">${label}</span>
-                    <span class="badge badge-xs ${badgeClass} ml-auto">${count}</span>
+                    <span class="bd-chip bd-chip--${tone} ml-auto">${count}</span>
                 `;
                 return header;
             }
@@ -598,7 +603,7 @@
             // (filter toggles trigger a re-render and rely on stable order).
             const visiblePlatinums = platinums.filter(visibleFor);
             if (visiblePlatinums.length > 0) {
-                list.appendChild(makeHeader('platinum', '🏆', 'Platinum', visiblePlatinums.length, 'badge-info'));
+                list.appendChild(makeHeader('platinum', '🏆', 'Platinum', visiblePlatinums.length, 'info'));
             }
             platinums.forEach(p => {
                 list.appendChild(p);
@@ -611,7 +616,7 @@
             others.forEach((item, idx) => {
                 const key = item.dataset.phase || '';
                 if (!sections.has(key)) {
-                    const meta = phaseMeta[key] || { label: 'Other', emoji: '·', badge_class: 'badge-ghost' };
+                    const meta = phaseMeta[key] || { label: 'Other', emoji: '·', tone: 'ghost' };
                     sections.set(key, { ...meta, key, count: 0 });
                 }
                 if (visibility[idx]) sections.get(key).count += 1;
@@ -624,7 +629,7 @@
                 // phase keep their previous DOM position and stale visibility
                 // class, which then breaks TOC mirroring on the next render.
                 if (section.count > 0) {
-                    list.appendChild(makeHeader(key || 'other', section.emoji, section.label, section.count, section.badge_class));
+                    list.appendChild(makeHeader(key || 'other', section.emoji, section.label, section.count, section.tone));
                 }
                 others.forEach((item, idx) => {
                     if ((item.dataset.phase || '') !== key) return;
