@@ -12,11 +12,7 @@ logger = logging.getLogger('psn_api')
 
 
 class ReviewHubService:
-    """Aggregate queries for the Review Hub landing and wizard pages."""
-
-    STATS_CACHE_KEY = 'review_hub:stats'
-    STATS_CACHE_TIMEOUT = 900  # 15 minutes
-
+    """Concept search and the Rate My Games wizard's queries."""
 
     @staticmethod
     def search_concepts(query, limit=8):

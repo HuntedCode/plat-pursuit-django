@@ -81,7 +81,6 @@ def test_both_hosts_load_the_shared_controller():
 
 @pytest.mark.parametrize('name', [
     'shareables/partials/share_modal.html',
-    'partials/rate_before_download_modal.html',
     'shareables/plat_card.html',
     'shareables/profile_card.html',
     'trophies/partials/profile_detail/tabs/card_tab.html',

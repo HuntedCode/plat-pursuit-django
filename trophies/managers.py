@@ -446,7 +446,6 @@ class CommentQuerySet(models.QuerySet):
         """
         return self.filter(is_deleted=False)
 
-
     def replies_to(self, comment):
         """
         Get direct replies to a comment.
@@ -459,7 +458,6 @@ class CommentQuerySet(models.QuerySet):
         """
         return self.filter(parent=comment)
 
-
     def by_new(self):
         """
         Order by creation date descending.
@@ -468,6 +466,7 @@ class CommentQuerySet(models.QuerySet):
             QuerySet: Comments ordered by newest first
         """
         return self.order_by('-created_at')
+
 
 class CommentManager(models.Manager):
     """Custom manager for Comment model."""
@@ -480,10 +479,10 @@ class CommentManager(models.Manager):
         """Proxy to queryset method."""
         return self.get_queryset().active()
 
-
     def by_new(self):
         """Proxy to queryset method."""
         return self.get_queryset().by_new()
+
 
 class ChecklistQuerySet(models.QuerySet):
     """Custom queryset for Checklist model."""

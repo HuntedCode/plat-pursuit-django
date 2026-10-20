@@ -27,6 +27,8 @@ Findings that belong to no single slice. Same status values as the slice records
 |----|-----|---------|--------|
 | SW-01 | Medium | DaisyUI is half-replaced, and the seam is visible. See below | planned: DaisyUI split |
 | SW-02 | Medium | The back-to-top button (`templates/partials/back_to_top.html`, DaisyUI `btn-primary`, 64px at `lg`) is the loudest element on every page, and on a phone it covers a contract card's Claim button. Seen as [FV-10](first-visit.md) and [DL-06](daily-loop.md) | planned: site-wide noise |
+| SW-03 | Low | Every trophy-list detail page (`/games/<np_communication_id>/`) throws a console error: `game_detail.html` loads `submit_shimmer.js`, which wires `#filter-form` / `#submit-btn`, and the page's form is `#gd-filter-form`. Pre-existing; found by the 2026-10 cleanup's browser pass | open |
+| SW-04 | Low | `templates/recap/monthly_recap.html` loads `color-grid-modal.js`, but nothing on the page calls it (its only host was the deleted platinum grid). A dead script load. Pre-existing; found by the 2026-10 cleanup's audit | open |
 
 ### SW-01: DaisyUI, foundation versus retired components
 

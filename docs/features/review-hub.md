@@ -286,7 +286,7 @@ The game detail page shows a single unified "Community" card (`community_section
 
 | Key Pattern | TTL | Purpose |
 |-------------|-----|---------|
-| `review_hub:stats` | 15m | Hub landing page aggregate stats (total reviews, ratings, reviewers, helpful votes) |
+| `review_hub:stats` | 15m | DELETED 2026-10 with `get_hub_stats`. Was: hub landing page aggregate stats (total reviews, ratings, reviewers, helpful votes) |
 | `review:recommend:{concept_id}:{group_id}` | 30m | Recommendation percentage stats |
 | `concept:averages:{concept_id}:group:{group_id}` | varies | DLC-specific rating averages |
 
