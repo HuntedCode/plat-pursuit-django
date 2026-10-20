@@ -208,7 +208,62 @@ Used for game lists, badge lists, activity feeds, leaderboard entries.
 
 ---
 
+## DaisyUI: What Stays, What Is Retired
+
+DaisyUI is the site's foundation, not something being removed: its card shell and theme colours sit
+under almost every page. What the rebuild replaces is its **components**, one family at a time, with
+house primitives drawn in the `--pp-*` tokens. Decided 2026-10 (SW-01 in
+[docs/design/reviews/README.md](../design/reviews/README.md)).
+
+| Status | DaisyUI | Use instead | Notes |
+|---|---|---|---|
+| **Foundation** | `card`, `card-body` | (keep) | The card recipe below. Career, the reference page, is built on it |
+| **Foundation** | theme colours (`bg-base-*`, `text-success`, ...) | (keep) | Since 2026-10 the theme's semantic colours READ the `--pp-*` tokens, so `text-success` and `var(--pp-success)` are the same colour. Change a status colour in `input.css`'s `:root` block, never in the DaisyUI theme |
+| **Foundation** | `loading` (spinner), `table` and `stat` on staff pages | (keep) | No house version, and none needed yet |
+| **Retired** | `btn` and every `btn-*` modifier | `pp-cta` family (see Buttons) | Guarded: `tests/engine/test_retired_daisyui.py` |
+| **Retired** | `badge` and `badge-*` | `.bd-chip` + a tone modifier | Guarded |
+| **Retired** | `tabs`, `tab` | `.pp-switch` (Tab Group, below) | Guarded |
+| **Pending** | `alert`, `toast` | a house notice and toast, to be built in the site-wide noise branch | Allowed until then |
+| **Pending** | `input`, `select`, `textarea`, `checkbox`, `toggle`, `radio`, `progress` | house fields, to be built with the onboarding rebuild | Allowed until then. Filter chips already have a house version (Toggle-Button Checkboxes, below) |
+| **Pending** | `modal`, `dropdown`, `tooltip`, `collapse`, `divider` | no decision yet | Prefer `PlatPursuit.DetailModal` (`.pp-detail-modal`) for new modals |
+
+**Retired means:** new code may not use it, and the guard test fails if a file gains a use. Existing
+uses sit on an allowlist that may only shrink, so a page converts when it is next worked on rather
+than in one sweep. Converting a file means lowering (or deleting) its allowlist entry in the same
+commit.
+
 ## Component Patterns
+
+### Buttons (`pp-cta`, the house button)
+
+One primitive with modifiers, defined in `static/css/components/cta.css`. The recipe is a tinted wash
+and a 45% border in the accent, a glow on hover, and never a solid fill. Set the accent with `--cta-c`
+(default `--pp-primary`).
+
+| Job | House | Was (DaisyUI, retired) |
+|---|---|---|
+| Main action | `pp-cta` | `btn btn-primary` |
+| Secondary, outlined | `pp-cta pp-cta--ghost` | `btn btn-outline` |
+| Quiet (close, "Start over", copy) | `pp-cta pp-cta--bare` | `btn btn-ghost` |
+| Destructive | `pp-cta pp-cta--danger` | `btn btn-error` |
+| Another tone | `pp-cta` + `[--cta-c:var(--pp-success)]` (or `style="--cta-c: var(--pp-success)"`) | `btn btn-success` / `info` / `warning` / `secondary` |
+| Smaller | `pp-cta--sm` (28px) / `pp-cta--xs` (22px) | `btn-sm` / `btn-xs` |
+| Icon only | `pp-cta--icon` (square), `+ pp-cta--round` (circle). Needs an `aria-label` | `btn-square` / `btn-circle` |
+| Full width | `w-full` | `btn-block` / `btn-wide` |
+| Inert | `disabled`, or `aria-disabled="true"` to keep hover and focus | `btn-disabled` |
+| Stars on a big yes | `pp-cta--rise` | (none) |
+
+```html
+<button class="pp-cta">Verify now</button>
+<button class="pp-cta pp-cta--sm pp-cta--bare">Cancel</button>
+<button class="pp-cta pp-cta--icon pp-cta--sm pp-cta--bare" aria-label="Copy code"><svg>...</svg></button>
+```
+
+- The default is about 36px tall; `--sm` and `--xs` are a fixed height so a text and an icon button of
+  the same size line up. They are for dense rows and toolbars: a page's main action stays the default.
+- The size modifiers are not responsive. Pick one size per button; do not swap modifiers per breakpoint.
+- Page-local families that predate `pp-cta` (`.gd-btn`, `.fnd-cta`, `.supm-*`, `.pc-btn`) migrate when
+  their pages are next touched. Do not start a new one.
 
 ### Page Header Card
 
@@ -222,7 +277,7 @@ Every rebuilt page should have a header card that establishes context and houses
                 <div class="flex items-center gap-2 flex-wrap">
                     <svg class="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0">...</svg>
                     <h1 class="text-lg md:text-xl lg:text-2xl font-bold">Page Title</h1>
-                    <span class="badge badge-sm badge-ghost">Context Badge</span>
+                    <span class="bd-chip bd-chip--ghost">Context Badge</span>
                 </div>
                 <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1">
                     Dynamic, contextual subtitle with personality.
@@ -298,7 +353,7 @@ Compact card for search, sort, and filter controls. Collapsible drawer for secon
                 <input class="input input-bordered input-sm md:input-md w-full pl-9 md:pl-10" />
             </div>
             <select class="select select-bordered select-sm md:select-md w-full md:w-48 lg:w-56">...</select>
-            <button class="btn btn-sm md:btn-md btn-primary w-full md:w-auto">...</button>
+            <button class="pp-cta w-full md:w-auto">...</button>
         </div>
 
         <!-- Collapsible filters -->
@@ -341,18 +396,18 @@ Two shared helpers (in `static/js/utils.js`) give **any** search toolbar — bro
 
 ### Toggle-Button Checkboxes
 
-For filter options (platforms, regions, categories). Replaces traditional checkboxes.
+For filter options (platforms, regions, categories). Replaces traditional checkboxes. The house chip
+lives in `static/css/components/browse-gallery.css`; its checked look keys on `:has(input:checked)`.
 
 ```html
-<label class="cursor-pointer">
-    <input type="checkbox" name="field" value="val" class="sr-only peer" />
-    <span class="btn btn-xs peer-checked:btn-primary peer-checked:font-bold btn-ghost border border-base-300 transition-all">
-        Label
-    </span>
+<label class="pp-bgal__chip">
+    <input type="checkbox" name="field" value="val">
+    Label
 </label>
 ```
 
-**Critical**: Use `sr-only` (not `hidden`) for the input. `hidden` applies `display: none` which prevents form submission.
+**Critical**: never hide the input with `hidden` (`display: none` keeps it out of the form submission).
+The chip already hides it visually while keeping it focusable and submitted.
 
 ### Toggle Buttons (page-level controls)
 
@@ -360,33 +415,27 @@ For binary toggles (show/hide, grid/list, filter on/off).
 
 ```html
 <!-- Active state -->
-<button class="btn btn-xs md:btn-sm gap-1 btn-primary">
+<button class="pp-cta pp-cta--sm" aria-pressed="true">
     <svg class="w-3.5 h-3.5">...</svg>
     <span class="hidden md:inline">Label</span>
 </button>
 
 <!-- Inactive state -->
-<button class="btn btn-xs md:btn-sm gap-1 btn-ghost border border-base-300">
+<button class="pp-cta pp-cta--sm pp-cta--ghost" aria-pressed="false">
     <svg class="w-3.5 h-3.5">...</svg>
     <span class="hidden md:inline">Label</span>
 </button>
 ```
 
-Active states should use semantic colors: `btn-primary` for selection filters, `btn-warning` for exclusion filters.
+Active states use the accent for selection filters and `[--cta-c:var(--pp-warning)]` for exclusion
+filters. A group of mutually exclusive views is a Tab Group, not a row of toggles.
 
 ### Pagination
 
-Wrapped in a subtle panel with dashboard-style buttons.
-
-```html
-<div class="bg-base-300/30 rounded-lg px-3 py-2 md:px-4 md:py-2.5">
-    <div class="flex flex-col md:flex-row justify-center items-center gap-2">
-        <!-- Nav buttons: btn-ghost border border-base-content/10 -->
-        <!-- Current page: btn-primary no-animation cursor-default font-bold -->
-        <!-- Page jump form (optional) -->
-    </div>
-</div>
-```
+Browse pages use infinite scroll (`PlatPursuit.InfiniteScroller`); the numbered pagination partials
+were deleted with their last pages in 2026-10. If a page genuinely needs numbered pages, build them from
+`pp-cta pp-cta--sm pp-cta--ghost` buttons with the current page as `pp-cta pp-cta--sm` plus
+`aria-current="page"`.
 
 ### Active Filter Summary
 
@@ -395,9 +444,9 @@ Shows current filter state below the toolbar.
 ```html
 <div class="flex flex-wrap items-center gap-1.5 mb-3 text-xs text-base-content/50">
     <span class="font-semibold">Showing:</span>
-    <span class="badge badge-xs badge-ghost">Filter Value</span>
+    <span class="bd-chip bd-chip--ghost">Filter Value</span>
     <span class="text-base-content/30">·</span>
-    <span class="badge badge-xs badge-primary">Special Filter</span>
+    <span class="bd-chip bd-chip--primary">Special Filter</span>
     <a href="{% url 'reset_url' %}" class="link link-primary text-xs ml-1">Reset</a>
 </div>
 ```
@@ -470,13 +519,13 @@ Used when a feature is limited for free users (game lists, badge showcase, custo
                     <!-- More features... -->
                 </div>
             </div>
-            <a href="..." class="btn btn-sm md:btn-md btn-primary shrink-0">Upgrade to Premium</a>
+            <a href="..." class="pp-cta shrink-0">Upgrade to Premium</a>
         </div>
     </div>
 </div>
 ```
 
-Key details: `border-primary/20` (not `border-base-300`) for the accent. Content centers on mobile, left-aligns on tablet+. Button shrinks to `btn-sm` on mobile.
+Key details: `border-primary/20` (not `border-base-300`) for the accent. Content centers on mobile, left-aligns on tablet+. The button keeps the default `pp-cta` size at every width.
 
 ### Navbar/Footer Theme Seam
 
@@ -622,7 +671,7 @@ Use this when cells contain **compact, self-contained data** (numbers, icons, sh
 On mobile, hide text labels and show only icons for toolbar/header buttons. Use `hidden md:inline` on the label text.
 
 ```html
-<button class="btn btn-xs md:btn-sm gap-1">
+<button class="pp-cta pp-cta--sm pp-cta--ghost" aria-label="Customize">
     <svg class="w-3.5 h-3.5">...</svg>
     <span class="hidden md:inline">Customize</span>
 </button>
@@ -777,7 +826,7 @@ These are **page-specific** decisions, not site-wide tokens:
 - **ZoomScaler removed**: The legacy sub-768px transform-scale system was removed (no callers remained); every page builds mobile-first. The `#zoom-container` / `#zoom-wrapper` divs in `base.html` remain only as the host for the modal/ceremony recede (`.pp-receded` -> `#page-recede`).
 - **Tailwind rebuild required**: After adding new responsive class variants (e.g., `md:p-5`), run `npm run build` to regenerate `output.css`. The output is minified to a single line.
 - **`md:hidden` for mobile-only elements**: This class is visible below 768px and hidden at 768px+. Useful for short date formats shown only on mobile.
-- **Touch targets**: Interactive elements should be at least 44px on all sizes. DaisyUI `btn-xs` and `toggle-sm` are smaller but acceptable for secondary controls.
+- **Touch targets**: Interactive elements should be at least 44px on all sizes. `pp-cta--sm` / `pp-cta--xs` and DaisyUI `toggle-sm` are smaller but acceptable for secondary controls.
 - **Hover glow vs scale**: Prefer colored shadow glow (`hover:shadow-lg hover:shadow-{color}/30`) over `hover:scale-105`. Scale causes layout shifts and feels heavy at tight grid gaps.
 - **Container class at 640px**: Tailwind's `.container` snaps to `max-width: 640px` at the `sm` breakpoint, which can cause a visual jump. The effect is minimal since content is typically narrower than 640px on phones.
 - **Horizontal scroll strips widen the phone page**: A `nowrap` + `overflow-x: auto` row (chip row, tab strip, coin row) clips and scrolls fine, but its full content width still pushes up to the page, and a phone browser answers by widening the layout viewport: iOS Safari zooms the whole page out or lets it pan sideways into empty space. Either let the row wrap, or put `contain: layout size` plus a `contain-intrinsic-height` (the height of one item) on the scroll container itself, scoped to the breakpoints where it scrolls (`contain: none` where it wraps). Both keywords are needed; `min-width: 0`, `max-width`, and `overflow-x: clip` on ancestors do not fix it. Items inside should be `flex-shrink: 0` so their labels never wrap past the fixed height. **A desktop browser at a narrow width cannot reproduce it**: test with real device emulation (Playwright `p.devices['iPhone 12']`) and compare `window.innerWidth` to `document.documentElement.clientWidth`. Two shipped instances: the Plat Calendar crest row and the browse drawer's "Filter by Letter" row (`.pp-gbrowse__fchips--letters`).
