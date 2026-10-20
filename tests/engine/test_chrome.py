@@ -349,7 +349,7 @@ def test_a_user_badge_with_drawn_art_is_not_an_avatar(client):
 
 def test_the_dropdown_circle_masks_an_avatar_badge():
     # The client half of the flag above. No JS runner here, so pinned by source: the row's image takes
-    # `is-avatar` from `item.avatar`, and the badge row's avatar rule undoes the contain + padding that
+    # `is-avatar` from `item.is_avatar`, and the badge row's avatar rule undoes the contain + padding that
     # a drawn badge needs.
     root = Path(__file__).resolve().parents[2]
     js = (root / 'static/js/navbar-search.js').read_text(encoding='utf-8')
