@@ -98,7 +98,7 @@ from trophies.views import (ModCenterView, QuickTakeQueueView, GameFlagQueueView
                             HideBlurbView, DismissBlurbReportView, ApproveGameFlagView,
                             ListReportQueueView, HideListTextView, DismissListReportView,
                             DismissGameFlagView)
-from trophies.views import GamesListView, GameDetailView, GamePageView, GameLeaderboardView, RandomGameView, ProfilesListView, SearchView, ProfileDetailView, ProfileDayView, ToggleSelectionView, BadgeHowItWorksView, BadgeListView, BadgeDetailView, GroupBadgeInspectView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, RequestProfileRefreshView, ProfileSuggestView, SiteSuggestView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeSeriesCreationView, BadgeRanksPanelView, OverallBadgeLeaderboardsView, LeaderboardRowsView, MyTitlesView, RateMyGamesView, ReviewsArchivedView, RoadmapDetailView, RoadmapEditorView, PlatCardsView, RecentlyAddedView, TrophyListsBrowseView, CompanyListView, CompanyDetailView, FranchiseListView, FranchiseDetailView, GenreThemeListView, GenreDetailView, ThemeDetailView, CareerView, JobsBrowseView, JobDetailView, JobRanksPanelView, JobContractsView, ContractsResultsView, ContractModalView, ContractModalPreviewView, CollectionView, CollectionBadgeModalView
+from trophies.views import GamesListView, GameDetailView, GamePageView, GameLeaderboardView, RandomGameView, ProfilesListView, SearchView, ProfileDetailView, ProfileDayView, BadgeHowItWorksView, BadgeListView, BadgeDetailView, GroupBadgeInspectView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, RequestProfileRefreshView, ProfileSuggestView, SiteSuggestView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeSeriesCreationView, BadgeRanksPanelView, OverallBadgeLeaderboardsView, LeaderboardRowsView, MyTitlesView, RateMyGamesView, ReviewsArchivedView, RoadmapDetailView, RoadmapEditorView, PlatCardsView, RecentlyAddedView, TrophyListsBrowseView, CompanyListView, CompanyDetailView, FranchiseListView, FranchiseDetailView, GenreThemeListView, GenreDetailView, ThemeDetailView, CareerView, JobsBrowseView, JobDetailView, JobRanksPanelView, JobContractsView, ContractsResultsView, ContractModalView, ContractModalPreviewView, CollectionView, CollectionBadgeModalView
 from milestones.views import MilestoneListView   # new milestones app (replaces the legacy trophies view)
 from trophies.recap_views import RecapIndexView, RecapSlideView
 from users.views import CustomConfirmEmailView, stripe_webhook, paypal_webhook, SupportStorefrontView, SupportRoadmapView, SubscriptionManagementView
@@ -261,9 +261,10 @@ urlpatterns = [
     path('hunters/<str:psn_username>/', ProfileDetailView.as_view(), name='profile_detail'),
     # Trophy Case: DOOR CLOSED 2026-08-23 (his call, found via the SEO Lane 0 audit -- nothing in
     # the rebuilt site linked it; the profile's Trophies tab superseded it). 302 not 301: the page
-    # was the selection UI for the PARKED showcase system (profile customization, hidden 2026-08),
-    # whose user-authored selections are deliberately preserved -- if that rebuild wants this UI
-    # back, restoring is this one line. TrophyCaseView, ToggleSelectionView and the templates stay.
+    # was the selection UI for the PARKED showcase system (profile customization, hidden 2026-08).
+    # The page, its toggle endpoint and its templates were DELETED 2026-10 (owner's call, dead-code
+    # cleanup): a returning showcase gets a from-scratch UI. The user-authored selections stay, and
+    # PlatBot's /trophy_case still reads them through the live /api/v1/trophy-case/.
     path('hunters/<str:psn_username>/trophy-case/', RedirectView.as_view(
         pattern_name='profile_detail', permanent=False), name='trophy_case'),
     path('profiles/', RedirectView.as_view(
@@ -614,8 +615,6 @@ urlpatterns = [
     path('dashboard/recap/', RedirectView.as_view(pattern_name='recap_index', permanent=True, query_string=True)),
     path('dashboard/recap/<int:year>/<int:month>/', RedirectView.as_view(pattern_name='recap_view', permanent=True, query_string=True)),
 
-    path('toggle-selection/', ToggleSelectionView.as_view(), name='toggle-selection'),
-
     # ─────────────────────────────────────────────────────────────────────
     # Phase 10 legacy redirects: 301 from old paths to new canonical names.
     # ─────────────────────────────────────────────────────────────────────
@@ -752,7 +751,7 @@ urlpatterns = [
     path('staff/badge-reveal/', BadgeRevealView.as_view(), name='badge_reveal'),
     # NOTE: the Platinum Grid wizard is RETIRED (2026-08). /shareables/platinum-grid/ bounces to
     # the shareables landing; the legacy /staff/platinum-grid/ + /tools/platinum-grid/ 301s funnel
-    # into that bounce. PlatinumGridView is parked unrouted in trophies/views/platinum_grid_views.py.
+    # into that bounce. The wizard's views, templates and JS were deleted 2026-10 (dead-code cleanup).
 
     # Fundraiser
     path('fundraiser/<slug:slug>/', FundraiserView.as_view(), name='fundraiser'),

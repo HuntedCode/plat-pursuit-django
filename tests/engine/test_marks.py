@@ -260,24 +260,6 @@ def test_marked_surfaces_read_the_denorm():
     assert 'lb-row__prem' not in row, 'the legacy amber star survived'
 
 
-def test_comments_render_the_full_mark():
-    """A moderator's authority on a comment must not be hue-alone (and staff crimson sits a
-    breath from --pp-error): the full partial renders, glyph and aria-label included."""
-    from django.utils import timezone
-    rendered = render_to_string('partials/comment.html', {
-        'comment': {
-            'id': 1, 'author': {'username': 'ModAuthor', 'avatar_url': '', 'flag': '',
-                                'user_is_premium': False, 'display_mark': 'mod'},
-            'body': 'On topic.', 'display_body': 'On topic.', 'upvote_count': 0,
-            'is_edited': False, 'is_deleted': False, 'depth': 0,
-            'created_at': timezone.now(), 'updated_at': timezone.now(),
-            'user_has_voted': False, 'is_moderator': False,
-            'can_edit': False, 'can_delete': False, 'parent_id': None, 'replies': [],
-        },
-    })
-    assert 'aria-label="Moderator"' in rendered and 'pp-supname' in rendered
-
-
 def test_the_wall_carries_the_service_override(client):
     """A paying staff member's name AND sub-line wear the service colour on the credits, the
     sub-line saying so plainly ("Staff"); the stars stay their paid level's."""
@@ -331,23 +313,14 @@ def test_the_extended_surfaces_carry_the_mark():
     assert f'fill="{cornerstone}"' in name_zone
     assert name_zone.count('<svg') >= 5, 'cornerstone wears five stars'
 
-    # Plat Cards (the My Pursuit share cards): both the single plat card and the platinum
-    # grid are Playwright-rendered like the recap card, so the mark is inline there too.
+    # Plat Cards (the My Pursuit share cards) are Playwright-rendered like the recap card, so
+    # the mark is inline there too.
     staff_colour = SERVICE_MARKS['staff']['colour']
     plat = render_to_string('shareables/plat_card.html', {
         'username': 'Wrench', 'mark': mark_style('staff'), 'variant': 'platinum',
         'total_platinums': 1, 'badge_lines': [],
     })
     zone = plat[plat.index('Wrench') - 400:plat.index('Wrench') + 900]
-    assert f'color: {staff_colour}' in zone and f'fill="{staff_colour}"' in zone
-
-    grid = render_to_string('shareables/partials/platinum_grid_card.html', {
-        'username': 'Wrench', 'mark': mark_style('staff'), 'plat_rows': [],
-        'width': 800, 'height': 600, 'header_height': 80, 'footer_height': 40,
-        'padding': 24, 'section_gap': 12, 'total_plats': 0, 'icon_type': 'trophy',
-        'theme_key': 'default',
-    })
-    zone = grid[grid.index('Wrench') - 400:grid.index('Wrench') + 900]
     assert f'color: {staff_colour}' in zone and f'fill="{staff_colour}"' in zone
 
     # Quick-take blurb: the author's name link renders the mark from profile.display_mark.
@@ -417,4 +390,3 @@ def test_the_mark_title_joins_the_worn_title_line():
     from users.constants import SERVICE_MARKS
     assert 'Staff' in staff_row and SERVICE_MARKS['staff']['colour'] in staff_row, (
         'the service title should join the line in the service colour')
-

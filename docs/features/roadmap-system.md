@@ -162,8 +162,8 @@ All endpoints require staff authentication via SessionAuthentication + IsAdminUs
 | `templates/trophies/roadmap_edit.html` | Editor template |
 | `static/js/roadmap_editor.js` | Editor JavaScript |
 | `templates/trophies/partials/game_detail/roadmap_cta_card.html (DELETED 2026-08-30 -- see note below)` | Top-level Roadmap CTA card wrapper (header + DLC tab bar + per-CTG panels) |
-| `templates/trophies/partials/game_detail/roadmap_cta_filled.html` | Filled-state body: stat chips, step preview, View Full Roadmap button |
-| `templates/trophies/partials/game_detail/roadmap_cta_empty.html` | Empty-state body: Discord CTAs + optional staff Create button |
+| `templates/trophies/partials/game_detail/roadmap_cta_filled.html` (DELETED 2026-10) | Filled-state body: stat chips, step preview, View Full Roadmap button |
+| `templates/trophies/partials/game_detail/roadmap_cta_empty.html` (DELETED 2026-10) | Empty-state body: Discord CTAs + optional staff Create button |
 | `templates/trophies/partials/game_detail/community_tabs_section.html` | Community section (ratings + reviews; owns the shared DLC tab-switching JS) |
 | `templates/trophies/partials/dashboard/roadmap_recommendations.html` | Dashboard module |
 | `templates/community/partials/roadmap_recruitment_strip.html` | Community hub recruitment strip |
@@ -171,9 +171,10 @@ All endpoints require staff authentication via SessionAuthentication + IsAdminUs
 **Restore note (2026-08-30, list-detail slim-down):** `roadmap_cta_card.html` -- the wrapper
 that included `roadmap_cta_filled/empty/staff.html` and carried the inline `.roadmap-cta-link`
 click script -- was deleted as a true orphan (zero includes since the Roadmap tab left game
-detail). The three inner partials are still kept for a restore, but a restore must now RECREATE
-the wrapper (or an equivalent include site) and re-wire `.roadmap-cta-link`; git history at
-commit 9dc1bde9^ has the last copy.
+detail). The three inner partials (`roadmap_cta_filled/empty/staff.html`) and `roadmap_section.html`
+followed on 2026-10 (owner's call: roadmaps are reached by direct link only for now). A restore
+rebuilds the game-page entry point from scratch; git history has the last copies (the wrapper at
+9dc1bde9^, the inner partials at 24aaf68f).
 
 ## Gotchas and Pitfalls
 

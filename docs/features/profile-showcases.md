@@ -128,7 +128,7 @@ All endpoints resolve premium status via `profile.user_is_premium`.
 ## Integration Points
 
 - **Profile page** rendered showcases via `profile_showcases_section.html`, included in `profile_detail.html` after the header partial. That include is currently commented out (see the banner at the top); the partial itself is unchanged.
-- **Trophy Case page** (`/hunters/<psn_username>/trophy-case/`) is still the picker UX for `platinum_case` — linked from the editor
+- **Trophy Case page** (`/hunters/<psn_username>/trophy-case/`) was the picker UX for `platinum_case`, linked from the editor. **Deleted 2026-10** with its `toggle-selection/` endpoint (owner's call); the URL 302s to the profile. The saved `UserTrophySelection` rows remain, and PlatBot's `/trophy_case` still reads them through `/api/v1/trophy-case/`. A returning showcase builds a new picker.
 - **Subscription lifecycle** calls `handle_premium_downgrade()` on every cancel path
 
 ## Gotchas and Pitfalls

@@ -1,15 +1,12 @@
 """
 Review Hub service layer.
 
-Aggregate queries for the Review Hub landing page: stats, most-reviewed games,
-trending reviews, and unrated/unreviewed platinum counts for the wizard CTA.
+What survives the hub's archive (2026-05) and the deletion of its landing page (2026-10): the
+concept search and the Rate My Games wizard's queries (ratable concepts, rating progress).
 """
 import logging
 
-from django.core.cache import cache
-from django.db.models import Count, Sum, Q
-from django.utils import timezone
-from datetime import timedelta
+from django.db.models import Count, Q
 
 logger = logging.getLogger('psn_api')
 
@@ -20,145 +17,6 @@ class ReviewHubService:
     STATS_CACHE_KEY = 'review_hub:stats'
     STATS_CACHE_TIMEOUT = 900  # 15 minutes
 
-    @staticmethod
-    def get_hub_stats():
-        """Total reviews, total ratings, unique reviewers, total helpful votes.
-
-        Returns a dict with keys: total_reviews, total_ratings,
-        unique_reviewers, total_helpful_votes. All default to 0.
-        Cached 15 minutes.
-        """
-        cached = cache.get(ReviewHubService.STATS_CACHE_KEY)
-        if cached:
-            return cached
-
-        from trophies.models import Review, UserConceptRating
-
-        review_agg = Review.objects.filter(is_deleted=False).aggregate(
-            total_reviews=Count('id'),
-            unique_reviewers=Count('profile', distinct=True),
-            total_helpful_votes=Sum('helpful_count'),
-        )
-
-        total_ratings = UserConceptRating.objects.count()
-
-        stats = {
-            'total_reviews': review_agg['total_reviews'] or 0,
-            'total_ratings': total_ratings,
-            'unique_reviewers': review_agg['unique_reviewers'] or 0,
-            'total_helpful_votes': review_agg['total_helpful_votes'] or 0,
-        }
-
-        cache.set(ReviewHubService.STATS_CACHE_KEY, stats,
-                  ReviewHubService.STATS_CACHE_TIMEOUT)
-        return stats
-
-    @staticmethod
-    def get_most_reviewed_games(limit=10):
-        """Top concepts by non-deleted review count (single query).
-
-        Returns list of dicts: concept_icon_url, unified_title, slug,
-        review_count, recommendation_pct.
-        """
-        from trophies.models import Concept
-
-        # Fetch instances (not .values()) so cover_url's IGDB-first chain
-        # works for anchored concepts (empty concept_icon_url). The dict key
-        # stays 'concept_icon_url' for template/JS contract consistency; only
-        # the source changed.
-        concepts = list(
-            Concept.objects
-            .select_related('igdb_match')
-            .defer('igdb_match__raw_response')
-            .annotate(
-                review_count=Count(
-                    'reviews',
-                    filter=Q(reviews__is_deleted=False),
-                ),
-                recommended_count=Count(
-                    'reviews',
-                    filter=Q(
-                        reviews__is_deleted=False,
-                        reviews__recommended=True,
-                    ),
-                ),
-            )
-            .filter(review_count__gt=0)
-            .order_by('-review_count')[:limit]
-        )
-
-        result = []
-        for c in concepts:
-            total = c.review_count
-            pct = round(c.recommended_count / total * 100) if total else 0
-            result.append({
-                'concept_icon_url': c.cover_url or '',
-                'unified_title': c.unified_title,
-                'slug': c.slug,
-                'review_count': total,
-                'recommendation_pct': pct,
-            })
-
-        return result
-
-    @staticmethod
-    def get_top_reviewers(limit=10):
-        """Top reviewers by total helpful votes received across all their reviews.
-
-        Aggregates `helpful_count` (denormalized on Review) per profile and
-        returns the top N. Excludes deleted reviews and profiles whose total
-        is zero (newcomers don't surface even if they have a review with no
-        votes yet). Used by the Community Hub `top_reviewers` module.
-
-        Returns a list of dicts: profile (Profile instance), total_helpful,
-        review_count. Profile is included so the template can render avatar +
-        psn_username + flag without an extra query.
-        """
-        from django.db.models import Count, Sum
-        from trophies.models import Profile
-
-        return list(
-            Profile.objects
-            .annotate(
-                total_helpful=Sum(
-                    'reviews__helpful_count',
-                    filter=Q(reviews__is_deleted=False),
-                ),
-                review_count=Count(
-                    'reviews',
-                    filter=Q(reviews__is_deleted=False),
-                ),
-            )
-            .filter(total_helpful__gt=0)
-            .order_by('-total_helpful', '-review_count')[:limit]
-            .values(
-                'id', 'psn_username', 'display_psn_username',
-                'avatar_url', 'flag', 'user_is_premium',
-                'total_helpful', 'review_count',
-            )
-        )
-
-    @staticmethod
-    def get_trending_reviews(days=7, limit=5):
-        """Reviews with most helpful votes created in the last N days.
-
-        Returns Review queryset with select_related for template rendering.
-        """
-        from trophies.models import Review
-
-        cutoff = timezone.now() - timedelta(days=days)
-
-        return (
-            Review.objects
-            .filter(
-                is_deleted=False,
-                created_at__gte=cutoff,
-                helpful_count__gt=0,
-            )
-            .select_related('profile', 'concept', 'concept__igdb_match')
-            .prefetch_related('profile__user_titles__title')
-            .order_by('-helpful_count', '-created_at')[:limit]
-        )
 
     @staticmethod
     def search_concepts(query, limit=8):
@@ -306,20 +164,6 @@ class ReviewHubService:
             ReviewHubService.COMPLETE, profile=profile, **filters
         )
 
-    @staticmethod
-    def get_unrated_platinum_count(profile):
-        """Count of ratable concepts (non-shovelware) whose base-game rating is missing or incomplete."""
-        ratable_ids = ReviewHubService.get_ratable_concept_ids(profile)
-        if not ratable_ids:
-            return 0
-
-        rated_concept_ids = set(
-            ReviewHubService.complete_ratings(
-                profile, concept_id__in=ratable_ids, concept_trophy_group__isnull=True,
-            ).values_list('concept_id', flat=True)
-        )
-
-        return len(set(ratable_ids) - rated_concept_ids)
 
     @staticmethod
     def get_rating_progress(profile):
@@ -424,33 +268,3 @@ class ReviewHubService:
         progress['dlc_new'] = sum(1 for g in completed if g[0] not in any_rated_ctg)
         progress['dlc_need_rec'] = len(any_rated_ctg - complete_ctg)
         return progress
-
-    @staticmethod
-    def get_unrated_dlc_count(profile):
-        """Count of COMPLETED DLC groups the hunter has not rated yet.
-
-        Thin wrapper over `get_rating_progress` -- it used to carry its own per-group loop, and two
-        implementations of "which DLC counts" is how the header and the queue drift apart.
-        """
-        return ReviewHubService.get_rating_progress(profile)['dlc_waiting']
-
-    @staticmethod
-    def get_unreviewed_platinum_count(profile):
-        """Count of ratable concepts (non-shovelware) not yet base-game reviewed."""
-        from trophies.models import Review
-
-        ratable_ids = ReviewHubService.get_ratable_concept_ids(profile)
-        if not ratable_ids:
-            return 0
-
-        reviewed_concept_ids = set(
-            Review.objects
-            .filter(
-                profile=profile,
-                is_deleted=False,
-                concept_trophy_group__trophy_group_id='default',
-            )
-            .values_list('concept_id', flat=True)
-        )
-
-        return len(set(ratable_ids) - reviewed_concept_ids)

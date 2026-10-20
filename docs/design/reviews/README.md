@@ -65,7 +65,8 @@ one of these branches (its status row names it). Run in this order:
 | # | Branch | Covers | Shape |
 |---|--------|--------|-------|
 | 1 | Quick fixes (`fix/review-quick-fixes`) | FV-04, FV-09 copy, FV-16, FV-18, FV-19 | Done |
-| 2 | DaisyUI split | SW-01, FV-15 | Name kept versus retired components in the design system, add the shrinking-allowlist guard |
+| 2a | Dead legacy cleanup (`refactor/delete-dead-legacy-ui`) | SW-01 prerequisite | The SW-01 inventory found 25 of the 33 heaviest DaisyUI files unreachable. Deleted (owner's call): the old review hub, old Game Lists, platinum grid, trophy case page, comments UI, notification inbox, roadmap game-page partials. Done |
+| 2 | DaisyUI split | SW-01, FV-15 | Align DaisyUI's status colors to the `--pp-*` tokens (owner approved), name kept versus retired components in the design system, add the shrinking-allowlist guard |
 | 3 | Site-wide noise | SW-02 (FV-10, DL-06), FV-11, DL-10 | Back-to-top, toasts, no upsell or NEW before linking |
 | 4 | Career + first arrival | FV-03, FV-12, DL-01, DL-02, DL-03, DL-04, DL-09 | Design pass first |
 | 5 | Onboarding rebuild | FV-01, FV-07, FV-08, FV-09 step-2 help, FV-13, FV-20 | Design pass first; auth, link PSN and the sync card as one flow |

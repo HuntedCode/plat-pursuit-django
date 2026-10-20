@@ -333,51 +333,6 @@ class ProfileGamesForm(forms.Form):
     def _coerce(value, choices, default):
         return value if value in {key for key, _ in choices} else default
 
-class TrophyCaseForm(forms.Form):
-    query = forms.CharField(required=False, label='Search by game name')
-    sort = forms.ChoiceField(
-        choices=[
-            ('recent', 'Recently Earned'),
-            ('oldest', 'Oldest Earned'),
-            ('rarest_psn', 'Rarest (PSN)'),
-            ('rarest_pp', 'Rarest (PP)'),
-            ('alpha', 'Alphabetical'),
-            ('rating', 'Highest Rated'),
-            ('rating_inv', 'Lowest Rated'),
-            ('played', 'Most Played'),
-            ('played_inv', 'Least Played'),
-            ('time_to_beat', 'Shortest Time-to-Beat'),
-            ('time_to_beat_inv', 'Longest Time-to-Beat'),
-        ],
-        required=False,
-        label='Sort By',
-    )
-    filter = forms.ChoiceField(
-        choices=[('', 'All Platinums'), ('selected', 'Selected Only')],
-        required=False,
-        label='Filter',
-    )
-    platform = forms.MultipleChoiceField(
-        choices=[('PS5', 'PS5'), ('PS4', 'PS4'), ('PS3', 'PS3'), ('PSVITA', 'PSVita'), ('PSVR', 'PSVR'), ('PSVR2', 'PSVR2')],
-        required=False,
-        label='Platforms',
-    )
-    genres = forms.MultipleChoiceField(required=False, label='Genres')
-    themes = forms.MultipleChoiceField(required=False, label='Themes')
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        from trophies.models import Genre, Theme
-        try:
-            self.fields['genres'].choices = list(
-                Genre.objects.values_list('id', 'name').order_by('name')
-            )
-            self.fields['themes'].choices = list(
-                Theme.objects.values_list('id', 'name').order_by('name')
-            )
-        except Exception:
-            pass
-
 
 class UserConceptRatingForm(forms.ModelForm):
     """The ONE server-side gate on a rating. Both the API endpoint and any future writer go through it, so

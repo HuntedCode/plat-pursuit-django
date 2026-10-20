@@ -1,8 +1,9 @@
 """
 Broadcast email renderer: converts in-app notification content to email-safe HTML.
 
-This is the server-side equivalent of the JS formatStructuredContent() and
-renderStructuredSections() in notification-inbox.js. It renders the same
+This is the server-side equivalent of formatStructuredContent() and
+renderStructuredSections() in the old notification-inbox.js (deleted 2026-10; last copy at
+commit 24aaf68f). It renders the same
 mini-markup syntax (*bold*, _italic_, `code`, [link](url), - bullets)
 into inline-styled HTML safe for email clients.
 """

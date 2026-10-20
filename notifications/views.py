@@ -1,5 +1,4 @@
 from django.views.generic import TemplateView, ListView, View
-from django.contrib.auth.mixins import LoginRequiredMixin
 from django.shortcuts import redirect
 from django.contrib import messages
 from django.utils import timezone
@@ -10,40 +9,6 @@ from notifications.models import (
     NotificationTemplate, ScheduledNotification, NotificationLog
 )
 from notifications.services.scheduled_notification_service import ScheduledNotificationService
-
-
-class NotificationInboxView(LoginRequiredMixin, TemplateView):
-    """
-    Gmail-style notification inbox with split-pane layout.
-    Uses AJAX to load notifications via existing API endpoints.
-    """
-    template_name = 'notifications/inbox.html'
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context['title'] = 'Notifications'
-        context['breadcrumb'] = [
-            {'text': 'Home', 'url': '/'},
-            {'text': 'Notifications', 'url': None}
-        ]
-
-        # Notification types for filter dropdown
-        context['notification_types'] = [
-            ('platinum_earned', 'Platinum Trophy'),
-            ('badge_awarded', 'Badge Awarded'),
-            ('milestone_achieved', 'Milestone Achieved'),
-            ('challenge_completed', 'Challenge Completed'),
-            ('review_reply', 'Review Reply'),
-            ('review_milestone', 'Review Milestone'),
-            ('monthly_recap', 'Monthly Recap'),
-            ('subscription_created', 'Subscription Created'),
-            ('subscription_updated', 'Subscription Updated'),
-            ('discord_verified', 'Discord Verified'),
-            ('admin_announcement', 'Admin Announcement'),
-            ('system_alert', 'System Alert'),
-        ]
-
-        return context
 
 
 class AdminNotificationCenterView(StaffRequiredMixin, TemplateView):

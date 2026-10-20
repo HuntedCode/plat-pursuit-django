@@ -154,10 +154,4 @@ class CommentSerializer(serializers.ModelSerializer):
         return (profile and (obj.profile == profile or is_admin)) and not obj.is_deleted
 
 
-class CommentCreateSerializer(serializers.Serializer):
-    """Serializer for comment creation input."""
-    body = serializers.CharField(max_length=2000, required=True)
-    parent_id = serializers.IntegerField(required=False, allow_null=True)
-
-
 # Checklist serializers removed during roadmap migration (DB tables retained)

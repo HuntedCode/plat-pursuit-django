@@ -393,7 +393,8 @@ def test_both_fields_are_wired_to_a_counter(client):
 
 def test_the_shared_counter_is_not_a_fourth_copy():
     """It went into `utils.js` because it was about to be the THIRD implementation
-    (`admin-notifications.js` and `comments.js` each have their own, both bound to specific ids).
+    (`admin-notifications.js` has its own, bound to specific ids; `comments.js` had one until it was
+    deleted 2026-10).
     Lists must not add a fourth."""
     from pathlib import Path
 

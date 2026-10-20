@@ -6,9 +6,9 @@ from .views import (
     AgreeToGuidelinesView
 )
 # Checklist API views removed during roadmap migration (DB tables retained)
-# Nine of the ten notification views are no longer imported: their paths are withdrawn while the system
-# is hidden, and an import with no route is just a name to trip over later. They are untouched in
-# api/notification_views.py -- restoring the system restores this import alongside the paths.
+# The notification views are no longer imported: their paths are withdrawn while the system is hidden,
+# and an import with no route is just a name to trip over later. Eight are parked in
+# api/notification_views.py; the rating view was deleted 2026-10 with the inbox it served.
 #
 # The tenth (AdminUserSearchView) was the exception, left routed because the staff badge-creation form
 # used it as a user picker. That form authored LEGACY tier badges and was deleted in badge cutover 5b,
@@ -17,7 +17,7 @@ from .shareable_views import (
     PlatCardHTMLView, PlatCardPNGView, ProfileCardPNGView,
     LegacyPlatinumCardHTMLView, LegacyPlatinumCardPNGView,
 )
-# Platinum Grid is RETIRED (2026-08); api/platinum_grid_views.py is parked unrouted.
+# Platinum Grid is RETIRED (2026-08); its parked views were deleted 2026-10 (dead-code cleanup).
 from .recap_views import (
     RecapAvailableView, RecapDetailView, RecapRegenerateView, RecapShareImageHTMLView,
     RecapShareImagePNGView, RecapSlidePartialView, RecapDeckView
@@ -25,9 +25,8 @@ from .recap_views import (
 from .tracking_views import TrackSiteEventView
 from .easter_egg_views import RollEasterEggView
 from .share_temp_views import serve_share_temp_image
-# The twelve list views are no longer imported: their paths are withdrawn while the lists system is
-# hidden, and an import with no route is just a name to trip over later. They are untouched in
-# api/game_list_views.py -- restoring the system restores this import alongside the paths.
+# The legacy list API (api/game_list_views.py) was deleted 2026-10: Game Lists came back as the
+# rebuilt `gamelists` app, which serves its own endpoints, so the parked views had nothing to return to.
 from .game_picker_views import GameBackgroundSearchView, ConceptBannerImagesView
 from .subscription_admin_views import SubscriptionAdminActionView, SubscriptionAdminUserDetailView
 from .fundraiser_views import CreateDonationView, ClaimBadgeView, UpdateClaimStatusView
@@ -80,8 +79,9 @@ urlpatterns = [
     # ── Notifications: WITHDRAWN while the system is hidden (2026-08) ───────────────────────────────
     # Nine routes gone -- list, mark-read, mark-all-read, bulk-delete, delete, the rating endpoint, and
     # the three admin compose endpoints. Nothing can read or write into a system with no door, which is
-    # what the rebuild would otherwise have to reconcile. The views are parked in
-    # api/notification_views.py; the models and every producer are untouched.
+    # what the rebuild would otherwise have to reconcile. Eight views are parked in
+    # api/notification_views.py (the rating view and the inbox page were deleted 2026-10); the models
+    # and every producer are untouched.
     #
     # `notification-rating` went with them, which also removes the SECOND server-side writer of
     # UserConceptRating -- `GroupRatingView` is now the only one.
@@ -120,14 +120,8 @@ urlpatterns = [
     # Temp share image serving
     path('share-temp/<str:filename>', serve_share_temp_image, name='share-temp-image'),
 
-    # Game list endpoints -- WITHDRAWN while the lists system is hidden.
-    #
-    # Unrouted rather than left answering: the only caller was the add-to-list button on game cards,
-    # which is gone with the rest of the entry points, and an endpoint that still accepts writes into a
-    # system nobody can open collects data the revamp then has to reconcile. Checked before pulling
-    # them: PlatBot does not call `/api/v1/lists/` (its only "lists" matches are in vendored packages).
-    #
-    # The views are untouched in api/game_list_views.py; restoring the system is restoring these paths.
+    # Legacy game list endpoints: withdrawn 2026-08, views deleted 2026-10. The rebuilt Game Lists
+    # (`gamelists` app) route their own. PlatBot never called `/api/v1/lists/`.
 
     # Game search (for list typeahead)
 
