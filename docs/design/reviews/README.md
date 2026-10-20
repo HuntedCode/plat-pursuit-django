@@ -13,7 +13,7 @@ the hand-offs between pages.
 | Slice | Covers | Status | Record |
 |-------|--------|--------|--------|
 | First visit | Anon landing, sign up / sign in, email verify, link PSN, first sync, first arrival on the lobby + Career | Reviewed 2026-10-20 | [first-visit.md](first-visit.md) |
-| Daily loop | Lobby, Career, contracts and claims | Next | |
+| Daily loop | Lobby, Career, contracts and claims | Reviewed 2026-10-20 | [daily-loop.md](daily-loop.md) |
 | Discovery | Browse games, game detail, trophy lists, search | Not started | |
 | Challenges | The Challenges system (public since 2026-10-18) | Not started | |
 | Identity and social | Profiles, badges, leaderboards, share cards | Not started | |
@@ -25,7 +25,8 @@ Findings that belong to no single slice. Same status values as the slice records
 
 | ID | Sev | Finding | Status |
 |----|-----|---------|--------|
-| SW-01 | Medium | DaisyUI is half-replaced, and the seam is visible. See below | open, plan after the Daily loop review |
+| SW-01 | Medium | DaisyUI is half-replaced, and the seam is visible. See below | open |
+| SW-02 | Medium | The back-to-top button (`templates/partials/back_to_top.html`, DaisyUI `btn-primary`, 64px at `lg`) is the loudest element on every page, and on a phone it covers a contract card's Claim button. Seen as [FV-10](first-visit.md) and [DL-06](daily-loop.md) | open |
 
 ### SW-01: DaisyUI, foundation versus retired components
 
@@ -40,7 +41,8 @@ What is unfinished is the component swap. Some components have house replacement
 2026-10-20, roughly 20 of them staff or admin screens. The visible cost is **two button systems**: the
 house `pp-cta` (dark teal, the landing and the no-PSN welcome) and DaisyUI's bright-cyan `btn-primary`
 (sign up, link PSN, the sync finale, Career). That split is a large part of
-[FV-01](first-visit.md#fv-01-two-design-generations).
+[FV-01](first-visit.md#fv-01-two-design-generations). Toasts are the same story: `ToastManager` builds
+DaisyUI `alert-*` blocks, a saturated slab on a phone ([DL-10](daily-loop.md)).
 
 Proposed shape, not yet decided:
 

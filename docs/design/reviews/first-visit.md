@@ -23,7 +23,7 @@ Status values: `open`, `planned` (branch named), `fixed` (commit or PR), `won't 
 | FV-07 | Medium | Sign-up friction: confirm email and confirm password, both passwords wiped on a failed submit, a placeholder that reads as a filled value, and no word about what comes next | See below | open |
 | FV-08 | Medium | "Check your inbox" is a dead end: no address shown, no resend, and the main button goes back to Sign In | `templates/account/verification_sent.html` | open |
 | FV-09 | Medium | Link step 2, the hardest moment, has the least help; the welcome page's copy promises things linking does not deliver | See below | open |
-| FV-10 | Medium | The back-to-top button is the loudest element on every page | `templates/partials/back_to_top.html` | open (site-wide) |
+| FV-10 | Medium | The back-to-top button is the loudest element on every page | `templates/partials/back_to_top.html` | tracked as [SW-02](README.md#site-wide-findings) |
 | FV-11 | Low | A brand-new account with no PSN already shows the Premium button and a glowing "NEW" pill | `templates/partials/navbar.html` | open |
 | FV-12 | Low | The lobby states sync status three times ("Updated ...", "Sync now", the "Synced" dot) | `templates/trophies/home.html` | open, revisit after the Daily loop review |
 | FV-13 | Low | On the sync card, the one fact that matters ("10 to 30 minutes") is mid-way through an italic paragraph of up to six lines | `templates/home/_hero_syncing.html` | open |
