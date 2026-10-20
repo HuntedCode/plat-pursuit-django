@@ -19,6 +19,42 @@ the hand-offs between pages.
 | Identity and social | Profiles, badges, leaderboards, share cards | Not started | |
 | Account | Settings, membership, fundraiser | Not started | |
 
+## Site-wide findings
+
+Findings that belong to no single slice. Same status values as the slice records.
+
+| ID | Sev | Finding | Status |
+|----|-----|---------|--------|
+| SW-01 | Medium | DaisyUI is half-replaced, and the seam is visible. See below | open, plan after the Daily loop review |
+
+### SW-01: DaisyUI, foundation versus retired components
+
+DaisyUI was never meant to be removed wholesale. Part of it is the documented foundation: the design
+system's card recipe is DaisyUI `card` + `card-body` dressed in house tokens, and its theme supplies the
+`bg-base-*` / `text-base-content` colors used across nearly every template. Career, the reference
+page, uses `card`, `btn btn-primary` and `loading` too.
+
+What is unfinished is the component swap. Some components have house replacements (`badge` became
+`.bd-chip`, whose header calls itself "the strangler replacement for DaisyUI"; browse toolbars became
+`.pp-bgal__*`), but DaisyUI component classes were still present in about 190 templates and JS files on
+2026-10-20, roughly 20 of them staff or admin screens. The visible cost is **two button systems**: the
+house `pp-cta` (dark teal, the landing and the no-PSN welcome) and DaisyUI's bright-cyan `btn-primary`
+(sign up, link PSN, the sync finale, Career). That split is a large part of
+[FV-01](first-visit.md#fv-01-two-design-generations).
+
+Proposed shape, not yet decided:
+
+1. **Name the split in [design-system.md](../../reference/design-system.md).** Kept as foundation (card
+   shell, theme colors, spinner) versus retired with its house replacement (`badge` to `.bd-chip`,
+   `btn` to `pp-cta`, and decisions still to make for `alert`, `input` / `select`, `progress`).
+2. **A guard test for retired classes**, with the existing uses on an allowlist that may only shrink, so
+   new code cannot add more.
+3. **Convert inside the fix branches already planned**, page area by page area, rather than as one sweep.
+   Check each heavy file for liveness first: some (the archived review hub, legacy comments) are likely
+   deletions, not conversions.
+
+Re-measure before planning: the figures above are a snapshot, not a target.
+
 ## How a review is run
 
 1. **Judge rendered pages, not templates.** Playwright screenshots at phone (375), tablet (768) and
