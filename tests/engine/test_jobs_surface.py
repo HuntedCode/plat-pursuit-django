@@ -355,6 +355,14 @@ def test_the_catalogue_query_runs_its_subqueries_once_per_job_not_once_per_link(
     qs = _browse_queryset()
     assert qs.query.group_by is None, 'an outer aggregate is back: the supply subquery joins the GROUP BY'
 
+    # The other half of the outage: each run of the old subquery scanned EVERY contract. Both helpers
+    # must read the indexed link table, not `trophies_contract`; the plan check below cannot see that on
+    # a test-sized catalogue (the loop count is the same either way).
+    from trophies.views.career_views import _job_contract_count, _job_xp_supply
+    link_table = Contract.jobs.through
+    assert _job_xp_supply().model is link_table, '_job_xp_supply scans Contract again'
+    assert _job_contract_count().model is link_table, '_job_contract_count scans Contract again'
+
     plan = qs.explain(analyze=True).split('\n')
     top = [line for line in plan if _re.match(r'\s{8}SubPlan', line)]  # subplans of the job scan itself
     assert top, 'no subqueries in the plan; the catalogue no longer reads its counts the way this pins'

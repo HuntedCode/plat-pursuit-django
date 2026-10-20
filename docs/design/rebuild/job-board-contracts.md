@@ -759,8 +759,10 @@ Home membership is derived, so a merge has **no membership rows to re-point**. `
   3,000, then prod's 15s statement timeout and a 500. Count with a subquery too, so there is no outer
   aggregate, and read the `Contract.jobs` link table directly (indexed both ways). See
   `_job_xp_supply` / `_job_contract_count` in `trophies/views/career_views.py`; the shape is pinned by
-  `test_the_catalogue_query_runs_its_subqueries_once_per_job_not_once_per_link`. Dev's few hundred
-  contracts cannot show this: benchmark at prod scale.
+  `test_the_catalogue_query_runs_its_subqueries_once_per_job_not_once_per_link`, and the whole codebase
+  is guarded against the shape by `tests/engine/test_no_subquery_beside_aggregate.py` (a WRAPPED
+  subquery, e.g. inside `Coalesce`, is what Django copies into the GROUP BY; a bare one is safe). Dev's
+  few hundred contracts cannot show this: benchmark at prod scale.
 - **Membership is a derived query, not a stored relation.** You cannot `prefetch_related` it or
   join a through-table. Read it via `member_concept_ids()` / `contract_by_concept_map()`, or in
   ORM subqueries via `concept__igdb_match__igdb_id=<contract.igdb_id>` **plus** the anchored +

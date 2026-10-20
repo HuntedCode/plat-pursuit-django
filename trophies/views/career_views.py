@@ -355,9 +355,9 @@ class JobsBrowseView(HtmxListMixin, ListView):
     def get_queryset(self):
         qs = Job.objects.annotate(
             # ANNOTATED rather than counted per card, because the `contracts` sort has to happen in the
-            # database. It also replaces the separate grouped query this page used to run, so gaining a
-            # sort cost it a query rather than adding one. `distinct=True` because a Contract can feed
-            # several jobs and the join would otherwise multiply.
+            # database. Both are correlated SUBQUERIES, not `Count('contracts')`: an outer aggregate would
+            # give this query a GROUP BY and drag `xp_supply` into it, once per link (the 2026-10 outage;
+            # see `_job_xp_supply`). The link table holds one row per contract and job, so no `distinct`.
             contract_count=Coalesce(Subquery(_job_contract_count(), output_field=IntegerField()), Value(0)),
             xp_supply=Coalesce(Subquery(_job_xp_supply(), output_field=IntegerField()), Value(0)),
         )
