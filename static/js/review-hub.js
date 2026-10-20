@@ -279,7 +279,7 @@ PlatPursuit.ReviewHub = {
 
     async toggleVote(reviewId, voteType) {
         if (!this.config.isAuthenticated) {
-            PlatPursuit.ToastManager.error('Log in to vote on reviews.');
+            PlatPursuit.ToastManager.error('Sign in to vote on reviews.');
             return;
         }
 

@@ -1164,8 +1164,9 @@ class LinkPSNView(LoginRequiredMixin, View):
                     return render(request, self.template_name, context)
                 except ValueError as e:
                     messages.error(request, str(e))
-                except Exception as e:
-                    messages.error(request, 'An error occured during sync. Please try again later.')
+                except Exception:
+                    logger.exception("Link PSN: starting the sync failed for %s", psn_username)
+                    messages.error(request, 'An error occurred during sync. Please try again later.')
             return render(request, self.template_name, {'form': form, 'step': 1})
         elif action == 'verify':
             if psn_outage:
@@ -1176,16 +1177,7 @@ class LinkPSNView(LoginRequiredMixin, View):
                     'PlayStation Network is currently unavailable. '
                     'Please try verifying again once service recovers.'
                 )
-                try:
-                    profile = Profile.objects.get(psn_username=psn_username.lower())
-                    return render(request, self.template_name, {
-                        'form': self.form_class(initial={'psn_username': psn_username}),
-                        'step': 2,
-                        'verification_code': profile.verification_code,
-                        'profile': profile,
-                    })
-                except Profile.DoesNotExist:
-                    return redirect('link_psn')
+                return self._back_to_step_two(request, psn_username)
 
             form = self.form_class(request.POST)
             if form.is_valid():
@@ -1207,11 +1199,26 @@ class LinkPSNView(LoginRequiredMixin, View):
                 except Profile.DoesNotExist:
                     messages.error(request, "Profile not found. Please start over.")
                     return redirect('link_psn')
-                except Exception as e:
-                    messages.error(request, f"An error occurred during verification. Please try again.")
-                    return render(request, self.template_name, {'form': self.form_class(initial={'psn_username': psn_username}), 'step': 2})
+                except Exception:
+                    logger.exception("Link PSN: starting verification failed for %s", psn_username)
+                    messages.error(request, "An error occurred during verification. Please try again.")
+                    return self._back_to_step_two(request, psn_username)
 
         return redirect('link_psn')
+
+    def _back_to_step_two(self, request, psn_username):
+        """Re-render the verify step for a hunter who already holds a code, or start over when the
+        profile is gone. Every return to step 2 must carry the code and the profile: the generic
+        error path once rendered step 2 without them, and the hunter got an empty code box (FV-19)."""
+        profile = Profile.objects.filter(psn_username=psn_username.lower()).first()
+        if profile is None:
+            return redirect('link_psn')
+        return render(request, self.template_name, {
+            'form': self.form_class(initial={'psn_username': psn_username}),
+            'step': 2,
+            'verification_code': profile.verification_code,
+            'profile': profile,
+        })
 
 
 class ProfileVerifyView(LoginRequiredMixin, View):

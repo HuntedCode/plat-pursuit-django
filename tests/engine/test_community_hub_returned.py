@@ -228,7 +228,7 @@ def test_a_signed_out_visitor_can_reach_support_us_from_the_chrome(client):
 
     panel = body[body.index('pp-avmenu'):]
     panel = panel[:panel.index('</div>')]
-    assert 'Log in' in panel, 'this is not the anonymous menu'
+    assert 'Sign in' in panel, 'this is not the anonymous menu'
     assert '>Support Us</a>' in panel, 'a signed-out phone visitor cannot reach the hub'
 
 

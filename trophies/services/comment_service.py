@@ -133,7 +133,7 @@ class CommentService:
         from users.services import restriction_service
 
         if not profile:
-            return False, f"You must be logged in to {action}."
+            return False, f"You must be signed in to {action}."
         if not profile.is_linked:
             return False, f"You must link a PSN profile to {action}."
         # The restriction check goes HERE rather than at each caller: this function is already the
@@ -155,7 +155,7 @@ class CommentService:
             tuple: (bool can_comment, str reason)
         """
         if not profile:
-            return False, "You must be logged in to comment."
+            return False, "You must be signed in to comment."
         if not profile.is_linked:
             return False, "You must link a PSN profile to comment."
         if not profile.guidelines_agreed:

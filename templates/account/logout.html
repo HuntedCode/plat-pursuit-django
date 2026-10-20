@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 
-{% block title %}{% if user.is_authenticated %}Sign Out{% else %}Signed Out{% endif %}{% endblock %}
+{% block title %}{% if user.is_authenticated %}Sign out{% else %}Signed out{% endif %}{% endblock %}
 {% block robots %}noindex, nofollow{% endblock %}
 
 {% block main_layout %}
@@ -16,7 +16,7 @@
                     <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
                     <polyline points="22 4 12 14.01 9 11.01"></polyline>
                 </svg>
-                <h1 class="text-xl md:text-2xl font-bold mb-2">Signed Out</h1>
+                <h1 class="text-xl md:text-2xl font-bold mb-2">Signed out</h1>
                 <p class="text-sm text-base-content/60 mb-4" role="status">Your trophies will be here when you get back.</p>
                 <a href="{% url 'account_login' %}" class="btn btn-primary btn-sm md:btn-md w-full">Sign Back In</a>
                 <a href="{% url 'home' %}" class="btn btn-ghost btn-sm md:btn-md w-full mt-2 text-base-content/70">Go to Home</a>

@@ -82,7 +82,7 @@ def test_the_real_logout_is_post_only_and_renders_signed_out(client):
 
     resp = client.post('/logout/')
     assert resp.status_code == 200
-    assert 'Signed Out' in resp.content.decode()
+    assert 'Signed out' in resp.content.decode()
 
 
 # ── config pins ───────────────────────────────────────────────────────────────────────────────
@@ -319,6 +319,55 @@ def test_a_name_linked_to_someone_else_keeps_the_name_and_says_why(client):
     assert f'value="{taken.psn_username}"' in form
     assert 'aria-invalid' not in form
     assert 'already linked to another user' in body
+
+
+def _holding_a_code(client):
+    """A signed-in hunter mid-link: an unclaimed profile that already holds a verification code."""
+    client = _unlinked_client(client)
+    target = ProfileFactory(user=None, is_linked=False)
+    code = target.generate_verification_code()
+    return client, target, code
+
+
+def test_a_failed_verification_start_keeps_the_code_on_screen(client, monkeypatch):
+    """FV-19: the generic error path re-rendered step 2 without `verification_code` or `profile`,
+    so the hunter was asked to paste a code into About Me from an empty box."""
+    client, target, code = _holding_a_code(client)
+
+    def boom(profile):
+        raise RuntimeError('PSN hiccup')
+    monkeypatch.setattr('trophies.views.profile_views.VerificationService.start_verification_sync', boom)
+
+    body = client.post(reverse('link_psn'), {'action': 'verify', 'psn_username': target.psn_username}).content.decode()
+
+    assert 'Verify Your Account' in body
+    assert f'>{code}</code>' in body
+    assert 'An error occurred during verification' in body
+
+
+def test_verifying_during_a_psn_outage_keeps_the_code_on_screen(client, monkeypatch):
+    """The outage path shares the step-two re-render with FV-19's fix; pin that it still works."""
+    client, target, code = _holding_a_code(client)
+    monkeypatch.setattr('trophies.views.profile_views.redis_client.get',
+                        lambda key: b'1' if key == 'site:psn_outage' else None)
+
+    body = client.post(reverse('link_psn'), {'action': 'verify', 'psn_username': target.psn_username}).content.decode()
+
+    assert f'>{code}</code>' in body
+    assert 'PlayStation Network is currently unavailable' in body
+
+
+def test_a_failed_first_sync_says_so_in_plain_english(client, monkeypatch):
+    """The step-one sync failure message read "An error occured" (FV-19's typo)."""
+    def boom(profile):
+        raise RuntimeError('PSN hiccup')
+    monkeypatch.setattr('trophies.views.profile_views.PSNManager.initial_sync', boom)
+
+    body = _submit_link_name(_unlinked_client(client), 'freshhunter01').content.decode()
+
+    assert 'An error occurred during sync' in body
+    assert 'occured' not in body
+    assert 'value="freshhunter01"' in _step_one_form(body)
 
 
 def test_link_psn_step_one_starts_clean(client):

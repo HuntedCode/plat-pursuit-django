@@ -14,25 +14,26 @@ Status values: `open`, `planned` (branch named), `fixed` (commit or PR), `won't 
 
 | ID | Sev | Finding | Where | Status |
 |----|-----|---------|-------|--------|
-| FV-01 | High | The journey switches design generations three times: landing to sign up, welcome to link PSN, link PSN to the sync card | See below | open |
+| FV-01 | High | The journey switches design generations three times: landing to sign up, welcome to link PSN, link PSN to the sync card | See below | planned: onboarding rebuild |
 | FV-02 | High | **Bug:** link PSN step 1 drops form errors. An invalid name (`a!`, `ab`) reloads the page with the field cleared and no message | `templates/account/link_psn.html` | fixed: `fix/link-psn-form-errors` |
-| FV-03 | High | The first arrival does not pay off: the finale promises a Pursuer and shows tier counts; the lobby says "Welcome back" to a first-timer and buries Career, Collection and claimable contracts | `templates/home/_hero_syncing.html`, `templates/trophies/home.html` | open, revisit after the Daily loop review |
-| FV-04 | Medium | Sign up has four names, log in has two | See below | open |
-| FV-05 | Medium | The landing offers two first steps ("Start tracking" and "Create a free account") and never explains the difference | `templates/home/landing.html` | open |
-| FV-06 | Medium | The landing's Profile Card and the two share-card images are illegible on phones: text renders at 2.6 to 6px at 375 (measured on prod) | `templates/home/landing.html` (`.land-card`, proof section) | open |
-| FV-07 | Medium | Sign-up friction: confirm email and confirm password, both passwords wiped on a failed submit, a placeholder that reads as a filled value, and no word about what comes next | See below | open |
-| FV-08 | Medium | "Check your inbox" is a dead end: no address shown, no resend, and the main button goes back to Sign In | `templates/account/verification_sent.html` | open |
-| FV-09 | Medium | Link step 2, the hardest moment, has the least help; the welcome page's copy promises things linking does not deliver | See below | open |
+| FV-03 | High | The first arrival does not pay off: the finale promises a Pursuer and shows tier counts; the lobby says "Welcome back" to a first-timer and buries Career, Collection and claimable contracts | `templates/home/_hero_syncing.html`, `templates/trophies/home.html` | planned: Career + first arrival |
+| FV-04 | Medium | Sign up has four names, log in has two | See below | fixed: `fix/review-quick-fixes` |
+| FV-05 | Medium | The landing offers two first steps ("Start tracking" and "Create a free account") and never explains the difference | `templates/home/landing.html` | planned: landing |
+| FV-06 | Medium | The landing's Profile Card and the two share-card images are illegible on phones: text renders at 2.6 to 6px at 375 (measured on prod) | `templates/home/landing.html` (`.land-card`, proof section) | planned: landing |
+| FV-07 | Medium | Sign-up friction: confirm email and confirm password, both passwords wiped on a failed submit, a placeholder that reads as a filled value, and no word about what comes next | See below | planned: onboarding rebuild |
+| FV-08 | Medium | "Check your inbox" is a dead end: no address shown, no resend, and the main button goes back to Sign In | `templates/account/verification_sent.html` | planned: onboarding rebuild |
+| FV-09 | Medium | Link step 2, the hardest moment, has the least help; the welcome page's copy promises things linking does not deliver | See below | copy fixed: `fix/review-quick-fixes`; the step-2 help is planned: onboarding rebuild |
 | FV-10 | Medium | The back-to-top button is the loudest element on every page | `templates/partials/back_to_top.html` | tracked as [SW-02](README.md#site-wide-findings) |
-| FV-11 | Low | A brand-new account with no PSN already shows the Premium button and a glowing "NEW" pill | `templates/partials/navbar.html` | open |
-| FV-12 | Low | The lobby states sync status three times ("Updated ...", "Sync now", the "Synced" dot) | `templates/trophies/home.html` | open, revisit after the Daily loop review |
-| FV-13 | Low | On the sync card, the one fact that matters ("10 to 30 minutes") is mid-way through an italic paragraph of up to six lines | `templates/home/_hero_syncing.html` | open |
-| FV-14 | Low | The Career explainer's middle illustration is three blank cover cards | `templates/trophies/partials/career/_career_explainer.html` | open |
-| FV-15 | Low | Error styles differ: landing uses an outlined box with a lone red dot, the auth pages use salmon-filled blocks | `static/js/landing.js`, `templates/account/*.html` | open |
-| FV-16 | Low | The landing's badge section renders its heading and button over an empty shelf when the showcase is empty (cold cache, or a failure's negative cache) | `templates/home/landing.html`, `core/services/landing_service.py` | open |
-| FV-17 | Low | Forgot password lacks the logo header the other auth pages carry | `templates/account/password_reset.html` | open |
-| FV-18 | Low | At 320px the landing eyebrow wraps to two lines and strands its tick on the left | `templates/home/landing.html` (`.land-eyebrow`) | open |
-| FV-19 | Low | **Latent bug**, found while fixing FV-02: if starting verification raises, step 2 re-renders without `verification_code` or `profile`, so the hunter sees an empty code box. The step 1 exception message also reads "An error occured" | `trophies/views/profile_views.py` (`LinkPSNView.post`, the `verify` branch's `except Exception`) | open |
+| FV-11 | Low | A brand-new account with no PSN already shows the Premium button and a glowing "NEW" pill | `templates/partials/navbar.html` | planned: site-wide noise |
+| FV-12 | Low | The lobby states sync status three times ("Updated ...", "Sync now", the "Synced" dot) | `templates/trophies/home.html` | planned: Career + first arrival |
+| FV-13 | Low | On the sync card, the one fact that matters ("10 to 30 minutes") is mid-way through an italic paragraph of up to six lines | `templates/home/_hero_syncing.html` | planned: onboarding rebuild |
+| FV-14 | Low | The Career explainer's middle illustration is three blank cover cards | `templates/trophies/partials/career/_career_explainer.html` | open, needs a design call: the fan is a deliberate pure-CSS idiom ("no assets") shared with the badge how-to and How badges work, so changing it changes three surfaces |
+| FV-15 | Low | Error styles differ: landing uses an outlined box with a lone red dot, the auth pages use salmon-filled blocks | `static/js/landing.js`, `templates/account/*.html` | planned: DaisyUI split |
+| FV-16 | Low | The landing's badge section renders its heading and button over an empty shelf when the showcase is empty (cold cache, or a failure's negative cache) | `templates/home/landing.html`, `core/services/landing_service.py` | fixed: `fix/review-quick-fixes` (the section now hides. Accepted side effect: the heartbeat band's wash then meets Career's `--alt` wash, two washed bands in a row, on a cold cache only) |
+| FV-17 | Low | Forgot password lacks the logo header the other auth pages carry | `templates/account/password_reset.html` | won't fix: misread. Only sign in and sign up carry that header; the other nine auth pages match forgot password. Its yellow tagline is an FV-01 marker, so whether any auth page keeps it belongs to the onboarding rebuild |
+| FV-18 | Low | At 320px the landing eyebrow wraps to two lines and strands its tick on the left | `templates/home/landing.html` (`.land-eyebrow`) | fixed: `fix/review-quick-fixes` |
+| FV-19 | Low | **Latent bug**, found while fixing FV-02: if starting verification raises, step 2 re-renders without `verification_code` or `profile`, so the hunter sees an empty code box. The step 1 exception message also reads "An error occured" | `trophies/views/profile_views.py` (`LinkPSNView.post`, the `verify` branch's `except Exception`) | fixed: `fix/review-quick-fixes` |
+| FV-20 | Low | **Latent**, found by the FV-19 audit: every return to step 2 (`LinkPSNView._back_to_step_two`) shows the stored code as-is, even after its one-hour expiry, where step 1 regenerates an expired code. It also never re-checks that the profile is not linked to someone else (the outage path had the same gap before FV-19) | `trophies/views/profile_views.py` | planned: onboarding rebuild |
 
 ### FV-01: two design generations
 

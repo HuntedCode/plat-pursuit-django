@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% load static %}
 
-{% block title %}Login{% endblock %}
+{% block title %}Sign in{% endblock %}
 {% block robots %}noindex, nofollow{% endblock %}
 
 {% block main_layout %}
@@ -11,7 +11,7 @@
             <div class="card-body p-3 md:p-5 lg:p-7 pp-head-cascade">
                 {% include 'account/snippets/auth_header.html' %}
 
-                <h1 class="text-xl md:text-2xl font-bold mb-1">Sign In</h1>
+                <h1 class="text-xl md:text-2xl font-bold mb-1">Sign in</h1>
                 <p class="text-sm text-base-content/60 mb-4">Welcome back, hunter.</p>
 
                 {% include 'partials/_messages.html' %}
@@ -85,11 +85,11 @@
                         <a href="{% url 'account_reset_password' %}" class="text-xs md:text-sm link link-primary">Forgot password?</a>
                     </div>
 
-                    <button type="submit" class="btn btn-primary btn-sm md:btn-md w-full">Sign In</button>
+                    <button type="submit" class="btn btn-primary btn-sm md:btn-md w-full">Sign in</button>
                 </form>
 
                 <p class="mt-4 text-center text-sm text-base-content/70">
-                    Don't have an account? <a href="{% url 'account_signup' %}" class="link link-primary font-semibold">Sign Up</a>
+                    Don't have an account? <a href="{% url 'account_signup' %}" class="link link-primary font-semibold">Sign up</a>
                 </p>
             </div>
         </div>
