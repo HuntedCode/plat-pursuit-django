@@ -1,7 +1,7 @@
 """Retired DaisyUI components may not spread (SW-01, docs/design/reviews/README.md).
 
-`btn`, `badge` and `tabs` are retired in favour of the house `pp-cta`, `.bd-chip` and `.pp-switch`
-(docs/reference/design-system.md, "DaisyUI: What Stays, What Is Retired"). Pages still using them are
+`btn`, `badge`, `tabs`, `alert` and `toast` are retired in favour of the house `pp-cta`, `.bd-chip`, `.pp-switch`
+and `.pp-notice` / `.pp-toast` (docs/reference/design-system.md, "DaisyUI: What Stays, What Is Retired"). Pages still using them are
 on `retired_daisyui_allowlist.json`, and the counts there are a RATCHET:
 
 - a file may not gain a use (that is new code reaching for a retired component);
@@ -39,7 +39,8 @@ def test_no_file_gains_a_retired_daisyui_class():
             for path, families in now.items() for family, n in families.items()
             if n > allowed.get(path, {}).get(family, 0)]
     assert not grew, (
-        'Retired DaisyUI classes were added. Use pp-cta (buttons), .bd-chip (badges) or .pp-switch (tabs);\n'
+        'Retired DaisyUI classes were added. Use pp-cta (buttons), .bd-chip (badges), .pp-switch (tabs),\n'
+        '.pp-notice (alerts; partials/_messages.html for Django messages) or ToastManager (toasts);\n'
         'see "DaisyUI: What Stays, What Is Retired" in docs/reference/design-system.md.\n' + '\n'.join(grew))
 
 
@@ -96,3 +97,12 @@ def test_the_reader_counts_classes_not_words():
     py = ('"""btn badge-ghost in a docstring"""\nW = {"class": "btn btn-ghost"}\nmsg = "Earn a badge"\n'
           'attrs = {}\nattrs["class"] = "badge"\nPHASES = [("story", "badge-info")]\n')
     assert _py_counts(py) == {'btn': 2, 'badge': 2}
+
+    # alert and toast (retired 2026-10) are words too: role="alert" and a `toast` variable are not classes,
+    # and the house toast host's id `toast-container` is not DaisyUI's `toast`.
+    notice = _strip_template_comments(
+        '<div role="alert" class="alert alert-error">x</div><p>A toast to you</p>'
+        '<div id="toast-container" class="pp-toasts"></div>')
+    assert _all_names(_class_attr_values(notice)) == {'alert': 2}
+    assert _js_counts("el.setAttribute('role', 'alert'); const toast = make(); t.className = 'toast toast-end';"
+                      " document.getElementById('toast-container');") == {'toast': 2}

@@ -1,16 +1,20 @@
-{% comment %} THE Django-messages renderer for pages without the breadcrumb partial (the site's
-only other consumer). Extracted 2026-08-23 when the home templates turned out to render messages
-NOWHERE, so a login's "signed in" message queued silently until the next breadcrumb page showed
-it. Errors announce as alerts, everything else as status (the settings page's a11y shape).
-Include ONCE per page; a page that carries the breadcrumb must not include this too, or every
-message renders twice. {% endcomment %}
+{% comment %} THE Django-messages renderer. Extracted 2026-08-23 when the home templates turned out to render
+messages NOWHERE, so a login's "signed in" message queued silently until the next breadcrumb page showed it.
+Since 2026-10 the breadcrumb includes this too, so there is one renderer and one look: the house notice
+(.pp-notice, static/css/components/notice.css; FV-15 found three different message styles across the
+first-visit journey). Errors announce as alerts, everything else as status.
+Include ONCE per page; a page that carries the breadcrumb already has it, so including it again would
+render every message twice. {% endcomment %}
 {% if messages %}
-<div>
+<div class="pp-notices">
     {% for message in messages %}
-    <div role="{% if message.tags == 'error' %}alert{% else %}status{% endif %}"
-         class="px-4 py-3 mb-2 rounded-lg border text-sm {% if message.tags == 'error' %}border-error/40 bg-error/10{% else %}border-primary/40 bg-primary/10{% endif %}">
-        {{ message }}
+    {% with tone=message.level_tag %}
+    <div role="{% if tone == 'error' %}alert{% else %}status{% endif %}"
+         class="pp-notice pp-notice--{% if tone == 'error' or tone == 'success' or tone == 'warning' %}{{ tone }}{% else %}info{% endif %}">
+        {% include 'partials/_notice_icon.html' with tone=tone %}
+        <div class="pp-notice__body">{{ message }}</div>
     </div>
+    {% endwith %}
     {% endfor %}
 </div>
 {% endif %}

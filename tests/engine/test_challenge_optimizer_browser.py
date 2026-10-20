@@ -56,7 +56,7 @@ DOCK_PAGE = ('<div class="pp-cplan" data-cplan><section style="height:1600px;dis
              '<div style="height:800px"></div></div>' + BACK_TO_TOP)
 
 
-def _measure(tmp_path, width, *, hide_dock=False, wire=True):
+def _measure(tmp_path, width, *, hide_dock=False, wire=True, shown=True):
     from playwright.sync_api import sync_playwright
     script = (WATCH_DOCKS + '\nwatchDocks(document.querySelectorAll("[data-cplan-dock]"));') if wire else ''
     with sync_playwright() as p:
@@ -66,7 +66,12 @@ def _measure(tmp_path, width, *, hide_dock=False, wire=True):
         if hide_dock:
             page.evaluate("document.querySelector('[data-cplan-dock]').hidden = true")
         page.evaluate('window.scrollTo(0, 400)')
-        page.wait_for_timeout(150)   # the observer reports on the next frame
+        if shown:
+            # Measure where the button RESTS when offered. Since 2026-10 it is offered only on scroll-up
+            # (wireBackToTop in main.js) and slides in from 10px below, so the hidden state is not where
+            # it sits; the geometry that matters is the shown one.
+            page.evaluate("document.getElementById('back-to-top').classList.add('is-shown')")
+        page.wait_for_timeout(400)   # the observer reports on the next frame; the slide-in settles
         out = page.evaluate("""() => {
             const r = el => el.getBoundingClientRect();
             const btt = document.getElementById('back-to-top'), dock = document.querySelector('[data-cplan-dock]');
@@ -101,15 +106,12 @@ def test_with_no_dock_showing_the_button_keeps_its_own_spot(tmp_path, width, def
 def test_a_faded_out_back_to_top_lets_clicks_through(tmp_path):
     # Before the scroll threshold the button is invisible; it used to take the click meant for whatever sat
     # under it (the optimizer's Next). The partial ships hidden, so the point hits the page, not the button.
-    out = _measure(tmp_path, 1280)
+    out = _measure(tmp_path, 1280, shown=False)
     assert out['hit'] is False
 
 
-def test_main_js_toggles_click_through_with_the_fade():
-    main = (ROOT / 'static/js/main.js').read_text(encoding='utf-8')
-    block = main[main.index("getElementById('back-to-top')"):]
-    block = block[:block.index('}, 100);')]
-    assert "toggle('pointer-events-none', !shown)" in block and "toggle('opacity-0', !shown)" in block
+# (main.js's show/hide behaviour, including inertness while hidden, is driven in a real browser by
+#  tests/engine/test_back_to_top_and_toasts_browser.py since the 2026-10 scroll-up rewrite.)
 
 
 # --- one row per badge ------------------------------------------------------------------------------------

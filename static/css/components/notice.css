@@ -1,0 +1,87 @@
+/* ==========================================================================================
+   pp-notice + pp-toast -- THE house notice (2026-10; SW-01, FV-15, DL-10 in
+   docs/design/reviews/README.md). Replaces DaisyUI `alert`.
+
+   One recipe the site already drew twice by hand (the landing's search status and the no-PSN
+   hero's "Heads up" strip): a border in the tone, a light wash of the tone, and the tone on the
+   icon. The text stays --pp-text, so a notice never trades readability for colour. Set the tone
+   with a modifier, or with --nc on the element for anything off the list.
+
+   pp-toast is a notice that FLOATS over content, so it sits on a solid surface (a wash over
+   transparent would let the page show through) and carries a shadow. ToastManager (utils.js) builds
+   them; the containers are #toast-container (base.html) and each dialog's .modal-toast-container.
+   ========================================================================================== */
+
+.pp-notice {
+    --nc: var(--pp-info);
+    display: flex;
+    align-items: flex-start;
+    gap: 0.6rem;
+    padding: 0.7rem 0.9rem;
+    border-radius: var(--pp-radius-md);
+    border: 1px solid color-mix(in oklab, var(--nc) 38%, transparent);
+    background: color-mix(in oklab, var(--nc) 9%, transparent);
+    color: var(--pp-text);
+    font-size: 0.85rem;
+    line-height: 1.5;
+    text-align: left;
+}
+.pp-notice__icon { width: 1.1rem; height: 1.1rem; flex: 0 0 auto; margin-top: 0.12rem; color: var(--nc); }
+.pp-notice__body { min-width: 0; overflow-wrap: anywhere; }
+
+.pp-notice--info    { --nc: var(--pp-info); }
+.pp-notice--success { --nc: var(--pp-success); }
+.pp-notice--warning { --nc: var(--pp-warning); }
+.pp-notice--error   { --nc: var(--pp-error); }
+.pp-notice--primary { --nc: var(--pp-primary); }
+
+/* ── Stacks ── */
+/* Server-rendered messages (partials/_messages.html, also included by the breadcrumb). */
+.pp-notices { display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 0.75rem; }
+
+/* ── Stacks: the page-level toast host (the dialog one lives in game-detail.css) ─────────────── */
+.pp-toasts {
+    position: fixed;
+    right: 1rem;
+    /* bottom comes from #toast-container in input.css (clear of the mobile tab bar) */
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
+    width: max-content;
+    max-width: min(92vw, 26rem);
+    pointer-events: none;
+}
+.pp-toasts > * { pointer-events: auto; }
+/* Phones: one full-width column rather than a ragged right-aligned stack of text-sized toasts. */
+@media (max-width: 767px) {
+    .pp-toasts { left: 1rem; right: 1rem; width: auto; max-width: none; align-items: stretch; }
+    .pp-toasts > .pp-toast { max-width: none; }
+}
+
+/* ── The floating version ─────────────────────────────────────────────────────────────────────── */
+.pp-toast {
+    background: color-mix(in oklab, var(--nc) 12%, var(--pp-bg-1));
+    border-color: color-mix(in oklab, var(--nc) 45%, var(--pp-border));
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45), 0 2px 6px rgba(0, 0, 0, 0.3);
+    max-width: min(92vw, 26rem);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    /* Arrive with a little settle (the overshoot in the curve), leave quicker and quieter: exits are
+       choreographed, not popped. ToastManager adds .is-leaving and removes the node after it. */
+    .pp-toast { animation: ppToastIn 0.34s cubic-bezier(0.22, 1.25, 0.36, 1) both; }
+    .pp-toast.is-leaving { animation: ppToastOut 0.2s var(--pp-ease) both; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .pp-toast.is-leaving { opacity: 0; transition: opacity 0.2s linear; }
+}
+@keyframes ppToastIn {
+    from { opacity: 0; transform: translateY(12px) scale(0.98); }
+    to { opacity: 1; transform: none; }
+}
+@keyframes ppToastOut {
+    from { opacity: 1; transform: none; }
+    to { opacity: 0; transform: translateY(8px); }
+}

@@ -51,36 +51,43 @@
   "btn": 4
  },
  "templates/account/email.html": {
+  "alert": 4,
   "btn": 12
  },
  "templates/account/email_confirm.html": {
   "btn": 8
  },
  "templates/account/link_psn.html": {
+  "alert": 2,
   "btn": 20
  },
  "templates/account/login.html": {
+  "alert": 6,
   "btn": 4
  },
  "templates/account/logout.html": {
   "btn": 8
  },
  "templates/account/password_reset.html": {
+  "alert": 7,
   "btn": 4
  },
  "templates/account/password_reset_done.html": {
   "btn": 4
  },
  "templates/account/password_reset_from_key.html": {
+  "alert": 11,
   "btn": 8
  },
  "templates/account/password_reset_from_key_done.html": {
   "btn": 4
  },
  "templates/account/reauthenticate.html": {
+  "alert": 4,
   "btn": 4
  },
  "templates/account/signup.html": {
+  "alert": 10,
   "btn": 4
  },
  "templates/account/verification_sent.html": {
@@ -129,6 +136,7 @@
   "btn": 6
  },
  "templates/notifications/admin/notification_center.html": {
+  "alert": 10,
   "badge": 17,
   "btn": 24
  },
@@ -137,6 +145,7 @@
   "btn": 21
  },
  "templates/notifications/admin/scheduled_notifications.html": {
+  "alert": 4,
   "badge": 13,
   "btn": 32
  },
@@ -151,9 +160,6 @@
  },
  "templates/partials/art_reveal_banner.html": {
   "btn": 9
- },
- "templates/partials/back_to_top.html": {
-  "btn": 3
  },
  "templates/partials/fundraiser_banner.html": {
   "btn": 3
@@ -187,6 +193,7 @@
   "badge": 16
  },
  "templates/staff/decisions.html": {
+  "alert": 2,
   "badge": 9,
   "btn": 9
  },
@@ -243,6 +250,7 @@
   "btn": 8
  },
  "templates/trophies/roadmap_detail.html": {
+  "alert": 2,
   "badge": 3,
   "btn": 12
  },
@@ -251,16 +259,21 @@
   "btn": 130
  },
  "templates/trophies/staff/badge_series_create.html": {
+  "alert": 7,
   "badge": 7,
   "btn": 2
  },
  "templates/trophies/token_monitoring.html": {
+  "alert": 8,
   "badge": 4
  },
  "templates/users/admin/subscription_dashboard.html": {
   "badge": 39,
   "btn": 50,
   "tabs": 5
+ },
+ "templates/users/email_preferences.html": {
+  "alert": 4
  },
  "trophies/util_modules/trophy_phases.py": {
   "badge": 10

@@ -56,6 +56,7 @@
 @import "./components/support-welcome.css";
 @import "./components/fundraiser.css";
 @import "./components/cta.css";
+@import "./components/notice.css";
 @import "./components/gamelists.css";
 @import "./components/challenges.css";
 @import "./components/challenge-optimizer.css";

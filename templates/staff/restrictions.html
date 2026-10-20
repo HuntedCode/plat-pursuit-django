@@ -25,18 +25,9 @@ Who is barred from writing, and who has been. Nothing already published is hidde
     {% endfor %}
 </div>
 
-{% if messages %}
-<div class="flex flex-col gap-2 mb-4">
-    {% for message in messages %}
-    {% comment %}Three levels, not two. A `WARNING` -- "recorded, but nothing was put back" -- rendered
-        GREEN under an error/else branch, so the words changed and the signal an admin actually reads
-        did not.{% endcomment %}
-        <div class="alert {% if message.tags == 'error' %}alert-error{% elif message.tags == 'warning' %}alert-warning{% else %}alert-success{% endif %} py-2 text-sm">
-        {{ message }}
-    </div>
-    {% endfor %}
-</div>
-{% endif %}
+{% comment %}Messages render in the breadcrumb, through partials/_messages.html (the house notice,
+with its own error / warning / success tones). This page had its own loop too, so every message
+showed twice; removed 2026-10.{% endcomment %}
 
 {% if rows %}
 <div class="flex flex-col gap-3">
