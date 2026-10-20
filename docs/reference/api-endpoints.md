@@ -39,7 +39,7 @@ Driven by `navbar-search.js` and `landing.js`.
 
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
-| GET | `/api/site-suggest/` | Open | Typeahead over the catalogue, grouped (games / badges / franchises / hunters). Badges are badge series with a live edition (the set the badge pages serve), each tagged with its type |
+| GET | `/api/site-suggest/` | Open | Typeahead over the catalogue, grouped (games / badges / franchises / hunters). Badges are badge series with a live edition (the set the badge pages serve), each tagged with its type; a badge whose art is its submitter's PSN avatar carries `is_avatar: true` (the client circle-masks it) |
 | POST | `/api/search-sync-profile/` | Open | Add a PSN Online ID and start its sync. Creates the Profile if new; otherwise refreshes it, **or refuses with 429 if its cooldown is still running** |
 | GET | `/api/add-sync-status/` | Open | Poll the added hunter's ingestion state. Read-only, consumes no PSN tokens. **The most-polled endpoint on the site** and deliberately un-rate-limited: see below |
 

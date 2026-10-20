@@ -4,6 +4,9 @@ The permanent chrome frames every page, so these pin the structural facts that p
 would otherwise miss: the footer's 4-hub restructure (the pre-unify My Pursuit + Dashboard columns
 merged into one hub sitemap, a Support column added), and its auth-gated visibility.
 """
+import re
+from pathlib import Path
+
 import pytest
 from django.contrib.auth.models import AnonymousUser
 from django.template.loader import render_to_string
@@ -289,7 +292,9 @@ def test_site_suggest_skips_badge_with_blank_series_slug(client):
 
 def test_site_suggest_badge_shows_the_series_art(client):
     GroupBadgeFactory(series=BadgeSeriesFactory(name='Arty', badge_image='badges/series/arty.png'))
-    assert _badge_items(client, 'arty')[0]['image'].endswith('badges/series/arty.png')
+    item = _badge_items(client, 'arty')[0]
+    assert item['image'].endswith('badges/series/arty.png')
+    assert item['is_avatar'] is False                     # drawn art keeps the badge's own shape
 
 
 def test_site_suggest_badge_art_follows_the_edition_and_borrowed_art(client):
@@ -322,7 +327,37 @@ def test_site_suggest_user_badge_is_tagged_user_and_wears_the_submitters_avatar(
     assert set(items) == {'Fan Made', 'Fan Bare'}
     assert items['Fan Made']['sublabel'] == 'User'
     assert items['Fan Made']['image'] == 'https://cdn.example/author.png'
+    assert items['Fan Made']['is_avatar'] is True         # a photo: the client circle-masks it
     assert items['Fan Bare']['image'] == ''               # no avatar either: the glyph
+    assert items['Fan Bare']['is_avatar'] is False
+
+
+def test_a_user_badge_with_drawn_art_is_not_an_avatar(client):
+    # Drawn art (the series' own, or an edition override) wins over the submitter's avatar, so the row
+    # keeps the badge shape even though an avatar exists.
+    author = ProfileFactory(avatar_url='https://cdn.example/author.png')
+    GroupBadgeFactory(series=BadgeSeriesFactory(name='Fan Drawn', badge_type='user', submitted_by=author,
+                                                badge_image='badges/series/fan.png'))
+    GroupBadgeFactory(series=BadgeSeriesFactory(name='Fan Override', badge_type='user', submitted_by=author),
+                      badge_image_override='badges/group/fan.png')
+    items = {i['label']: i for i in _badge_items(client, 'fan')}
+
+    assert items['Fan Drawn']['image'].endswith('badges/series/fan.png')
+    assert items['Fan Override']['image'].endswith('badges/group/fan.png')
+    assert items['Fan Drawn']['is_avatar'] is False and items['Fan Override']['is_avatar'] is False
+
+
+def test_the_dropdown_circle_masks_an_avatar_badge():
+    # The client half of the flag above. No JS runner here, so pinned by source: the row's image takes
+    # `is-avatar` from `item.is_avatar`, and the badge row's avatar rule undoes the contain + padding that
+    # a drawn badge needs.
+    root = Path(__file__).resolve().parents[2]
+    js = (root / 'static/js/navbar-search.js').read_text(encoding='utf-8')
+    css = (root / 'static/css/components/chrome.css').read_text(encoding='utf-8')
+    assert 'thumb(art, item.is_avatar === true)' in js
+    assert re.search(r"if \(isAvatar\) \{\s*img\.classList\.add\('is-avatar'\)", js)
+    rule = re.search(r'\.pp-navsearch__opt--badge img\.is-avatar \{([^}]*)\}', css)
+    assert rule and 'border-radius: 50%' in rule.group(1) and 'padding: 0' in rule.group(1)
 
 
 def test_site_suggest_badges_stop_at_five_sorted_ignoring_case(client):

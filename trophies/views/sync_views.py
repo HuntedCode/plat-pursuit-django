@@ -237,15 +237,18 @@ class ProfileSuggestView(View):
 
 
 def _badge_art(series):
-    """The subject art of the series' representative live edition, else '' (client falls back to
-    the badge glyph). Resolved on the edition because an edition can override its series' image
-    and a series can borrow another's; art_layers() answers both. Its static placeholder is
-    dropped rather than shown: the glyph is the dropdown's no-art state."""
+    """(image url, is_avatar) for the series' representative live edition: its subject art, else ''
+    (client falls back to the badge glyph). Resolved on the edition because an edition can override
+    its series' image and a series can borrow another's; art_layers() answers both. Its static
+    placeholder is dropped rather than shown: the glyph is the dropdown's no-art state. `is_avatar`
+    marks a user badge wearing its submitter's avatar, which the client circle-masks like a hunter's."""
     edition = series.representative_group_badge
     if edition is None:
-        return ''
+        return '', False
     art = edition.art_layers()
-    return art['main'] if art['has_custom_image'] else ''
+    if not art['has_custom_image']:
+        return '', False
+    return art['main'], art['is_avatar']
 
 
 class SiteSuggestView(View):
@@ -291,7 +294,7 @@ class SiteSuggestView(View):
 
         # Hash the normalized query so spaces/unicode/length can't produce an invalid
         # or oversized cache key (the response is identical for every viewer).
-        cache_key = f'sitesuggest:v2:{hashlib.md5(q.lower().encode()).hexdigest()}'
+        cache_key = f'sitesuggest:v3:{hashlib.md5(q.lower().encode()).hexdigest()}'
         cached = cache.get(cache_key)
         if cached is not None:
             return JsonResponse(cached)
@@ -356,15 +359,16 @@ class SiteSuggestView(View):
                                        queryset=GroupBadge.objects.select_related('platform_group')))
             .order_by(Lower('name'), 'id')[:self.PER_GROUP]
         )
-        items = [
-            {
+        items = []
+        for s in series:
+            image, is_avatar = _badge_art(s)
+            items.append({
                 'label': s.name,
                 'sublabel': badge_type_label(s.badge_type),
-                'image': _badge_art(s),
+                'image': image,
+                'is_avatar': is_avatar,
                 'url': reverse('badge_detail', kwargs={'series_slug': s.series_slug}),
-            }
-            for s in series
-        ]
+            })
         return {'type': 'badge', 'label': 'Badges', 'items': items}
 
     def _franchises(self, q):

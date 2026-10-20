@@ -293,9 +293,10 @@ document.addEventListener('DOMContentLoaded', () => {
             + (GLYPHS[type] || GLYPHS.profile) + '</svg>';
         return span;
     }
-    function thumb(url) {
+    function thumb(url, isAvatar) {
         const img = document.createElement('img');
         img.src = url;                 // property assignment: no markup injection
+        if (isAvatar) { img.classList.add('is-avatar'); }   // a user badge wearing its submitter's avatar
         img.alt = '';
         img.loading = 'lazy';
         img.decoding = 'async';
@@ -313,7 +314,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Leading media: real artwork when we have it (game/franchise cover, badge art,
         // hunter avatar), else the per-type glyph.
         const art = item.image || (type === 'profile' ? item.avatar_url : '');
-        if (art) { a.appendChild(thumb(art)); }
+        if (art) { a.appendChild(thumb(art, item.is_avatar === true)); }
         else { a.appendChild(glyphPlaceholder(type)); }
 
         const name = document.createElement('b');
