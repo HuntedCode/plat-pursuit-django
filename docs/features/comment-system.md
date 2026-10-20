@@ -21,7 +21,8 @@ Comments on the new Roadmap system were intentionally not built. The [Review Hub
 - Comment **list** and **create** endpoints (no surface in the UI calls them).
 - The `comments.js` client and the comment composer UI.
 - The cache key `comments:concept:{id}:checklist:{checklist_id}` (no fresh writes; reads are no longer happening).
-- The `BannedWord` filter is still wired into `CommentService.create_comment()`, but since no creation path exists, the filter primarily survives for the markdown filters used by the review system.
+- **Deleted 2026-10** (dead-code cleanup): the unrouted `CommentListView` / `CommentCreateView`, `partials/comment.html`, `comments.js`, `CommentCreateSerializer`, and the service methods only they called (`create_comment`, `get_comments_for_concept`, `get_comment_context_for_profile`). Last copies at commit `24aaf68f`.
+- The `BannedWord` filter survives on its own: `CommentService.check_banned_words` is still called by Game Lists, `trophies/forms.py` and the review service.
 
 ## Surviving API Endpoints
 

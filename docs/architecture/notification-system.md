@@ -271,9 +271,14 @@ This prevents double-processing if the cron job overlaps (unlikely with hourly r
 ### 11. Historical Milestone Notifications Still Render
 
 No new milestone notifications are created (see #10), but rows created before the retirement remain in the
-inbox. Their `metadata` already carries `title_name` / `title_text`, and `renderMilestoneDetail()` in
-`notification-inbox.js` is deliberately kept so those historical entries still render their styled callout
-card. Don't delete that renderer while old rows exist.
+database, and their `metadata` carries `title_name` / `title_text`.
+
+**The inbox page and `notification-inbox.js` were deleted 2026-10** (owner's call; the page had been
+unrouted since 2026-08, so nothing rendered these rows anyway). **The rebuild inherits the stored data:**
+every notification type's `metadata` keeps the shape the old renderers read, including
+`renderMilestoneDetail()`'s fields. Before designing the new inbox, read the last copy for the full list
+of keys per type: `git show 24aaf68f:static/js/notification-inbox.js`. Prod rows are the only real
+sample; dev has almost none.
 
 ## Management Commands
 

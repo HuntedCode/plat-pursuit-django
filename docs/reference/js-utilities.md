@@ -115,7 +115,7 @@ sentence naming the cap, and the navbar search's add-and-sync replaced BOTH the 
 searches. Please wait a minute and try again.") and the 503 PSN-outage line with a generic failure --
 the anon search cap is 3/min, so the message hunters met most often was the one always discarded.
 `quick-add.js`, `navsync.js` and `navbar-search.js` use the shared reader; the remaining call sites
-(`comments.js`, `game-lists.js`, `fundraiser.js`, `list-detail.js`, `rate-my-games.js` and others)
+(`fundraiser.js`, `list-detail.js`, `rate-my-games.js` and others)
 are a mechanical follow-up, not a second implementation.
 
 **Auto-parsing**: 204 returns null, JSON content-type returns parsed object, everything else returns text.
@@ -744,7 +744,8 @@ Bound automatically on `DOMContentLoaded`, so most pages need no call at all.
 
 Shared because it was the **third** copy: `admin-notifications.js` had one bound to three specific
 element ids and `comments.js` had an inline listener that only ever wrote a number. Neither was
-reusable and both re-implemented the same escalation. Those two are candidates to migrate onto this.
+reusable and both re-implemented the same escalation. `comments.js` was deleted 2026-10;
+`admin-notifications.js` is the one left to migrate onto this.
 
 Escalation classes are toggled by the helper and live in the Tailwind safelist — if a third is ever
 added, safelist it too.

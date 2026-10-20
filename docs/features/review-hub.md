@@ -2,6 +2,11 @@
 
 > ## ⚠️ ARCHIVED (2026-05) — text reviews are retired
 >
+> **Code deleted 2026-10:** the unrouted `ReviewHubLandingView` / `ReviewHubDetailView`, their templates
+> (`review_hub.html`, `review_hub_detail.html`, `partials/reviews/*`) and `review-hub.js` /
+> `review-hub-landing.js`. Everything below describes the system as it was; the last copies are at commit
+> `24aaf68f`. `ReviewsArchivedView` and `RateMyGamesView` remain live.
+>
 > The text-review system was retired after a data-handling bug in
 > `Concept.absorb()` (the `ConceptTrophyGroup` CASCADE trap, fixed in
 > `c5871ba`) cascade-deleted some `Review` and `UserConceptRating` rows
@@ -10,9 +15,9 @@
 > live independently** (`api/rating_views.py`).
 >
 > **What "archived" means:** the `Review` / `ReviewVote` / `ReviewReply` /
-> `ReviewReport` models, the `api/review_views.py` view classes, and
-> `ReviewHubLandingView` / `ReviewHubDetailView` are kept **dormant** in
-> the tree for a possible future rebuild. All review routes are
+> `ReviewReport` models and the `api/review_views.py` view classes are kept
+> **dormant** in the tree for a possible future rebuild (the landing and
+> detail views were deleted 2026-10, see above). All review routes are
 > unregistered: `/community/reviews/` serves a notice page
 > (`ReviewsArchivedView` → `trophies/reviews_archived.html`),
 > `/community/reviews/<slug>/` 302-redirects to it, and every review API
@@ -47,14 +52,14 @@ The review feed uses **client-side rendering** from JSON API responses (not serv
 | `trophies/services/review_service.py` | Full CRUD + voting + replies + reporting + stats (641 lines) |
 | `trophies/services/concept_trophy_group_service.py` | Sync, access checks, mismatch detection (346 lines) |
 | `trophies/services/rating_service.py` | Extended with DLC group rating methods (232 lines) |
-| `trophies/services/review_hub_service.py` | Hub landing page queries: stats, most-reviewed, trending, search, unrated/unreviewed counts |
+| `trophies/services/review_hub_service.py` | Concept search and the Rate My Games wizard's queries. The landing-page queries (stats, most-reviewed, trending, unrated/unreviewed counts) were deleted 2026-10 |
 | `trophies/management/commands/backfill_concept_slugs.py` | One-time slug generation for all Concepts (88 lines) |
 | `trophies/management/commands/backfill_concept_trophy_groups.py` | Trophy group sync + mismatch auditing (292 lines) |
 | `notifications/models.py` | `review_reply` and `review_milestone` notification types |
 | `trophies/token_keeper.py` | Sync hook for `ConceptTrophyGroupService.sync_for_concept()` |
 
 | `api/review_views.py` | 11 view classes covering 15 API endpoints |
-| `trophies/views/review_hub_views.py` | `ReviewHubLandingView`, `ReviewHubDetailView`, `RateMyGamesView` |
+| `trophies/views/review_hub_views.py` | `ReviewsArchivedView`, `RateMyGamesView` (`ReviewHubLandingView` / `ReviewHubDetailView` deleted 2026-10) |
 | `static/js/review-hub.js` | Detail page logic (ReviewHub class) |
 | `static/js/review-hub-landing.js` | Landing page logic (game search typeahead, recent feed with infinite scroll) |
 | `static/js/rate-my-games.js` | Wizard logic (RateMyGamesWizard class) |
@@ -199,7 +204,7 @@ The review feed uses **client-side rendering** from JSON API responses (not serv
 - Rating form is **collapsible** (collapsed by default) in the sidebar.
 - User's own review is a **separate section** above the feed (server-rendered), not part of the paginated feed.
 - Game detail page shows a unified "Community" card with recommendation stats, ratings grid, user review preview, and Review Hub CTA.
-- Review word-count progress bars use the shared `ReviewProgressTiers.updateWordProgress()` utility from `utils.js` across all three locations (new review form, edit review, inline edit).
+- Review word-count progress bars used the shared `ReviewProgressTiers.updateWordProgress()` utility from `utils.js` across all three locations (new review form, edit review, inline edit). It was deleted 2026-10 with its last callers; the last copy is at commit `24aaf68f`.
 
 ## Integration Points
 
@@ -281,7 +286,7 @@ The game detail page shows a single unified "Community" card (`community_section
 
 | Key Pattern | TTL | Purpose |
 |-------------|-----|---------|
-| `review_hub:stats` | 15m | Hub landing page aggregate stats (total reviews, ratings, reviewers, helpful votes) |
+| `review_hub:stats` | 15m | DELETED 2026-10 with `get_hub_stats`. Was: hub landing page aggregate stats (total reviews, ratings, reviewers, helpful votes) |
 | `review:recommend:{concept_id}:{group_id}` | 30m | Recommendation percentage stats |
 | `concept:averages:{concept_id}:group:{group_id}` | varies | DLC-specific rating averages |
 

@@ -7,17 +7,14 @@ Re-exports all view classes for backward compatibility with existing URL configu
 from .game_views import GamesListView, GameDetailView, GuideListView, RecentlyAddedView, RandomGameView, TrophyListsBrowseView
 from .game_page_views import GamePageView
 from .game_leaderboard_views import GameLeaderboardView
-from .trophy_views import TrophyCaseView, ToggleSelectionView
 from .profile_views import ProfilesListView, ProfileDetailView, ProfileDayView, LinkPSNView, ProfileVerifyView
 from .badge_views import BadgeHowItWorksView, BadgeListView, BadgeDetailView, GroupBadgeInspectView, BadgeRanksPanelView, OverallBadgeLeaderboardsView, LeaderboardRowsView
 # Checklist views removed during roadmap migration (DB tables retained)
 from .sync_views import ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, RequestProfileRefreshView, ProfileSuggestView, SiteSuggestView
 from .admin_views import TokenMonitoringView, BadgeSeriesCreationView
 from .misc_views import SearchView
-from .list_views import BrowseListsView, GameListDetailView, GameListEditView, GameListCreateView, MyListsView
-from .review_hub_views import ReviewHubLandingView, RateMyGamesView, ReviewHubDetailView, ReviewsArchivedView
+from .review_hub_views import RateMyGamesView, ReviewsArchivedView
 from .title_views import MyTitlesView
-from .platinum_grid_views import PlatinumGridView
 from .roadmap_views import RoadmapDetailView, RoadmapEditorView
 from .shareables_views import PlatCardsView
 from .career_views import CareerView, JobsBrowseView, JobDetailView, JobRanksPanelView, JobContractsView, ContractsResultsView, ContractModalView, ContractModalPreviewView
@@ -35,8 +32,6 @@ __all__ = [
     # Game views
     'GamesListView', 'GameDetailView', 'GamePageView', 'GuideListView', 'RecentlyAddedView', 'RandomGameView',
     'TrophyListsBrowseView',
-    # Trophy views
-    'TrophyCaseView', 'ToggleSelectionView',
     # Profile views
     'ProfilesListView', 'ProfileDetailView', 'ProfileDayView', 'LinkPSNView', 'ProfileVerifyView',
     # Badge views
@@ -48,15 +43,11 @@ __all__ = [
     'TokenMonitoringView', 'BadgeSeriesCreationView',
     # Misc views
     'SearchView',
-    # List views
-    'BrowseListsView', 'GameListDetailView', 'GameListEditView', 'GameListCreateView', 'MyListsView',
     # Review Hub views
-    'ReviewHubLandingView', 'RateMyGamesView', 'ReviewHubDetailView', 'ReviewsArchivedView',
+    'RateMyGamesView', 'ReviewsArchivedView',
     # Dashboard views
     # Title views
     'MyTitlesView',
-    # Platinum Grid views
-    'PlatinumGridView',
     # Roadmap views
     'RoadmapDetailView', 'RoadmapEditorView',
     # Shareables views

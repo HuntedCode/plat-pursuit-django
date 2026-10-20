@@ -562,7 +562,8 @@ def test_the_old_list_search_endpoint_is_gone():
     resolving to the rebuilt app and `list_edit` became a redirect stub.
 
     `NoReverseMatch` alone would be a weak pin here (it also fires for a name that merely needs
-    arguments), so the view class is asserted gone as well.
+    arguments), so the old module is asserted gone as well (deleted 2026-10 with the rest of the
+    legacy list API, which only makes this pin stronger).
 
     AND THE NAME IS NAMESPACED. `api/urls.py` sets `app_name = 'api'`, so `reverse('game-search')`
     raises `NoReverseMatch` whether or not the route exists -- the bare name never resolves under a
@@ -570,9 +571,9 @@ def test_the_old_list_search_endpoint_is_gone():
     about weak reverse pins, and passed with the route restored. Mutation caught it; `api:` is what
     makes the assertion mean anything. A positive control below proves the namespace itself works.
     """
-    from django.urls import NoReverseMatch, reverse
+    import importlib
 
-    import api.game_list_views as old_views
+    from django.urls import NoReverseMatch, reverse
 
     # Control: the namespace resolves, so the failure below is about THIS name, not the prefix.
     assert reverse('api:generate-code').startswith('/api/v1/')
@@ -580,7 +581,8 @@ def test_the_old_list_search_endpoint_is_gone():
     with pytest.raises(NoReverseMatch):
         reverse('api:game-search')
 
-    assert not hasattr(old_views, 'GameSearchView'), 'the leaking view is still importable'
+    with pytest.raises(ModuleNotFoundError):
+        importlib.import_module('api.game_list_views')
 
 
 def test_the_rebuilt_search_is_scoped_where_the_old_one_was_not():

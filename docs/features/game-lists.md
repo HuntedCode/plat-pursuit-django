@@ -23,13 +23,13 @@ This is the first thing to get right, because an import from the wrong module is
 | Tables | **retained** | new |
 
 The legacy tables stay deliberately: they hold every existing list, and the rebuild offers a per-list
-importer that reads them. The legacy *code* is unreachable — `trophies/views/list_views.py` is routed
-nowhere, and `plat_pursuit/urls.py` imports its list views from `gamelists.views`.
+importer that reads them. The legacy *code* is gone: `trophies/views/list_views.py`, `api/game_list_views.py`,
+the old list templates and `game-lists.js` were deleted 2026-10 (dead-code cleanup; last copies at commit
+`24aaf68f`). `plat_pursuit/urls.py` imports its list views from `gamelists.views`.
 
-**`trophies/views/__init__.py` still exports `BrowseListsView`, `GameListDetailView` and
-`MyListsView`** — the same three names the URLconf imports from `gamelists.views`. Adding any of them
-to the big `from trophies.views import …` line would silently shadow the live routes with dead views,
-and Django would not complain.
+The legacy views used the same names the URLconf imports from `gamelists.views` (`BrowseListsView`,
+`GameListDetailView`, `MyListsView`), which made the big `from trophies.views import …` line a shadowing
+trap. With them deleted the trap is gone; keep new `trophies.views` names distinct from `gamelists.views` ones.
 
 ---
 

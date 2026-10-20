@@ -127,13 +127,6 @@
     .pp-gtile__mosaic { transition: none; }
 }
 
-/* The author, between the name and the counts. Quieter than either: whose list it is matters, but not
-   more than what the list IS. */
-.pp-gtile__author {
-    font-size: 10.5px; font-weight: 600; color: rgba(255, 255, 255, 0.66);
-    max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-
 /* The game-count range in the lists toolbar. One control rather than two loose number boxes with a
    stray label between them -- it reads as a single filter, which is what it is. */
 .pp-gl-range {
@@ -157,35 +150,6 @@
 .pp-gl-range:focus-within { border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border)); }
 
 /* ---- List detail: the bits the browse tile does not cover -------------------------------------- */
-
-/* Item stack. The cards carry their own shape; this only sets the rhythm between them. */
-.pp-lrow-stack { display: flex; flex-direction: column; gap: 8px; }
-
-.pp-lprivate {
-    display: inline-flex; align-items: center; gap: 4px;
-    padding: 2px 8px; border-radius: 999px;
-    font-size: 10px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
-    color: var(--pp-warning);
-    background: color-mix(in oklab, var(--pp-warning) 13%, transparent);
-    border: 1px solid color-mix(in oklab, var(--pp-warning) 30%, transparent);
-}
-.pp-lprivate svg { width: 11px; height: 11px; }
-
-/* Whose list it is. A real link with a real target, so it gets a hover state rather than being decoration
-   that happens to be clickable. */
-.pp-lauthor {
-    display: inline-flex; align-items: center; gap: 8px;
-    color: var(--pp-text-dim); text-decoration: none;
-    transition: color 0.18s ease;
-}
-.pp-lauthor:hover { color: var(--pp-text); }
-.pp-lauthor__av {
-    width: 26px; height: 26px; border-radius: 999px; overflow: hidden; flex-shrink: 0;
-    border: 1px solid color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border));
-}
-.pp-lauthor__av img { width: 100%; height: 100%; object-fit: cover; }
-.pp-lauthor__name { font-size: 13px; font-weight: 700; }
-.pp-lauthor:hover .pp-lauthor__name { color: var(--pp-primary); }
 
 /* The toolbar's left-hand label, so the sort control is not floating alone on a bar. */
 .pp-ltoolbar__title {

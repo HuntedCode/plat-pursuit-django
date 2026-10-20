@@ -446,53 +446,6 @@ class CommentQuerySet(models.QuerySet):
         """
         return self.filter(is_deleted=False)
 
-    def for_concept(self, concept):
-        """
-        Get all comments for a concept (concept-level only, no trophy or checklist comments).
-
-        Args:
-            concept: Concept instance
-
-        Returns:
-            QuerySet: Concept-level comments
-        """
-        return self.filter(concept=concept, trophy_id__isnull=True, checklist_id__isnull=True)
-
-    def for_trophy(self, concept, trophy_id):
-        """
-        Get comments for a specific trophy across all game stacks in a concept.
-
-        Args:
-            concept: Concept instance
-            trophy_id: Trophy position within concept
-
-        Returns:
-            QuerySet: Trophy-level comments
-        """
-        return self.filter(concept=concept, trophy_id=trophy_id)
-
-    def for_checklist(self, concept, checklist_id):
-        """
-        Get comments for a specific checklist within a concept.
-
-        Args:
-            concept: Concept instance
-            checklist_id: Checklist ID within concept
-
-        Returns:
-            QuerySet: Checklist-level comments
-        """
-        return self.filter(concept=concept, checklist_id=checklist_id)
-
-    def top_level(self):
-        """
-        Filter to root comments (no parent).
-
-        Returns:
-            QuerySet: Top-level comments without a parent
-        """
-        return self.filter(parent__isnull=True)
-
     def replies_to(self, comment):
         """
         Get direct replies to a comment.
@@ -505,15 +458,6 @@ class CommentQuerySet(models.QuerySet):
         """
         return self.filter(parent=comment)
 
-    def by_top(self):
-        """
-        Order by upvote count (default sort).
-
-        Returns:
-            QuerySet: Comments ordered by most upvotes first
-        """
-        return self.order_by('-upvote_count', '-created_at')
-
     def by_new(self):
         """
         Order by creation date descending.
@@ -522,49 +466,6 @@ class CommentQuerySet(models.QuerySet):
             QuerySet: Comments ordered by newest first
         """
         return self.order_by('-created_at')
-
-    def by_old(self):
-        """
-        Order by creation date ascending.
-
-        Returns:
-            QuerySet: Comments ordered by oldest first
-        """
-        return self.order_by('created_at')
-
-    def with_author_data(self):
-        """
-        Optimize with profile and user data.
-
-        Returns:
-            QuerySet: Comments with prefetched author data
-        """
-        return self.select_related('profile', 'profile__user')
-
-    def with_vote_check(self, profile):
-        """
-        Annotate whether the given profile has voted on each comment.
-
-        Args:
-            profile: Profile instance to check votes for
-
-        Returns:
-            QuerySet: Comments with 'user_has_voted' annotation
-        """
-        if not profile:
-            return self.annotate(user_has_voted=Value(False))
-
-        # Import here to avoid circular imports
-        from trophies.models import CommentVote
-
-        return self.annotate(
-            user_has_voted=Exists(
-                CommentVote.objects.filter(
-                    comment=OuterRef('pk'),
-                    profile=profile
-                )
-            )
-        )
 
 
 class CommentManager(models.Manager):
@@ -578,63 +479,9 @@ class CommentManager(models.Manager):
         """Proxy to queryset method."""
         return self.get_queryset().active()
 
-    def for_concept(self, concept):
-        """Proxy to queryset method."""
-        return self.get_queryset().for_concept(concept)
-
-    def for_trophy(self, concept, trophy_id):
-        """Proxy to queryset method."""
-        return self.get_queryset().for_trophy(concept, trophy_id)
-
-    def for_checklist(self, concept, checklist_id):
-        """Proxy to queryset method."""
-        return self.get_queryset().for_checklist(concept, checklist_id)
-
-    def top_level(self):
-        """Proxy to queryset method."""
-        return self.get_queryset().top_level()
-
-    def by_top(self):
-        """Proxy to queryset method."""
-        return self.get_queryset().by_top()
-
     def by_new(self):
         """Proxy to queryset method."""
         return self.get_queryset().by_new()
-
-    def by_old(self):
-        """Proxy to queryset method."""
-        return self.get_queryset().by_old()
-
-    def get_threaded_comments(self, concept, profile=None, sort='top', checklist_id=None):
-        """
-        Get all comments for a checklist in threaded structure.
-
-        Args:
-            concept: Concept instance
-            profile: Optional profile to check votes
-            sort: 'top', 'new', or 'old'
-            checklist_id: Checklist ID to scope comments
-
-        Returns:
-            QuerySet: Comments optimized for display with nested replies
-        """
-        if checklist_id is not None:
-            qs = self.for_checklist(concept, checklist_id).with_author_data()
-        else:
-            qs = self.for_concept(concept).with_author_data()
-
-        if profile:
-            qs = qs.with_vote_check(profile)
-
-        if sort == 'new':
-            qs = qs.by_new()
-        elif sort == 'old':
-            qs = qs.by_old()
-        else:
-            qs = qs.by_top()
-
-        return qs
 
 
 class ChecklistQuerySet(models.QuerySet):

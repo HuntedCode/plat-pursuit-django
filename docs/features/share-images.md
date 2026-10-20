@@ -228,7 +228,7 @@ modal wrapper — that is what let the Rate My Games wizard stop carrying its ow
 contract did not change. This page shipped with the legacy
 `rate_before_download_modal.html`, which predates the rebuild: DaisyUI colours and, more importantly, **no
 blurb field**, so the card rendered a quick take the only form that could set it never offered. That
-partial still exists for `dashboard.html`; it is no longer used here. The guidelines sheet is composed
+partial was deleted 2026-10 (dead-code cleanup): its last host, `dashboard.html`, went with the dashboard in 2026-08. The guidelines sheet is composed
 alongside it because the modal's notice links there, wired by the shared
 `PlatPursuit.wireGuidelinesSheet()`.
 

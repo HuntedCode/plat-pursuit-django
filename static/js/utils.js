@@ -423,7 +423,8 @@ const API = {
      * "Failed to sync profile" instead of "Too many searches. Please wait a minute."
      *
      * Hand-rolled copies of this shape had accumulated in `quick-add.js`, `list-detail.js`,
-     * `navsync.js`, `comments.js`, `game-lists.js` and a dozen more. This is the one home for it;
+     * `navsync.js` and a dozen more (`comments.js` and `game-lists.js` too, both deleted 2026-10). This
+     * is the one home for it;
      * `quick-add.js` predicted as much in the comment above its own copy. Callers not yet migrated
      * are a follow-up, not a second implementation.
      *
@@ -1507,90 +1508,6 @@ const LeaderboardUtils = {
         url.searchParams.set(paramName, page);
         window.location.href = url.toString();
     }
-};
-
-/**
- * ReviewProgressTiers: Shared word-count tier data for review progress bars.
- * Used by both review-hub.js and rate-my-games.js to drive trophy icon
- * colors and progress bar styling as the reviewer writes.
- */
-const ReviewProgressTiers = {
-    iconTiers: [
-        { words: 0,   cssColor: 'var(--color-base-content)', opacity: '0.25' },
-        { words: 25,  cssColor: 'var(--color-trophy-bronze)', opacity: '1' },
-        { words: 75,  cssColor: 'var(--color-trophy-silver)', opacity: '1' },
-        { words: 100, cssColor: 'var(--color-trophy-gold)',   opacity: '1' },
-    ],
-    progressTiers: [
-        { words: 0,   pct: 0,   color: 'bg-error',   nextWords: 10,  nextLabel: 'getting started' },
-        { words: 10,  pct: 15,  color: 'bg-error',   nextWords: 25,  nextLabel: 'a solid start' },
-        { words: 25,  pct: 35,  color: 'bg-warning',  nextWords: 50,  nextLabel: 'a good review' },
-        { words: 50,  pct: 55,  color: 'bg-warning',  nextWords: 75,  nextLabel: 'a great review' },
-        { words: 75,  pct: 75,  color: 'bg-info',     nextWords: 100, nextLabel: 'an excellent review' },
-        { words: 100, pct: 90,  color: 'bg-success',  nextWords: 150, nextLabel: 'an outstanding review' },
-        { words: 150, pct: 100, color: 'bg-success',  nextWords: null, nextLabel: null },
-    ],
-
-    /** Trophy cup SVG for dynamic HTML (mirrors partials/icons/trophy_cup.html). */
-    trophyCupSvg: '<svg class="w-5 h-5 inline-block flex-shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="currentColor" aria-hidden="true"><path d="M102.49,0c0,27.414,0,104.166,0,137.062c0,112.391,99.33,156.25,153.51,156.25c54.18,0,153.51-43.859,153.51-156.25c0-32.896,0-109.648,0-137.062H102.49z M256.289,50.551l-68.164,29.768v98.474l-0.049,19.53c-0.526-0.112-47.274-10.112-47.274-78.391c0-28.17,0-69.6,0-69.6h60.385L256.289,50.551z"/><polygon points="315.473,400.717 291.681,367.482 279.791,318.506 256,322.004 232.209,318.506 220.314,367.482 205.347,388.394 196.527,400.476 196.699,400.476 196.527,400.717"/><polygon points="366.93,432.24 366.93,432 145.07,432 145.07,511.598 145.07,511.76 145.07,511.76 145.07,512 366.93,512 366.93,432.402 366.93,432.24"/><path d="M511.638,96.668c-0.033-1.268-0.068-2.336-0.068-3.174V45.1h-73.889v38.736h35.152v9.658c0,1.127,0.037,2.557,0.086,4.258c0.389,13.976,1.303,46.707-21.545,70.203c-5.121,5.266-11.221,9.787-18.219,13.613c-3.883,17.635-10.109,33.564-18.104,47.814c26.561-6.406,48.026-17.898,64.096-34.422C513.402,159.734,512.121,113.918,511.638,96.668z"/><path d="M60.625,167.955c-22.848-23.496-21.934-56.227-21.541-70.203c0.047-1.701,0.082-3.131,0.082-4.258v-9.658h34.842h0.07l0,0h0.24V45.1H0.43v48.394c0,0.838-0.032,1.906-0.068,3.174c-0.482,17.25-1.76,63.066,32.494,98.293c16.068,16.524,37.531,28.014,64.092,34.422c-7.996-14.25-14.22-30.182-18.103-47.816C71.846,177.74,65.746,173.221,60.625,167.955z"/></svg>',
-
-    /**
-     * Update a word-count progress bar, text label, and trophy icon.
-     * Shared by review creation, wizard, and both edit forms.
-     *
-     * @param {Object} els - DOM elements: { bar, text, icon } (all optional)
-     * @param {number} wordCount - Current word count
-     */
-    updateWordProgress(els, wordCount) {
-        const { bar, text, icon } = els;
-
-        // Find current tier
-        let tier = this.progressTiers[0];
-        for (let i = this.progressTiers.length - 1; i >= 0; i--) {
-            if (wordCount >= this.progressTiers[i].words) {
-                tier = this.progressTiers[i];
-                break;
-            }
-        }
-
-        // Smooth width interpolation between tiers
-        if (bar) {
-            let barWidth = tier.pct;
-            const tierIdx = this.progressTiers.indexOf(tier);
-            if (tierIdx < this.progressTiers.length - 1) {
-                const next = this.progressTiers[tierIdx + 1];
-                const progress = (wordCount - tier.words) / (next.words - tier.words);
-                barWidth = tier.pct + (next.pct - tier.pct) * Math.min(progress, 1);
-            }
-            bar.style.width = `${barWidth}%`;
-            bar.className = `h-full rounded-full transition-all duration-300 ease-out ${tier.color}`;
-        }
-
-        // Countdown text
-        if (text) {
-            if (wordCount === 0) {
-                text.textContent = 'Write at least 10 words to get started...';
-            } else if (tier.nextWords) {
-                const remaining = tier.nextWords - wordCount;
-                text.textContent = `${remaining} word${remaining === 1 ? '' : 's'} until ${tier.nextLabel}!`;
-            } else {
-                text.textContent = 'Outstanding review! The community thanks you.';
-            }
-        }
-
-        // Trophy icon color
-        if (icon) {
-            let iconTier = this.iconTiers[0];
-            for (let i = this.iconTiers.length - 1; i >= 0; i--) {
-                if (wordCount >= this.iconTiers[i].words) {
-                    iconTier = this.iconTiers[i];
-                    break;
-                }
-            }
-            icon.style.color = iconTier.cssColor;
-            icon.style.opacity = iconTier.opacity;
-        }
-    },
 };
 
 /**
@@ -3594,7 +3511,6 @@ window.PlatPursuit.InfiniteScroller = InfiniteScroller;
 window.PlatPursuit.DragReorderManager = DragReorderManager;
 window.PlatPursuit.ZoomAwareObserver = ZoomAwareObserver;
 window.PlatPursuit.LeaderboardUtils = LeaderboardUtils;
-window.PlatPursuit.ReviewProgressTiers = ReviewProgressTiers;
 window.PlatPursuit.TrophyListRenderer = TrophyListRenderer;
 window.PlatPursuit.SpoilerToggle = SpoilerToggle;
 window.PlatPursuit.Lightbox = Lightbox;
@@ -4357,9 +4273,9 @@ document.addEventListener('keydown', function (e) {
  * rather than the JS knowing both ids.
  *
  * SHARED because this is the THIRD copy. `admin-notifications.js` has one bound to three specific
- * element ids, and `comments.js` has an inline listener that only ever writes a number. Neither is
- * reusable and both re-implement the same escalation. Those two are candidates to migrate onto this,
- * but not in this branch -- they belong to other systems.
+ * element ids, and `comments.js` had an inline listener that only ever wrote a number. Neither was
+ * reusable and both re-implemented the same escalation. `comments.js` was deleted 2026-10;
+ * `admin-notifications.js` is the one left to migrate onto this.
  *
  * The count is what the BROWSER sees. The server sanitizes before it measures, so pasted markup can
  * shrink server-side and the two disagree. The disagreement is always in the safe direction (the

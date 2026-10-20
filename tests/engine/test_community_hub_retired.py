@@ -97,6 +97,6 @@ def test_what_remains_under_community_still_answers(client):
 def test_live_javascript_builds_no_stale_profile_links():
     """Hand-built URLs in JS do NOT follow a rename the way `{% url %}` does. The roadmap notes'
     @mention links are the live one -- they would have quietly started hopping through a 301."""
-    for name in ('roadmap_notes.js', 'review-hub.js', 'review-hub-landing.js'):
+    for name in ('roadmap_notes.js',):
         src = (ROOT / 'static' / 'js' / name).read_text(encoding='utf-8')
         assert '/community/profiles/' not in src, f'{name} still builds the old profile path'
