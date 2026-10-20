@@ -1,7 +1,9 @@
-<button id="back-to-top"
-        class="btn btn-square w-10 h-10 md:w-12 md:h-12 lg:w-16 lg:h-16 rounded-lg btn-primary border-2 md:border-3 lg:border-4 border-base-200 fixed right-3 md:right-4 lg:right-8 shadow-xl opacity-0 pointer-events-none transition-opacity duration-300 z-50"
-        aria-label="Back to top">
-    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-7 md:h-7 lg:w-10 lg:h-10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+{% comment %} The house icon button on a quiet floating surface (.pp-totop in chrome.css). It shows only
+while the reader scrolls back UP past the first screens and hides while they scroll down, so it never
+sits over what they are reading or tapping (SW-02: the old 64px cyan square covered a contract's Claim
+button on phones). Behaviour: wireBackToTop() in static/js/main.js. {% endcomment %}
+<button id="back-to-top" type="button" class="pp-cta pp-cta--icon pp-cta--round pp-totop" aria-label="Back to top" tabindex="-1" aria-hidden="true">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <path d="M12 19V6M5 12l7-7 7 7"/>
     </svg>
 </button>

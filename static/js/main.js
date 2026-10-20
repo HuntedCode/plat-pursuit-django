@@ -63,29 +63,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // ===== Back to top button =====
     const backToTop = document.getElementById('back-to-top');
-    if (backToTop) {
-        let scrollTimeout;
-
-        const handleScroll = () => {
-            clearTimeout(scrollTimeout);
-            scrollTimeout = setTimeout(() => {
-                // Faded out is not enough: an invisible button still takes the click meant for whatever is
-                // under it (the optimizer's Next sat exactly there), so a hidden one lets clicks through.
-                const shown = window.scrollY > 300;
-                backToTop.classList.toggle('opacity-100', shown);
-                backToTop.classList.toggle('opacity-0', !shown);
-                backToTop.classList.toggle('pointer-events-none', !shown);
-            }, 100);
-        };
-
-        window.addEventListener('scroll', handleScroll);
-
-        backToTop.addEventListener('click', () => {
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-        });
-
-        handleScroll();
-    }
+    if (backToTop) wireBackToTop(backToTop);
 
     // Light mode was removed 2026-08-22: the rebuild's --pp-* token foundation is dark-first
     // (every rebuilt surface reads dark values), so the old toggle produced a broken hybrid.
@@ -127,3 +105,81 @@ document.addEventListener('DOMContentLoaded', function() {
     // mobile tab bar now uses hub_section template logic for the active
     // state, and the navbar has no dropdowns to coordinate.
 });
+
+/**
+ * Back to top (2026-10, SW-02 in docs/design/reviews/README.md).
+ *
+ * Offered only while the reader scrolls back UP past the first screens, and withdrawn while they scroll
+ * down: the pattern Safari and Chrome use for their own toolbars. The old button appeared after 300px
+ * and stayed, so it sat over whatever was under the corner (a contract card's Claim button on phones).
+ *
+ * Hidden means INERT, not just invisible: out of the tab order and hidden from screen readers, and the
+ * stylesheet drops pointer events, because an invisible button still takes the tap meant for whatever
+ * is under it (the Challenge optimizer's Next sat exactly there).
+ *
+ * After a click it stays hidden for the whole smooth scroll home; otherwise the upward scroll it starts
+ * would offer the button again on the way up.
+ */
+function wireBackToTop(btn) {
+    const SHOW_BELOW = 600; // px from the top before the button is offered at all
+    const NUDGE = 8;        // px of travel that counts as a direction, so momentum jitter does nothing
+    let lastY = window.scrollY;
+    let ticking = false;
+    let homeward = false;   // set by a click, cleared once the page is back near the top
+
+    const set = (shown) => {
+        if (btn.classList.contains('is-shown') === shown) return;
+        btn.classList.toggle('is-shown', shown);
+        btn.tabIndex = shown ? 0 : -1;
+        if (shown) btn.removeAttribute('aria-hidden');
+        else btn.setAttribute('aria-hidden', 'true');
+        // Never leave focus on a control that just became aria-hidden and unfocusable.
+        if (!shown && document.activeElement === btn) btn.blur();
+    };
+
+    const update = () => {
+        ticking = false;
+        // Clamped to the real scroll range: iOS's rubber-band bounce past either end reports positions
+        // outside it, and the bounce back would otherwise read as scrolling up and offer the button.
+        const max = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+        const y = Math.min(Math.max(window.scrollY, 0), max);
+        const delta = y - lastY;
+        if (y < SHOW_BELOW) {
+            homeward = false;
+            set(false);
+            lastY = y;
+            return;
+        }
+        if (Math.abs(delta) < NUDGE) return; // keep the baseline, so slow scrolls still add up
+        // The scroll home only ever moves UP, so any downward move is the reader taking over: stop
+        // suppressing, or an interrupted trip home would hide the button until they reached the top.
+        if (delta > 0) homeward = false;
+        set(delta < 0 && !homeward);
+        lastY = y;
+    };
+
+    window.addEventListener('scroll', () => {
+        if (!ticking) {
+            ticking = true;
+            requestAnimationFrame(update);
+        }
+    }, { passive: true });
+
+    btn.addEventListener('click', () => {
+        homeward = true;
+        // Send keyboard focus to the top of the content the reader just jumped to, so the next Tab
+        // continues from there rather than from a button at the end of the page that is now hidden.
+        const main = document.getElementById('main-content');
+        if (main) {
+            if (!main.hasAttribute('tabindex')) main.setAttribute('tabindex', '-1');
+            main.focus({ preventScroll: true });
+        }
+        set(false);
+        const smooth = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        window.scrollTo({ top: 0, behavior: smooth ? 'smooth' : 'auto' });
+    });
+
+    btn.classList.remove('is-shown');
+    btn.tabIndex = -1;
+    btn.setAttribute('aria-hidden', 'true');
+}

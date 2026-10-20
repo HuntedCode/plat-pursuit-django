@@ -287,6 +287,36 @@
     .pp-navpremium span { display: none; }
 }
 
+/* ── Back to top (2026-10, SW-02) ────────────────────────────────────────────────────────────────
+   The house icon button on a quiet floating surface: solid enough to read over any content, dim until
+   hovered, and HIDDEN unless the reader is scrolling back up (wireBackToTop in main.js toggles .is-shown).
+   Hidden means inert too: an invisible button still takes the tap meant for whatever is under it.
+   `bottom` comes from #back-to-top in input.css (clear of the mobile tab bar) and challenge-optimizer.css.
+   EVERY selector is `.pp-cta.pp-totop`: chrome.css is imported BEFORE cta.css, so a bare `.pp-totop` ties
+   `.pp-cta` on specificity and loses on order (the audit measured the default CTA's see-through cyan
+   wash, 36px, and a slide-in that snapped). */
+.pp-cta.pp-totop {
+    position: fixed;
+    right: 1rem;
+    z-index: 50;
+    --cta-h: 2.5rem;
+    color: var(--pp-text-dim);
+    background: color-mix(in oklab, var(--pp-bg-2) 94%, transparent);
+    border-color: var(--pp-border);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+    opacity: 0;
+    transform: translateY(10px);
+    pointer-events: none;
+    transition: opacity 0.2s var(--pp-ease), transform 0.25s var(--pp-ease), box-shadow 0.15s ease;
+}
+.pp-cta.pp-totop > svg { width: 1.1rem; height: 1.1rem; }
+.pp-cta.pp-totop.is-shown { opacity: 1; transform: none; pointer-events: auto; }
+@media (hover: hover) {
+    .pp-cta.pp-totop:hover { color: var(--pp-text); border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border)); }
+}
+@media (min-width: 1024px) { .pp-cta.pp-totop { right: 2rem; } }
+@media (prefers-reduced-motion: reduce) { .pp-cta.pp-totop { transform: none; transition: opacity 0.2s linear; } }
+
 /* ── PSN profile search: persistent typeahead bar (md+), icon-collapse (<md) ── */
 /* Chrome stays calm: matte field at rest, cyan focus ring only when engaged (the one active accent). */
 .pp-navsearch { position: relative; display: flex; align-items: center; margin-left: auto; flex-shrink: 0; }

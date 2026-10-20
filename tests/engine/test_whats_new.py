@@ -441,8 +441,9 @@ def test_the_archive_asks_nothing_of_anonymous_readers(client):
 # ── the attention dot ─────────────────────────────────────────────────────────────────────────────────
 
 def test_the_avatar_carries_a_dot_when_something_is_unread(client):
-    """The signal for everyone the modal cannot reach: deep landings that never touch Home, hunters
-    signed in without a linked PSN, and anyone who closed the modal by reflex having read nothing."""
+    """The signal for everyone the modal cannot reach: deep landings that never touch Home, and anyone
+    who closed the modal by reflex having read nothing. NOT accounts without a linked PSN since 2026-10
+    (FV-11, owner's call): their one job is linking, so the pill waits; see test_chrome_before_linking."""
     client, _ = _synced_client(client)
 
     body = client.get(reverse('about'), **CF).content.decode()

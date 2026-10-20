@@ -31,11 +31,15 @@ FAMILIES = {
                         r'|primary|secondary|accent|info|success|warning|error))?$'),
     'tabs': re.compile(r'^(?:tabs(?:-(?:box|border|lift|xs|sm|md|lg|xl|top|bottom))?'
                        r'|tab(?:-(?:active|disabled|content))?)$'),
+    # Retired 2026-10 for the house notice (.pp-notice / .pp-toast): SW-01, FV-15, DL-10.
+    'alert': re.compile(r'^alert(?:-(?:info|success|warning|error|soft|outline|dash|vertical|horizontal))?$'),
+    'toast': re.compile(r'^toast(?:-(?:start|center|end|top|middle|bottom))?$'),
 }
 #: Counted only where used as a class. `tab-content` is hyphenated but doubles as a common element id
-#: (`#tab-content` on the profile page), so it cannot be read in every string.
-BARE = {'btn', 'badge', 'tab', 'tabs', 'tab-content'}
-_HYPHENATED = re.compile(r'(?<![\w#-])((?:btn|badge|tabs?)-[\w-]+)')
+#: (`#tab-content` on the profile page), so it cannot be read in every string. `alert` and `toast` are
+#: words too (role="alert", a `toast` variable), so they count only as classes.
+BARE = {'btn', 'badge', 'tab', 'tabs', 'tab-content', 'alert', 'toast'}
+_HYPHENATED = re.compile(r'(?<![\w#-])((?:btn|badge|tabs?|alert|toast)-[\w-]+)')
 _TEMPLATE_TAG = re.compile(r'{%.*?%}|{{.*?}}', re.S)
 
 

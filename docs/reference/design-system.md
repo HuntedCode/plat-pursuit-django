@@ -223,7 +223,7 @@ house primitives drawn in the `--pp-*` tokens. Decided 2026-10 (SW-01 in
 | **Retired** | `btn` and every `btn-*` modifier | `pp-cta` family (see Buttons) | Guarded: `tests/engine/test_retired_daisyui.py` |
 | **Retired** | `badge` and `badge-*` | `.bd-chip` + a tone modifier | Guarded |
 | **Retired** | `tabs`, `tab` | `.pp-switch` (Tab Group, below) | Guarded |
-| **Pending** | `alert`, `toast` | a house notice and toast, to be built in the site-wide noise branch | Allowed until then |
+| **Retired** | `alert`, `toast` | `.pp-notice` (+ tone), `ToastManager` for toasts, `partials/_messages.html` for Django messages (see Notices and Toasts) | Guarded since 2026-10 |
 | **Pending** | `input`, `select`, `textarea`, `checkbox`, `toggle`, `radio`, `progress` | house fields, to be built with the onboarding rebuild | Allowed until then. Filter chips already have a house version (Toggle-Button Checkboxes, below) |
 | **Pending** | `modal`, `dropdown`, `tooltip`, `collapse`, `divider` | no decision yet | Prefer `PlatPursuit.DetailModal` (`.pp-detail-modal`) for new modals |
 
@@ -264,6 +264,35 @@ and a 45% border in the accent, a glow on hover, and never a solid fill. Set the
 - The size modifiers are not responsive. Pick one size per button; do not swap modifiers per breakpoint.
 - Page-local families that predate `pp-cta` (`.gd-btn`, `.fnd-cta`, `.supm-*`, `.pc-btn`) migrate when
   their pages are next touched. Do not start a new one.
+
+### Notices and Toasts (`pp-notice`, the house notice)
+
+One recipe, in `static/css/components/notice.css`: a border in the tone, a light wash of the tone, the
+tone on the icon, and the text left in `--pp-text`, so a notice never trades readability for colour.
+It replaced DaisyUI `alert`, whose solid fills painted the whole block in the status colour.
+
+```html
+<div class="pp-notice pp-notice--warning" role="status">
+    {% include 'partials/_notice_icon.html' with tone='warning' %}
+    <div class="pp-notice__body">Your PSN Gaming History must be public.</div>
+</div>
+```
+
+- Tones: `--info` (default), `--success`, `--warning`, `--error`, `--primary`; or set `--nc` for anything else.
+- `role="alert"` for errors, `role="status"` for everything else.
+- **Django messages** render through `partials/_messages.html` only (the breadcrumb includes it). Include
+  it once per page.
+- **Toasts** come from `PlatPursuit.ToastManager.show(message, tone)`, never hand-built: it adds the
+  floating `.pp-toast` surface, the entrance and exit, and the screen-reader announcement, inside an open
+  dialog too. The icons live twice, in `_notice_icon.html` and `ToastManager._ICONS`; change them together.
+
+### Back to Top
+
+`templates/partials/back_to_top.html` (`.pp-totop` on the house icon button, behaviour in
+`wireBackToTop` in `static/js/main.js`). It is offered only while the reader scrolls back UP past about
+600px and withdrawn while they scroll down, so it never sits over what they are reading or tapping, and
+it is inert (unfocusable, hidden from screen readers, no pointer events) whenever it is hidden. A page with
+its own sticky controls in that corner lifts it clear rather than hiding it (see `challenge-optimizer.css`).
 
 ### Page Header Card
 

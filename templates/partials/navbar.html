@@ -137,8 +137,10 @@ data-nav-* hooks + the #nav-sync data-url-* attrs. The sync-search dropdown keep
         system, which comes back rebuilt rather than restyled -- see the redirect block in
         plat_pursuit/urls.py. It was also the last DaisyUI dropdown in the navbar.{% endcomment %}
 
-        {# Premium CTA (non-premium authed) #}
-        {% if user.is_authenticated and not user.premium_tier %}
+        {% comment %}Premium CTA: non-members with a LINKED PSN only (2026-10, FV-11). A fresh account's one job
+        is linking; asking for money before they have seen their own data is the wrong first ask. Support Us
+        stays in the account menu for anyone. `navsync.profile` is already loaded, so this costs no query.{% endcomment %}
+        {% if user.is_authenticated and not user.premium_tier and navsync.profile.is_linked %}
         <a href="{% url 'support_hub' %}" class="pp-navpremium" aria-label="Go Premium">
             <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="m12 2 3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
             <span>Premium</span>
@@ -148,7 +150,7 @@ data-nav-* hooks + the #nav-sync data-url-* attrs. The sync-search dropdown keep
         {# ── Status-aware avatar + unified panel (absorbs the hotbar) ── #}
         {% if user.is_authenticated %}
         <div class="dropdown dropdown-end" id="nav-account">
-            <div tabindex="0" role="button" class="pp-av"{% if navsync %} data-nav-avatar data-sync="{{ navsync.sync_status }}"{% endif %} aria-label="Account{% if navsync %} and sync status{% endif %}{% if mod_open_count %}, {{ mod_open_count }} report{{ mod_open_count|pluralize }} waiting to be moderated{% endif %}{% if whats_new_unread %}, something new to read{% endif %}" aria-haspopup="true" aria-expanded="false">
+            <div tabindex="0" role="button" class="pp-av"{% if navsync %} data-nav-avatar data-sync="{{ navsync.sync_status }}"{% endif %} aria-label="Account{% if navsync %} and sync status{% endif %}{% if mod_open_count %}, {{ mod_open_count }} report{{ mod_open_count|pluralize }} waiting to be moderated{% endif %}{% if whats_new_unread and navsync.profile.is_linked %}, something new to read{% endif %}" aria-haspopup="true" aria-expanded="false">
                 <span class="pp-av__img">
                     {% if user.profile.avatar_url %}<img alt="" src="{{ user.profile.avatar_url }}" loading="lazy" decoding="async" />
                     {% else %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>{% endif %}
@@ -160,7 +162,9 @@ data-nav-* hooks + the #nav-sync data-url-* attrs. The sync-search dropdown keep
                 question, and it is aria-hidden because the avatar's own label already says it in
                 words.{% endcomment %}
                 {% if mod_open_count %}<span class="pp-av__queue" aria-hidden="true">{% if mod_open_count > 9 %}9+{% else %}{{ mod_open_count }}{% endif %}</span>{% endif %}
-                {% if whats_new_unread and not mod_open_count %}<span class="pp-av__new" aria-hidden="true">New</span>{% endif %}
+                {% comment %}NEW waits for a linked PSN (2026-10, FV-11): before that, linking is the only thing the
+                chrome should be asking for. What's New stays reachable in the menu either way.{% endcomment %}
+                {% if whats_new_unread and not mod_open_count and navsync.profile.is_linked %}<span class="pp-av__new" aria-hidden="true">New</span>{% endif %}
             </div>
             <div tabindex="0" class="dropdown-content pp-avpanel mt-2 z-[100] max-md:fixed max-md:top-16 max-md:right-2" id="nav-sync"
                  {% if navsync %}data-url-sync="{% url 'profile_sync_status' %}" data-url-trigger="{% url 'trigger_sync' %}" data-status="{{ navsync.sync_status }}" data-seconds="{{ navsync.seconds_to_next_sync|default:0 }}"{% endif %}>

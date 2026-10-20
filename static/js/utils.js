@@ -54,48 +54,18 @@ const ToastManager = {
             try { container.showPopover(); } catch (e) { /* not connected / unsupported */ }
         }
 
-        // Create toast element
+        // The house notice, floating (static/css/components/notice.css). It was a solid DaisyUI `alert`,
+        // which painted the whole slab in the status colour; the notice keeps the colour on the border,
+        // a light wash and the icon, and the text readable (2026-10, DL-10).
+        // hasOwn, not a truthy lookup: 'constructor' and friends are not tones.
+        const tone = Object.hasOwn(ToastManager._ICONS, type) ? type : 'info';
         const toast = document.createElement('div');
-        toast.className = 'alert shadow-lg mb-2 max-w-md';
-
-        // Set alert type styling
-        switch(type) {
-            case 'success':
-                toast.classList.add('alert-success');
-                break;
-            case 'error':
-                toast.classList.add('alert-error');
-                break;
-            case 'warning':
-                toast.classList.add('alert-warning');
-                break;
-            default:
-                toast.classList.add('alert-info');
-        }
-
-        // Create icon based on type
-        let icon;
-        switch(type) {
-            case 'success':
-                icon = `<svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>`;
-                break;
-            case 'error':
-                icon = `<svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>`;
-                break;
-            case 'warning':
-                icon = `<svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>`;
-                break;
-            default:
-                icon = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-current shrink-0 w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>`;
-        }
-
-        const wrapper = document.createElement('div');
-        wrapper.className = 'flex items-center gap-2';
-        wrapper.innerHTML = icon;
-        const span = document.createElement('span');
-        span.textContent = message;
-        wrapper.appendChild(span);
-        toast.appendChild(wrapper);
+        toast.className = `pp-notice pp-toast pp-notice--${tone}`;
+        toast.innerHTML = ToastManager._ICONS[tone];
+        const body = document.createElement('div');
+        body.className = 'pp-notice__body';
+        body.textContent = message;
+        toast.appendChild(body);
 
         // Add to container
         container.appendChild(toast);
@@ -139,17 +109,26 @@ const ToastManager = {
             }
         }
         setTimeout(() => {
-            toast.style.opacity = '0';
-            toast.style.transform = 'translateX(100%)';
-            toast.style.transition = 'all 0.3s ease-in-out';
+            // The exit is the stylesheet's (.is-leaving: a short fade and settle, or a plain fade under
+            // reduced motion); the node goes once it has played. A fixed timeout rather than
+            // `animationend`, which never fires when there is no animation to end.
+            toast.classList.add('is-leaving');
             setTimeout(() => {
                 toast.remove();
                 // Tidy the top-layer popover once its last toast clears, so it stops shadowing the modal.
                 if (container.matches?.('[popover]') && container.matches(':popover-open') && !container.children.length) {
                     try { container.hidePopover(); } catch (e) { /* already hidden */ }
                 }
-            }, 300);
+            }, 220);
         }, autoRemoveDuration);
+    },
+
+    /** One icon per tone, sized and coloured by `.pp-notice__icon`. */
+    _ICONS: {
+        success: '<svg class="pp-notice__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg>',
+        error: '<svg class="pp-notice__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m9.5 9.5 5 5m0-5-5 5"/></svg>',
+        warning: '<svg class="pp-notice__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4m0 4h.01"/></svg>',
+        info: '<svg class="pp-notice__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4m0-4h.01"/></svg>',
     },
 
     /**
