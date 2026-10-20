@@ -21,7 +21,7 @@
                 </svg>
                 <h1 class="text-xl md:text-2xl font-bold mb-2">Email Confirmed</h1>
                 <p class="text-sm text-base-content/70 mb-4" role="status">Your email is confirmed. Time to start hunting.</p>
-                <a href="{% url 'account_login' %}" class="btn btn-primary btn-sm md:btn-md w-full">Sign In</a>
+                <a href="{% url 'account_login' %}" class="btn btn-primary btn-sm md:btn-md w-full">Sign in</a>
             </div>
             {% else %}
             <div class="card-body p-3 md:p-5 lg:p-7 text-center pp-head-cascade">
@@ -35,7 +35,7 @@
                     Confirmation links only last a few days, and this one is no longer valid.
                     Sign in and we will send you a fresh one.
                 </p>
-                <a href="{% url 'account_login' %}" class="btn btn-primary btn-sm md:btn-md w-full">Sign In</a>
+                <a href="{% url 'account_login' %}" class="btn btn-primary btn-sm md:btn-md w-full">Sign in</a>
             </div>
             {% endif %}
         </div>

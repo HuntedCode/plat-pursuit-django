@@ -292,6 +292,25 @@ def test_the_no_psn_state_renders_the_link_hero_on_the_landing_surface(client):
     assert 'data-land-search' not in body, 'the search hero leaked into an authed state'
 
 
+def test_the_link_hero_only_promises_what_linking_delivers(client):
+    """FV-09 (docs/design/reviews/first-visit.md): the hero promised a "six-digit code" for a code
+    that mixes letters and digits, and "We'll walk you through it" for a privacy setting that
+    linking only repeats a warning about. Tied to the real generator, so a change to the code's
+    shape has to revisit this copy."""
+    from trophies.services.verification_service import VerificationService
+
+    profile = ProfileFactory(is_linked=False)
+    client.force_login(profile.user)
+    code = VerificationService.generate_code(profile)
+
+    body = client.get('/', **CF).content.decode()
+
+    assert len(code) == 6
+    assert 'six-character code' in body
+    assert 'six-digit' not in body
+    assert 'walk you through' not in body
+
+
 def test_the_website_jsonld_is_anon_only(client):
     """The WebSite/SearchAction schema is marketing structured data for the indexable front
     door; the authed variants are noindex and must not carry it. The generic

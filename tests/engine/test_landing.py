@@ -283,6 +283,18 @@ def test_the_shelf_slots_are_inspect_triggers(client):
     assert 'Click or tap a medallion to inspect it' in body, 'the hint is missing'
 
 
+def test_an_empty_shelf_hides_the_whole_badge_section(client, monkeypatch):
+    """FV-16: with no medallions the section rendered its heading and gallery button over nothing.
+    The showcase is empty only on a cold cache or a failed build, so the section steps aside."""
+    monkeypatch.setattr('core.services.landing_service._badge_showcase', lambda: [])
+
+    body = _get(client).content.decode()
+
+    assert 'Badges worth the chase' not in body
+    assert 'land-medals' not in body
+    assert 'Play your way. It all counts.' in body, 'only the badge section may step aside'
+
+
 # --- The badge showcase ---
 
 def test_the_badge_showcase_dedupes_to_one_edition_per_series():

@@ -26,6 +26,11 @@
     background: var(--pp-primary);
     flex-shrink: 0;
 }
+/* Below 360px the hero's "For PlayStation trophy hunters" outgrows the line at 0.18em tracking and
+   wraps, stranding the tick beside the first line (FV-18). Tighter tracking keeps it on one line. */
+@media (max-width: 359px) {
+    .land-eyebrow { letter-spacing: 0.06em; gap: 7px; }
+}
 
 /* ── Hero ── */
 .land-hero {

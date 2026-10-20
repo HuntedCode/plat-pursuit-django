@@ -253,7 +253,7 @@ class ConceptTrophyGroupService:
         from trophies.models import Trophy, EarnedTrophy
 
         if not profile:
-            return False, "You must be logged in to rate."
+            return False, "You must be signed in to rate."
         if not profile.is_linked:
             return False, "You must link a PSN profile to rate."
 
@@ -344,7 +344,7 @@ class ConceptTrophyGroupService:
         from trophies.models import ProfileGame, EarnedTrophy
 
         if not profile:
-            return False, "You must be logged in to write a review."
+            return False, "You must be signed in to write a review."
         if not profile.is_linked:
             return False, "You must link a PSN profile to write a review."
 

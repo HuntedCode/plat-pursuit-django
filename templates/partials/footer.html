@@ -61,8 +61,8 @@
                     <li><a href="{% url 'milestones_list' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Milestones</a></li>
                     <li><a href="{% url 'career' %}?view=contracts" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Contracts</a></li>
                     {% if not user.is_authenticated %}
-                    <li class="pt-1.5 mt-1.5 border-t border-neutral-content/10"><a href="{% url 'account_login' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Sign In</a></li>
-                    <li><a href="{% url 'account_signup' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Sign Up</a></li>
+                    <li class="pt-1.5 mt-1.5 border-t border-neutral-content/10"><a href="{% url 'account_login' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Sign in</a></li>
+                    <li><a href="{% url 'account_signup' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Sign up</a></li>
                     {% endif %}
                     {% endif %}
                 </ul>

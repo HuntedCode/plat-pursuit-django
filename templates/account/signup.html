@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% load static %}
 
-{% block title %}Sign Up{% endblock %}
+{% block title %}Sign up{% endblock %}
 {% block robots %}noindex, nofollow{% endblock %}
 
 {% block main_layout %}
@@ -11,7 +11,7 @@
             <div class="card-body p-3 md:p-5 lg:p-7 pp-head-cascade">
                 {% include 'account/snippets/auth_header.html' %}
 
-                <h1 class="text-xl md:text-2xl font-bold mb-1">Sign Up</h1>
+                <h1 class="text-xl md:text-2xl font-bold mb-1">Sign up</h1>
                 <p class="text-sm text-base-content/60 mb-4">Join the hunt. Every trophy counts.</p>
 
                 {% include 'partials/_messages.html' %}
@@ -132,11 +132,11 @@
                         {% endif %}
                     </div>
 
-                    <button type="submit" class="btn btn-primary btn-sm md:btn-md w-full">Sign Up</button>
+                    <button type="submit" class="btn btn-primary btn-sm md:btn-md w-full">Sign up</button>
                 </form>
 
                 <p class="mt-4 text-center text-sm text-base-content/70">
-                    Already have an account? <a href="{% url 'account_login' %}" class="link link-primary font-semibold">Sign In</a>
+                    Already have an account? <a href="{% url 'account_login' %}" class="link link-primary font-semibold">Sign in</a>
                 </p>
             </div>
         </div>

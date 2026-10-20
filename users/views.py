@@ -1396,7 +1396,7 @@ class EmailPreferencesView(View):
             user_id = EmailPreferenceService.validate_preference_token(token)
             user = CustomUser.objects.get(id=user_id)
         except signing.SignatureExpired:
-            context['error_message'] = 'This link has expired. Links are valid for 90 days. Please use a newer email or log in to update your preferences.'
+            context['error_message'] = 'This link has expired. Links are valid for 90 days. Please use a newer email or sign in to update your preferences.'
             return render(request, self.template_name, context)
         except (signing.BadSignature, ValueError):
             context['error_message'] = 'This link is invalid or has been tampered with. Please use the link from your email.'
