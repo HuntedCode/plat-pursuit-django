@@ -203,6 +203,13 @@ The `eslint@9.39.5` end-of-support warning that `npm ci` used to print went with
 | Markdown | 3.7 | 3.8.1 | Crash on malformed HTML-like input; renders staff-authored broadcast emails only | Low (fixed: 3.8.1; with the app's `extra`, `nl2br`, `sane_lists` extensions it renders sample broadcasts byte-identically to 3.7) |
 | requests, idna, python-dotenv | 2.32.5, 3.11, 1.2.1 | 2.33.0, 3.15, 1.2.2 | Temp-file name in a zip helper, idna DoS on long input, `.env` symlink follow (local only) | Low (fixed) |
 
+**Python, 2026-10-20: 9 new advisories in 2 packages.** Published after #223's PR run passed, so the audit gate turned `main` and every open PR red at once, before any test ran. Dependabot had not opened a PR yet.
+
+| Package | Pinned | Clears all | Why it matters here | Priority |
+|---------|--------|------------|---------------------|----------|
+| Pillow | 12.3.0 | 13.0.0 (major) | 8 advisories; the 13.0 notes list decoder overflows and decompression-bomb bypasses (JPEG, TIFF, PDF, BMP, GIF and more). Uploads reach only the `formats=` allowlist (see [Image Uploads](#image-uploads)), which narrows but does not remove the exposure: JPEG and GIF are on it, and both have fixes in 13.0. None of 13.0's breaking changes touch this app (Python 3.10 dropped, I-mode PNG saves no longer clip, `get_child_images` moved, a few removals we do not call). The one behaviour change on our path: `thumbnail()` now applies `reducing_gap` to RGBA images too | High (fixed: 13.0.0) |
+| certifi | 2026.7.22 | 2026.10.19 | CA bundle update; affects every outbound TLS call (PSN, IGDB, Discord, S3) | Medium (fixed: 2026.10.19) |
+
 ## HTML Sanitizing
 
 User-written HTML is cleaned by [nh3](https://github.com/messense/nh3) (Python bindings for the Rust `ammonia` sanitizer), which replaced bleach in 2026-10 after bleach's maintainers ended the project.
