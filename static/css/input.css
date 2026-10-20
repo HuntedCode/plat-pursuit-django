@@ -5,7 +5,6 @@
 /* Standalone design mockups (raw HTML/JS kept as a record) are not site templates; their inline CSS reads as junk utilities. */
 @source not "../../docs/design/pursuer-avatar/mockups";
 @import "./components/chips.css";
-@import "./components/buttons.css";
 @import "./components/chrome.css";
 @import "./components/motion.css";
 @import "./components/switcher.css";
@@ -202,19 +201,24 @@
   --color-base-content: oklch(97.807% 0.029 256.847);
   --color-primary: oklch(86.078% 0.142 206.182);
   --color-primary-content: oklch(17.226% 0.028 139.549);
-  --color-secondary: oklch(0.741 0.233 277.1);
+  /* The semantic colours READ the house tokens (2026-10, SW-01 in docs/design/reviews/README.md).
+     They were separate literals that had drifted (DaisyUI's info was a far more saturated blue, its
+     warning a lemon yellow), so every remaining `text-success` / `alert-info` / `badge-warning`
+     painted a different shade than the rebuilt pages beside it. One source of truth now: change a
+     status colour in the :root --pp-* block below, never here. */
+  --color-secondary: var(--pp-secondary);
   --color-secondary-content: oklch(17.226% 0.028 139.549);
-  --color-accent: oklch(0.815 0.195 35.4);
+  --color-accent: var(--pp-accent);
   --color-accent-content: oklch(17.226% 0.028 139.549);
   --color-neutral: oklch(14% 0.005 285.823);
   --color-neutral-content: oklch(92% 0.004 286.32);
-  --color-info: oklch(0.735 0.274 257.3);
+  --color-info: var(--pp-info);
   --color-info-content: oklch(17.226% 0.028 139.549);
-  --color-success: oklch(86.171% 0.142 166.534);
+  --color-success: var(--pp-success);
   --color-success-content: oklch(17.226% 0.028 139.549);
-  --color-warning: oklch(0.946 0.186 94.8);
+  --color-warning: var(--pp-warning);
   --color-warning-content: oklch(17.226% 0.028 139.549);
-  --color-error: oklch(0.759 0.24 19.2);
+  --color-error: var(--pp-error);
   --color-error-content: oklch(17.226% 0.028 139.549);
   --radius-selector: 0.25rem;
   --radius-field: 0.25rem;

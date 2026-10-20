@@ -25,7 +25,7 @@ Findings that belong to no single slice. Same status values as the slice records
 
 | ID | Sev | Finding | Status |
 |----|-----|---------|--------|
-| SW-01 | Medium | DaisyUI is half-replaced, and the seam is visible. See below | planned: DaisyUI split |
+| SW-01 | Medium | DaisyUI is half-replaced, and the seam is visible. See below | partly fixed: `refactor/daisyui-split` (status colours aligned to `--pp-*`; `btn`, `badge`, `tabs` retired behind a ratchet guard; `pp-cta` gained sizes, a quiet variant and icon buttons). Alerts/toasts: planned, site-wide noise. Form fields: planned, onboarding rebuild |
 | SW-02 | Medium | The back-to-top button (`templates/partials/back_to_top.html`, DaisyUI `btn-primary`, 64px at `lg`) is the loudest element on every page, and on a phone it covers a contract card's Claim button. Seen as [FV-10](first-visit.md) and [DL-06](daily-loop.md) | planned: site-wide noise |
 | SW-03 | Low | Every trophy-list detail page (`/games/<np_communication_id>/`) throws a console error: `game_detail.html` loads `submit_shimmer.js`, which wires `#filter-form` / `#submit-btn`, and the page's form is `#gd-filter-form`. Pre-existing; found by the 2026-10 cleanup's browser pass | open |
 | SW-04 | Low | `templates/recap/monthly_recap.html` loads `color-grid-modal.js`, but nothing on the page calls it (its only host was the deleted platinum grid). A dead script load. Pre-existing; found by the 2026-10 cleanup's audit | open |
@@ -59,6 +59,11 @@ Proposed shape, not yet decided:
 
 Re-measure before planning: the figures above are a snapshot, not a target.
 
+**Left after branch 2 (2026-10):** three rules in `static/css/input.css` still hard-code the OLD DaisyUI
+success/error literals; nothing uses them, so they belong to a dead-CSS sweep. `trophies/util_modules/trophy_phases.py`
+maps trophy phases to DaisyUI `badge-*` classes from Python, so converting the roadmap's phase chips means
+changing that map too (it is on the guard's allowlist).
+
 ## Fix plan
 
 Agreed with the owner on 2026-10-20 after the first two slices. Every finding in both records maps to
@@ -68,10 +73,10 @@ one of these branches (its status row names it). Run in this order:
 |---|--------|--------|-------|
 | 1 | Quick fixes (`fix/review-quick-fixes`) | FV-04, FV-09 copy, FV-16, FV-18, FV-19 | Done |
 | 2a | Dead legacy cleanup (`refactor/delete-dead-legacy-ui`) | SW-01 prerequisite | The SW-01 inventory found 25 of the 33 heaviest DaisyUI files unreachable. Deleted (owner's call): the old review hub, old Game Lists, platinum grid, trophy case page, comments UI, notification inbox, roadmap game-page partials. Done |
-| 2 | DaisyUI split | SW-01, FV-15 | Align DaisyUI's status colors to the `--pp-*` tokens (owner approved), name kept versus retired components in the design system, add the shrinking-allowlist guard |
-| 3 | Site-wide noise | SW-02 (FV-10, DL-06), FV-11, DL-10 | Back-to-top, toasts, no upsell or NEW before linking |
+| 2 | DaisyUI split (`refactor/daisyui-split`) | SW-01 | Status colours read the `--pp-*` tokens; the kept / retired / pending table in design-system.md; `pp-cta` sizes, `--bare` and `--icon`; `btn`, `badge`, `tabs` retired behind `tests/engine/test_retired_daisyui.py`. Done |
+| 3 | Site-wide noise | SW-02 (FV-10, DL-06), FV-11, DL-10, FV-15 | Back-to-top, a house notice and toast (retiring DaisyUI `alert`), no upsell or NEW before linking |
 | 4 | Career + first arrival | FV-03, FV-12, DL-01, DL-02, DL-03, DL-04, DL-09 | Design pass first |
-| 5 | Onboarding rebuild | FV-01, FV-07, FV-08, FV-09 step-2 help, FV-13, FV-20 | Design pass first; auth, link PSN and the sync card as one flow |
+| 5 | Onboarding rebuild | FV-01, FV-07, FV-08, FV-09 step-2 help, FV-13, FV-20 | Design pass first; auth, link PSN and the sync card as one flow, with the house form fields that retire DaisyUI `input` / `select` / `textarea` / `checkbox` / `toggle` |
 | 6 | Contracts board | DL-05, DL-07, DL-08 | |
 | 7 | Landing | FV-05, FV-06 | |
 

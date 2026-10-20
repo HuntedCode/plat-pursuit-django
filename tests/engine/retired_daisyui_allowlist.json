@@ -1,0 +1,268 @@
+{
+ "static/js/admin-notifications.js": {
+  "badge": 10
+ },
+ "static/js/browse-filters.js": {
+  "badge": 3,
+  "btn": 2
+ },
+ "static/js/career.js": {
+  "btn": 2
+ },
+ "static/js/claim-ceremony.js": {
+  "btn": 6
+ },
+ "static/js/color-grid-modal.js": {
+  "btn": 4
+ },
+ "static/js/fundraiser.js": {
+  "badge": 4
+ },
+ "static/js/monthly-recap.js": {
+  "btn": 4
+ },
+ "static/js/reel-spinner.js": {
+  "badge": 7,
+  "btn": 18
+ },
+ "static/js/roadmap-detail.js": {
+  "badge": 4,
+  "btn": 6
+ },
+ "static/js/roadmap_editor.js": {
+  "badge": 24,
+  "btn": 25
+ },
+ "static/js/section-builder.js": {
+  "badge": 4,
+  "btn": 27
+ },
+ "static/js/subscription-admin.js": {
+  "badge": 13,
+  "tabs": 3
+ },
+ "templates/404.html": {
+  "btn": 4
+ },
+ "templates/429.html": {
+  "btn": 4
+ },
+ "templates/account/account_inactive.html": {
+  "btn": 4
+ },
+ "templates/account/email.html": {
+  "btn": 12
+ },
+ "templates/account/email_confirm.html": {
+  "btn": 8
+ },
+ "templates/account/link_psn.html": {
+  "btn": 20
+ },
+ "templates/account/login.html": {
+  "btn": 4
+ },
+ "templates/account/logout.html": {
+  "btn": 8
+ },
+ "templates/account/password_reset.html": {
+  "btn": 4
+ },
+ "templates/account/password_reset_done.html": {
+  "btn": 4
+ },
+ "templates/account/password_reset_from_key.html": {
+  "btn": 8
+ },
+ "templates/account/password_reset_from_key_done.html": {
+  "btn": 4
+ },
+ "templates/account/reauthenticate.html": {
+  "btn": 4
+ },
+ "templates/account/signup.html": {
+  "btn": 4
+ },
+ "templates/account/verification_sent.html": {
+  "btn": 4
+ },
+ "templates/art_reveal/event.html": {
+  "btn": 8
+ },
+ "templates/challenges/my_challenges.html": {
+  "btn": 4
+ },
+ "templates/design/style_guide_preview.html": {
+  "btn": 7
+ },
+ "templates/fundraiser/badge_reveal.html": {
+  "btn": 17
+ },
+ "templates/fundraiser/fundraiser_admin.html": {
+  "badge": 23,
+  "btn": 6
+ },
+ "templates/gamelists/detail.html": {
+  "badge": 3
+ },
+ "templates/home/_hero_syncing.html": {
+  "badge": 6,
+  "btn": 3
+ },
+ "templates/moderation/_queue_shell.html": {
+  "badge": 3,
+  "btn": 12
+ },
+ "templates/moderation/game_flags.html": {
+  "badge": 3,
+  "btn": 6
+ },
+ "templates/moderation/list_reports.html": {
+  "badge": 3,
+  "btn": 6
+ },
+ "templates/moderation/mod_center.html": {
+  "badge": 9
+ },
+ "templates/moderation/quick_takes.html": {
+  "badge": 3,
+  "btn": 6
+ },
+ "templates/notifications/admin/notification_center.html": {
+  "badge": 17,
+  "btn": 24
+ },
+ "templates/notifications/admin/notification_history.html": {
+  "badge": 9,
+  "btn": 21
+ },
+ "templates/notifications/admin/scheduled_notifications.html": {
+  "badge": 13,
+  "btn": 32
+ },
+ "templates/pages/about.html": {
+  "btn": 6
+ },
+ "templates/pages/contact.html": {
+  "btn": 12
+ },
+ "templates/partials/anon_profile_banner.html": {
+  "btn": 3
+ },
+ "templates/partials/art_reveal_banner.html": {
+  "btn": 9
+ },
+ "templates/partials/back_to_top.html": {
+  "btn": 3
+ },
+ "templates/partials/fundraiser_banner.html": {
+  "btn": 3
+ },
+ "templates/partials/site_banner.html": {
+  "btn": 3
+ },
+ "templates/partials/unsaved_changes_modal.html": {
+  "btn": 7
+ },
+ "templates/recap/_timezone_modal.html": {
+  "btn": 8
+ },
+ "templates/recap/monthly_recap.html": {
+  "btn": 16
+ },
+ "templates/recap/recap_index.html": {
+  "badge": 3,
+  "btn": 28
+ },
+ "templates/staff/_admin_link.html": {
+  "btn": 3
+ },
+ "templates/staff/_back_to_admin.html": {
+  "btn": 3
+ },
+ "templates/staff/_staff_shell.html": {
+  "btn": 6
+ },
+ "templates/staff/admin_hub.html": {
+  "badge": 16
+ },
+ "templates/staff/decisions.html": {
+  "badge": 9,
+  "btn": 9
+ },
+ "templates/staff/people.html": {
+  "badge": 6,
+  "btn": 2
+ },
+ "templates/staff/person.html": {
+  "badge": 22,
+  "btn": 6
+ },
+ "templates/staff/restrictions.html": {
+  "badge": 15,
+  "btn": 3
+ },
+ "templates/trophies/career.html": {
+  "btn": 3
+ },
+ "templates/trophies/collection.html": {
+  "btn": 3
+ },
+ "templates/trophies/partials/contracts/_contract_card.html": {
+  "badge": 15,
+  "btn": 6
+ },
+ "templates/trophies/partials/leaderboard_rank_cell.html": {
+  "badge": 3
+ },
+ "templates/trophies/partials/roadmap/collectible_item_row.html": {
+  "badge": 6
+ },
+ "templates/trophies/partials/roadmap/collectibles_tracker.html": {
+  "btn": 9
+ },
+ "templates/trophies/partials/roadmap/dlc_nav_strip.html": {
+  "btn": 7
+ },
+ "templates/trophies/partials/roadmap/edit_button.html": {
+  "btn": 4
+ },
+ "templates/trophies/partials/roadmap/formatting_toolbar.html": {
+  "btn": 63
+ },
+ "templates/trophies/partials/roadmap/preview_button.html": {
+  "btn": 2
+ },
+ "templates/trophies/partials/roadmap/step_card.html": {
+  "badge": 6
+ },
+ "templates/trophies/partials/roadmap/trophy_guide_card.html": {
+  "badge": 11
+ },
+ "templates/trophies/reviews_archived.html": {
+  "btn": 8
+ },
+ "templates/trophies/roadmap_detail.html": {
+  "badge": 3,
+  "btn": 12
+ },
+ "templates/trophies/roadmap_edit.html": {
+  "badge": 68,
+  "btn": 130
+ },
+ "templates/trophies/staff/badge_series_create.html": {
+  "badge": 7,
+  "btn": 2
+ },
+ "templates/trophies/token_monitoring.html": {
+  "badge": 4
+ },
+ "templates/users/admin/subscription_dashboard.html": {
+  "badge": 39,
+  "btn": 50,
+  "tabs": 5
+ },
+ "trophies/util_modules/trophy_phases.py": {
+  "badge": 10
+ }
+}
