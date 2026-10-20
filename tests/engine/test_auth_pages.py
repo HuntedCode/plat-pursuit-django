@@ -11,6 +11,7 @@ from django.template.loader import get_template
 from django.urls import reverse
 
 from tests.factories import ProfileFactory
+from trophies.models import Profile
 
 pytestmark = pytest.mark.django_db
 
@@ -238,17 +239,97 @@ def test_account_inactive_wears_house_chrome(client):
     assert 'Contact Us' in body, 'the one moment a bare white page would be most alarming'
 
 
-def test_link_psn_step_one_renders_for_an_unlinked_user(client):
+def _unlinked_client(client):
     profile = ProfileFactory(is_linked=True)
     user = profile.user
     profile.unlink_user()
     client.force_login(user)
+    return client
 
-    body = client.get(reverse('link_psn')).content.decode()
+
+def _step_one_form(body):
+    """The step-1 form alone, so an assertion cannot match the same words elsewhere on the page."""
+    start = body.index('value="submit_username"')
+    return body[body.rindex('<form', 0, start):body.index('</form>', start)]
+
+
+def _submit_link_name(client, name):
+    return client.post(reverse('link_psn'), {'action': 'submit_username', 'psn_username': name})
+
+
+def test_link_psn_step_one_renders_for_an_unlinked_user(client):
+    body = _unlinked_client(client).get(reverse('link_psn')).content.decode()
 
     assert body.count('<h1') == 1
     assert 'Link Your PSN Account' in body
     assert 'pp-head-cascade' in body
+
+
+@pytest.mark.parametrize('bad_name', ['a!', 'ab', 'bad name'])
+def test_link_psn_step_one_shows_why_a_name_was_rejected(client, bad_name):
+    """FV-02 (docs/design/reviews/first-visit.md): the view re-rendered step 1 with the bound
+    form, but the template never printed its errors or the typed value, so an invalid name
+    reloaded an empty form with no message at all."""
+    resp = _submit_link_name(_unlinked_client(client), bad_name)
+
+    assert resp.status_code == 200
+    form = _step_one_form(resp.content.decode())
+    assert 'must be 3-16 characters' in form
+    assert 'role="alert"' in form
+    assert 'aria-invalid="true"' in form
+    assert f'value="{bad_name}"' in form, 'the typed name must survive the round trip'
+
+
+def test_a_refilled_link_name_is_escaped(client):
+    """The typed value is echoed back into an attribute, so it must stay autoescaped."""
+    form = _step_one_form(_submit_link_name(_unlinked_client(client), 'a"><b>x').content.decode())
+
+    assert 'value="a&quot;&gt;&lt;b&gt;x"' in form
+    assert '<b>x' not in form
+
+
+def test_an_over_long_link_name_is_reported_once(client):
+    """The form's max_length and the model field's copied validators each carried a
+    MaxLengthValidator, so the length error printed twice once errors were shown at all."""
+    form = _step_one_form(_submit_link_name(_unlinked_client(client), 'a' * 17).content.decode())
+
+    assert form.count('at most 16 characters') == 1
+
+
+def test_a_rejected_link_name_creates_no_profile(client):
+    """Validation must run before get_or_create: a rejected name must not leave a Profile row
+    (or kick off a sync) behind."""
+    client = _unlinked_client(client)
+    before = Profile.objects.count()
+
+    _submit_link_name(client, 'a!')
+
+    assert Profile.objects.count() == before
+
+
+def test_a_name_linked_to_someone_else_keeps_the_name_and_says_why(client):
+    """The other step-1 re-render: the name is VALID, so the reason travels as a message, not a
+    field error. The field keeps the name and must not be marked invalid."""
+    taken = ProfileFactory(is_linked=True)
+    client = _unlinked_client(client)
+
+    body = _submit_link_name(client, taken.psn_username).content.decode()
+
+    form = _step_one_form(body)
+    assert f'value="{taken.psn_username}"' in form
+    assert 'aria-invalid' not in form
+    assert 'already linked to another user' in body
+
+
+def test_link_psn_step_one_starts_clean(client):
+    """The unbound form's value is None; it must render as an empty field, never the text "None",
+    and an untouched form carries no error state."""
+    form = _step_one_form(_unlinked_client(client).get(reverse('link_psn')).content.decode())
+
+    assert 'value=""' in form
+    assert 'value="None"' not in form
+    assert 'aria-invalid' not in form
+    assert 'role="alert"' not in form
 
 
 # ── the audit's findings, pinned ──────────────────────────────────────────────────────────────

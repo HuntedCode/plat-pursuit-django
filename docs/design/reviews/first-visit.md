@@ -15,7 +15,7 @@ Status values: `open`, `planned` (branch named), `fixed` (commit or PR), `won't 
 | ID | Sev | Finding | Where | Status |
 |----|-----|---------|-------|--------|
 | FV-01 | High | The journey switches design generations three times: landing to sign up, welcome to link PSN, link PSN to the sync card | See below | open |
-| FV-02 | High | **Bug:** link PSN step 1 drops form errors. An invalid name (`a!`, `ab`) reloads the page with the field cleared and no message | `templates/account/link_psn.html` | planned: `fix/` branch next |
+| FV-02 | High | **Bug:** link PSN step 1 drops form errors. An invalid name (`a!`, `ab`) reloads the page with the field cleared and no message | `templates/account/link_psn.html` | fixed: `fix/link-psn-form-errors` |
 | FV-03 | High | The first arrival does not pay off: the finale promises a Pursuer and shows tier counts; the lobby says "Welcome back" to a first-timer and buries Career, Collection and claimable contracts | `templates/home/_hero_syncing.html`, `templates/trophies/home.html` | open, revisit after the Daily loop review |
 | FV-04 | Medium | Sign up has four names, log in has two | See below | open |
 | FV-05 | Medium | The landing offers two first steps ("Start tracking" and "Create a free account") and never explains the difference | `templates/home/landing.html` | open |
@@ -32,6 +32,7 @@ Status values: `open`, `planned` (branch named), `fixed` (commit or PR), `won't 
 | FV-16 | Low | The landing's badge section renders its heading and button over an empty shelf when the showcase is empty (cold cache, or a failure's negative cache) | `templates/home/landing.html`, `core/services/landing_service.py` | open |
 | FV-17 | Low | Forgot password lacks the logo header the other auth pages carry | `templates/account/password_reset.html` | open |
 | FV-18 | Low | At 320px the landing eyebrow wraps to two lines and strands its tick on the left | `templates/home/landing.html` (`.land-eyebrow`) | open |
+| FV-19 | Low | **Latent bug**, found while fixing FV-02: if starting verification raises, step 2 re-renders without `verification_code` or `profile`, so the hunter sees an empty code box. The step 1 exception message also reads "An error occured" | `trophies/views/profile_views.py` (`LinkPSNView.post`, the `verify` branch's `except Exception`) | open |
 
 ### FV-01: two design generations
 

@@ -1,5 +1,6 @@
 import logging
 from django import forms
+from django.core.validators import MaxLengthValidator
 from django.db.models import Q
 from trophies.models import Profile, UserConceptRating, Concept, ProfileGame
 
@@ -470,7 +471,13 @@ class GuideSearchForm(forms.Form):
 class LinkPSNForm(forms.Form):
     psn_username = forms.CharField(
         max_length=16,
-        validators=Profile._meta.get_field('psn_username').validators,
+        # The model field's validators already include its own MaxLengthValidator, which
+        # `max_length` above adds again: copied whole, an over-long name showed the same
+        # error twice once link_psn.html started printing field errors.
+        validators=[
+            v for v in Profile._meta.get_field('psn_username').validators
+            if not isinstance(v, MaxLengthValidator)
+        ],
         help_text="Enter your exact PSN Online ID (3-16 characters, letters, numbers, hypens or underscores).",
         widget=forms.TextInput(attrs={'class': 'input w-full', 'placeholder': 'Your PSN Username'}),
     )

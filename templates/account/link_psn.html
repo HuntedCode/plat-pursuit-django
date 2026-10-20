@@ -70,11 +70,21 @@
                         <input id="id_psn_username"
                                type="text"
                                name="psn_username"
+                               value="{{ form.psn_username.value|default_if_none:'' }}"
                                class="input input-bordered input-sm md:input-md w-full"
                                placeholder="Your PSN Online ID"
                                maxlength="16"
                                autocomplete="off"
+                               {% if form.psn_username.errors %}aria-invalid="true" aria-describedby="psn-username-error"{% endif %}
                                required>
+                        {% comment %} The view re-renders this step with the bound form when the
+                        name fails validation. Without this block (and the value above) an invalid
+                        name reloaded the page cleared, with no message at all. {% endcomment %}
+                        {% if form.psn_username.errors %}
+                        <div id="psn-username-error" class="alert alert-error text-sm mt-1" role="alert">
+                            {{ form.psn_username.errors }}
+                        </div>
+                        {% endif %}
                     </div>
                     <button type="submit" class="btn btn-primary btn-sm md:btn-md w-full">Continue</button>
                 </form>
