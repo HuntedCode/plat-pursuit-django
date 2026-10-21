@@ -550,6 +550,8 @@ Logs PSN API calls for token monitoring: endpoint, status code, response time, r
 ### CustomUser
 Extends Django's AbstractUser with email-based authentication. Key fields: `stripe_customer_id`, `paypal_subscription_id`, `subscription_provider` (stripe/paypal), `premium_tier`, `user_timezone`, `email_preferences` (JSON). (`default_region` was deleted 2026-08: zero consumers.) The `is_premium()` method checks subscription status against both Stripe and PayPal.
 
+It still carries AbstractUser's unique `username` column, though nothing signs in with it. Leaving it empty works once, then the next empty one breaks the unique constraint. Signup fills it through allauth, the admin's "Add user" form (`users.forms.AdminAddUserForm`) calls the same allauth `populate_username`, and `UserFactory` uses a sequence. `UserManager.create_user` (and so `manage.py createsuperuser`) does not, so a second account made that way collides with the first.
+
 Key relationships:
 - Reverse: `profile` OneToOne from Profile
 
