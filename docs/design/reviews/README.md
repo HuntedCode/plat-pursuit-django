@@ -78,7 +78,8 @@ one of these branches (its status row names it). Run in this order:
 | 2 | DaisyUI split (`refactor/daisyui-split`) | SW-01 | Status colours read the `--pp-*` tokens; the kept / retired / pending table in design-system.md; `pp-cta` sizes, `--bare` and `--icon`; `btn`, `badge`, `tabs` retired behind `tests/engine/test_retired_daisyui.py`. Done |
 | 3 | Site-wide noise (`feature/ui/site-wide-noise`) | SW-02 (FV-10, DL-06), FV-11, DL-10, FV-15 | Quiet scroll-up back-to-top; `.pp-notice` / `.pp-toast` with one messages renderer; `alert` and `toast` retired behind the guard; Premium and NEW wait for a linked PSN. Done |
 | 3a | Review leftovers (`fix/review-leftovers`) | SW-03, SW-04, the SW-01 leftovers | Two dead scripts and the dead-CSS sweep; phase pills on `.bd-chip`; back-to-top steps aside for toasts; pins for branch 3's two unpinned fixes. Done |
-| 4 | Career + first arrival | FV-03, FV-12, DL-01, DL-02, DL-03, DL-04, DL-09 | Design pass first |
+| 3b | Pursuer Level from 1 (`feature/gamification/pursuer-level-from-one`) | DL-04 | The owner chose to redefine the level rather than restyle it: it counts levels gained, so a newcomer is 1. Ranks and Ascent rungs moved down 25; a backfill command moves the stored copies. Its own branch because it changes stored numbers. Done |
+| 4 | Career + first arrival | FV-03, FV-12, DL-01, DL-02, DL-03, DL-09 | Design pass first |
 | 5 | Onboarding rebuild | FV-01, FV-07, FV-08, FV-09 step-2 help, FV-13, FV-20 | Design pass first; auth, link PSN and the sync card as one flow, with the house form fields that retire DaisyUI `input` / `select` / `textarea` / `checkbox` / `toggle` |
 | 6 | Contracts board | DL-05, DL-07, DL-08 | |
 | 7 | Landing | FV-05, FV-06 | |
@@ -86,11 +87,12 @@ one of these branches (its status row names it). Run in this order:
 Career comes before onboarding because every hunter hits Career on every visit, while onboarding
 happens once per hunter.
 
-**Owner decisions still open:** what level a newcomer sees (DL-04); whether sign up keeps "confirm
+**Owner decisions still open:** whether sign up keeps "confirm
 email" and "confirm password" (FV-07); whether the landing keeps "Start tracking" without an account as
 a first step (FV-05); and whether the abstract cover fan stays (FV-14, shared with the badge how-to).
 Decided: the action names are **Sign in / Sign up / Sign out**, sentence case (FV-04, pinned by
-`tests/engine/test_action_names.py`).
+`tests/engine/test_action_names.py`). A newcomer is **Pursuer Level 1**: the level counts levels gained,
+with ranks and rungs moved down 25 and no announcement (DL-04, 2026-10-21).
 
 ## How a review is run
 

@@ -3,8 +3,8 @@
 FLAT, CAP-LESS curve: every level costs the same `JOB_XP_PER_LEVEL`, and there is no cap --
 the level number climbs forever (the open-ended endgame). 1-based: every job starts at
 level 1 with 0 XP (the floor, so a fresh Pursuer already "is" all 24 jobs rather than a
-wall of locked ones). Pursuer Level = sum of a profile's per-job levels ACROSS THE WHOLE catalogue (untouched jobs
-count at their level-1 floor; see contract_service.pursuer_level_from).
+wall of locked ones). Pursuer Level = 1 + every job level GAINED (each job's level - 1), so a newcomer
+is level 1 and adding a job to the catalogue changes nobody's level; see contract_service.gained_levels.
 
 Why flat: XP is fully fungible, so any modifier behaves consistently at every level -- a
 double-XP event always doubles levels gained, a quest's +N XP is always worth the same
@@ -82,7 +82,7 @@ def tier_for_level(level: int) -> dict:
     return {'key': chosen[1], 'name': chosen[2], 'min_level': chosen[0], 'next_level': next_level}
 
 
-# --- Pursuer rank: the account-wide standing on the SUM of element levels ---------
+# --- Pursuer rank: the account-wide standing on the Pursuer Level (levels gained) ---
 # A long, military-flavored ladder (named tier + Roman-numeral division, V -> I) that the
 # single Pursuer Level climbs. There is ONE Pursuer per account, so unlike the per-element
 # tiers this ladder is deliberately deep -- a fresh thing to reach toward for the long haul.
@@ -95,26 +95,30 @@ PURSUER_DIVISIONS = 5
 _PURSUER_NUMERALS = ['V', 'IV', 'III', 'II', 'I']  # index 0 = entry (V) ... index 4 = top (I)
 
 # (min_level, key, name, has_divisions), ascending by min_level. Thresholds are anchored on
-# GAMES completed (Pursuer Level ~= 25 floor + 2 per game): Recruit @ ~5 games, Hunter @ ~45,
-# Warden @ ~140, ... Ascendant @ ~1,000 games. Fast early promotions (a division every ~3
-# games), an aspirational apex. See the games->level table in xp-economy.md.
+# GAMES completed (Pursuer Level ~= 1 + 2 per game, since it counts levels GAINED): Recruit @ ~5
+# games, Hunter @ ~45, Warden @ ~140, ... Ascendant @ ~1,000 games. Fast early promotions (a
+# division every ~3 games), an aspirational apex. See the games->level table in xp-economy.md.
+# Moved down 25 in 2026-10 when the level stopped counting the 25 held starting levels (it was
+# "25 floor + 2 per game"): one level more generous than the exact 24, for round numbers, so no
+# hunter lost a rank. Newbie starts at 1, the level every Pursuer starts at, so the rank table
+# never shows a level nobody can hold.
 PURSUER_RANKS = [
-    (0,    'newbie',     'Newbie',     False),  # floor (~0 games)
-    (35,   'recruit',    'Recruit',    True),   # ~5 games
-    (65,   'seeker',     'Seeker',     True),   # ~20
-    (115,  'hunter',     'Hunter',     True),   # ~45
-    (195,  'ranger',     'Ranger',     True),   # ~85
-    (305,  'warden',     'Warden',     True),   # ~140
-    (465,  'marshal',    'Marshal',    True),   # ~220
-    (685,  'vanquisher', 'Vanquisher', True),   # ~330
-    (985,  'paragon',    'Paragon',    True),   # ~480
-    (1405, 'luminary',   'Luminary',   True),   # ~690
-    (2025, 'ascendant',  'Ascendant',  False),  # ~1,000 games (open-ended apex)
+    (1,    'newbie',     'Newbie',     False),  # where everyone starts (~0 games)
+    (10,   'recruit',    'Recruit',    True),   # ~5 games
+    (40,   'seeker',     'Seeker',     True),   # ~20
+    (90,   'hunter',     'Hunter',     True),   # ~45
+    (170,  'ranger',     'Ranger',     True),   # ~85
+    (280,  'warden',     'Warden',     True),   # ~140
+    (440,  'marshal',    'Marshal',    True),   # ~220
+    (660,  'vanquisher', 'Vanquisher', True),   # ~330
+    (960,  'paragon',    'Paragon',    True),   # ~480
+    (1380, 'luminary',   'Luminary',   True),   # ~690
+    (2000, 'ascendant',  'Ascendant',  False),  # ~1,000 games (open-ended apex)
 ]
 
 
 def pursuer_rank_for_level(level: int) -> dict:
-    """The account-wide Pursuer rank for a Pursuer Level (the sum of every element level).
+    """The account-wide Pursuer rank for a Pursuer Level (1 + every element level gained).
 
     Returns {key, name, division, division_roman, label, min_level, next_level, next_label,
     levels_to_next}. `division` is 1-5 (1 = top of the tier, the 'I') for the divisioned

@@ -144,8 +144,8 @@ JOB_XP_PER_LEVEL = 3000        # FLAT, CAP-LESS curve: every job level costs thi
 #: payout, which the hunter claims separately. Under the flat curve it is exactly two job levels every
 #: time, which is the property that makes it legible to a hunter ("two levels a slot").
 #:
-#: A full 25-slot run therefore pays 150,000 bonus XP, i.e. 50 job levels, and Pursuer Level is the
-#: sum of per-job levels. That is a deliberate, owner-approved amount, not an oversight -- but it is
+#: A full 25-slot run therefore pays 150,000 bonus XP, i.e. 50 job levels, and Pursuer Level counts
+#: every job level gained, so +50 Pursuer Levels. That is a deliberate, owner-approved amount, not an oversight -- but it is
 #: the reason to model a change here with `report_xp_economy` before shipping one.
 CHALLENGE_SLOT_JOB_XP = 6000
 

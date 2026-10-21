@@ -1169,17 +1169,15 @@ instead of a visible failure, which is the shape of every N+1 this project has h
   and `discipline_ring` handles the all-zero case as an even split rather than five zero-length arcs.
   **`pursuer_card_service` still carries the strongest-family version and so still carries the bug** — dormant,
   since that component renders nowhere but a staff preview. Whoever re-mounts it should fix it on the way in.
-- **The level floor must match `pursuer_level_from`, and it has to apply to the *headline* too.** An
-  untouched job is level 1, not 0, and `contract_service` records what happens when two surfaces disagree:
-  the Career XP board and the hunter's own Career page showed different levels for the same hunter. The band
-  floors per discipline for that reason — and the first cut floored the band while defaulting the Pursuer
-  Level itself to `0`, so a hunter with no standing row read **Lv 0** here and **Lv 25** on their own Career
-  page, with the plaque contradicting itself on one row (five families averaging 1.0 across a 25-job
-  catalogue, beside a headline of zero). Two independent audits put that first. `floor_level` now goes
-  through the shared helper.
+- **The level must come from the shared helper, and it has to apply to the *headline* too.** `contract_service`
+  records what happens when two surfaces disagree: the Career XP board and the hunter's own Career page
+  showed different levels for the same hunter. The first cut defaulted the Pursuer Level to `0` for a hunter
+  with no standing row, so the plaque read **Lv 0** beside their Career page's real level; two independent
+  audits put that first. `start_level` now comes from `pursuer_level_from(None)` (level 1 since the 2026-10
+  levels-gained rule). The band's per-discipline AVERAGES still floor untouched jobs at level 1, as the
+  Career page does; the ring's arcs count levels gained, as the Career hero's do.
 - **The per-discipline job count is data, not five.** `DISCIPLINE_LABELS` fixes the five disciplines, but how
-  many jobs sit in each is a staff-editable catalogue and it is the denominator of both the floor and the
-  average. Hard-coding it would be right today and silently wrong after one catalogue edit.
+  many jobs sit in each is a staff-editable catalogue and it is the denominator of the average. Hard-coding it would be right today and silently wrong after one catalogue edit.
 - **A-Z runs pay no job XP, so the "job XP from this run" line is Job Coverage only.** `redeemable_slots` gates
   on the type, so the per-square bonus belongs to that side even when one platinum advanced both boards. An
   unclaimed jobs run is zero, and zero omits the line rather than printing `+0`, which would read as a failed

@@ -40,7 +40,7 @@ def test_frac_into_level_is_the_within_band_fraction():
 
 
 def test_ranks_crossed_excludes_the_floor():
-    keys = [k for _lvl, k, _n, _d in ranks_crossed(25, 200)]
+    keys = [k for _lvl, k, _n, _d in ranks_crossed(1, 200)]   # from a newcomer's level 1
     assert 'newbie' not in keys and 'recruit' in keys and 'ranger' in keys
 
 

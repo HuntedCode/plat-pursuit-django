@@ -50,14 +50,15 @@ is a four-place edit.
     to an accessible name that is already long -- on the Hall of Fame the whole row is one `<a>`. The same
     numbers are visible text in Career's legend, which is the surface built to be read rather than scanned.
 
-    `{% templatetag openvariable %} f.total {% templatetag closevariable %}` is the discipline's summed
-    level, floored -- the same figure Career's legend prints, not the average.{% endcomment %}
+    `{% templatetag openvariable %} f.total {% templatetag closevariable %}` is the levels gained in that
+    discipline -- what it adds to the Pursuer Level, and the same figure Career's legend prints, not the
+    average. The five add up to the centre number less the 1 every Pursuer starts at.{% endcomment %}
     {% for f in ring %}
     {% with pd=f.total|stringformat:"d"|length %}
     <div class="lab-dna__peek" data-disc="{{ f.slug }}" aria-hidden="true"
          style="--disc: var(--disc-{{ f.slug }});">
-        {% comment %}THE SAME DIGIT RUNGS THE CENTRE USES (`--d3` .. `--d6`), because a discipline's summed
-        level is open-ended -- `leveling.py` calls the curve "FLAT, CAP-LESS" -- and the first cut applied
+        {% comment %}THE SAME DIGIT RUNGS THE CENTRE USES (`--d3` .. `--d6`), because a discipline's levels
+        gained are open-ended -- `leveling.py` calls the curve "FLAT, CAP-LESS" -- and the first cut applied
         them to the Pursuer Level only, so a four-figure total would have been drawn at the one-figure size
         and spilled the hole. Same `stringformat` idiom, so the two stay in step.{% endcomment %}
         <span class="lab-dna__level lab-dna__level--peek lab-dna__level--d{{ pd }} pp-tally">{{ f.total }}</span>

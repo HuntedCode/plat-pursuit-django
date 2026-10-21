@@ -539,8 +539,8 @@ def test_a_job_with_no_row_yet_survives_a_concurrent_revoke():
     _reconcile('c-lockcover', '--apply')
 
     assert (ProfileJobXP.objects.filter(profile=profile).count()
-            == contract_service.catalogue_job_count()), 'the catalogue was not materialized'
+            == Job.objects.count()), 'the catalogue was not materialized'
     assert _banked(profile) == 0
-    # The floored rows are the hunter's true state, so Pursuer Level is unchanged by materializing.
+    # The materialized rows have gained nothing, so the hunter is back to the starting level.
     assert (ProfileCareerStanding.objects.get(profile=profile).pursuer_level
-            == contract_service._pursuer_level(profile))
+            == contract_service._pursuer_level(profile) == 1)

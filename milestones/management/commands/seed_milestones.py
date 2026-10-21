@@ -49,12 +49,13 @@ CATALOG = [
     {
         'slug': 'pursuer-ascent', 'name': 'Pursuer Ascent', 'icon': 'trending-up',
         'accent': '#f97316',
-        'description': 'Your total Pursuer Level across every job.',
+        'description': 'Your Pursuer Level: every job level you have gained.',
         'metric': 'pursuer_level', 'category': 'Trophy Hunting', 'sort_order': 50,
-        # PLACEHOLDER — flat + cap-less curve. A fresh linked account already sits at ~25 (every job floored
-        # at level 1), so the first rung MUST clear the baseline or everyone auto-earns it. Calibrate vs. the
-        # real level distribution.
-        'tiers': [40, 75, 150, 250, 400, 600, 850, 1200, 1600, 2000],
+        # PLACEHOLDER: flat + cap-less curve. Calibrate vs. the real level distribution. Moved down 25 in
+        # 2026-10 with the Pursuer ranks, when the level stopped counting the 25 held starting levels (a
+        # newcomer is 1, not 25), so nobody lost a rung. Re-running this command updates the thresholds
+        # and keeps every earned tier.
+        'tiers': [15, 50, 125, 225, 375, 575, 825, 1175, 1575, 1975],
     },
     {
         'slug': 'time-invested', 'name': 'Time Invested', 'icon': 'clock',

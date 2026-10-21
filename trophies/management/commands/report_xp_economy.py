@@ -27,6 +27,7 @@ from collections import Counter, defaultdict
 
 from django.core.management.base import BaseCommand
 
+from trophies.services.contract_service import pursuer_level_from
 from trophies.services.job_detection import simulate_stage_jobs, CATALOG_ORDER
 from trophies.util_modules.constants import (CHALLENGE_SLOT_JOB_XP, CONTRACT_XP_TOTAL,
                                              JOB_XP_PER_LEVEL)
@@ -74,7 +75,7 @@ class Command(BaseCommand):
                 feed[slug] += 1
 
         levels = {slug: _level(int(supply.get(slug, 0)), k) for slug in CATALOG_ORDER}
-        pursuer_level = sum(levels.values())                       # all 25 jobs, min level 1
+        pursuer_level = pursuer_level_from(sum(lv - 1 for lv in levels.values()))  # levels gained
         lv_sorted = sorted(levels.values())
         tier_counts = Counter(tier_for_level(lv)['name'] for lv in levels.values())
 
@@ -95,7 +96,7 @@ class Command(BaseCommand):
 
         w('')
         w(head('Aggregate (a completionist who has done every stage)'))
-        w(f'  Pursuer Level (sum of 25 job levels):  {pursuer_level:>6,}')
+        w(f'  Pursuer Level (1 + levels gained):     {pursuer_level:>6,}')
         w(f'  Job level  min / median / max:         {lv_sorted[0]} / {lv_sorted[len(lv_sorted)//2]} / {lv_sorted[-1]}')
         w('  Tier mix (jobs per tier):              ' +
           ', '.join(f'{name} {tier_counts.get(name, 0)}' for _, _, name in JOB_TIERS if tier_counts.get(name)))
@@ -115,8 +116,9 @@ class Command(BaseCommand):
             w(f'  Job levels bought per job:             {per_job // k:>6,}'
               f'   (a square is {slot_xp / k:g} levels)')
             w(f'  Pursuer Level, contracts only:         {pursuer_level:>6,}')
-            w(f'  Pursuer Level, with the bonus:         {sum(bonus_levels.values()):>6,}'
-              f'   (+{sum(bonus_levels.values()) - pursuer_level:,})')
+            bonus_pursuer = pursuer_level_from(sum(lv - 1 for lv in bonus_levels.values()))
+            w(f'  Pursuer Level, with the bonus:         {bonus_pursuer:>6,}'
+              f'   (+{bonus_pursuer - pursuer_level:,})')
 
         w('')
         w(head('Tier ladder  (level -> XP -> ~genre completions at T/2 each)'))

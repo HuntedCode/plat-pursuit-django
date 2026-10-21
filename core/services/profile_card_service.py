@@ -19,6 +19,7 @@ import logging
 
 from trophies.models import BadgeSeries, EarnedTrophy, GroupBadge, UserGroupBadge
 from trophies.services import career_service, profile_stats_service
+from trophies.services.contract_service import pursuer_level_from
 from trophies.services.badge_detail_service import group_medallion_layers
 from users.services.marks import mark_style
 
@@ -200,7 +201,7 @@ def get_card_data(profile):
         'rarest_plat': rarest_plat,
         'latest_plat': latest_plat,
 
-        'pursuer_level': hero.get('pursuer_level') or 0,
+        'pursuer_level': hero.get('pursuer_level') or pursuer_level_from(None),   # never below 1
         'rank_label': (hero.get('pursuer_rank') or {}).get('label', ''),
         'ring': ring,
         'top_job': top_job,

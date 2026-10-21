@@ -46,7 +46,7 @@ claimed:
 
 1. the career standings -- Pursuer Level and Career XP -- for every profile on the page. NOT the rank:
    that is not a stored column, it is derived from the level in Python by `pursuer_rank_for_level`;
-2. the job catalogue's shape -- how many jobs each discipline holds, which the level floor needs;
+2. the job catalogue's shape -- how many jobs each discipline holds, which the averages need;
 3. one aggregate over `ProfileJobXP` for every profile on the page, grouped by discipline;
 4. the count of redeemed slots per run, for the job XP the run itself paid.
 
@@ -64,17 +64,16 @@ from django.db.models import Count, Sum
 
 from challenges.models import CHALLENGE_TYPE_JOBS, ChallengeSlot
 from trophies.models import Job, ProfileCareerStanding, ProfileJobXP
-from trophies.services.contract_service import pursuer_level_from
+from trophies.services.contract_service import gained_levels, pursuer_level_from
 from trophies.services import job_render
 from trophies.services.job_render import DISCIPLINE_LABELS
 from trophies.util_modules.constants import CHALLENGE_SLOT_JOB_XP
 from trophies.util_modules.leveling import pursuer_rank_for_level
 
-#: An untouched job sits at level 1, not 0. `contract_service.pursuer_level_from` carries the full argument
-#: ("PURSUER_RANKS is explicitly calibrated against the floored scale"), and the drift it records -- the
-#: Career XP board and the hunter's own Career page disagreeing about one hunter's level -- came from
-#: summing the rows that exist instead of flooring across the catalogue. The band below has to floor the
-#: same way or a hunter reads one average here and another on their Career page.
+#: An untouched job sits at level 1, not 0. Only the per-discipline AVERAGE below uses it: the Career page
+#: averages held levels with every untouched job at 1, and the band has to average the same way or a hunter
+#: reads one average here and another there. The Pursuer Level and the ring count levels GAINED instead
+#: (`contract_service.gained_levels`), where an untouched job adds nothing.
 UNTOUCHED_JOB_LEVEL = 1
 
 #: How hard the plaque's chrome leans on the hunter's rank colour. FOUR INTENSITIES, NOT ELEVEN: the exact
@@ -124,8 +123,8 @@ def plaques_for(challenges):
 
     Returning nothing for them would make the plaque's whole lower half vanish for exactly the hunters most
     likely to have finished an A-Z run off the back of the history importer, and it would do it silently,
-    because Django templates swallow missing keys. The level such a hunter gets is the CATALOGUE FLOOR, not
-    zero -- see `floor_level` below, which is the defect two audits independently put first.
+    because Django templates swallow missing keys. The level such a hunter gets is the starting level, 1, not
+    zero -- see `start_level` below.
     """
     challenges = list(challenges)
     run_ids = [c.pk for c in challenges]
@@ -146,7 +145,7 @@ def plaques_for(challenges):
     # ── 2. the catalogue's shape: how many jobs each discipline holds.
     #
     # READ, NOT ASSUMED. `DISCIPLINE_LABELS` fixes the five disciplines, but how many jobs sit in each is
-    # data -- staff add jobs -- and it is the denominator of both the floor and the average. Hard-coding
+    # data -- staff add jobs -- and it is the denominator of the average. Hard-coding
     # "five per discipline" would be right today and silently wrong after one catalogue edit, reporting a
     # level average that no longer matches the Career page's.
     catalogue = {
@@ -159,7 +158,7 @@ def plaques_for(challenges):
         ProfileJobXP.objects
         .filter(profile_id__in=profile_ids)
         .values('profile_id', 'job__discipline')
-        .annotate(level_sum=Sum('level'), row_count=Count('job_id'))
+        .annotate(level_sum=Sum('level'), row_count=Count('job_id'), gained=gained_levels())
     )
     by_profile = {}
     for row in rows:
@@ -191,41 +190,20 @@ def plaques_for(challenges):
         .annotate(n=Count('pk'))
     }
 
-    # THE FLOOR FOR A HUNTER WITH NO STANDING ROW, and getting this wrong was the worst defect in the first
-    # cut of this file. `or 0` looks like the obvious default and is the one number it cannot be: a hunter
-    # has a level in every job from the moment they exist, so `pursuer_level_from(None, None, 25)` is **25**,
-    # and their own Career page says Lv 25 while the plaque said Lv 0.
-    #
-    # IT IS EXACTLY THE DRIFT `UNTOUCHED_JOB_LEVEL`'s comment above exists to prevent -- "summing the rows
-    # that exist instead of flooring across the catalogue" -- which `_families` was careful about and this
-    # line was not. Worse, the plaque contradicted ITSELF on one row: the band reported all five families
-    # averaging level 1.0 across a 25-job catalogue (i.e. 25) directly beside a headline reading Lv 0.
-    #
-    # COSTS NOTHING: the catalogue is already in hand from query 2, and `pursuer_level_from` is the shared
-    # helper both other surfaces go through, so this is the same expression rather than a parallel one.
-    # SUMMED OVER THE FIVE REAL DISCIPLINES, which matters because `Job.discipline` has `choices` but no DB
-    # constraint: a badly-seeded row outside the five would otherwise put a job in the Pursuer Level that
-    # `build_profile_jobs` cannot display and the ring below does not include.
-    #
-    # THE SAME SCOPE `contract_service.catalogue_job_count()` USES, and an earlier version of this comment
-    # claimed the opposite -- that the helper "counts the whole table", which it does not: it filters
-    # `discipline__in=Job.DISCIPLINES` and its own docstring says "Scoped to the five real disciplines".
-    # The inversion was self-falsifying inside this branch, since
-    # `test_a_hunter_with_no_career_standing_still_gets_a_plaque` computes its expectation THROUGH that
-    # helper and passes -- which only holds because the two denominators agree.
-    #
-    # Re-derived from `catalogue` rather than calling it, for the one reason that does hold: the rows are
-    # already in hand, so calling it would be a fifth query for a number this dict already contains.
-    floor_level = pursuer_level_from(None, None, sum(catalogue.get(slug, 0) for slug in DISCIPLINE_LABELS))
+    # THE STARTING LEVEL FOR A HUNTER WITH NO STANDING ROW. `or 0` looks like the obvious default and is the
+    # one number it cannot be: a hunter is Pursuer Level 1 from the moment they exist, so their own Career
+    # page says Lv 1 and the plaque must too. Through the shared helper rather than a literal 1, so a
+    # change to the definition reaches this surface as well.
+    start_level = pursuer_level_from(None)
 
     out = {}
     for challenge in challenges:
         standing = standings.get(challenge.profile_id) or {}
         # `.get(...) is None` RATHER THAN `or`: a stored level of 0 is not the same as no row, and `or` would
-        # silently promote a real zero to the floor. A stored 0 should not happen (every writer goes through
-        # `pursuer_level_from`), which is precisely why it must not be papered over if it ever does.
+        # silently promote a real zero to the starting level. A stored 0 should not happen (every writer goes
+        # through `pursuer_level_from`), which is precisely why it must not be papered over if it ever does.
         stored = standing.get('pursuer_level')
-        level = floor_level if stored is None else stored
+        level = start_level if stored is None else stored
         rank = pursuer_rank_for_level(level)
         out[challenge.pk] = {
             'rank': rank,
@@ -283,12 +261,12 @@ def _ring(disc_rows, catalogue):
         row = disc_rows.get(slug) or {}
         level_sum = row.get('level_sum') or 0
         row_count = row.get('row_count') or 0
-        # The floor, applied exactly as `pursuer_level_from` does: every job the hunter has no row for still
-        # counts at level 1. `max(..., 0)` for the same reason it carries one -- a catalogue edit in flight
-        # must not produce a negative term.
+        # The average floors every job the hunter has no row for at level 1, as the Career page does.
+        # `max(..., 0)` so a catalogue edit in flight cannot produce a negative term.
         floored = level_sum + max(n_jobs - row_count, 0) * UNTOUCHED_JOB_LEVEL
         averages[slug] = round(floored / n_jobs, 1)
-        totals[slug] = floored
+        # The arcs are levels GAINED, the quantity the Pursuer Level counts (see `career_service`).
+        totals[slug] = row.get('gained') or 0
 
     # THE FIVE-FULL-BARS PROBLEM DOES NOT ARISE HERE, and it is worth saying why rather than leaving the
     # guard's absence to look like an omission. The bespoke band scaled each family against the hunter's
@@ -297,9 +275,9 @@ def _ring(disc_rows, catalogue):
     # of everything on the one page built to display mastery. (Reachable: an A-Z run completed through the
     # history importer pays no job XP.)
     #
-    # The ring scales each arc against the SUM instead, so five equal floors are five equal arcs -- which is
-    # the truth, and what the Career hero already shows those hunters. `discipline_ring` handles the
-    # all-zero case explicitly as an even split rather than as five zero-length arcs.
+    # The ring scales each arc against the SUM instead, and a hunter who has gained nothing anywhere has a sum
+    # of zero, which `discipline_ring` draws explicitly as an even split rather than as five zero-length
+    # arcs -- what the Career hero already shows those hunters.
     #
     # THE ABANDONED PURSUER CARD STILL CARRIES THE BUG, dormant. `pursuer_card_service` computes its
     # `bar_pct` unconditionally and `_pursuer_card.html` gates only on a truthy five-element list, so a
@@ -312,8 +290,8 @@ def _ring(disc_rows, catalogue):
             'slug': slug,
             'label': label,
             'avg': averages[slug],
-            # `total` IS WHAT THE ARCS ARE PROPORTIONED BY -- this discipline's floored share of the Pursuer
-            # Level, the same figure `career_service` hands the helper. The ring reads `slug`, `dash` and
+            # `total` IS WHAT THE ARCS ARE PROPORTIONED BY -- this discipline's levels gained, the same figure
+            # `career_service` hands the helper. The ring reads `slug`, `dash` and
             # `offset` for the arcs and `total`, `short` and `label` for the hover peek; `avg` is the one key
             # no host renders, kept only because `career_service` supplies it and the two producers' key
             # sets are deliberately identical. (An earlier comment said the ring reads only the first

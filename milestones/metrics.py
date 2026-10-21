@@ -81,15 +81,11 @@ def _total_badges_earned(profile) -> int:
 def _pursuer_level(profile) -> int:
     """Pursuer Level -- delegated, NOT reimplemented.
 
-    This used to be a bare `Sum(ProfileJobXP.level)`, which is a different number: a row is only
-    materialized once a job is paid, so summing the rows misses the level-1 floor every untouched
-    job carries. The "Pursuer Ascent" tiers were calibrated the other way -- seed_milestones says
-    so outright ("A fresh linked account already sits at ~25 ... the first rung MUST clear the
-    baseline") -- so measuring unfloored made every rung ~25 levels too expensive, permanently,
-    since EarnedMilestoneTier rows are never deleted.
-
-    `contract_service._pursuer_level` is the same bounded 2-query aggregate, and routing through it
-    is what keeps this surface from drifting from the Career page and the leaderboard again."""
+    This once had its own `Sum(ProfileJobXP.level)`, a different number from the Career page's, and
+    the "Pursuer Ascent" rungs are calibrated on the Career page's definition. Because
+    EarnedMilestoneTier rows are never deleted, a metric that drifts from the rungs' scale mis-awards
+    permanently. `contract_service._pursuer_level` is the same bounded aggregate every other surface
+    reads, which is what keeps this one from drifting from the Career page and the leaderboard."""
     from trophies.services.contract_service import _pursuer_level as pursuer_level
     return pursuer_level(profile)
 

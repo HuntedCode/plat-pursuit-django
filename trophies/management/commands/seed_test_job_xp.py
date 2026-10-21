@@ -37,7 +37,7 @@ class Command(BaseCommand):
         parser.add_argument('--profile-id', type=int, default=3)
         parser.add_argument('--clear', action='store_true', help='Remove all seeded job XP for the profile.')
         parser.add_argument('--scale', type=float, default=1.0,
-                            help='Multiply every seeded level (default 1 ~= Pursuer Level 736). '
+                            help='Multiply every seeded level (default 1 ~= Pursuer Level 712). '
                                  'Try ~2 for a 4-digit ring, ~14 for 5-digit.')
 
     def handle(self, *args, **options):

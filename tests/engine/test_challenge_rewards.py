@@ -327,8 +327,8 @@ def test_a_redeem_logs_every_pursuer_rank_it_crosses():
     starts from the already-raised level. The Career hero reads these rows, so the hunter is left with
     blank dates on rungs they really did cross.
 
-    FIVE SQUARES, not one: a single square is two job levels and lands a fresh hunter on Pursuer 27, which
-    crosses nothing (Recruit is 35). Five reaches exactly 35.
+    FIVE SQUARES, not one: a single square is two job levels and lands a fresh hunter on Pursuer 3, which
+    crosses nothing (Recruit is 10). Four reach 9; five reach 11, the fewest that cross it.
     """
     from trophies.models import ProgressionMilestone
 

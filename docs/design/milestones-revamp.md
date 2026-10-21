@@ -201,7 +201,7 @@ ceilings deliberately and space the intermediate rungs to reach 10.
 | **Trophy Collector** | `lifetime_trophies` *(fixed 60k)* | 100, 500, 1000, 2500, 5000, 10000, 20000, 35000, 50000, **60000** |
 | **Completionist** | `full_completions` (100%) | 1, 5, 10, 25, 50, 100, 250, 500, 750, **1000** |
 | **Badge Collector** | `total_badges_earned` | 1, 5, 10, 25, 50, 100, 150, 250, 375, **500** ⚠ tune vs badge catalogue |
-| **Pursuer Ascent** | `pursuer_level` = `contract_service._pursuer_level` (per-job levels **plus the level-1 floor for untouched jobs**) | ⚠ calibrate (cap-less curve; the ~25 baseline is REAL, not nonzero-by-accident) |
+| **Pursuer Ascent** | `pursuer_level` = `contract_service._pursuer_level` (**1 + every job level gained**; a newcomer is 1) | ⚠ calibrate (cap-less curve; rungs moved down 25 in 2026-10 with the level's redefinition) |
 | **Time Invested** | `playtime_hours` *(fixed 20k)* | 10, 50, 100, 250, 500, 1000, 2500, 5000, 10000, **20000** |
 
 **Metrics needed** (all single-aggregate / whale-safe):
@@ -209,14 +209,15 @@ ceilings deliberately and space the intermediate rungs to reach 10.
 - `lifetime_trophies` — denorm `profile.total_trophies`
 - `full_completions` — denorm `profile.total_completes`
 - `total_badges_earned` — `UserGroupBadge.filter(profile=…).count()` (held group badges in the new subsystem, the same surface the Collection reads; NOT the legacy `ProfileGamification.total_badges_earned` tier count)
-- `pursuer_level` — delegates to `contract_service._pursuer_level`. **Not** a bare `aggregate(Sum('level'))`: a ProfileJobXP row only exists once a job is paid, so summing rows drops the level-1 floor every untouched job carries, and the Ascent rungs are calibrated on the floored scale. It was written unfloored, which made every rung ~25 levels too expensive and put this card at a different number from the Career page it links to.
+- `pursuer_level`: delegates to `contract_service._pursuer_level`, never its own aggregate. It once had one, which put this card at a different number from the Career page it links to, and since earned rungs are never deleted a drifted metric mis-awards permanently. Since 2026-10 the level counts levels GAINED (a newcomer is 1, not 25), and the rungs moved down 25 with it (re-run `seed_milestones`; tiers update in place by index, so earned history is kept).
 - `playtime_hours` — `Sum(ProfileGame.play_duration)` → hours
 
 **Two ladders to calibrate against real data before locking thresholds:**
 1. **Badge Collector** — depends on how many badges the catalogue can yield; 500 is a placeholder.
 2. **Pursuer Ascent** — the Pursuer Level curve is **flat + cap-less** (`util_modules/leveling.py`) and every
-   synced hunter starts with a nonzero baseline (~24 jobs floored at level 1), so the first rung must sit
-   above baseline and the ceiling is aspirational, not a hard cap. This one is In Flight (the level economy
+   synced hunter starts at level 1, so the first rung (15) sits just above it and the ceiling is
+   aspirational, not a hard cap. (Until 2026-10 the baseline was ~25 and the first rung 40, so a new
+   account started 62% of the way there and Ascent was everyone's "nearest" milestone.) This one is In Flight (the level economy
    is still settling) — calibrate the ladder once when we build, don't hard-guess now.
 
 **Supporter group (added):** two more milestones live under a light **"Supporter"** section (community + the

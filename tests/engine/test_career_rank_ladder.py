@@ -54,11 +54,11 @@ def test_eleven_ranks_and_only_the_middle_nine_have_divisions():
 
 
 def test_levels_to_counts_down_to_each_locked_rank_and_is_zero_once_reached():
-    table = pursuer_rank_table(100)   # Seeker
+    table = pursuer_rank_table(75)   # Seeker
     by_key = {t['key']: t for t in table['tiers']}
     assert by_key['seeker']['levels_to'] == 0 and by_key['seeker']['reached']
-    assert by_key['hunter']['levels_to'] == 115 - 100 and not by_key['hunter']['reached']
-    assert by_key['ascendant']['levels_to'] == APEX - 100
+    assert by_key['hunter']['levels_to'] == 90 - 75 and not by_key['hunter']['reached']
+    assert by_key['ascendant']['levels_to'] == APEX - 75
 
 
 # ── the page ────────────────────────────────────────────────────────────────────────────────────
@@ -68,7 +68,7 @@ def _climber():
     profile = ProfileFactory(is_linked=True)
     ProfileJobXP.objects.create(profile=profile, job=Job.objects.get(slug='gunslinger'), total_xp=60000, level=60)
     ProgressionMilestone.objects.create(
-        profile=profile, kind=ProgressionMilestone.PURSUER_RANK, key='recruit', name='Recruit', level_at=35,
+        profile=profile, kind=ProgressionMilestone.PURSUER_RANK, key='recruit', name='Recruit', level_at=10,
         reached_at=datetime(2026, 9, 3, 12, tzinfo=dt_tz.utc))
     return profile
 
@@ -135,10 +135,10 @@ def test_a_rank_logged_but_since_lost_says_how_far_off_it_is_not_reached():
     """A milestone outlives a drop in level (a reconcile can take XP back). The row follows the level."""
     from django.template.loader import render_to_string
 
-    table = pursuer_rank_table(100)   # Seeker: Hunter (115) not held
+    table = pursuer_rank_table(75)   # Seeker: Hunter (90) not held
     for t in table['tiers']:
         t['reached_at'] = datetime(2026, 9, 1, tzinfo=dt_tz.utc) if t['key'] == 'hunter' else None
-    html = render_to_string('trophies/partials/career/_rank_ladder.html', {'table': table, 'level': 100})
+    html = render_to_string('trophies/partials/career/_rank_ladder.html', {'table': table, 'level': 75})
     hunter = html[html.index('>Hunter<'):]
     assert hunter[:hunter.index('</p>')].endswith('15 levels to go')
 
@@ -156,3 +156,20 @@ def test_the_modal_closes_on_its_own_id_scoped_rule():
     css = (ROOT / 'static' / 'css' / 'components' / 'series-list.css').read_text(encoding='utf-8')
     assert '#rank-ladder.is-closing,' in css
     assert '#rank-ladder.is-closing .pp-detail-modal__dialog,' in css
+
+
+def test_a_newcomer_starts_at_newbie_level_1_where_every_pursuer_starts():
+    """Pursuer Level counts levels gained since 2026-10, so a hunter with nothing claimed is level 1, and
+    Newbie's row says so rather than printing a level nobody can hold."""
+    from django.template.loader import render_to_string
+
+    table = pursuer_rank_table(1)
+    for t in table['tiers']:
+        t['reached_at'] = None
+    html = render_to_string('trophies/partials/career/_rank_ladder.html', {'table': table, 'level': 1})
+    newbie = html[html.index('>Newbie<'):]
+    newbie = newbie[:newbie.index('</p>')]
+    assert 'Lv 1<' in newbie and 'Lv 0' not in html
+    assert newbie.endswith('Where every Pursuer starts')
+    recruit = html[html.index('>Recruit<'):]
+    assert recruit[:recruit.index('</p>')].endswith('9 levels to go')
