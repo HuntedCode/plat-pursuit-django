@@ -5,9 +5,9 @@ says where the link went, can send another, and can undo a mistyped address. All
 session record, so they only ever act on the account this browser just made or signed in to.
 
 WHO WRITES IT. The sign-up itself (`CustomAccountAdapter.save_user`, `created=True`), so the page knows
-the address even when allauth's rate limit skipped the email; and every confirmation email that really
-sends (`send_confirmation_mail`, which stamps `sent_at`), including the one a sign-in to an unconfirmed
-account triggers (`created=False`). A signed-in sender, such as staff resending from the admin, is never
+the address even when allauth's rate limit skipped the email; a sign-in to a different account
+(`pre_login`, `created=False`); and every confirmation email that really sends (`send_confirmation_mail`,
+which stamps `sent_at`), including the one a sign-in to an unconfirmed account triggers. A signed-in sender, such as staff resending from the admin, is never
 recorded. A completed sign-in clears it (`users/signals.py`), so a later visit does not show a stale
 address.
 
@@ -33,14 +33,24 @@ _DEFAULT_COOLDOWN_SECONDS = 180
 
 def resend_cooldown_seconds():
     """allauth's own `confirm_email` limit ("1/180s/key", from ACCOUNT_EMAIL_CONFIRMATION_COOLDOWN), read
-    rather than copied, so the wait the page shows is the wait allauth enforces."""
-    match = re.fullmatch(r'1/(\d+)s/key', str((allauth_settings.RATE_LIMITS or {}).get('confirm_email') or ''))
+    rather than copied, so the wait the page shows is the wait allauth enforces. No limit configured (a
+    cooldown of 0) means no wait."""
+    rate = (allauth_settings.RATE_LIMITS or {}).get('confirm_email')
+    if not rate:
+        return 0
+    match = re.fullmatch(r'1/(\d+)s/key', str(rate))
     return int(match.group(1)) if match else _DEFAULT_COOLDOWN_SECONDS
 
 
 def record_signup(request, user):
     """The sign-up just made `user`. `sent_at` stays empty until an email really goes."""
     request.session[SESSION_KEY] = {'user_id': user.pk, 'email': user.email, 'created': True, 'sent_at': None}
+
+
+def record_account(request, user):
+    """A sign-in to an account this browser did not just make (`CustomAccountAdapter.pre_login`): its address,
+    never fix-it. `sent_at` stays empty until an email really goes."""
+    request.session[SESSION_KEY] = {'user_id': user.pk, 'email': user.email, 'created': False, 'sent_at': None}
 
 
 def record_send(request, user, email, *, created):

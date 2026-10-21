@@ -477,3 +477,56 @@ def test_the_auth_scripts_keep_their_contracts():
     assert 'button.disabled = true' in countdown and 'button.disabled = false' in countdown
     assert "(input.closest('.pp-input-wrap') || input).after(meter)" in js
     assert "field.closest('.pp-input-wrap')" in js, 'the reveal button lives in the wrap'
+
+
+# ── the second audit's findings, pinned ───────────────────────────────────────────────────────
+
+def test_manage_email_addresses_still_says_the_link_went(client, mailoutbox):
+    """Dropping allauth's "Confirmation email sent" for visitors must not silence it for a signed-in hunter: on
+    Manage email addresses it is the only word that the re-send worked."""
+    profile = ProfileFactory(is_linked=True)
+    EmailAddress.objects.create(user=profile.user, email=profile.user.email, verified=True, primary=True)
+    EmailAddress.objects.create(user=profile.user, email='second@example.com', verified=False, primary=False)
+    client.force_login(profile.user)
+
+    body = client.post('/accounts/email/', {'action_send': '', 'email': 'second@example.com'}, follow=True).content.decode()
+
+    assert len(mailoutbox) == 1
+    assert 'Confirmation email sent to second@example.com' in body
+
+
+def test_no_cooldown_means_no_wait(settings):
+    settings.ACCOUNT_EMAIL_CONFIRMATION_COOLDOWN = 0
+
+    assert pending_signup.resend_cooldown_seconds() == 0
+
+
+def test_signing_in_to_another_unconfirmed_account_takes_over_the_page(client, mailoutbox):
+    """Account A signed up here; then a sign-in to unconfirmed account B while B's email is still rate-limited
+    (no send, so no stamp). The page kept naming A and offered to delete it."""
+    from django.test import Client
+    _sign_up(client, 'first@example.com')
+    _sign_up(Client(), 'second-account@example.com')   # B's email just went: its cooldown is running
+
+    client.post('/accounts/login/', {'login': 'second-account@example.com', 'password': PASSWORD})
+
+    record = client.session[pending_signup.SESSION_KEY]
+    assert record['email'] == 'second-account@example.com' and record['created'] is False
+    main = _main(client.get(reverse('account_email_verification_sent')).content.decode())
+    assert '<b>second-account@example.com</b>' in main
+    assert reverse('account_verification_fix') not in main
+
+
+def test_verifying_a_profile_someone_else_linked_never_syncs(client, monkeypatch):
+    """The main verify path's ownership check (the outage path is pinned above)."""
+    client, _ = _unlinked_client(client)
+    taken = ProfileFactory(is_linked=True)
+    taken.generate_verification_code()
+    synced = []
+    monkeypatch.setattr('trophies.views.profile_views.VerificationService.start_verification_sync', synced.append)
+
+    resp = client.post(reverse('link_psn'), {'action': 'verify', 'psn_username': taken.psn_username}, follow=True)
+
+    assert synced == []
+    assert 'already linked to another user' in resp.content.decode()
+

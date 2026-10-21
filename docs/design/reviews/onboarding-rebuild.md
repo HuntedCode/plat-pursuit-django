@@ -90,10 +90,13 @@ Built for these pages, then used everywhere new:
 ## As built
 
 - **Check your inbox** reads one session record (`users/services/pending_signup.py`), written by the
-  sign-up itself and stamped by every confirmation email that really sends, never for a signed-in sender
-  (a staff resend from the admin), and cleared by a completed sign-in. allauth's own "Confirmation email
-  sent to X." notice is silenced (an empty `account/messages/email_confirmation_sent.txt`): the page says
-  it already. Resend and fix-it take no address from the request, so they can only act on the
+  sign-up itself (or a sign-in to a different unconfirmed account) and stamped by every confirmation email
+  that really sends, never for a signed-in sender (a staff resend from the admin), and cleared by a
+  completed sign-in. allauth's own "Confirmation email sent to X." notice is dropped for visitors only
+  (`CustomAccountAdapter.add_message`): the page says it already, while Manage email addresses, signed in,
+  still needs it.
+- **No new account oracle:** sign up already says "This email is already in use." for an existing address
+  (`CustomUserCreationForm.clean_email`), so only new accounts ever reach "Check your inbox". Resend and fix-it take no address from the request, so they can only act on the
   sign-up that happened in that browser. Resend goes through allauth's own send, so its one-per-three-
   minutes limit still holds; the page shows the wait instead of failing silently.
 - **Fix it** deletes the account only while it is unverified, has never signed in and is not staff,

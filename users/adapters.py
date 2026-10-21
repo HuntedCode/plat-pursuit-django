@@ -14,7 +14,30 @@ def _is_visitor(request):
     return (request is not None and hasattr(request, 'session')
             and not getattr(getattr(request, 'user', None), 'is_authenticated', False))
 
+#: allauth's "Confirmation email sent to X." For a visitor it only repeats "Check your inbox", which names the
+#: address in its own lede, and a resend says so itself. A signed-in hunter on Manage email addresses still
+#: needs it: there it is the only word that the re-send or the new address worked.
+_CONFIRMATION_SENT_MESSAGE = 'account/messages/email_confirmation_sent.txt'
+
+
 class CustomAccountAdapter(DefaultAccountAdapter):
+    def add_message(self, request, level, message_template=None, message_context=None, extra_tags='', message=None):
+        if message_template == _CONFIRMATION_SENT_MESSAGE and _is_visitor(request):
+            return
+        super().add_message(request, level, message_template=message_template, message_context=message_context,
+                            extra_tags=extra_tags, message=message)
+
+    def pre_login(self, request, user, **kwargs):
+        """A sign-in to an unconfirmed account takes over "Check your inbox" for that account, even when allauth's
+        rate limit then skips the email: otherwise the page kept naming the account signed up earlier in this
+        browser, and offered to delete it."""
+        if _is_visitor(request):
+            from users.services import pending_signup
+            record = pending_signup.pending(request)
+            if record is not None and record['user_id'] != user.pk:
+                pending_signup.record_account(request, user)
+        return super().pre_login(request, user, **kwargs)
+
     def get_client_ip(self, request):
         # The IP allauth's rate limits key on. Its default reads REMOTE_ADDR, which behind
         # Render is the proxy: every visitor would share one bucket (core/client_ip.py).
