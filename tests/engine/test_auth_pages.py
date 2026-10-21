@@ -174,8 +174,7 @@ def test_the_honeypot_rejects_bots_that_fill_every_field(client):
     from users.models import CustomUser
 
     resp = client.post('/accounts/signup/', {
-        'email': 'bot@example.com', 'email2': 'bot@example.com',
-        'password1': 'a-perfectly-fine-pass-1', 'password2': 'a-perfectly-fine-pass-1',
+        'email': 'bot@example.com', 'password1': 'a-perfectly-fine-pass-1',
         'website': 'https://spam.example',
     })
 
@@ -187,8 +186,7 @@ def test_a_human_signup_still_works(client):
     from users.models import CustomUser
 
     resp = client.post('/accounts/signup/', {
-        'email': 'human@example.com', 'email2': 'human@example.com',
-        'password1': 'a-perfectly-fine-pass-1', 'password2': 'a-perfectly-fine-pass-1',
+        'email': 'human@example.com', 'password1': 'a-perfectly-fine-pass-1',
         'website': '',
     })
 
@@ -199,10 +197,10 @@ def test_a_human_signup_still_works(client):
 # ── Phases D + E: touch-ups + the created overrides ───────────────────────────────────────────
 
 @pytest.mark.parametrize('url,h1_text', [
-    ('/accounts/password/reset/', 'Forgot Password?'),
-    ('/accounts/password/reset/done/', 'Reset Link Sent'),
-    ('/accounts/password/reset/key/done/', 'Password Reset Complete'),
-    ('/accounts/confirm-email/', 'Check Your Inbox'),
+    ('/accounts/password/reset/', 'Forgot your password?'),
+    ('/accounts/password/reset/done/', 'Reset link sent'),
+    ('/accounts/password/reset/key/done/', 'Password updated'),
+    ('/accounts/confirm-email/', 'Check your inbox'),
 ])
 def test_touched_up_pages_carry_cascade_and_one_h1(client, url, h1_text):
     body = client.get(url).content.decode()
@@ -235,8 +233,8 @@ def test_account_inactive_wears_house_chrome(client):
                        follow=True)
 
     body = resp.content.decode()
-    assert 'Account Inactive' in body
-    assert 'Contact Us' in body, 'the one moment a bare white page would be most alarming'
+    assert 'Account inactive' in body
+    assert 'Contact us' in body, 'the one moment a bare white page would be most alarming'
 
 
 def _unlinked_client(client):
@@ -261,7 +259,7 @@ def test_link_psn_step_one_renders_for_an_unlinked_user(client):
     body = _unlinked_client(client).get(reverse('link_psn')).content.decode()
 
     assert body.count('<h1') == 1
-    assert 'Link Your PSN Account' in body
+    assert 'Link your PSN account' in body
     assert 'pp-head-cascade' in body
 
 
@@ -340,7 +338,7 @@ def test_a_failed_verification_start_keeps_the_code_on_screen(client, monkeypatc
 
     body = client.post(reverse('link_psn'), {'action': 'verify', 'psn_username': target.psn_username}).content.decode()
 
-    assert 'Verify Your Account' in body
+    assert 'Verify your account' in body
     assert f'>{code}</code>' in body
     assert 'An error occurred during verification' in body
 
@@ -391,8 +389,7 @@ def test_confirming_an_email_logs_the_new_hunter_in(client, mailoutbox):
     import re as _re
 
     client.post('/accounts/signup/', {
-        'email': 'fresh@example.com', 'email2': 'fresh@example.com',
-        'password1': 'a-perfectly-fine-pass-1', 'password2': 'a-perfectly-fine-pass-1',
+        'email': 'fresh@example.com', 'password1': 'a-perfectly-fine-pass-1',
         'website': '',
     })
     assert len(mailoutbox) == 1, 'the verification email must send'
@@ -440,15 +437,13 @@ def test_a_wrong_password_keeps_the_typed_email(client):
     assert f'value="{user.email}"' in resp.content.decode(), 'the email must survive the failure'
 
 
-def test_a_failed_signup_keeps_both_typed_emails(client):
+def test_a_failed_signup_keeps_the_typed_email(client):
     resp = client.post('/accounts/signup/', {
-        'email': 'keep.me@example.com', 'email2': 'keep.me@example.com',
-        'password1': 'mismatched-pass-1', 'password2': 'mismatched-pass-2',
-        'website': '',
+        'email': 'keep.me@example.com', 'password1': 'short', 'website': '',
     })
 
     assert resp.status_code == 200
-    assert resp.content.decode().count('value="keep.me@example.com"') == 2
+    assert resp.content.decode().count('value="keep.me@example.com"') == 1
 
 
 def test_remember_me_actually_remembers_and_forgetting_actually_forgets(client):

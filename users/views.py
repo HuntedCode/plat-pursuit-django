@@ -4,7 +4,7 @@ import pytz
 from datetime import datetime, timedelta
 from datetime import timezone as dt_timezone
 
-from allauth.account.views import ConfirmEmailView
+from allauth.account.views import ConfirmEmailView, EmailVerificationSentView
 from django.conf import settings
 from django.core import signing
 from django.core.cache import cache
@@ -20,6 +20,7 @@ from django.contrib.auth.views import redirect_to_login
 from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import render, redirect
 from django.urls import reverse
+from django.utils.http import urlencode
 from django.views import View
 from django.views.generic import TemplateView
 from django.views.decorators.csrf import csrf_exempt
@@ -33,6 +34,7 @@ from users.constants import (ACTIVE_PREMIUM_TIERS, LADDER_SLUGS,
                              PREMIUM_PERKS, SUPPORT_TIERS,
                              SUPPORT_TIERS_ARE_PLACEHOLDERS)
 from users.forms import CustomPasswordChangeForm, EmailPreferencesForm
+from users.services import pending_signup
 from users.services.email_preference_service import EmailPreferenceService
 from users.services.subscription_service import SubscriptionService
 from users.services.timezone_service import set_user_timezone
@@ -54,6 +56,43 @@ class CustomConfirmEmailView(ConfirmEmailView):
         response = super().post(*args, **kwargs)
         logger.info(f"POST response: {response.status_code}")
         return response
+
+
+class VerificationSentView(EmailVerificationSentView):
+    """"Check your inbox", with somewhere to go (FV-08): the address the link went to, a resend, and a fix
+    for a mistyped address. All three read the session's pending sign-up (users/services/pending_signup.py)."""
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        record = pending_signup.pending(self.request)
+        context['pending_email'] = record['email'] if record else None
+        context['resend_wait'] = pending_signup.resend_wait(self.request)
+        context['can_fix_address'] = pending_signup.can_discard(record)
+        return context
+
+
+@require_POST
+def resend_verification(request):
+    outcome = pending_signup.resend(request)
+    if outcome == 'confirmed':
+        messages.success(request, 'That address is already confirmed. Sign in to carry on.')
+        return redirect('account_login')
+    if outcome == 'none':
+        return redirect('account_signup')
+    if outcome == 'sent':
+        messages.success(request, 'Sent. The new link is on its way.')
+    else:
+        messages.info(request, 'A link went out a moment ago. You can send another in a few minutes.')
+    return redirect('account_email_verification_sent')
+
+
+@require_POST
+def fix_signup_address(request):
+    email = pending_signup.discard(request)
+    if email is None:
+        return redirect('account_email_verification_sent')
+    messages.info(request, 'No problem. Enter the right address and we will send a fresh link.')
+    return redirect(f"{reverse('account_signup')}?{urlencode({'email': email})}")
     
 class SettingsView(LoginRequiredMixin, View):
     """The account settings page (rebuilt 2026-08, ground-up).

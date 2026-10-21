@@ -27,7 +27,7 @@ class CustomUserCreationForm(SignupForm):
 
     class Meta:
         model = CustomUser
-        fields = ("email", "password1", "password2")
+        fields = ("email", "password1")
 
     def clean_browser_timezone(self):
         # The field's own choices (`CustomUser.user_timezone`), an old browser-reported name mapped to its current

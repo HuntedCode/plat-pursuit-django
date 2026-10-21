@@ -1,15 +1,110 @@
 /* ────────────────────────────────────────────────────────────────────────────
-   The syncing hero's enter finale (home/_hero_syncing.html + static/js/syncing.js).
-   Only the finale styles live here: the walkthrough carousel this file used to style
-   was retired by the gates merge (the landing's real sections are the tour).
+   The syncing hero (home/_hero_syncing.html + static/js/syncing.js): the status card a first
+   sync waits on, and the enter finale it turns into.
+
+   Rebuilt 2026-10 (onboarding rebuild, FV-01 + FV-13) in the landing's language: centred, the
+   eyebrow + display headline, house progress (field.css .pp-progress). The tone is --sync-tone:
+   primary while it works, error and info for a failed sync and a PSN outage, success once the
+   Pursuer emerges. A healthy wait is never dressed as a warning.
    ──────────────────────────────────────────────────────────────────────────── */
 
+.sync-card {
+    --sync-tone: var(--pp-primary);
+    position: relative;
+    overflow: hidden;
+    padding: 1.75rem 1.25rem 1.5rem;
+    background: var(--pp-bg-1);
+    border: 1px solid var(--pp-border);
+    border-radius: var(--pp-radius-lg);
+    text-align: center;
+}
+@media (min-width: 768px) { .sync-card { padding: 2.5rem 2.5rem 2rem; } }
+/* The tone, as a hairline across the top: the card's one accent. */
+.sync-card::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto;
+    height: 3px;
+    background: var(--sync-tone);
+    transition: background-color var(--pp-dur-slow) ease;
+}
+.sync-card--error { --sync-tone: var(--pp-error); }
+.sync-card--info { --sync-tone: var(--pp-info); }
+/* The finale: the Pursuer has emerged. */
+.sync-card.is-emerged { --sync-tone: var(--pp-success); }
+
+.sync-card__live,
+.sync-card__finale { display: flex; flex-direction: column; align-items: center; gap: 0.9rem; }
+.sync-card .land-eyebrow { justify-content: center; }
+.sync-card .land-eyebrow__tick { background: var(--sync-tone); }
+
+.sync-card__avatar {
+    position: relative;
+    width: 4.5rem;
+    height: 4.5rem;
+    border-radius: 999px;
+    overflow: hidden;
+    box-shadow: 0 0 0 2px var(--sync-tone);
+}
+@media (min-width: 768px) { .sync-card__avatar { width: 5.5rem; height: 5.5rem; } }
+/* Working: a slow breathing ring. Opacity on a pseudo-element only (no filter, no layout). */
+.sync-card__avatar.is-working::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    box-shadow: inset 0 0 0 3px var(--sync-tone);
+    opacity: 0;
+}
+@media (prefers-reduced-motion: no-preference) {
+    .sync-card__avatar.is-working::after { animation: syncBreathe 2.4s ease-in-out infinite; }
+}
+@keyframes syncBreathe { 0%, 100% { opacity: 0; } 50% { opacity: 0.85; } }
+
+.sync-card__head { display: flex; flex-direction: column; align-items: center; gap: 0.5rem; }
+.sync-card__h1 {
+    font-family: var(--pp-font-display);
+    font-size: 1.75rem;
+    font-weight: 700;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    color: var(--pp-text);
+    text-wrap: balance;
+}
+@media (min-width: 768px) { .sync-card__h1 { font-size: 2.4rem; } }
+
+.sync-card__eta { font-size: 0.95rem; color: var(--pp-text-dim); }
+.sync-card__eta b { color: var(--pp-text); font-weight: 700; }
+.sync-card__lede {
+    max-width: 52ch;
+    font-size: 0.9rem;
+    line-height: 1.55;
+    color: var(--pp-text-dim);
+    text-wrap: pretty;
+}
+.sync-card__lede b { color: var(--pp-text); font-weight: 600; }
+
+.sync-card__progress { width: 100%; max-width: 34rem; display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.25rem; }
+.sync-card__progress .pp-progress { --pc: var(--sync-tone); }
+.sync-card__progress-row {
+    display: flex;
+    flex-wrap: wrap;            /* a whale's "123,456 / 234,567 tasks" + "Started 1h 12m ago" outgrow 375px */
+    justify-content: space-between;
+    gap: 1rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--pp-text-dim);
+}
+.sync-card__tally { font-size: 0.9rem; font-weight: 600; color: var(--pp-text-dim); }
+.sync-card__tally .pp-tally { color: var(--pp-primary); }
+.sync-card__phase { font-size: 0.78rem; color: var(--pp-text-mute); }
+
+.sync-card__ctas { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0.6rem; margin-top: 0.5rem; }
+
 /* ── Finale ── */
-/* The card's warning accent flips to success when the Pursuer emerges. */
-[data-sync-card].is-emerged { border-left-color: var(--color-success); }
 /* The Pursuer the hunter's history already earned (FV-03): the contracts waiting and the level claiming them
    reaches, where four PSN trophy counts used to sit under "Your Pursuer has emerged". */
-.swf__pursuit { margin-top: 0.85rem; }
+.swf__pursuit { margin-top: 0.1rem; }
 .swf__pursuit-lead { font-size: 0.95rem; font-weight: 700; }
 .swf__pursuit-level { margin-top: 0.2rem; font-size: 0.85rem; color: var(--pp-text-dim); }
 .swf__pursuit-jobs { justify-content: center; margin-top: 0.4rem; }
@@ -19,4 +114,8 @@
 @media (min-width: 768px) {
     .swf__pursuit-lead { font-size: 1.1rem; }
     .swf__pursuit-level { font-size: 0.95rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .sync-card::before { transition: none; }
 }

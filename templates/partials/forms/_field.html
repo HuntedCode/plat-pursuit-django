@@ -1,0 +1,39 @@
+{% comment %}One house form field (field.css): label, control, optional hint, and the field's errors.
+
+Params:
+    field         the bound form field (required)
+    label         the visible label (required)
+    type          input type; default "text". "password" never echoes the value and gets the reveal button
+    autocomplete  the autocomplete token
+    hint          a quiet line under the control
+    maxlength     optional
+    strength      password only: true shows the strength meter (auth-forms.js)
+    strength_email  with strength: the id of the email field the meter checks the password against
+    plain_entry   true for a name, not prose: no autocapitalise, no spellcheck
+
+ERRORS CARRY THE STATE. `aria-invalid` is what draws the red border and `aria-describedby` ties the error
+text to the control, so what a screen reader hears and what is drawn cannot disagree. The value is echoed for everything but a
+password, so a failed submit costs only the retype that has to happen (FV-07).{% endcomment %}
+{% with fid=field.auto_id %}
+<div class="pp-field">
+    <label class="pp-field__label" for="{{ fid }}">{{ label }}</label>
+    {% if type == 'password' %}<div class="pp-input-wrap">{% endif %}
+    <input class="pp-input" id="{{ fid }}" name="{{ field.html_name }}" type="{{ type|default:'text' }}"
+           {% if type != 'password' %}value="{{ field.value|default_if_none:'' }}"{% endif %}
+           {% if autocomplete %}autocomplete="{{ autocomplete }}"{% endif %}
+           {% if maxlength %}maxlength="{{ maxlength }}"{% endif %}
+           {% if plain_entry %}autocapitalize="none" spellcheck="false"{% endif %}
+           {% if strength %}data-password-strength{% if strength_email %} data-strength-email="{{ strength_email }}"{% endif %}{% endif %}
+           {% if field.errors %}aria-invalid="true"{% endif %}
+           {% if field.errors or hint %}aria-describedby="{% if hint %}{{ fid }}-hint{% endif %}{% if field.errors %}{% if hint %} {% endif %}{{ fid }}-error{% endif %}"{% endif %}
+           {% if field.field.required %}required{% endif %}>
+    {% if type == 'password' %}
+        <button type="button" class="pp-input-wrap__btn" aria-label="Show password" aria-pressed="false" data-password-toggle="{{ fid }}">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle><line x1="3" y1="3" x2="21" y2="21"></line></svg>
+        </button>
+    </div>
+    {% endif %}
+    {% if hint %}<p class="pp-field__hint" id="{{ fid }}-hint">{{ hint }}</p>{% endif %}
+    {% if field.errors %}<div class="pp-field__errors" id="{{ fid }}-error" role="alert">{% for error in field.errors %}<p class="pp-field__error">{{ error }}</p>{% endfor %}</div>{% endif %}
+</div>
+{% endwith %}

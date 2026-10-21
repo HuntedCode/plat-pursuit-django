@@ -224,7 +224,8 @@ house primitives drawn in the `--pp-*` tokens. Decided 2026-10 (SW-01 in
 | **Retired** | `badge` and `badge-*` | `.bd-chip` + a tone modifier | Guarded |
 | **Retired** | `tabs`, `tab` | `.pp-switch` (Tab Group, below) | Guarded |
 | **Retired** | `alert`, `toast` | `.pp-notice` (+ tone), `ToastManager` for toasts, `partials/_messages.html` for Django messages (see Notices and Toasts) | Guarded since 2026-10 |
-| **Pending** | `input`, `select`, `textarea`, `checkbox`, `toggle`, `radio`, `progress` | house fields, to be built with the onboarding rebuild | Allowed until then. Filter chips already have a house version (Toggle-Button Checkboxes, below) |
+| **Retired** | `input`, `select`, `textarea`, `checkbox`, `progress` | `partials/forms/_field.html` (`.pp-field` + `.pp-input`), `.pp-check`, `.pp-progress` (see Form Fields) | Guarded since 2026-10 (onboarding rebuild) |
+| **Pending** | `toggle`, `radio`, `range` | no house version yet | Build it when a page needs one (YAGNI). Filter chips already have a house version (Toggle-Button Checkboxes, below) |
 | **Pending** | `modal`, `dropdown`, `tooltip`, `collapse`, `divider` | no decision yet | Prefer `PlatPursuit.DetailModal` (`.pp-detail-modal`) for new modals |
 
 **Retired means:** new code may not use it, and the guard test fails if a file gains a use. Existing
@@ -285,6 +286,38 @@ It replaced DaisyUI `alert`, whose solid fills painted the whole block in the st
 - **Toasts** come from `PlatPursuit.ToastManager.show(message, tone)`, never hand-built: it adds the
   floating `.pp-toast` surface, the entrance and exit, and the screen-reader announcement, inside an open
   dialog too. The icons live twice, in `_notice_icon.html` and `ToastManager._ICONS`; change them together.
+
+### Form Fields (`pp-field`, the house fields)
+
+`static/css/components/field.css`, built with the onboarding rebuild (2026-10). The box is the landing
+search's: a `--pp-bg-1` well with a hairline border that warms toward primary on focus, 44px tall, 16px
+text (below 16px iOS zooms the page on focus).
+
+| Piece | Use |
+|---|---|
+| `partials/forms/_field.html` | One bound Django field: label, `.pp-input`, optional hint, its errors. Params: `field`, `label`, `type`, `autocomplete`, `hint`, `maxlength`, `plain_entry` (a name, not prose), `strength` / `strength_email` (password meter) |
+| `partials/forms/_form_errors.html` | A form's non-field errors as one error `.pp-notice` |
+| `.pp-input` | `<input>`, `<select>` (drawn chevron) and `<textarea>` share it |
+| `.pp-input-wrap` + `.pp-input-wrap__btn` | A control inside the box; the password reveal (`auth-forms.js`, `[data-password-toggle]`) |
+| `.pp-check` | A `<label>` wrapping a checkbox and its words: one 44px target |
+| `.pp-progress` | A native `<progress>`; tone with `--pc` (default primary) |
+
+- **The error state is `aria-invalid="true"`**, which is what draws the red border, and the error text is
+  tied to the control with `aria-describedby`. What a screen reader hears and what is drawn cannot
+  disagree. One `.pp-field__error` line per error.
+- **Never echo a password.** The partial echoes every other value, so a failed submit costs only the
+  retype that has to happen.
+- **No placeholder that looks like a value** (`cool.guy@platpursuit.com` read as filled in, FV-07). A
+  label plus an empty box reads as empty.
+
+### Auth Shell (`account/base_auth.html`)
+
+Every sign in, sign up, reset, confirm and link PSN page extends it (`static/css/components/auth.css`):
+eyebrow, display `h1`, dim lede, house fields, a full-width `pp-cta.auth-submit`, and an `.auth-alt`
+line ("Already have an account? Sign in"). It drops the site footer and the phone tab bar (owner,
+2026-10-21) through `base.html`'s `site_footer` and `mobile_tabbar` blocks, and keeps Privacy, Terms
+and Contact under the card. `input.css` resets the bottom padding and toast offset for any page without
+the tab bar (`body:not(:has(.mobile-tabbar))`).
 
 ### Back to Top
 

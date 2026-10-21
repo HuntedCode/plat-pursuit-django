@@ -7,7 +7,37 @@ from core.client_ip import client_ip
 
 logger = logging.getLogger(__name__)
 
+
+def _is_visitor(request):
+    """A request with a session and nobody signed in: the sign-up or sign-in this browser is in the middle
+    of. Never raises: a send that already happened must not be reported to allauth as failed."""
+    return (request is not None and hasattr(request, 'session')
+            and not getattr(getattr(request, 'user', None), 'is_authenticated', False))
+
+#: allauth's "Confirmation email sent to X." For a visitor it only repeats "Check your inbox", which names the
+#: address in its own lede, and a resend says so itself. A signed-in hunter on Manage email addresses still
+#: needs it: there it is the only word that the re-send or the new address worked.
+_CONFIRMATION_SENT_MESSAGE = 'account/messages/email_confirmation_sent.txt'
+
+
 class CustomAccountAdapter(DefaultAccountAdapter):
+    def add_message(self, request, level, message_template=None, message_context=None, extra_tags='', message=None):
+        if message_template == _CONFIRMATION_SENT_MESSAGE and _is_visitor(request):
+            return
+        super().add_message(request, level, message_template=message_template, message_context=message_context,
+                            extra_tags=extra_tags, message=message)
+
+    def pre_login(self, request, user, **kwargs):
+        """A sign-in to an unconfirmed account takes over "Check your inbox" for that account, even when allauth's
+        rate limit then skips the email: otherwise the page kept naming the account signed up earlier in this
+        browser, and offered to delete it."""
+        if _is_visitor(request):
+            from users.services import pending_signup
+            record = pending_signup.pending(request)
+            if record is not None and record['user_id'] != user.pk:
+                pending_signup.record_account(request, user)
+        return super().pre_login(request, user, **kwargs)
+
     def get_client_ip(self, request):
         # The IP allauth's rate limits key on. Its default reads REMOTE_ADDR, which behind
         # Render is the proxy: every visitor would share one bucket (core/client_ip.py).
@@ -26,6 +56,11 @@ class CustomAccountAdapter(DefaultAccountAdapter):
             user.user_timezone = zone
         if commit:
             user.save()
+            # "Check your inbox" knows the address from here, even if allauth's rate limit then skips the
+            # email (FV-08; users/services/pending_signup.py).
+            if _is_visitor(request):
+                from users.services import pending_signup
+                pending_signup.record_signup(request, user)
         return user
 
     def confirm_email(self, request, email_address):
@@ -82,6 +117,13 @@ class CustomAccountAdapter(DefaultAccountAdapter):
         except Exception as e:
             logger.exception(f"Failed to send verification email to {email}: {e}")
             raise  # Re-raise so allauth knows sending failed
+
+        # "Check your inbox" names this address and offers a resend and a fix (FV-08). Recorded only after
+        # a real send, and only for the visitor's own sign-up or sign-in: a staff resend from the admin
+        # must not land in the staff member's session.
+        if _is_visitor(request):
+            from users.services import pending_signup
+            pending_signup.record_send(request, user, email, created=signup)
 
     def send_password_reset_mail(self, user, email, context):
         """

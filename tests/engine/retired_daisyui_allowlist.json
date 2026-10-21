@@ -27,11 +27,14 @@
  },
  "static/js/roadmap_editor.js": {
   "badge": 24,
-  "btn": 25
+  "btn": 25,
+  "input": 6
  },
  "static/js/section-builder.js": {
   "badge": 4,
-  "btn": 27
+  "btn": 27,
+  "input": 6,
+  "textarea": 3
  },
  "static/js/subscription-admin.js": {
   "badge": 13,
@@ -43,51 +46,10 @@
  "templates/429.html": {
   "btn": 4
  },
- "templates/account/account_inactive.html": {
-  "btn": 4
- },
  "templates/account/email.html": {
   "alert": 4,
-  "btn": 12
- },
- "templates/account/email_confirm.html": {
-  "btn": 8
- },
- "templates/account/link_psn.html": {
-  "alert": 2,
-  "btn": 20
- },
- "templates/account/login.html": {
-  "alert": 6,
-  "btn": 4
- },
- "templates/account/logout.html": {
-  "btn": 8
- },
- "templates/account/password_reset.html": {
-  "alert": 7,
-  "btn": 4
- },
- "templates/account/password_reset_done.html": {
-  "btn": 4
- },
- "templates/account/password_reset_from_key.html": {
-  "alert": 11,
-  "btn": 8
- },
- "templates/account/password_reset_from_key_done.html": {
-  "btn": 4
- },
- "templates/account/reauthenticate.html": {
-  "alert": 4,
-  "btn": 4
- },
- "templates/account/signup.html": {
-  "alert": 10,
-  "btn": 4
- },
- "templates/account/verification_sent.html": {
-  "btn": 4
+  "btn": 12,
+  "input": 4
  },
  "templates/art_reveal/event.html": {
   "btn": 8
@@ -96,20 +58,23 @@
   "btn": 4
  },
  "templates/design/style_guide_preview.html": {
-  "btn": 7
+  "btn": 7,
+  "input": 1
  },
  "templates/fundraiser/badge_reveal.html": {
-  "btn": 17
+  "btn": 17,
+  "checkbox": 3
+ },
+ "templates/fundraiser/fundraiser.html": {
+  "checkbox": 3
  },
  "templates/fundraiser/fundraiser_admin.html": {
   "badge": 23,
-  "btn": 6
+  "btn": 6,
+  "select": 3
  },
  "templates/gamelists/detail.html": {
   "badge": 3
- },
- "templates/home/_hero_syncing.html": {
-  "badge": 6
  },
  "templates/moderation/_queue_shell.html": {
   "badge": 3,
@@ -117,23 +82,29 @@
  },
  "templates/moderation/game_flags.html": {
   "badge": 3,
-  "btn": 6
+  "btn": 6,
+  "input": 3
  },
  "templates/moderation/list_reports.html": {
   "badge": 3,
-  "btn": 6
+  "btn": 6,
+  "input": 3
  },
  "templates/moderation/mod_center.html": {
   "badge": 9
  },
  "templates/moderation/quick_takes.html": {
   "badge": 3,
-  "btn": 6
+  "btn": 6,
+  "input": 3
  },
  "templates/notifications/admin/notification_center.html": {
   "alert": 10,
   "badge": 17,
-  "btn": 24
+  "btn": 24,
+  "input": 12,
+  "select": 6,
+  "textarea": 4
  },
  "templates/notifications/admin/notification_history.html": {
   "badge": 9,
@@ -166,7 +137,8 @@
   "btn": 7
  },
  "templates/recap/_timezone_modal.html": {
-  "btn": 8
+  "btn": 8,
+  "select": 3
  },
  "templates/recap/monthly_recap.html": {
   "btn": 16
@@ -190,19 +162,27 @@
  "templates/staff/decisions.html": {
   "alert": 2,
   "badge": 9,
-  "btn": 9
+  "btn": 9,
+  "input": 3
  },
  "templates/staff/people.html": {
   "badge": 6,
-  "btn": 2
+  "btn": 2,
+  "input": 2
  },
  "templates/staff/person.html": {
   "badge": 22,
-  "btn": 6
+  "btn": 6,
+  "input": 6,
+  "select": 6
  },
  "templates/staff/restrictions.html": {
   "badge": 15,
-  "btn": 3
+  "btn": 3,
+  "input": 3
+ },
+ "templates/support/membership.html": {
+  "checkbox": 3
  },
  "templates/trophies/career.html": {
   "btn": 3
@@ -218,10 +198,13 @@
   "badge": 3
  },
  "templates/trophies/partials/roadmap/collectible_item_row.html": {
-  "badge": 6
+  "badge": 6,
+  "checkbox": 3
  },
  "templates/trophies/partials/roadmap/collectibles_tracker.html": {
-  "btn": 9
+  "btn": 9,
+  "checkbox": 4,
+  "input": 3
  },
  "templates/trophies/partials/roadmap/dlc_nav_strip.html": {
   "btn": 7
@@ -238,6 +221,12 @@
  "templates/trophies/partials/roadmap/step_card.html": {
   "badge": 6
  },
+ "templates/trophies/partials/roadmap/toc_mobile.html": {
+  "checkbox": 2
+ },
+ "templates/trophies/partials/roadmap/toc_sidebar.html": {
+  "checkbox": 2
+ },
  "templates/trophies/partials/roadmap/trophy_guide_card.html": {
   "badge": 9
  },
@@ -247,16 +236,23 @@
  "templates/trophies/roadmap_detail.html": {
   "alert": 2,
   "badge": 3,
-  "btn": 12
+  "btn": 12,
+  "checkbox": 3,
+  "select": 4
  },
  "templates/trophies/roadmap_edit.html": {
   "badge": 68,
-  "btn": 130
+  "btn": 130,
+  "checkbox": 25,
+  "input": 56,
+  "select": 12,
+  "textarea": 21
  },
  "templates/trophies/staff/badge_series_create.html": {
   "alert": 7,
   "badge": 7,
-  "btn": 2
+  "btn": 2,
+  "input": 2
  },
  "templates/trophies/token_monitoring.html": {
   "alert": 8,
@@ -265,9 +261,23 @@
  "templates/users/admin/subscription_dashboard.html": {
   "badge": 39,
   "btn": 50,
-  "tabs": 5
+  "tabs": 5,
+  "textarea": 2
  },
  "templates/users/email_preferences.html": {
-  "alert": 4
+  "alert": 4,
+  "checkbox": 12
+ },
+ "templates/users/settings.html": {
+  "checkbox": 15
+ },
+ "trophies/forms.py": {
+  "input": 12,
+  "select": 4,
+  "textarea": 3
+ },
+ "users/forms.py": {
+  "checkbox": 7,
+  "input": 3
  }
 }

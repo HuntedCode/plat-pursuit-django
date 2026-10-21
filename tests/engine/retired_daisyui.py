@@ -36,12 +36,27 @@ FAMILIES = {
     # Retired 2026-10 for the house notice (.pp-notice / .pp-toast): SW-01, FV-15, DL-10.
     'alert': re.compile(r'^alert(?:-(?:info|success|warning|error|soft|outline|dash|vertical|horizontal))?$'),
     'toast': re.compile(r'^toast(?:-(?:start|center|end|top|middle|bottom))?$'),
+    # Retired 2026-10 for the house fields (.pp-input / .pp-check / .pp-progress, field.css): the onboarding
+    # rebuild. Suffixes are DaisyUI's own, so Tailwind's `select-none` / `select-all` and the site's own
+    # `progress-bar` / `progress-band` are not counted.
+    'input': re.compile(r'^input(?:-(?:bordered|ghost|xs|sm|md|lg|xl'
+                        r'|primary|secondary|accent|neutral|info|success|warning|error))?$'),
+    'select': re.compile(r'^select(?:-(?:bordered|ghost|xs|sm|md|lg|xl'
+                         r'|primary|secondary|accent|neutral|info|success|warning|error))?$'),
+    'textarea': re.compile(r'^textarea(?:-(?:bordered|ghost|xs|sm|md|lg|xl'
+                           r'|primary|secondary|accent|neutral|info|success|warning|error))?$'),
+    'checkbox': re.compile(r'^checkbox(?:-(?:xs|sm|md|lg|xl'
+                           r'|primary|secondary|accent|neutral|info|success|warning|error))?$'),
+    'progress': re.compile(r'^progress(?:-(?:primary|secondary|accent|neutral|info|success|warning|error))?$'),
 }
 #: Counted only where used as a class. `tab-content` is hyphenated but doubles as a common element id
 #: (`#tab-content` on the profile page), so it cannot be read in every string. `alert` and `toast` are
 #: words too (role="alert", a `toast` variable), so they count only as classes.
-BARE = {'btn', 'badge', 'tab', 'tabs', 'tab-content', 'alert', 'toast'}
-_HYPHENATED = re.compile(r'(?<![\w#-])((?:btn|badge|tabs?|alert|toast)-[\w-]+)')
+#: The field names are HTML words too (an <input>, a `select` variable, `progress` in copy), so they also count
+#: only as classes.
+BARE = {'btn', 'badge', 'tab', 'tabs', 'tab-content', 'alert', 'toast',
+        'input', 'select', 'textarea', 'checkbox', 'progress'}
+_HYPHENATED = re.compile(r'(?<![\w#-])((?:btn|badge|tabs?|alert|toast|input|select|textarea|checkbox|progress)-[\w-]+)')
 _TEMPLATE_TAG = re.compile(r'{%.*?%}|{{.*?}}', re.S)
 
 

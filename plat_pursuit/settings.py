@@ -297,7 +297,9 @@ MIDDLEWARE = [
 
 # Allauth-specific
 ACCOUNT_LOGIN_METHODS = {'email'}
-ACCOUNT_SIGNUP_FIELDS = ['email*', 'email2*', 'password1*', 'password2*']
+# One email, one password (FV-07, owner 2026-10-21). The password field's show toggle catches a typo there,
+# and "Check your inbox" names the address with a way to fix it, so neither confirm field earns its retype.
+ACCOUNT_SIGNUP_FIELDS = ['email*', 'password1*']
 ACCOUNT_UNIQUE_EMAIL = True
 ACCOUNT_EMAIL_VERIFICATION = 'mandatory'
 # (ACCOUNT_PASSWORD_MIN_LENGTH was removed in allauth 65.x -- the minimum comes from

@@ -1,0 +1,193 @@
+/* ==========================================================================================
+   pp-field / pp-input / pp-check / pp-progress -- THE house form fields (2026-10, onboarding
+   rebuild; SW-01's "pending" row in docs/reference/design-system.md). Replace DaisyUI `input`,
+   `select`, `textarea`, `checkbox` and `progress`, which are retired behind
+   tests/engine/test_retired_daisyui.py.
+
+   The box is the landing search's (`.land-search__input`): a --pp-bg-1 well with a hairline
+   border that warms toward primary on focus. One recipe for text, email, password, select and
+   textarea, so a form never mixes two field styles.
+
+   Markup (partials/forms/_field.html renders it from a bound Django field):
+     <div class="pp-field">
+       <label class="pp-field__label" for="id_email">Email</label>
+       <input class="pp-input" id="id_email" ... aria-invalid="true" aria-describedby="id_email-error">
+       <p class="pp-field__hint" id="id_email-hint">...</p>
+       <div class="pp-field__errors" id="id_email-error"><p class="pp-field__error">...</p></div>
+     </div>
+   A password gets the reveal button inside `.pp-input-wrap` (auth-forms.js wires
+   [data-password-toggle]). The red border is drawn from aria-invalid, so the state a screen
+   reader hears and the state that is drawn cannot disagree.
+   ========================================================================================== */
+
+.pp-field { display: flex; flex-direction: column; gap: 0.35rem; min-width: 0; }
+
+.pp-field__label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--pp-text-dim);
+}
+.pp-field__hint { font-size: 0.78rem; line-height: 1.45; color: var(--pp-text-mute); }
+/* The error is TEXT in the error tone with a mark, not a filled block: the field's own red border
+   already says which box is wrong, so a second salmon slab under it only shouts (FV-15). */
+.pp-field__error {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.4rem;
+    font-size: 0.8rem;
+    line-height: 1.45;
+    color: var(--pp-error);
+}
+.pp-field__error::before {
+    content: "";
+    flex: 0 0 auto;
+    width: 0.4rem;
+    height: 0.4rem;
+    margin-top: 0.4rem;
+    border-radius: 999px;
+    background: currentColor;
+}
+/* One line per error, each with its own mark (a field can fail two validators at once). */
+.pp-field__errors { display: flex; flex-direction: column; gap: 0.2rem; }
+
+.pp-input {
+    width: 100%;
+    min-width: 0;
+    min-height: 2.75rem;             /* 44px: the touch-target floor */
+    padding: 0.6rem 0.9rem;
+    font: inherit;
+    font-size: 1rem;                 /* 16px: below it iOS zooms the page on focus */
+    line-height: 1.4;
+    color: var(--pp-text);
+    background: var(--pp-bg-1);
+    border: 1px solid var(--pp-border);
+    border-radius: var(--pp-radius-md);
+    transition: border-color var(--pp-dur-fast) ease, box-shadow var(--pp-dur-fast) ease;
+}
+.pp-input::placeholder { color: var(--pp-text-mute); opacity: 1; }
+.pp-input:hover:not(:disabled) { border-color: color-mix(in oklab, var(--pp-text) 28%, var(--pp-border)); }
+.pp-input:focus {
+    outline: none;
+    border-color: color-mix(in oklab, var(--pp-primary) 60%, var(--pp-border));
+    box-shadow: 0 0 12px color-mix(in oklab, var(--pp-primary) 22%, transparent);
+}
+.pp-input:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+.pp-input[aria-invalid="true"] { border-color: color-mix(in oklab, var(--pp-error) 70%, var(--pp-border)); }
+.pp-input[aria-invalid="true"]:focus-visible { outline-color: var(--pp-error); }
+.pp-input:disabled { opacity: 0.55; cursor: not-allowed; }
+
+textarea.pp-input { min-height: 6rem; resize: vertical; }
+select.pp-input {
+    appearance: none;
+    padding-right: 2.4rem;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a3acbd' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.8rem center;
+    background-size: 1rem;
+}
+
+/* A control inside the box (the password reveal). The input pads right to clear it. */
+.pp-input-wrap { position: relative; }
+.pp-input-wrap > .pp-input { padding-right: 2.9rem; }
+.pp-input-wrap__btn {
+    position: absolute;
+    inset-block: 0;
+    right: 0;
+    width: 2.75rem;
+    display: grid;
+    place-items: center;
+    color: var(--pp-text-mute);
+    border-radius: 0 var(--pp-radius-md) var(--pp-radius-md) 0;
+    cursor: pointer;
+    transition: color var(--pp-dur-fast) ease;
+}
+.pp-input-wrap__btn:hover { color: var(--pp-text); }
+.pp-input-wrap__btn:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: -2px; }
+.pp-input-wrap__btn svg { width: 1.15rem; height: 1.15rem; }
+
+/* ── Password strength (auth-forms.js builds it under a [data-password-strength] box) ────── */
+.pp-strength { --sc: var(--pp-text-mute); display: flex; flex-direction: column; gap: 0.3rem; }
+.pp-strength[data-score="1"] { --sc: var(--pp-error); }
+.pp-strength[data-score="2"],
+.pp-strength[data-score="3"] { --sc: var(--pp-warning); }
+.pp-strength[data-score="4"] { --sc: var(--pp-success); }
+.pp-strength__bars { display: flex; gap: 0.25rem; }
+.pp-strength__bars > span {
+    flex: 1;
+    height: 0.25rem;
+    border-radius: 999px;
+    background: color-mix(in oklab, var(--pp-text) 10%, transparent);
+    transition: background-color var(--pp-dur) ease;
+}
+.pp-strength[data-score="1"] > .pp-strength__bars > span:nth-child(-n+1),
+.pp-strength[data-score="2"] > .pp-strength__bars > span:nth-child(-n+2),
+.pp-strength[data-score="3"] > .pp-strength__bars > span:nth-child(-n+3),
+.pp-strength[data-score="4"] > .pp-strength__bars > span { background: var(--sc); }
+.pp-strength__label { font-size: 0.78rem; color: var(--pp-text-mute); }
+.pp-strength:not([data-score="0"]) .pp-strength__label { color: var(--pp-text-dim); }
+
+/* ── pp-check: a checkbox with its label as one 44px-tall target ─────────────────────────── */
+.pp-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    min-height: 2.75rem;
+    font-size: 0.875rem;
+    color: var(--pp-text-dim);
+    cursor: pointer;
+}
+.pp-check > input {
+    appearance: none;
+    flex: 0 0 auto;
+    width: 1.15rem;
+    height: 1.15rem;
+    margin: 0;
+    display: grid;
+    place-items: center;
+    background: var(--pp-bg-1);
+    border: 1px solid color-mix(in oklab, var(--pp-text) 30%, var(--pp-border));
+    border-radius: var(--pp-radius-sm);
+    cursor: pointer;
+    transition: background-color var(--pp-dur-fast) ease, border-color var(--pp-dur-fast) ease;
+}
+.pp-check > input::after {
+    content: "";
+    width: 0.32rem;
+    height: 0.6rem;
+    margin-top: -0.12rem;
+    border: solid var(--pp-bg-0);
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg) scale(0);
+    transition: transform var(--pp-dur-fast) var(--pp-ease);
+}
+.pp-check > input:checked { background: var(--pp-primary); border-color: var(--pp-primary); }
+.pp-check > input:checked::after { transform: rotate(45deg) scale(1); }
+.pp-check > input:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+.pp-check:hover > input:not(:checked) { border-color: color-mix(in oklab, var(--pp-primary) 55%, var(--pp-border)); }
+
+/* ── pp-progress: a determinate bar on a native <progress> ───────────────────────────────── */
+/* Tone with --pc (default primary). A healthy wait is never dressed as a warning (FV-01). */
+.pp-progress {
+    --pc: var(--pp-primary);
+    appearance: none;
+    display: block;
+    width: 100%;
+    height: 0.5rem;
+    border: 0;
+    border-radius: 999px;
+    overflow: hidden;
+    background: color-mix(in oklab, var(--pp-text) 10%, transparent);
+    color: var(--pc);
+}
+.pp-progress::-webkit-progress-bar { background: transparent; }
+.pp-progress::-webkit-progress-value {
+    background: var(--pc);
+    border-radius: 999px;
+    transition: width var(--pp-dur-slow) var(--pp-ease);
+}
+.pp-progress::-moz-progress-bar { background: var(--pc); border-radius: 999px; }
+
+@media (prefers-reduced-motion: reduce) {
+    .pp-input, .pp-check > input, .pp-check > input::after, .pp-input-wrap__btn, .pp-strength__bars > span { transition: none; }
+    .pp-progress::-webkit-progress-value { transition: none; }
+}

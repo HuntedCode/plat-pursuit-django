@@ -1,23 +1,45 @@
-{% extends 'base.html' %}
+{% extends 'account/base_auth.html' %}
+{% load static %}
 
-{% block title %}Verify Email{% endblock %}
-{% block robots %}noindex, nofollow{% endblock %}
+{% block title %}Check your inbox{% endblock %}
+{% block auth_eyebrow %}One more step{% endblock %}
+{% block auth_title %}Check your inbox{% endblock %}
+{% block auth_lede %}
+{% comment %}FV-08: this page used to name no address and offer only "Back to sign in". The address comes from the
+session's pending sign-up (users/services/pending_signup.py); a visitor who lands here without one (an old
+tab, a bookmark) gets the generic line.{% endcomment %}
+<p class="auth-card__lede" role="status">
+    {% if pending_email %}We sent a confirmation link to <b>{{ pending_email }}</b>. Open it to confirm your account, then link your PSN.
+    {% else %}We sent you a confirmation link. Open it to confirm your account, then link your PSN.{% endif %}
+</p>
+{% endblock %}
 
-{% block main_layout %}
-<main id="main-content" class="flex-1 flex items-center justify-center px-4 py-6 md:py-10" role="main">
-    <div class="w-full max-w-lg">
-        <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
-            <div class="card-body p-3 md:p-5 lg:p-7 text-center pp-head-cascade">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-12 h-12 mx-auto text-info mb-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
-                    <polyline points="22,6 12,13 2,6"></polyline>
-                </svg>
-                <h1 class="text-xl md:text-2xl font-bold mb-2">Check Your Inbox</h1>
-                <p class="text-sm text-base-content/60 mb-4" role="status">We've sent a verification link to your email. Click it to confirm your account and join the hunt.</p>
-                <a href="{% url 'account_login' %}" class="btn btn-primary btn-sm md:btn-md w-full">Back to sign in</a>
-                <p class="text-xs text-base-content/60 mt-2">Don't see it? Check your spam folder.</p>
-            </div>
-        </div>
-    </div>
-</main>
+{% block auth_body %}
+<div class="auth-form">
+    <p class="auth-next">Nothing yet? Check your spam folder; it can take a minute to arrive.</p>
+    {% if pending_email %}
+    <form method="post" action="{% url 'account_verification_resend' %}">
+        {% csrf_token %}
+        {% comment %}The wait is allauth's own limit (one per address per cooldown), shown rather than
+        discovered: auth-forms.js disables the button and counts the wait down. It renders LIVE, so without JS
+        it still works, and the view says so if it is early.{% endcomment %}
+        <button type="submit" class="pp-cta pp-cta--ghost auth-submit" data-resend-wait="{{ resend_wait }}">
+            <span data-resend-label>Send another link</span>
+        </button>
+    </form>
+    {% endif %}
+</div>
+
+{% if can_fix_address %}
+<form method="post" action="{% url 'account_verification_fix' %}" class="auth-alt">
+    {% csrf_token %}
+    Wrong address? <button type="submit" class="auth-link">Fix it</button>
+</form>
+{% else %}
+<p class="auth-alt">Already confirmed? <a href="{% url 'account_login' %}" class="auth-link">Sign in</a></p>
+{% endif %}
+{% endblock %}
+
+{% block js_scripts %}
+<script src="{% static 'js/auth-forms.js' %}"></script>
 {% endblock %}
