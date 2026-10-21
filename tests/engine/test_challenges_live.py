@@ -3169,7 +3169,7 @@ def test_each_ring_arc_peeks_its_disciplines_level_on_hover(client):
     # every assertion below would keep passing against the wrong element.
     gained = str(39 * Job.objects.filter(discipline='combat').count())
     combat = hero.split('lab-dna__peek" data-disc="combat"')[-1].split('</div>')[0]
-    assert '>%s<' % gained in combat, ('the combat peek should print its levels gained, %s: %r' % (gained, combat))
+    assert '>+%s<' % gained in combat, ('the combat peek should print its levels gained, +%s: %r' % (gained, combat))
 
     # DECORATIVE TO AT. These duplicate the arcs for sighted hover; announcing five more numbers would add
     # ten words to an accessible name that is already one long run-on string for the whole row. The same
@@ -3268,7 +3268,7 @@ def test_each_ring_arc_peeks_its_disciplines_level_on_hover(client):
             profile=whale, job=job, defaults={'total_xp': 900000, 'level': 300})
     whale_hero = _hero(client.get(reverse('challenges_hall_of_fame')).content.decode())
     mind = whale_hero.split('lab-dna__peek" data-disc="mind"')[-1].split('</div>')[0]
-    assert '1495' in mind, 'expected mind to have gained 5 x 299 = 1495 levels: %r' % mind
+    assert '+1495' in mind, 'expected mind to have gained 5 x 299 = 1495 levels: %r' % mind
     assert 'lab-dna__level--d4' in mind, (
         'a four-figure total is not taking the --d4 rung, so it renders at the one-figure size and spills '
         'the ring hole: %r' % mind)

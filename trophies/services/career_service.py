@@ -11,12 +11,26 @@ the ~25-row Job catalog (whale-OOM rule).
 """
 import logging
 
+from django.urls import reverse
+from django.utils.http import urlencode
+
 from trophies.models import ProgressionMilestone, UserTitle
 from trophies.services import job_render
 from trophies.services.contract_service import pursuer_level_from
+from trophies.util_modules.constants import ALL_PLATFORMS
 from trophies.util_modules.leveling import JOB_TIERS, pursuer_rank_ladder, pursuer_rank_table
 
 logger = logging.getLogger(__name__)
+
+
+def claim_board_url():
+    """Career's Contracts board on Ready to Claim with every platform lit: where every claim entry point
+    lands (the claim banner's href on Career and the lobby, its JS jump, the first-sync finale's "Claim your
+    contracts", job detail's Claim link). Every platform because the
+    claimable count ignores platform while the board defaults to current-gen, so a new tab, a copied
+    link or a no-JS tap still finds the N it was promised."""
+    return reverse('career') + '?' + urlencode(
+        [('view', 'contracts'), ('status', 'claimable')] + [('platform', p) for p in ALL_PLATFORMS])
 
 
 def _build_jobs(profile):

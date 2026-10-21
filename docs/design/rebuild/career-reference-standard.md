@@ -42,8 +42,9 @@ almost always a specific detail that question surfaces:
   never an outer card around the content grid -- both trap the many long / paginated (infinite-scroll)
   pages in an ever-growing border. (Item-level cards inside the content -- game cards, job tiles, the empty
   state -- are fine; it's the *outer content wrapper* that must not be a card.) NB: Career's original
-  one-container layout was the lone exception and has been reconciled to this rule (`career.html`: hero card
-  -> summary card -> free tabs + panels), so don't copy its old outer shell.
+  one-container layout was the lone exception and has been reconciled to this rule (`career.html`: hero card,
+  with the summary folded into it since 2026-10 (DL-09) -> claim banner -> free tabs + panels), so don't copy
+  its old outer shell.
 - **Tab groups use ONE treatment: the segmented switcher** (site-wide rule, 2026-07) -- a bordered
   container of transparent chips, active chip tinted, an icon per chip, right-aligned in a
   `flex justify-end` row. 2-way toggles and multi-tab nav both use it; the old free-standing pills are

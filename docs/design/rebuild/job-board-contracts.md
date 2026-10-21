@@ -837,7 +837,10 @@ Home membership is derived, so a merge has **no membership rows to re-point**. `
   contract with jobs, under `pending_tier_q`) is what the banner, the Contracts tab badge, the nav
   badge, the accept API's `claimable_count` and **Claim all** all read. Claim all used to pay pending
   rows on contracts that had gone non-live, which nothing showed; those rows are kept, so a republished
-  contract is claimable again. `claimable_summary` totals the XP in SQL (`_pending_xp_expr`), the
+  contract is claimable again. `claim_projection` (2026-10) reads the same rows to say what claiming
+  everything would make the hunter (Pursuer Level, rank, each job's level before and after), splitting each
+  contract's pending XP evenly across its jobs in SQL, as a claim does; Career's banner and tiles, the lobby
+  and the first-sync finale show it. `claimable_summary` totals the XP in SQL (`_pending_xp_expr`), the
   numeric twin of `_pending_tiers`, so the banner shows what is actually waiting (a contract with its
   platinum banked contributes its 30%, not its whole T). `test_claim_live.py` holds the two forms
   together, including the 5005 x 0.70 half-up boundary.

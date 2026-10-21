@@ -121,6 +121,11 @@
 }
 /* #4 reward material -- remove the .claim-banner--gold class in the template to revert. */
 .claim-banner.claim-banner--gold { background: linear-gradient(100deg, color-mix(in oklab, var(--pp-primary) 12%, var(--pp-bg-2)) 0%, var(--pp-bg-2) 48%, color-mix(in oklab, #c79a52 11%, var(--pp-bg-2)) 100%); }
+/* The jobs a claim raises furthest ("Pathfinder 1 -> 17"), under the banner's "Claim them to reach Level 103". */
+.claim-banner__jobs { display: flex; flex-wrap: wrap; gap: 2px 14px; margin: 3px 0 2px; padding: 0; list-style: none; font-size: 12px; color: var(--pp-text-dim); }
+.claim-banner__jobs .pp-tally { color: var(--pp-primary); font-weight: 700; }
+/* Expendable on a phone, where the narrow column stacks it into a tall list: each job tile below says the same. */
+@media (max-width: 767px) { .claim-banner__jobs { display: none; } }
 @media (prefers-reduced-motion: reduce) { .claim-banner, .claim-spark { animation: none; } .claim-banner::after { display: none; } }
 
 /* ---- Career hero: ambient glow tinted by the Pursuer's strongest discipline (--dominant) ---- */
@@ -362,6 +367,18 @@
 .lab-dna-legend__dot { width: 9px; height: 9px; border-radius: 999px; background: var(--disc); box-shadow: 0 0 6px color-mix(in oklab, var(--disc) 55%, transparent); }
 .lab-dna-legend__name { white-space: nowrap; }
 .lab-dna-legend__val { font-weight: 700; color: var(--pp-text); font-variant-numeric: tabular-nums; }
+/* The legend's caption: its values are each discipline's levels GAINED ("+7"), what that discipline adds to the
+   Pursuer Level in the ring's centre, so a newcomer reads "+0" five times rather than "Combat 0" beside five
+   Combat jobs at Lv 1. */
+.lab-dna-legend__head { margin: 0 0 5px; font-size: 9px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--pp-text-mute); }
+
+/* ---- The Career summary, folded into the hero under the rank bar (it was a card titled "Career" inside the
+   Career page, DL-09, tall enough to push every view off a desktop's first screen, DL-01). Four quiet facts,
+   rendered only once there is XP to count. */
+.hero-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 16px; margin: 14px 0 0; padding-top: 12px; border-top: 1px solid var(--pp-divider); }
+@media (min-width: 768px) { .hero-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.hero-stat dt { font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--pp-text-mute); }
+.hero-stat dd { margin: 3px 0 0; font-size: 20px; line-height: 1.1; color: var(--pp-text); }
 
 /* ---- Hero identity chip: your strongest discipline. Pays off the ambient hero glow (which is
    tinted by the same discipline) with a label; disc-coloured dot echoes the filter chips + radar. */
@@ -413,6 +430,11 @@
 .job__lvbox { text-align: center; margin: 9px 0 4px; }
 .job__lv-num { display: block; font-size: 44px; line-height: 0.85; letter-spacing: -0.01em; color: var(--disc); }  /* face via shared .pp-tally; resting = calm, glow only on master/legend below */
 .job__lv-cap { font-size: 9px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: var(--pp-text-mute); }
+/* The level a job reaches once the waiting contracts are claimed ("1 -> 17"): the first arrival's preview.
+   BESIDE the number, on its baseline, so a tile with XP waiting is no taller than one without and the
+   tier captions stay level across a row. */
+.job__lv-row { display: flex; justify-content: center; align-items: baseline; gap: 6px; }
+.job__lv-to { font-size: 15px; line-height: 0.85; font-weight: 700; color: var(--pp-primary); white-space: nowrap; }
 .job__name { font-weight: 700; font-size: 13px; text-align: center; color: var(--pp-text); }
 .job__foot { margin-top: auto; padding-top: 12px; }
 /* job bar retrofitted to the shared Horizon primitive (.pp-horizon themed, --disc accent, --horizon-h: 5px) */

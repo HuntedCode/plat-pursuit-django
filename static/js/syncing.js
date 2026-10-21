@@ -73,45 +73,70 @@
         var card = document.querySelector('[data-sync-card]');
         var completed = false;
         var counted = false;
-        var latestStats = null;
+        var latestPursuit = null;
 
-        function slots() {
-            return finale ? Array.prototype.slice.call(
-                finale.querySelectorAll('[data-complete-stat]')) : [];
-        }
+        function hook(name) { return finale ? finale.querySelector('[data-pursuit-' + name + ']') : null; }
+        function setText(name, value) { var el = hook(name); if (el) { el.textContent = value; } }
 
-        function fillStats(stats) {
-            // Idempotent: runs on completion with the cached (one-poll-stale) figures, then
-            // again from the trailing progress event with the final ones. Before the count-up
-            // has run, only the data-countup TARGET moves (the visible 0 waits for the
-            // animation); after it, corrections write text directly -- no second animation.
-            if (!finale || !stats) { return; }
-            slots().forEach(function (slot) {
-                var value = stats[slot.dataset.completeStat];
-                if (value == null) { return; }
-                slot.dataset.countup = value;
-                if (counted) { slot.textContent = Number(value).toLocaleString('en-US'); }
-            });
+        function fillPursuit(pursuit) {
+            // What the hunter's history already earned (FV-03): the synced poll's `pursuit` block
+            // (sync_views._pursuit_payload). Exactly one of the two lines shows; both render hidden so
+            // the finale never flashes the wrong one. Idempotent, like the stats it replaced: it runs on
+            // completion with whatever has arrived, then again from the trailing progress event.
+            if (!finale) { return; }
+            var count = (pursuit && pursuit.count) || 0;
+            var yes = hook('yes'), none = hook('none'), claim = hook('claim');
+            if (yes) { yes.hidden = !count; }
+            if (none) { none.hidden = !!count; }
+            if (claim) { claim.hidden = !count; }
+            if (!count) { return; }
+            var countEl = hook('count');
+            if (countEl) {
+                countEl.dataset.countup = count;
+                if (counted) { countEl.textContent = Number(count).toLocaleString('en-US'); }
+            }
+            setText('noun', count === 1 ? 'contract is' : 'contracts are');
+            setText('pronoun', count === 1 ? 'it' : 'them');
+            // Said only when claiming moves the level, as the claim banner says it.
+            var moves = !!pursuit.level && pursuit.level > (pursuit.from_level || 0);
+            var reach = hook('reach');
+            if (reach) { reach.hidden = !moves; }
+            if (moves) {
+                setText('level', Number(pursuit.level).toLocaleString('en-US'));
+                setText('rank', pursuit.rank || '');
+            }
+            var top = hook('top');
+            if (top) {
+                top.textContent = '';
+                (pursuit.top || []).forEach(function (job) {
+                    // Text nodes, never markup: job names are data.
+                    var li = document.createElement('li'), n = document.createElement('span');
+                    li.appendChild(document.createTextNode(job.name + ' '));
+                    n.className = 'pp-tally';
+                    n.textContent = job.from + ' → ' + job.to;
+                    li.appendChild(n);
+                    top.appendChild(li);
+                });
+            }
         }
 
         function startCountUps() {
             // One frame after the reveal, ON PURPOSE: navsync dispatches the trailing
             // sync-progress synchronously right after status-changed, so by the time this
-            // frame runs the data-countup targets already hold the FINAL figures -- the
-            // count-up plays once, to the right numbers. countUp itself handles
+            // frame runs the data-countup target already holds the final figure -- the
+            // count-up plays once, to the right number. countUp itself handles
             // prefers-reduced-motion (instant set) and reads the target off data-countup.
             counted = true;
-            var counter = window.PlatPursuit && PlatPursuit.countUp;
-            slots().forEach(function (slot) {
-                if (counter) { counter(slot, 900); }
-                else { slot.textContent = Number(slot.dataset.countup || 0).toLocaleString('en-US'); }
-            });
+            var countEl = hook('count');
+            if (!countEl) { return; }
+            if (window.PlatPursuit && PlatPursuit.countUp) { PlatPursuit.countUp(countEl, 900); }
+            else { countEl.textContent = Number(countEl.dataset.countup || 0).toLocaleString('en-US'); }
         }
 
         document.addEventListener('platpursuit:sync-progress', function (e) {
             var data = (e && e.detail) || {};
-            if (data.stats) { latestStats = data.stats; }
-            if (completed) { fillStats(latestStats); }
+            if (data.pursuit) { latestPursuit = data.pursuit; }
+            if (completed) { fillPursuit(latestPursuit); }
         });
 
         document.addEventListener('platpursuit:sync-status-changed', function (e) {
@@ -124,7 +149,7 @@
                     return;
                 }
                 completed = true;
-                fillStats(latestStats);
+                fillPursuit(latestPursuit);
                 live.hidden = true;
                 finale.hidden = false;
                 if (card) { card.classList.add('is-emerged'); }
@@ -197,7 +222,8 @@
                 if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
                 // Real ordering: status-changed FIRST, trailing progress with final stats after.
                 document.dispatchEvent(new CustomEvent('platpursuit:sync-status-changed', { detail: { status: 'synced' } }));
-                emitProgress({ sync_percentage: 100, stats: { plats: 71, golds: 841, silvers: 2500, bronzes: 5000 } });
+                emitProgress({ sync_percentage: 100, stats: { plats: 71, golds: 841, silvers: 2500, bronzes: 5000 },
+                               pursuit: { count: 60, from_level: 1, level: 103, rank: 'Hunter V', top: [{ name: 'Pathfinder', from: 1, to: 17 }, { name: 'Gunslinger', from: 1, to: 11 }, { name: 'Infiltrator', from: 1, to: 10 }] } });
             });
         }
     }

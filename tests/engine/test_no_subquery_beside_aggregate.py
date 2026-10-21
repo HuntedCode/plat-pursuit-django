@@ -20,6 +20,8 @@ helpers' callers by hand.
 import ast
 from pathlib import Path
 
+from tests.engine._tree import SKIP_DIRS
+
 ROOT = Path(__file__).resolve().parents[2]
 _NOT_APP_CODE = {'tests', 'venv', 'node_modules', 'staticfiles', 'media', 'docs', 'static', 'templates'}
 AGGREGATES = {'Count', 'Sum', 'Avg', 'Max', 'Min', 'StringAgg', 'ArrayAgg', 'StdDev', 'Variance', 'BoolOr', 'BoolAnd'}
@@ -99,8 +101,11 @@ def offenders_in(source, label='<source>'):
 
 def _app_sources():
     packages = [p.parent for p in ROOT.glob('*/__init__.py') if p.parent.name not in _NOT_APP_CODE]
+    # The shared walker's SKIP_DIRS too: `__pycache__` is never our source, and `test_tree_walk` creates and
+    # deletes a probe file inside one mid-suite, so a walk that lists it can lose it before reading it
+    # (the intermittent FileNotFoundError seen under -n 12 in 2026-10).
     return sorted(p for pkg in packages for p in pkg.rglob('*.py')
-                  if 'migrations' not in p.parts and 'tests' not in p.parts)
+                  if 'migrations' not in p.parts and 'tests' not in p.parts and not SKIP_DIRS.intersection(p.parts))
 
 
 def test_no_wrapped_subquery_sits_beside_an_outer_aggregate():

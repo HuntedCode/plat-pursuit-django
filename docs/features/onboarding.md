@@ -33,9 +33,13 @@ syncing branch):
    definitionally consistent with the finale's numbers.
 4. **The enter moment.** On a FIRST sync (`is_initial_sync`), the `synced` transition swaps
    the status card in place: "Your Pursuer has emerged" (the phrase is from
-   `docs/design/gamification-plan.md`'s design intent for this exact moment), the final
-   trophy counts, and one "Enter your Pursuit" CTA. No auto-reload; the user arrives on the
-   Home on purpose. Quick refreshes and error transitions keep the old reload behavior.
+   `docs/design/gamification-plan.md`'s design intent for this exact moment), then what the
+   hunter's history has already earned: the contracts waiting, the Pursuer Level and rank
+   claiming them reaches, and the jobs it raises most, from the synced poll's `pursuit` block
+   (`sync_views._pursuit_payload`, read only on the synced response). "Claim your contracts"
+   leads to Career's claimable board; "Enter your Pursuit" to the Home. With nothing to claim,
+   one plain line instead. (It used to show four trophy counts the hunter already had on PSN;
+   FV-03.) No auto-reload; the user arrives on the Home on purpose. Quick refreshes and error transitions keep the old reload behavior.
 
 See [home-page.md](home-page.md) for the router, the event contract, and the finalize phases.
 
@@ -173,8 +177,8 @@ Client discipline (from the badge howto + timezone modal prior art):
 ## Gotchas and Pitfalls
 
 - **Event ordering is load-bearing**: navsync dispatches `platpursuit:sync-status-changed`
-  before the same poll's `platpursuit:sync-progress`. The finale's stat fill must stay
-  idempotent and re-run on the trailing event, or it shows one-poll-stale counts forever.
+  before the same poll's `platpursuit:sync-progress`. The finale's fill must stay idempotent
+  and re-run on the trailing event, which is the one carrying the `pursuit` block.
 - **Never poll from the syncing page**: navsync owns the network; consumers subscribe to its
   events. Killing `#nav-sync` on that page freezes everything.
 - **`get_total_trophies_from_summary()` returns `None` on an empty summary**: `psn_found` is

@@ -67,19 +67,55 @@ def test_the_wordmark_is_lit_on_the_lobby(client):
     assert b'pp-nav__brand is-active' not in client.get('/career/', **CF).content
 
 
-def test_the_lobby_leads_with_the_trophy_floor(client):
-    """Order is the argument: the trophy block is what everyone arrives for and the only block already
-    full on the day someone finishes their first sync. If the moat CTAs ever climb above it, the page has
-    quietly become a gamification landing again -- which is the cold-start case this ordering exists for.
+def test_the_lobby_leads_with_the_pursuit(client):
+    """Order is the argument, and it was reversed on purpose (owner, 2026-10-21; FV-03 / DL-03 in
+    docs/design/reviews/). The trophy block used to lead because it was the only block already full on the
+    day someone finished their first sync. It no longer is: a new hunter's history has already earned
+    contracts, and the claim prompt says what claiming them makes them. So the Pursuit leads (the claim
+    prompt, then Career + Collection) and the PSN statistics, which the hunter already has on PSN, follow.
     """
+    from django.utils import timezone
+    from trophies.models import Contract, EarnedContract, Job
+
+    profile = ProfileFactory(is_linked=True, sync_status='synced')
+    n = 96001
+    contract = Contract.objects.create(name=f'lobby-{n}', slug=f'lobby-{n}', igdb_id=n, is_live=True)
+    contract.jobs.set(Job.objects.filter(slug='pathfinder'))
+    EarnedContract.objects.create(profile=profile, contract=contract, full_reached_at=timezone.now())
+    client.force_login(profile.user)
+
+    body = client.get('/', **CF).content
+
+    assert body.index(b'claim-banner') < body.index(b'home-moats') < body.index(b'Trophy collection'), (
+        'the lobby no longer leads with the Pursuit')
+    banner = body[body.rindex(b'<a ', 0, body.index(b'claim-banner')):body.index(b'home-moats')]
+    assert b'Claim it to reach' in banner and b'Level 3<' in banner, 'the claim prompt lost its projection'
+    assert b'/career/?view=contracts&amp;status=claimable' in banner
+
+
+def test_sync_status_is_said_once(client):
+    """FV-12: the header says "Updated ... · Sync now"; the trophy card's "Synced" dot said it again."""
     profile = ProfileFactory(is_linked=True, sync_status='synced')
     client.force_login(profile.user)
 
     body = client.get('/', **CF).content
 
-    assert body.index(b'Trophy collection') < body.index(b'home-moats'), (
-        'the moat CTAs moved above the trophy block'
-    )
+    assert b'home-hi__sync' in body
+    # Scoped to the trophy card: the navbar's sync panel carries its own "Synced", which is its job.
+    card = body[body.index(b'Trophy collection'):body.index(b'Average completion')]
+    assert b'Synced' not in card, 'a second "Synced" status is back on the lobby'
+
+
+def test_the_psn_level_is_named_as_the_trophy_level(client):
+    """It sat a scroll away from a Career ring reading "1": two different numbers both called "Lv"."""
+    profile = ProfileFactory(is_linked=True, sync_status='synced')
+    profile.trophy_level = 386
+    profile.save(update_fields=['trophy_level'])
+    client.force_login(profile.user)
+
+    body = client.get('/', **CF).content
+
+    assert b'Trophy Lv 386' in body
 
 
 # --- Premium pass: header, landing numbers, hover responses, mobile fit ---
@@ -93,7 +129,9 @@ def test_the_lobby_leads_with_an_accented_header_card(client):
     body = client.get('/', **CF).content
 
     assert b'border-l-primary' in body, 'no accented header card'
-    assert b'Welcome back' in body
+    # A hunter who has never claimed is greeted, not welcomed BACK (FV-03): this was the first-timer's
+    # greeting straight off the sync finale.
+    assert b'home-hi__eyebrow">Welcome<' in body
     assert b'pp-head-cascade' in body, 'the header has no opening beat'
     # Freshness leads: it is the lobby's reason to exist, so it belongs in the header.
     assert body.index(b'home-hi__sync') < body.index(b'Trophy collection')
@@ -348,3 +386,13 @@ def test_the_lobby_marks_its_names_like_everywhere_else(client):
     body = client.get('/', **CF).content.decode()
 
     assert body.count('pp-markname') >= 2, 'both the header and the moat must carry the mark'
+
+
+def test_a_hunter_who_has_claimed_is_welcomed_back(client):
+    from trophies.models import Job, ProfileJobXP
+
+    profile = ProfileFactory(is_linked=True, sync_status='synced')
+    ProfileJobXP.objects.create(profile=profile, job=Job.objects.get(slug='mage'), total_xp=6000, level=3)
+    client.force_login(profile.user)
+
+    assert b'home-hi__eyebrow">Welcome back<' in client.get('/', **CF).content

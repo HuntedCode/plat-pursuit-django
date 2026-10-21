@@ -47,14 +47,14 @@
                         <h1 class="text-xl md:text-2xl lg:text-3xl font-bold truncate min-w-0">{% name_mark name=hero.pursuer_name mark=hero.display_mark size='lg' %}</h1>
                         {% if hero.active_title %}
                             <p class="text-sm md:text-base text-secondary italic pr-1 truncate">{{ hero.active_title }}</p>
-                        {% else %}
-                            <p class="text-xs md:text-sm text-base-content/40 italic pr-1">No title equipped</p>
                         {% endif %}
-                        {% comment %} Identity chip: your strongest discipline (pays off the ambient glow, which is tinted by it). {% endcomment %}
+                        {% comment %} Identity chip: your strongest discipline (pays off the ambient glow, which is tinted by it).
+                        A Pursuer with neither a title nor a lead gets ONE quiet line, not "No title equipped" over
+                        "New Pursuer": two lines saying there is nothing here yet (DL-02). {% endcomment %}
                         {% if hero.dominant %}
                         <p class="mt-2"><span class="hero-disc-chip" style="--disc: var(--disc-{{ hero.dominant.slug }});"><span class="hero-disc-chip__dot" aria-hidden="true"></span>Leads with {{ hero.dominant.label }}</span></p>
-                        {% else %}
-                        <p class="text-xs text-base-content/40 mt-1.5 italic">New Pursuer</p>
+                        {% elif not hero.active_title %}
+                        <p class="text-xs md:text-sm text-base-content/40 mt-1 italic pr-1">New Pursuer</p>
                         {% endif %}
                     </div>
                 </div>
@@ -68,15 +68,21 @@
                 everywhere else). `elements.css` carries the rules.{% endcomment %}
                 <div class="lab-dna-pair flex items-center gap-3 md:gap-4 shrink-0">
                     {% include 'partials/components/_disciplines_ring.html' with ring=hero.ring level=hero.pursuer_level %}
-                    <ul class="lab-dna-legend">
-                        {% for f in hero.ring %}
-                        <li data-disc="{{ f.slug }}" style="--disc: var(--disc-{{ f.slug }});">
-                            <span class="lab-dna-legend__dot"></span>
-                            <span class="lab-dna-legend__name">{{ f.label }}</span>
-                            <span class="lab-dna-legend__val" data-countup="{{ f.total }}">{{ f.total }}</span>
-                        </li>
-                        {% endfor %}
-                    </ul>
+                    {% comment %} LEVELS GAINED, SAID AS GAINS. Each value is what that discipline adds to the
+                    Pursuer Level (each job's level - 1), so a newcomer reads "+0" five times under a 1, rather
+                    than "Combat 0" beside five Combat jobs that each say Lv 1. {% endcomment %}
+                    <div class="lab-dna-legend-wrap">
+                        <p class="lab-dna-legend__head">Levels gained</p>
+                        <ul class="lab-dna-legend">
+                            {% for f in hero.ring %}
+                            <li data-disc="{{ f.slug }}" style="--disc: var(--disc-{{ f.slug }});">
+                                <span class="lab-dna-legend__dot"></span>
+                                <span class="lab-dna-legend__name">{{ f.label }}</span>
+                                <span class="lab-dna-legend__val">+<span data-countup="{{ f.total }}">{{ f.total }}</span></span>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
                 </div>
                 {% endif %}
             </div>
@@ -103,6 +109,21 @@
             </span>
             </button>
             {% endif %}
+
+            {% comment %} THE SUMMARY, FOLDED INTO THE HERO. It used to be a card titled "Career" inside the Career
+            page (DL-09), whose height pushed every view below a 900px desktop's first screen (DL-01). Inside
+            the hero it is refreshed with it after a claim, so it is not a refresh region of its own.
+
+            NOTHING UNTIL THE FIRST CLAIM: four tiles reading 0, 0, 1.0 and 1 say nothing, and the claim
+            banner below says the one thing worth saying (DL-02). {% endcomment %}
+            {% if career and career.total_xp %}
+            <dl class="hero-stats">
+                <div class="hero-stat"><dt>Tiers earned</dt><dd class="pp-tally" data-countup="{{ tiers_earned }}">{{ tiers_earned }}</dd></div>
+                <div class="hero-stat"><dt>Career XP</dt><dd class="pp-tally" title="{{ career.total_xp|intcomma }} XP">{{ total_xp_compact }}</dd></div>
+                <div class="hero-stat"><dt>Average job level</dt><dd class="pp-tally" data-countup="{{ career.avg_level }}" data-countup-decimals="1">{{ career.avg_level }}</dd></div>
+                <div class="hero-stat"><dt>Best job level</dt><dd class="pp-tally" data-countup="{{ career.highest_level }}">{{ career.highest_level }}</dd></div>
+            </dl>
+            {% endif %}
         </div>
     </section>
 
@@ -122,20 +143,7 @@
     (career.js `refreshAfterClaim`), and the last claim must be able to empty this, which needs a
     container to empty. Every `data-career-panel` is one of those regions. {% endcomment %}
     <div data-career-panel="banner">
-    {% if claimable.count %}
-    <a href="{{ claim_board_url }}" data-lab-goto="contracts" data-goto-filter="claimable" class="claim-banner claim-banner--gold card bg-base-200/90 border-2 border-primary/40 hover:border-primary transition-colors group mb-3">
-        <div class="card-body p-3 md:p-4 flex-row items-center gap-3 md:gap-4">
-            <span class="claim-spark shrink-0 text-primary">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8 md:w-9 md:h-9" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3z"/></svg>
-            </span>
-            <div class="min-w-0 flex-1">
-                <div class="font-bold text-sm md:text-base"><span class="text-primary" data-countup="{{ claimable.count }}">{{ claimable.count }}</span> Contract{{ claimable.count|pluralize }} ready to claim</div>
-                <div class="text-xs md:text-sm text-base-content/60"><span class="pp-tally text-primary font-semibold">+<b data-countup="{{ claimable.total_xp }}">{{ claimable.total_xp|intcomma }}</b></span> XP waiting to level your jobs</div>
-            </div>
-            <span class="shrink-0 text-xs md:text-sm text-primary font-semibold inline-flex items-center gap-1">Review &amp; claim <span class="group-hover:translate-x-0.5 transition-transform" aria-hidden="true">&rarr;</span></span>
-        </div>
-    </a>
-    {% endif %}
+    {% include 'partials/components/_claim_banner.html' with claimable=claimable projection=projection level=hero.pursuer_level href=claim_board_url in_page=True %}
     </div>
 
     {% if career %}
@@ -152,59 +160,16 @@
     {% include 'trophies/partials/career/_career_explainer.html' %}
     {% if show_new_contracts %}{% include 'trophies/partials/career/_new_contracts.html' %}{% endif %}
 
-    {% comment %} Career summary card (the "Career" heading + aggregate stats) -- the accented header for
-    this section. Stacked chrome per the site-wide rule; the tabs + panels below flow FREE (not carded). {% endcomment %}
-    <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
-        <div class="card-body p-3 md:p-5 lg:p-7 pp-head-cascade">
-            <div class="flex items-center gap-2 flex-wrap">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <path d="M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/><rect width="20" height="14" x="2" y="6" rx="2"/>
-                </svg>
-                <h2 class="text-lg md:text-xl lg:text-2xl font-bold">Career</h2>
-            </div>
-            <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1 mb-2">
-                The {{ career.total }} jobs that make up how you play, across five disciplines.
-            </p>
-            {% comment %} Reopens the how-it-works modal: unlike badges there is no long-form
-            page, the modal IS the teaching, so it stays reachable after the first visit. {% endcomment %}
-            <div class="pp-edhint-row mb-4">
-                <button type="button" class="pp-edhint" data-career-open>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
-                    How does my Career work?
-                </button>
-            </div>
-
-            {# Summary stats (aggregates you can't read off the grid) #}
-            <div data-career-panel="summary" class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
-                <div class="scard">
-                    <div class="scard__label">Tiers earned</div>
-                    <div class="scard__value pp-tally text-primary" data-countup="{{ tiers_earned }}">{{ tiers_earned }}</div>
-                    <div class="scard__sub">prestige tiers across your jobs</div>
-                </div>
-                <div class="scard">
-                    <div class="scard__label">Total XP</div>
-                    <div class="scard__value pp-tally" title="{{ career.total_xp|intcomma }} XP">{{ total_xp_compact }}</div>
-                    <div class="scard__sub">earned across all jobs</div>
-                </div>
-                <div class="scard">
-                    <div class="scard__label">Average level</div>
-                    <div class="scard__value pp-tally" data-countup="{{ career.avg_level }}" data-countup-decimals="1">{{ career.avg_level }}</div>
-                    <div class="scard__sub">across all {{ career.total }} jobs</div>
-                </div>
-                <div class="scard">
-                    <div class="scard__label">Highest level</div>
-                    <div class="scard__value pp-tally" data-countup="{{ career.highest_level }}">{{ career.highest_level }}</div>
-                    <div class="scard__sub">your single best job</div>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    {% comment %} Career content: the Jobs / Radar / Contracts tabs + panels flow FREE (NOT boxed in a card),
-    per the site-wide page-structure rule -- mirroring the Collection's free toggle + views. {% endcomment %}
-    {# View toggle: Jobs / Radar / Contracts (the merged Contracts board). Right-aligned segmented tabs, like the Collection's. #}
-    <div class="flex items-center justify-end mt-5 mb-4">
-        <div class="pp-switch" role="tablist" aria-label="Career view">
+    {% comment %} THE VIEW SWITCHER, right-aligned per the site-wide Tab Group standard (design-system.md), with
+    the Dossier / Sheet switch under it now right-aligned to match: the two used to sit at opposite edges
+    (DL-09). The explainer link that lived in the old "Career" card takes the row's other end: unlike badges
+    there is no long-form page, the modal IS the teaching, so it stays reachable after the first visit. {% endcomment %}
+    <div class="flex items-center justify-between gap-x-4 gap-y-2 flex-wrap mt-5 mb-4">
+        <button type="button" class="pp-edhint" data-career-open>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+            How does my Career work?
+        </button>
+        <div class="pp-switch ml-auto" role="tablist" aria-label="Career view">
             <button type="button" id="career-tab-jobs" aria-controls="career-panel-jobs" class="pp-switch__chip {% if active_view == 'jobs' %}is-active{% endif %}" data-view="jobs" role="tab" aria-selected="{% if active_view == 'jobs' %}true{% else %}false{% endif %}">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="14" x="2" y="7" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>Jobs
             </button>
@@ -221,7 +186,7 @@
 
     {# Jobs: two layouts -- Dossier (rich discipline chapters) + Character sheet (compact, shareable) #}
     <div class="lab-view" id="career-panel-jobs" role="tabpanel" aria-labelledby="career-tab-jobs" data-view="jobs" {% if active_view != 'jobs' %}hidden{% endif %}>
-        <div class="jlayout" role="tablist" aria-label="Jobs layout">
+        <div class="flex justify-end"><div class="jlayout" role="tablist" aria-label="Jobs layout">
             <button type="button" class="jlayout__btn is-active" data-layout="dossier" role="tab" aria-selected="true">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>
                 Dossier
@@ -230,7 +195,7 @@
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" x2="21" y1="6" y2="6"/><line x1="8" x2="21" y1="12" y2="12"/><line x1="8" x2="21" y1="18" y2="18"/><line x1="3" x2="3.01" y1="6" y2="6"/><line x1="3" x2="3.01" y1="12" y2="12"/><line x1="3" x2="3.01" y1="18" y2="18"/></svg>
                 Sheet
             </button>
-        </div>
+        </div></div>
 
         {# Dossier: each discipline a banded chapter (icon + name + active/XP stats + avg), jobs beneath #}
         <div class="jobs-layout jdoss" data-layout="dossier">
@@ -245,7 +210,7 @@
                     <span class="jdoss__avg">avg Lv <b class="pp-tally">{{ d.avg }}</b></span>
                 </div>
                 <div class="jdoss__grid">
-                    {% for job in d.jobs %}<div class="ptile" data-slug="{{ job.slug }}" role="button" tabindex="0" aria-label="{{ job.name }} detail">{% include 'partials/jobs/_job_tile.html' with card=job %}</div>{% endfor %}
+                    {% for job in d.jobs %}<div class="ptile" data-slug="{{ job.slug }}" role="button" tabindex="0" aria-label="{{ job.name }} detail{% if job.waiting_to %}, level {{ job.waiting_to }} once your contracts are claimed{% endif %}">{% include 'partials/jobs/_job_tile.html' with card=job %}</div>{% endfor %}
                 </div>
             </div>
             {% endfor %}

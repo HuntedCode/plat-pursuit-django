@@ -19,6 +19,8 @@ import re
 from collections import Counter
 from pathlib import Path
 
+from tests.engine._tree import SKIP_DIRS
+
 ROOT = Path(__file__).resolve().parents[2]
 ALLOWLIST = Path(__file__).with_name('retired_daisyui_allowlist.json')
 _NOT_APP_CODE = {'tests', 'venv', 'node_modules', 'staticfiles', 'media', 'docs', 'static', 'templates'}
@@ -248,8 +250,11 @@ def python_packages():
 def sources():
     templates = sorted((ROOT / 'templates').rglob('*.html'))
     scripts = sorted(p for p in (ROOT / 'static' / 'js').rglob('*.js') if 'vendor' not in p.parts)
+    # The shared walker's SKIP_DIRS too: `__pycache__` is never our source, and `test_tree_walk` creates and
+    # deletes a probe file inside one mid-suite, so a walk that lists it can lose it before reading it
+    # (the intermittent FileNotFoundError seen under -n 12 in 2026-10).
     python = sorted(p for pkg in python_packages() for p in pkg.rglob('*.py')
-                    if 'migrations' not in p.parts and 'tests' not in p.parts)
+                    if 'migrations' not in p.parts and 'tests' not in p.parts and not SKIP_DIRS.intersection(p.parts))
     return templates, scripts, python
 
 

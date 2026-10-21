@@ -109,7 +109,10 @@ def test_the_enter_moment_ships_on_first_syncs(client):
     # The TEMPLATE half of the JS contract: without data-sync-live the state machine silently
     # falls back to a reload and the feature vanishes with every other assertion still green.
     assert 'data-sync-live' in body
-    assert 'data-complete-stat="plats"' in body
+    # The finale shows the Pursuer the history already earned (FV-03), not four PSN trophy counts.
+    assert 'data-pursuit-yes' in body and 'data-pursuit-none' in body
+    assert 'data-complete-stat' not in body, 'the trophy-count tally is back in the finale'
+    assert '/career/?view=contracts&amp;status=claimable' in body, 'the finale lost its claim action'
 
 
 def test_quick_refreshes_do_not_get_the_finale(client):
@@ -135,7 +138,7 @@ def test_the_js_reloads_only_for_errors_and_refreshes():
         'expected exactly two reload sites: the quick-refresh fallback and the error branch'
     )
     assert 'PlatPursuit.countUp' in code, (
-        'the finale stats must ride the house count-up, not snap into place'
+        'the finale count must ride the house count-up, not snap into place'
     )
     assert "status === 'synced'" in code.replace('"', "'")
 
@@ -241,3 +244,49 @@ def test_the_tally_and_finale_wiring_survives(client):
     syncing = _code(Path(settings.BASE_DIR) / 'static' / 'js' / 'syncing.js')
     assert 'requestAnimationFrame(startCountUps)' in syncing
     assert 'if (completed) { return; }' in syncing, 'a second synced transition replays the finale'
+
+
+def test_the_synced_payload_says_what_the_history_already_earned(client):
+    """FV-03: the finale reads the synced poll's `pursuit` block. Contract detection runs inside
+    sync_complete, before the profile is marked synced, so the claimables exist by then."""
+    import itertools
+    from django.utils import timezone
+    from trophies.models import Contract, EarnedContract, Job
+
+    client, profile = _syncing_client(client, total_trophies=0)
+    data = client.get('/api/profile-sync-status/', **CF).json()
+    assert 'pursuit' not in data, 'the syncing polls must stay free of the projection'
+
+    profile.sync_status = 'synced'
+    profile.save(update_fields=['sync_status'])
+    assert client.get('/api/profile-sync-status/', **CF).json()['pursuit'] == {'count': 0}
+
+    ids = itertools.count(95001)
+    for _ in range(2):
+        n = next(ids)
+        contract = Contract.objects.create(name=f'fin-{n}', slug=f'fin-{n}', igdb_id=n, is_live=True)
+        contract.jobs.set(Job.objects.filter(slug='pathfinder'))
+        EarnedContract.objects.create(profile=profile, contract=contract, full_reached_at=timezone.now())
+
+    pursuit = client.get('/api/profile-sync-status/', **CF).json()['pursuit']
+    assert pursuit['count'] == 2
+    assert pursuit['from_level'] == 1, 'the finale cannot tell whether claiming moves the level'
+    assert pursuit['level'] == 5 and pursuit['rank'] == 'Newbie'      # 2 x 6,000 XP = 4 levels gained
+    assert pursuit['top'] == [{'name': 'Pathfinder', 'from': 1, 'to': 5}]
+
+
+def test_the_finale_script_and_template_agree_on_every_hook(client):
+    """syncing.js finds the finale's parts by `data-pursuit-*` hook names; a name renamed on one side only
+    would leave that part blank with nothing failing. Job names arrive from the payload, so they are written
+    as text, never as markup."""
+    import re
+
+    code = _code(Path(settings.BASE_DIR) / 'static' / 'js' / 'syncing.js')
+    template = (Path(settings.BASE_DIR) / 'templates' / 'home' / '_hero_syncing.html').read_text(encoding='utf-8')
+    used = set(re.findall(r"hook\('([a-z]+)'\)", code)) | set(re.findall(r"setText\('([a-z]+)'", code))
+    assert used >= {'yes', 'none', 'claim', 'count', 'noun', 'pronoun', 'reach', 'level', 'rank', 'top'}
+    missing = sorted(name for name in used if f'data-pursuit-{name}' not in template)
+    assert not missing, f'syncing.js reads hooks the finale does not render: {missing}'
+    fill = code[code.index('function fillPursuit'):code.index('function startCountUps')]
+    assert 'innerHTML' not in fill, 'the finale writes payload text as markup'
+    assert "pursuit.level > (pursuit.from_level || 0)" in fill, 'the finale states a level claiming does not move'
