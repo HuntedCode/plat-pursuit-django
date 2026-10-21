@@ -1,5 +1,6 @@
 from django import forms
-from django.contrib.auth.forms import PasswordChangeForm
+from django.contrib.auth.forms import AdminUserCreationForm, PasswordChangeForm
+from allauth.account.adapter import get_adapter
 from allauth.account.forms import SignupForm
 from .models import CustomUser
 from .services.timezone_service import normalize_zone
@@ -25,10 +26,6 @@ class CustomUserCreationForm(SignupForm):
     # `timezone_confirmed_at` (`users.services.timezone_service`). Missing or unknown: the UTC default.
     browser_timezone = forms.CharField(required=False, max_length=64, widget=forms.HiddenInput)
 
-    class Meta:
-        model = CustomUser
-        fields = ("email", "password1")
-
     def clean_browser_timezone(self):
         # The field's own choices (`CustomUser.user_timezone`), an old browser-reported name mapped to its current
         # one; anything else is dropped, never an error, because a hunter cannot see or fix this input.
@@ -46,6 +43,28 @@ class CustomUserCreationForm(SignupForm):
         if CustomUser.objects.filter(email=email).exists():
             raise forms.ValidationError("This email is already in use.")
         return email
+
+
+class AdminAddUserForm(AdminUserCreationForm):
+    """The Django admin's "Add user" form. Not the signup form above: that one is allauth's, not a ModelForm,
+    so the admin could not build its page (`'CustomUserForm' object has no attribute 'instance'`)."""
+
+    class Meta(AdminUserCreationForm.Meta):
+        model = CustomUser
+        fields = ("email", "user_timezone")
+
+    def clean_email(self):
+        # Lowercased like a signup, so the address can still sign in and the duplicate check matches.
+        email = self.cleaned_data['email'].lower()
+        if CustomUser.objects.filter(email__iexact=email).exists():
+            raise forms.ValidationError("This email is already in use.")
+        return email
+
+    def save(self, commit=True):
+        # The model still carries AbstractUser's unique `username`, which allauth fills on signup. Fill it the
+        # same way, or every admin-added account after the first collides on an empty one.
+        get_adapter().populate_username(None, self.instance)
+        return super().save(commit=commit)
 
 class CustomPasswordChangeForm(PasswordChangeForm):
     def __init__(self, *args, **kwargs):

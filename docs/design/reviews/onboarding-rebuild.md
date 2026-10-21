@@ -112,8 +112,8 @@ Built for these pages, then used everywhere new:
 
 ## Found along the way (not fixed here)
 - The Django admin's "add user" page 500s (`'CustomUserForm' object has no attribute 'instance'`) on
-  main too: `CustomUserAdmin.add_form` is the allauth sign-up form, which is not a ModelForm. Its own
-  fix branch.
+  main too: `CustomUserAdmin.add_form` is the allauth sign-up form, which is not a ModelForm. Fixed on
+  its own branch (`fix/admin-add-user`): the admin now has its own form, `users.forms.AdminAddUserForm`.
 
 ## Not in this branch
 - The landing (FV-05, FV-06): branch 7.

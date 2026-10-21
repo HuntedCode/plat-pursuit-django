@@ -3,7 +3,7 @@ from django.contrib.auth.admin import UserAdmin
 from allauth.account.models import EmailAddress
 from allauth.account.admin import EmailAddressAdmin as BaseEmailAddressAdmin
 from .models import CustomUser, SubscriptionPeriod
-from .forms import CustomUserCreationForm
+from .forms import AdminAddUserForm
 
 class PSNLinkedFilter(admin.SimpleListFilter):
     title = "PSN linked"
@@ -21,7 +21,7 @@ class PSNLinkedFilter(admin.SimpleListFilter):
 
 @admin.register(CustomUser)
 class CustomUserAdmin(UserAdmin):
-    add_form = CustomUserCreationForm
+    add_form = AdminAddUserForm
 
     # Fields for list view (efficient, searchable)
     list_display = ('email', 'is_linked_to_profile', 'premium_tier', 'subscription_provider', 'email_prefs_summary', 'user_timezone', 'timezone_confirmed', 'is_staff', 'is_active', 'date_joined')
@@ -66,7 +66,7 @@ class CustomUserAdmin(UserAdmin):
     add_fieldsets = (
         (None, {
             'classes': ('wide',),
-            'fields': ('email', 'user_timezone', 'password1', 'password2'),
+            'fields': ('email', 'user_timezone', 'usable_password', 'password1', 'password2'),
         }),
     )
 
