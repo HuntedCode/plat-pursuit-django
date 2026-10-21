@@ -1,7 +1,9 @@
 """Retired DaisyUI components may not spread (SW-01, docs/design/reviews/README.md).
 
 `btn`, `badge`, `tabs`, `alert` and `toast` are retired in favour of the house `pp-cta`, `.bd-chip`, `.pp-switch`
-and `.pp-notice` / `.pp-toast` (docs/reference/design-system.md, "DaisyUI: What Stays, What Is Retired"). Pages still using them are
+and `.pp-notice` / `.pp-toast`; `input`, `select`, `textarea`, `checkbox` and `progress` in favour of `.pp-input`,
+`.pp-check` and `.pp-progress` (static/css/components/field.css) (docs/reference/design-system.md, "DaisyUI: What
+Stays, What Is Retired"). Pages still using them are
 on `retired_daisyui_allowlist.json`, and the counts there are a RATCHET:
 
 - a file may not gain a use (that is new code reaching for a retired component);
@@ -40,7 +42,8 @@ def test_no_file_gains_a_retired_daisyui_class():
             if n > allowed.get(path, {}).get(family, 0)]
     assert not grew, (
         'Retired DaisyUI classes were added. Use pp-cta (buttons), .bd-chip (badges), .pp-switch (tabs),\n'
-        '.pp-notice (alerts; partials/_messages.html for Django messages) or ToastManager (toasts);\n'
+        '.pp-notice (alerts; partials/_messages.html for Django messages), ToastManager (toasts) or\n'
+        'partials/forms/_field.html / .pp-input / .pp-check / .pp-progress (form fields);\n'
         'see "DaisyUI: What Stays, What Is Retired" in docs/reference/design-system.md.\n' + '\n'.join(grew))
 
 
@@ -106,3 +109,21 @@ def test_the_reader_counts_classes_not_words():
     assert _all_names(_class_attr_values(notice)) == {'alert': 2}
     assert _js_counts("el.setAttribute('role', 'alert'); const toast = make(); t.className = 'toast toast-end';"
                       " document.getElementById('toast-container');") == {'toast': 2}
+
+
+def test_the_reader_counts_field_classes_not_tags_or_tailwind():
+    """The field families (retired 2026-10) share names with HTML tags (<input>, <select>), Tailwind utilities
+    (`select-none`, `select-all`) and the site's own classes (`progress-bar`, `land-search__input`). Only
+    DaisyUI's classes may count."""
+    markup = _strip_template_comments(
+        '<input type="text" class="input input-bordered input-sm w-full"><select class="select select-bordered">'
+        '<textarea class="textarea textarea-bordered"></textarea><input type="checkbox" class="checkbox checkbox-primary">'
+        '<progress class="progress progress-warning"></progress>'
+        '<p class="select-none select-all">x</p><div class="progress-bar progress-band"></div>'
+        '<input class="land-search__input pp-input"><label class="pp-check"><input type="checkbox"></label>')
+    assert _all_names(_class_attr_values(markup)) == {
+        'input': 3, 'select': 2, 'textarea': 2, 'checkbox': 2, 'progress': 2}
+
+    assert _js_counts("const input = form.querySelector('input'); el.className = 'pp-input';"
+                      " sel.classList.add('select-none'); bar.className = 'progress-bar';") == {}
+    assert _py_counts("W = {'class': 'input input-bordered w-full'}\nX = {'class': 'pp-input'}\n") == {'input': 2}

@@ -1,0 +1,3 @@
+{% comment %}Deliberately EMPTY (allauth skips an empty message). "Check your inbox" names the address in its own
+lede, and a resend says so itself (users/views.py resend_verification), so allauth's "Confirmation email sent
+to X." notice only repeated the page twice over (onboarding rebuild audit).{% endcomment %}

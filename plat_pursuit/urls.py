@@ -101,7 +101,7 @@ from trophies.views import (ModCenterView, QuickTakeQueueView, GameFlagQueueView
 from trophies.views import GamesListView, GameDetailView, GamePageView, GameLeaderboardView, RandomGameView, ProfilesListView, SearchView, ProfileDetailView, ProfileDayView, BadgeHowItWorksView, BadgeListView, BadgeDetailView, GroupBadgeInspectView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, RequestProfileRefreshView, ProfileSuggestView, SiteSuggestView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeSeriesCreationView, BadgeRanksPanelView, OverallBadgeLeaderboardsView, LeaderboardRowsView, MyTitlesView, RateMyGamesView, ReviewsArchivedView, RoadmapDetailView, RoadmapEditorView, PlatCardsView, RecentlyAddedView, TrophyListsBrowseView, CompanyListView, CompanyDetailView, FranchiseListView, FranchiseDetailView, GenreThemeListView, GenreDetailView, ThemeDetailView, CareerView, JobsBrowseView, JobDetailView, JobRanksPanelView, JobContractsView, ContractsResultsView, ContractModalView, ContractModalPreviewView, CollectionView, CollectionBadgeModalView
 from milestones.views import MilestoneListView   # new milestones app (replaces the legacy trophies view)
 from trophies.recap_views import RecapIndexView, RecapSlideView
-from users.views import CustomConfirmEmailView, stripe_webhook, paypal_webhook, SupportStorefrontView, SupportRoadmapView, SubscriptionManagementView
+from users.views import CustomConfirmEmailView, VerificationSentView, resend_verification, fix_signup_address, stripe_webhook, paypal_webhook, SupportStorefrontView, SupportRoadmapView, SubscriptionManagementView
 from users.subscription_admin_views import SubscriptionAdminView
 from fundraiser.views import FundraiserView, DonationSuccessView, FundraiserAdminView, BadgeRevealView, FundraiserLandingView
 # Notifications are HIDDEN pending their rebuild (2026-08); every view in `notifications/views.py` is
@@ -769,6 +769,11 @@ urlpatterns = [
     path('api/site-suggest/', SiteSuggestView.as_view(), name='site_suggest'),
 
     path('accounts/link-psn/', LinkPSNView.as_view(), name='link_psn'),
+    # "Check your inbox" with somewhere to go (FV-08): the exact path shadows allauth's own view, and the two
+    # actions sit outside confirm-email/ so the <key> route below cannot swallow them.
+    path('accounts/confirm-email/', VerificationSentView.as_view(), name='account_email_verification_sent'),
+    path('accounts/verify/resend/', resend_verification, name='account_verification_resend'),
+    path('accounts/verify/fix/', fix_signup_address, name='account_verification_fix'),
     path('accounts/confirm-email/<str:key>/', CustomConfirmEmailView.as_view(), name='account_confirm_email'),
     # SHADOW ROUTES (declared before the allauth include, so they win the match):
     # - password change lives on Settings (its form has field errors + a throttle; two password

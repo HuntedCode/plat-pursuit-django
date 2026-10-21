@@ -80,12 +80,14 @@
         <div id="page-recede">{% block content %}{% endblock %}</div>
       </main>
     {% endblock %}
-    {% include 'partials/footer.html' %}
+    {% comment %}Both blocks exist so a focused flow (account/base_auth.html) can drop them; every other page
+    inherits them as they are.{% endcomment %}
+    {% block site_footer %}{% include 'partials/footer.html' %}{% endblock %}
     </div>
     </div>
     {% include 'partials/back_to_top.html' %}
     {% block fixed_overlays %}{% endblock %}
-    {% include 'partials/mobile_tabbar.html' %}
+    {% block mobile_tabbar %}{% include 'partials/mobile_tabbar.html' %}{% endblock %}
 
     <!-- Toast Notification Container -->
     <div id="toast-container" class="pp-toasts"></div>

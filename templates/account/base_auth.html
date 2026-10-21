@@ -1,0 +1,29 @@
+{% extends 'base.html' %}
+{% comment %}THE auth shell (static/css/components/auth.css): every sign in, sign up, reset, confirm and link
+PSN page extends this, so the onboarding journey keeps one look from "Sign up" to the sync card (FV-01).
+
+Blocks: title, auth_eyebrow, auth_title (the page's ONE h1; branch inside it, never add a second),
+auth_lede, auth_body, auth_card_class ("auth-card--wide" for link PSN's step 2).
+
+Focused chrome (owner, 2026-10-21): no footer and no phone tab bar, so the form is the whole screen.
+The legal links the footer carried stay under the card.{% endcomment %}
+{% block robots %}noindex, nofollow{% endblock %}
+{% block site_footer %}{% endblock %}
+{% block mobile_tabbar %}{% endblock %}
+
+{% block main_layout %}
+<main id="main-content" class="auth-page" role="main">
+    <div class="auth-card {% block auth_card_class %}{% endblock %} pp-head-cascade">
+        <p class="land-eyebrow"><span class="land-eyebrow__tick" aria-hidden="true"></span>{% block auth_eyebrow %}Platinum Pursuit{% endblock %}</p>
+        <h1 class="auth-card__h1">{% block auth_title %}{% endblock %}</h1>
+        {% block auth_lede %}{% endblock %}
+        {% include 'partials/_messages.html' %}
+        {% block auth_body %}{% endblock %}
+    </div>
+    <nav class="auth-legal" aria-label="Legal">
+        <a href="{% url 'privacy' %}">Privacy</a>
+        <a href="{% url 'terms' %}">Terms</a>
+        <a href="{% url 'contact' %}">Contact</a>
+    </nav>
+</main>
+{% endblock %}

@@ -1095,6 +1095,26 @@ class ProfileDayView(View):
         return render(request, template, context)
 
 
+_LINKED_ELSEWHERE = 'This PSN account is already linked to another user.'
+
+
+def _claimed_by_someone_else(profile, user):
+    return bool(profile.user_id) and profile.user_id != user.pk
+
+
+def _code_is_live(profile):
+    return bool(profile.verification_code and profile.verification_expires_at
+                and profile.verification_expires_at >= timezone.now())
+
+
+def _ensure_fresh_code(profile):
+    """Give the profile a live verification code. Returns True when it had to issue a new one."""
+    if _code_is_live(profile):
+        return False
+    profile.generate_verification_code()
+    return True
+
+
 class LinkPSNView(LoginRequiredMixin, View):
     """
     Multi-step view for linking PSN account to web account.
@@ -1135,8 +1155,8 @@ class LinkPSNView(LoginRequiredMixin, View):
                 psn_username = form.cleaned_data['psn_username'].lower().strip()
                 try:
                     profile, created = Profile.objects.get_or_create(psn_username=psn_username)
-                    if profile.user and profile.user != request.user:
-                        raise ValueError('This PSN account is already linked to another user.')
+                    if _claimed_by_someone_else(profile, request.user):
+                        raise ValueError(_LINKED_ELSEWHERE)
 
                     time_since_last_sync = profile.get_time_since_last_sync()
                     if created:
@@ -1144,8 +1164,7 @@ class LinkPSNView(LoginRequiredMixin, View):
                     else:
                         profile.attempt_sync()
 
-                    if not profile.verification_code or profile.verification_expires_at < timezone.now():
-                        profile.generate_verification_code()
+                    _ensure_fresh_code(profile)
 
                     if psn_outage:
                         messages.warning(
@@ -1185,6 +1204,11 @@ class LinkPSNView(LoginRequiredMixin, View):
                 try:
                     start_time = timezone.now().timestamp()
                     profile = Profile.objects.get(psn_username=psn_username.lower())
+                    # The same two checks every return to step 2 makes (FV-20). Without them a hunter who
+                    # came back after the hour sat through a whole verification sync with a code that could
+                    # never pass, and was then told PSN "may still be updating".
+                    if _claimed_by_someone_else(profile, request.user) or not _code_is_live(profile):
+                        return self._back_to_step_two(request, psn_username)
                     VerificationService.start_verification_sync(profile)
 
                     messages.info(request, "Verification in progress...")
@@ -1209,10 +1233,19 @@ class LinkPSNView(LoginRequiredMixin, View):
     def _back_to_step_two(self, request, psn_username):
         """Re-render the verify step for a hunter who already holds a code, or start over when the
         profile is gone. Every return to step 2 must carry the code and the profile: the generic
-        error path once rendered step 2 without them, and the hunter got an empty code box (FV-19)."""
+        error path once rendered step 2 without them, and the hunter got an empty code box (FV-19).
+
+        It also re-runs step 1's two checks (FV-20): the code is regenerated if its hour ran out while
+        the hunter was away (it used to be shown as-is, so they pasted a code that could never pass),
+        and a profile someone else linked in the meantime sends them back to the start."""
         profile = Profile.objects.filter(psn_username=psn_username.lower()).first()
         if profile is None:
             return redirect('link_psn')
+        if _claimed_by_someone_else(profile, request.user):
+            messages.error(request, _LINKED_ELSEWHERE)
+            return redirect('link_psn')
+        if _ensure_fresh_code(profile):
+            messages.info(request, 'Your code ran out, so here is a new one. Swap it into About, then verify.')
         return render(request, self.template_name, {
             'form': self.form_class(initial={'psn_username': psn_username}),
             'step': 2,

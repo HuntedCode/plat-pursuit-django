@@ -16,8 +16,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const field = document.getElementById(fieldId);
         if (!field) return;
 
-        const button = field.closest('.form-control')?.querySelector('[data-password-toggle]')
-            || field.parentElement.querySelector('[data-password-toggle]');
+        const button = field.closest('.pp-input-wrap')?.querySelector('[data-password-toggle]');
         if (!button) return;
 
         const icon = button.querySelector('svg');
@@ -68,12 +67,9 @@ document.addEventListener('DOMContentLoaded', () => {
         'gamer', 'noob', 'letmein1', 'qazwsx', 'security',
     ]);
 
-    const STRENGTH_LEVELS = [
-        { label: 'Weak',   color: 'bg-error'   },
-        { label: 'Fair',   color: 'bg-warning'  },
-        { label: 'Good',   color: 'bg-warning'  },
-        { label: 'Strong', color: 'bg-success'  },
-    ];
+    // Index = score - 1. The tone per score lives in field.css (.pp-strength[data-score]).
+    const STRENGTH_LABELS = ['Weak', 'Fair', 'Good', 'Strong'];
+    const STRENGTH_EMPTY = 'Use 8 or more characters';
 
     /**
      * Evaluates password strength against Django's default validators.
@@ -153,58 +149,30 @@ document.addEventListener('DOMContentLoaded', () => {
         const emailFieldId = input.getAttribute('data-strength-email');
         const emailField = emailFieldId ? document.getElementById(emailFieldId) : null;
 
-        // Build the indicator DOM
-        const container = document.createElement('div');
-        container.className = 'mt-2 bg-white/[0.03] border border-base-content/5 rounded-lg p-2';
-        container.setAttribute('aria-live', 'polite');
+        // The meter sits inside the field, under the box (field.css .pp-strength): four bars and one line.
+        // Before anything is typed the line is the rule ("Use 8 or more characters"), not "strength: --".
+        const meter = document.createElement('div');
+        meter.className = 'pp-strength';
+        meter.dataset.score = '0';
 
-        const barRow = document.createElement('div');
-        barRow.className = 'flex gap-1 mb-1';
+        const bars = document.createElement('div');
+        bars.className = 'pp-strength__bars';
+        bars.setAttribute('aria-hidden', 'true');
+        for (let i = 0; i < 4; i++) bars.appendChild(document.createElement('span'));
 
-        const segments = [];
-        for (let i = 0; i < 4; i++) {
-            const seg = document.createElement('div');
-            seg.className = 'h-1.5 flex-1 rounded-full bg-base-content/10 transition-colors duration-200';
-            barRow.appendChild(seg);
-            segments.push(seg);
-        }
-
+        // Only the words are live, and only when they change, so typing is not read aloud per key.
         const label = document.createElement('p');
-        label.className = 'text-xs text-base-content/50';
-        label.innerHTML = 'Password strength: <span class="font-semibold">--</span>';
+        label.className = 'pp-strength__label';
+        label.setAttribute('aria-live', 'polite');
 
-        container.appendChild(barRow);
-        container.appendChild(label);
-
-        // Insert after the input's parent .form-control
-        const formControl = input.closest('.form-control');
-        if (formControl) {
-            formControl.after(container);
-        } else {
-            input.parentElement.after(container);
-        }
-
-        const labelSpan = label.querySelector('span');
+        meter.append(bars, label);
+        (input.closest('.pp-input-wrap') || input).after(meter);
 
         function update() {
-            const score = evaluateStrength(input.value, emailField?.value);
-            const displayScore = input.value ? score : 0;
-
-            segments.forEach((seg, i) => {
-                seg.className = 'h-1.5 flex-1 rounded-full transition-colors duration-200';
-                if (input.value && i < displayScore) {
-                    seg.classList.add(STRENGTH_LEVELS[Math.max(0, displayScore - 1)].color);
-                } else {
-                    seg.classList.add('bg-base-content/10');
-                }
-            });
-
-            if (input.value) {
-                const level = STRENGTH_LEVELS[Math.max(0, displayScore - 1)];
-                labelSpan.textContent = level.label;
-            } else {
-                labelSpan.textContent = '--';
-            }
+            const score = input.value ? evaluateStrength(input.value, emailField?.value) : 0;
+            meter.dataset.score = String(score);
+            const text = score ? `Strength: ${STRENGTH_LABELS[score - 1]}` : STRENGTH_EMPTY;
+            if (label.textContent !== text) label.textContent = text;
         }
 
         input.addEventListener('input', update);
@@ -217,4 +185,27 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Attach strength indicators
     document.querySelectorAll('[data-password-strength]').forEach(initStrengthIndicator);
+
+    // ── Resend countdown ("Check your inbox", FV-08) ────────────────
+    // The server renders the button live with the seconds left on allauth's per-address limit in
+    // data-resend-wait; this holds it disabled while they count down and hands it back at zero. (Live
+    // by default, so without JS it still submits and the view explains an early press.)
+    document.querySelectorAll('[data-resend-wait]').forEach(button => {
+        let left = parseInt(button.dataset.resendWait, 10) || 0;
+        const label = button.querySelector('[data-resend-label]');
+        if (left <= 0 || !label) return;
+
+        button.disabled = true;
+        label.textContent = `Send another in ${left}s`;
+        const timer = setInterval(() => {
+            left -= 1;
+            if (left > 0) {
+                label.textContent = `Send another in ${left}s`;
+                return;
+            }
+            clearInterval(timer);
+            button.disabled = false;
+            label.textContent = 'Send another link';
+        }, 1000);
+    });
 });

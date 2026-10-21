@@ -1,0 +1,8 @@
+{% comment %}A form's non-field errors ("The email address and/or password you specified are not correct.")
+as a house error notice. Field errors sit under their own field (partials/forms/_field.html).{% endcomment %}
+{% if form.non_field_errors %}
+<div role="alert" class="pp-notice pp-notice--error">
+    {% include 'partials/_notice_icon.html' with tone='error' %}
+    <div class="pp-notice__body">{% for error in form.non_field_errors %}{{ error }}{% if not forloop.last %}<br>{% endif %}{% endfor %}</div>
+</div>
+{% endif %}

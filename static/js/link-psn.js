@@ -96,7 +96,7 @@ document.addEventListener('DOMContentLoaded', () => {
             stopPolling();
             statusText.textContent = 'Timed out';
             dotsSpan.textContent = '';
-            timeoutBlock.classList.remove('hidden');
+            timeoutBlock.hidden = false;
         }
 
         function pollStatus() {

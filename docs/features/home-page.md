@@ -50,7 +50,7 @@ Two team-preview doors exist for reviewing states an account can't naturally rea
 
 The syncing hero's transition handling lives in `static/js/syncing.js` and branches three ways on `platpursuit:sync-status-changed`:
 
-- **`synced` on a FIRST sync** (the finale block only renders when `is_initial_sync`): no reload. The status card swaps in place to the enter moment ("Your Pursuer has emerged" + the final trophy counts + one "Enter your Pursuit" CTA to `/`). The user arrives on the Home on purpose.
+- **`synced` on a FIRST sync** (the finale block only renders when `is_initial_sync`): no reload. The status card swaps in place to the enter moment ("Your Pursuer has emerged", the contracts waiting and the level claiming them reaches, then "Claim your contracts" and "Enter your Pursuit"; see [onboarding.md](onboarding.md)). The user arrives on the Home on purpose.
 - **`synced` on a quick refresh**: `window.location.reload()` as before; `HomeView` re-resolves to the synced Home.
 - **`error`**: `window.location.reload()`; `HomeView` re-renders the shell with error styling server-side.
 

@@ -7,10 +7,31 @@ chrome rebuild, and this is its rebuilt-from-scratch replacement in a different 
 spotlight tours: the sync wait is a captive window, and in-context cards teach at the moment
 of curiosity).
 
+## Before the sync: sign up, confirm, link PSN
+
+Rebuilt 2026-10 as one flow in one shell (`templates/account/base_auth.html`, see the Auth Shell
+section of [design-system.md](../reference/design-system.md); record:
+[onboarding-rebuild.md](../design/reviews/onboarding-rebuild.md)).
+
+| Step | What the hunter sees | Notes |
+|---|---|---|
+| Sign up | One email, one password, "Next: confirm your email, then link your PSN." | `ACCOUNT_SIGNUP_FIELDS = ['email*', 'password1*']`. The honeypot and the browser timezone input stay |
+| Check your inbox | The address the link went to, "Send another link" (the wait counts down), "Wrong address? Fix it" | `users/services/pending_signup.py`: one session record, written by `CustomAccountAdapter.send_confirmation_mail` after a real send |
+| Confirm | The link signs them in (`ACCOUNT_LOGIN_ON_EMAIL_CONFIRMATION`) and lands on the no-PSN welcome | |
+| Link PSN 1 to 3 | Name, then the code with where About is, then verifying | Step 2 regenerates an expired code and re-checks ownership on every return (FV-20) |
+
+**Resend and fix-it act only on this browser's sign-up.** Neither takes an address from the request;
+both read the session record. Fix-it deletes the account only while it is unverified, has never signed in
+and is not staff, then clears allauth's pending login for it and reopens sign up with the address
+prefilled (allauth's `?email=`). A staff resend from the admin is never recorded (the sender is signed
+in), so a staff member's own "Check your inbox" can never offer to delete someone else's account.
+
 ## Surface 1: the syncing hero on the gates surface (`templates/home/_hero_syncing.html`)
 
 Since the gates merge, the syncing state renders on `home/landing.html` with a live status hero
-above the landing's real sections. A first sync takes 10-30 minutes and the user has nothing to
+above the landing's real sections. Since 2026-10 the card is in the landing's language (FV-01): centred,
+the primary tone while it works (error and outage keep their own), and "Usually 10 to 30 minutes." on a
+line of its own (FV-13). A first sync takes 10-30 minutes and the user has nothing to
 do but wait. The page uses that window three ways (hero wiring in `static/js/syncing.js` +
 `static/css/components/syncing.css`; the progress/elapsed mirrors are inline in the landing's
 syncing branch):

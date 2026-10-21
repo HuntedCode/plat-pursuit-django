@@ -1,6 +1,6 @@
 # Onboarding rebuild: design pass (fix plan branch 5)
 
-Status: **approved, building** (2026-10-21, `feature/ui/onboarding-rebuild`), with the three owner decisions below. Covers FV-01,
+Status: **built** (2026-10-21, `feature/ui/onboarding-rebuild`), with the three owner decisions below. Covers FV-01,
 FV-07, FV-08, FV-09 (step-2 help), FV-13, FV-20, the auth half of FV-15, and the house form fields.
 Judged from fresh captures of every page at 375, 768 and 1440 (sign up, sign in, forgot password, check
 your inbox, the no-PSN welcome, link steps 1 to 3, the sync card and its finale).
@@ -86,6 +86,31 @@ Built for these pages, then used everywhere new:
   account nobody can reach. **Decided: delete it.**
 - **C. Field retirement scope.** Ratchet (today's ~150 uses allowlisted, new uses refused, old ones
   convert as pages are touched) or convert every page now. **Decided: ratchet**, as `btn` was.
+
+## As built
+
+- **Check your inbox** reads one session record (`users/services/pending_signup.py`), written by the
+  sign-up itself and stamped by every confirmation email that really sends, never for a signed-in sender
+  (a staff resend from the admin), and cleared by a completed sign-in. allauth's own "Confirmation email
+  sent to X." notice is silenced (an empty `account/messages/email_confirmation_sent.txt`): the page says
+  it already. Resend and fix-it take no address from the request, so they can only act on the
+  sign-up that happened in that browser. Resend goes through allauth's own send, so its one-per-three-
+  minutes limit still holds; the page shows the wait instead of failing silently.
+- **Fix it** deletes the account only while it is unverified, has never signed in and is not staff,
+  clears allauth's pending login for it, and returns to sign up with the address prefilled (`?email=`,
+  allauth's own prefill).
+- **Link PSN step 2:** the PS5 privacy path ("Users and Accounts > Privacy > Who can see your gaming
+  history") is from PlayStation's support pages; the PS5 profile path (avatar > Profile > Edit Profile >
+  About) is from a third-party guide, as Sony documents no About path. Re-check both if Sony moves them.
+- **Hooks unchanged:** the sync card keeps every hook `syncing.js`, `navsync.js` and `landing.html`'s
+  inline mirrors read.
+- The password reset form keeps its second password field: it is allauth's form, and the sign-up
+  decision was about sign up.
+
+## Found along the way (not fixed here)
+- The Django admin's "add user" page 500s (`'CustomUserForm' object has no attribute 'instance'`) on
+  main too: `CustomUserAdmin.add_form` is the allauth sign-up form, which is not a ModelForm. Its own
+  fix branch.
 
 ## Not in this branch
 - The landing (FV-05, FV-06): branch 7.

@@ -83,8 +83,7 @@ def test_a_chosen_zone_is_still_a_confirmation():
 
 def _signup(client, email, **extra):
     return client.post('/accounts/signup/', {
-        'email': email, 'email2': email,
-        'password1': 'a-perfectly-fine-pass-1', 'password2': 'a-perfectly-fine-pass-1', 'website': '', **extra,
+        'email': email, 'password1': 'a-perfectly-fine-pass-1', 'website': '', **extra,
     })
 
 

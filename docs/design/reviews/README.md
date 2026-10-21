@@ -80,7 +80,7 @@ one of these branches (its status row names it). Run in this order:
 | 3a | Review leftovers (`fix/review-leftovers`) | SW-03, SW-04, the SW-01 leftovers | Two dead scripts and the dead-CSS sweep; phase pills on `.bd-chip`; back-to-top steps aside for toasts; pins for branch 3's two unpinned fixes. Done |
 | 3b | Pursuer Level from 1 (`feature/gamification/pursuer-level-from-one`) | DL-04 | The owner chose to redefine the level rather than restyle it: it counts levels gained, so a newcomer is 1. Ranks and Ascent rungs moved down 25; a backfill command moves the stored copies. Its own branch because it changes stored numbers. Done |
 | 4 | Career + first arrival (`feature/ui/career-first-arrival`) | FV-03, FV-12, DL-01, DL-02, DL-03, DL-09 | Design record: [career-first-arrival.md](career-first-arrival.md). Every surface says what claiming makes the hunter (`claim_projection`); the lobby leads with the Pursuit; Career's summary folds into the hero. Done |
-| 5 | Onboarding rebuild | FV-01, FV-07, FV-08, FV-09 step-2 help, FV-13, FV-20 | Design pass first; auth, link PSN and the sync card as one flow, with the house form fields that retire DaisyUI `input` / `select` / `textarea` / `checkbox` / `toggle` |
+| 5 | Onboarding rebuild (`feature/ui/onboarding-rebuild`) | FV-01, FV-07, FV-08, FV-09 step-2 help, FV-13, FV-20 | Design record: [onboarding-rebuild.md](onboarding-rebuild.md). One auth shell with focused chrome; house fields (`input`, `select`, `textarea`, `checkbox`, `progress` retired behind the guard); "Check your inbox" names the address, resends and fixes a typo; the sync card leads with the wait. Done |
 | 6 | Contracts board | DL-05, DL-07, DL-08, FV-14 | |
 | 7 | Landing | FV-05, FV-06 | |
 

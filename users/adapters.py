@@ -7,6 +7,13 @@ from core.client_ip import client_ip
 
 logger = logging.getLogger(__name__)
 
+
+def _is_visitor(request):
+    """A request with a session and nobody signed in: the sign-up or sign-in this browser is in the middle
+    of. Never raises: a send that already happened must not be reported to allauth as failed."""
+    return (request is not None and hasattr(request, 'session')
+            and not getattr(getattr(request, 'user', None), 'is_authenticated', False))
+
 class CustomAccountAdapter(DefaultAccountAdapter):
     def get_client_ip(self, request):
         # The IP allauth's rate limits key on. Its default reads REMOTE_ADDR, which behind
@@ -26,6 +33,11 @@ class CustomAccountAdapter(DefaultAccountAdapter):
             user.user_timezone = zone
         if commit:
             user.save()
+            # "Check your inbox" knows the address from here, even if allauth's rate limit then skips the
+            # email (FV-08; users/services/pending_signup.py).
+            if _is_visitor(request):
+                from users.services import pending_signup
+                pending_signup.record_signup(request, user)
         return user
 
     def confirm_email(self, request, email_address):
@@ -82,6 +94,13 @@ class CustomAccountAdapter(DefaultAccountAdapter):
         except Exception as e:
             logger.exception(f"Failed to send verification email to {email}: {e}")
             raise  # Re-raise so allauth knows sending failed
+
+        # "Check your inbox" names this address and offers a resend and a fix (FV-08). Recorded only after
+        # a real send, and only for the visitor's own sign-up or sign-in: a staff resend from the admin
+        # must not land in the staff member's session.
+        if _is_visitor(request):
+            from users.services import pending_signup
+            pending_signup.record_send(request, user, email, created=signup)
 
     def send_password_reset_mail(self, user, email, context):
         """

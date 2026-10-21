@@ -57,6 +57,8 @@
 @import "./components/fundraiser.css";
 @import "./components/cta.css";
 @import "./components/notice.css";
+@import "./components/field.css";
+@import "./components/auth.css";
 @import "./components/gamelists.css";
 @import "./components/challenges.css";
 @import "./components/challenge-optimizer.css";
@@ -402,6 +404,10 @@
       padding-bottom: 3.5rem;
     }
   }
+  /* A focused page drops the tab bar (account/base_auth.html), so nothing needs clearing. */
+  body:not(:has(.mobile-tabbar)) #zoom-wrapper { padding-bottom: 0; }
+  body:not(:has(.mobile-tabbar)) #toast-container { bottom: 1rem; }
+  body:not(:has(.mobile-tabbar)) #back-to-top { bottom: 2rem; }
 }
 
 /* ===== Browse-page flag-filter pills ===== */
