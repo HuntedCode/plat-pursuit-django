@@ -25,7 +25,7 @@ from trophies.models import (
     ProfileGame, ProfileJobXP, Trophy,
 )
 from trophies.services import job_render
-from trophies.services.contract_service import pending_tier_q
+from trophies.services.contract_service import pending_tier_q, tier_amounts
 from trophies.services.job_render import DISCIPLINE_LABELS
 
 
@@ -44,7 +44,7 @@ def _member_at_igdb(prefix):
     PLUS the raw igdb_id equalling the outer Contract's igdb_id. Replaces the old membership joins."""
     return {**_member_gate(prefix), f'{prefix}igdb_match__igdb_id': OuterRef('igdb_id')}
 from trophies.util_modules.constants import (
-    ALL_PLATFORMS, CONTRACT_PLATINUM_FRAC, CONTRACT_XP_TOTAL, MODERN_PLATFORMS,
+    ALL_PLATFORMS, CONTRACT_XP_TOTAL, MODERN_PLATFORMS,
     NEW_CONTRACT_WINDOW_DAYS,
 )
 
@@ -535,8 +535,9 @@ def project_card(c, member_games=None, new_cutoff=None):
     # member check `defines_plat` only speaks for a contract they have not reached yet.
     ec_has_platinum = getattr(c, 'ec_has_platinum', None)
     has_plat = bool(ec_has_platinum if ec_has_platinum is not None else getattr(c, 'defines_plat', False))
-    plat_xp = round(t * CONTRACT_PLATINUM_FRAC) if has_plat else 0
-    bonus_xp = t - plat_xp   # the "at 100%" amount (== T when there's no plat tier)
+    # The accept path's own split (`tier_amounts`), so the card's numbers round exactly as accepting does,
+    # including an `xp_total_override` that lands on a .5. At the base rate: the reward, not an event's boost.
+    plat_xp, bonus_xp = tier_amounts(t, has_plat, multiplier=1)   # bonus_xp == T when there's no plat tier
     # Per-tier bar fills (drawn like the circle's progress). Plat bar creeps with the member game's
     # completion and snaps full when the platinum is earned; the 100% bar stays locked until the plat
     # is done, then creeps to 100. No-plat contracts have a single bar creeping straight to 100%.
@@ -554,6 +555,10 @@ def project_card(c, member_games=None, new_cutoff=None):
     full_accepted = bool(getattr(c, 'full_accepted', None))
     claim_plat = has_plat and plat_reached and not plat_accepted
     claim_full = full_reached and not full_accepted
+    # What one press banks right now: the Claim button's label ("Claim 4,200 XP") and the modal's footer. At the
+    # ACTIVE multiplier, because that is what accepting pays.
+    pays_plat, pays_full = tier_amounts(t, has_plat)
+    claim_xp = (pays_plat if claim_plat else 0) + (pays_full if claim_full else 0)
     return {
         'name': c.name or (first_concept.unified_title if first_concept else ''),
         'slug': c.slug,
@@ -577,6 +582,10 @@ def project_card(c, member_games=None, new_cutoff=None):
         'full_fill': full_fill,
         'claim_plat': claim_plat,
         'claim_full': claim_full,
+        'claim_xp': claim_xp,
+        # Per-tier "Banked", for the modal's Rewards lines (a contract can be banked at platinum with 100% to go).
+        'plat_banked': has_plat and plat_accepted,
+        'full_banked': full_accepted,
         'status': status,
         'progress': progress,
     }
@@ -808,36 +817,19 @@ def suggest_relaxation(profile, disc_levels=None, q='', status='', disciplines=N
 
 
 def build_contract_modal(profile, slug):
-    """Full modal dict for one Contract: jobs + member games WITH the viewer's per-game progress.
-    Powers the lazy-loaded modal endpoint. Returns None if the slug isn't a live contract."""
-    try:
-        c = _card_prefetch(Contract.objects.filter(is_live=True)).get(slug=slug)
-    except Contract.DoesNotExist:
+    """Full modal dict for one Contract: the board card's own dict (`project_card`, so the modal and the card
+    cannot disagree about status, tiers or what a claim pays) plus the member games WITH the viewer's per-game
+    progress. Powers the lazily loaded modal endpoints. `profile=None` is the anonymous preview: no per-user
+    work, every game's `profile_game` is None. Returns None if the slug isn't a live contract with jobs."""
+    c = _card_prefetch(annotated_contracts(profile, with_ranking=False)).filter(slug=slug).first()
+    if c is None:
         return None
-    jobs = list(c.jobs.all())
-    if not jobs:
-        return None
-    elements = [job_render.job_atom(j) for j in jobs]
-    n = len(jobs)
     games = _member_games(c)
     pg_by_game = {}
     if profile is not None and games:
         pg_by_game = {pg.game_id: pg for pg in ProfileGame.objects.filter(profile=profile, game__in=games)}
-    game_entries = [{
+    p = project_card(c, member_games=games)
+    p['games'] = [{
         'game': g, 'profile_game': pg_by_game.get(g.id), 'has_guide': bool(g.concept.guide_slug),
     } for g in games]
-    first_concept = games[0].concept if games else None
-    family_gradient, family_color = _family_styles(elements)
-    t = c.xp_total_override or CONTRACT_XP_TOTAL
-    return {
-        'name': c.name or (first_concept.unified_title if first_concept else ''),
-        'slug': c.slug,
-        'cover_game': games[0] if games else None,
-        'games': game_entries,
-        'game_count': len(game_entries),
-        'elements': elements,
-        'family_gradient': family_gradient,
-        'family_color': family_color,
-        'xp_total': t,
-        'xp_each': t // n,
-    }
+    return p

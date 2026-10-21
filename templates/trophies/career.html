@@ -265,7 +265,7 @@
             {% comment %} An always-rendered refresh region (`display: contents`, so the toolbar's layout is
             untouched): a claim refreshes it in place, which can bring the button back (a claimable that
             arrived since the page loaded) as well as remove it. Its click is delegated in career.js. {% endcomment %}
-            <span data-career-panel="claim-all" class="contents">{% if claimable_count %}<button type="button" id="rp-accept-all" class="btn btn-sm btn-primary shrink-0">Claim all ({{ claimable_count }})</button>{% endif %}</span>
+            <span data-career-panel="claim-all" class="contents">{% if claimable_count %}<button type="button" id="rp-accept-all" class="pp-cta pp-cta--sm shrink-0">Claim all ({{ claimable_count }})</button>{% endif %}</span>
         </div>
         {% comment %} Icon sprite: define all job glyphs once, BEFORE the toolbar's discipline
         popovers and the cards both reference them via <use>. {% endcomment %}

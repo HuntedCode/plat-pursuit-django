@@ -231,8 +231,11 @@ class ContractModalView(LoginRequiredMixin, View):
         p = contracts_service.build_contract_modal(profile, slug)
         if p is None:
             return HttpResponseNotFound()   # explicit 404 so the fetch JS doesn't inject the 404 page
+        # `?claim=1` is Career's board, the one page with a claim controller: its footer claims in place.
+        # Every other host (game and badge detail) gets a link to Career's Ready to Claim board instead.
         return render(request, 'trophies/partials/contracts/_contract_modal.html',
-                      {'p': p, 'profile': profile})
+                      {'p': p, 'profile': profile, 'claims_here': request.GET.get('claim') == '1',
+                       'claim_board_url': claim_board_url()})
 
 
 class ContractModalPreviewView(View):

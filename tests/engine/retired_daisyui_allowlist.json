@@ -6,9 +6,6 @@
   "badge": 3,
   "btn": 2
  },
- "static/js/career.js": {
-  "btn": 2
- },
  "static/js/claim-ceremony.js": {
   "btn": 6
  },
@@ -184,15 +181,8 @@
  "templates/support/membership.html": {
   "checkbox": 3
  },
- "templates/trophies/career.html": {
-  "btn": 3
- },
  "templates/trophies/collection.html": {
   "btn": 3
- },
- "templates/trophies/partials/contracts/_contract_card.html": {
-  "badge": 15,
-  "btn": 6
  },
  "templates/trophies/partials/leaderboard_rank_cell.html": {
   "badge": 3

@@ -1,8 +1,10 @@
 {% comment %}
 Contract modal content -- injected into the shared .emodal on open (grows from the card). Header
-(contract identity) + the tier-2 job breakdown (full pills, finally shown here) + the from-scratch
-member-games grid. Rendered inside an inert <template> in the card, so nothing loads until opened.
-Expects: p (contract dict), profile (viewer).
+(contract identity) + the reward split with the viewer's state + the tier-2 job breakdown (full pills) + the
+from-scratch member-games grid, and a claim action when something is ready.
+Fetched on open from `contract_modal` (ContractModalView), so nothing loads until then.
+Expects: p (a `build_contract_modal` dict), profile (viewer), claims_here (Career's board, which claims in
+place) and claim_board_url (where every other host sends the claim).
 {% endcomment %}
 {% load humanize job_icons %}
 <div class="rpm" style="--rp-fam: {{ p.family_color }};">
@@ -25,6 +27,9 @@ Expects: p (contract dict), profile (viewer).
         </div>
     </div>
 
+    {% if claims_here %}{% include 'trophies/partials/contracts/_contract_rewards.html' with p=p show_state=True %}
+    {% else %}{% include 'trophies/partials/contracts/_contract_rewards.html' with p=p show_state=True claim_url=claim_board_url %}{% endif %}
+
     <div class="rpm__section">
         <div class="rpm__label">Jobs this Contract levels</div>
         <div class="rpm__jobs">
@@ -40,4 +45,15 @@ Expects: p (contract dict), profile (viewer).
             {% for g in p.games %}{% include 'trophies/partials/contracts/_contract_game.html' with game=g.game pgame=g.profile_game has_guide=g.has_guide fam=p.family_color %}{% endfor %}
         </div>
     </div>
+
+    {% comment %} The action, where the reader already is (DL-07): a hunter who opened a ready contract to read it
+    should not have to close it and hunt for the card's button. Sticky, so it stays in reach while the games
+    scroll. CAREER ONLY: its board claims in place (career.js closes the modal, then the card's own claim path
+    runs, so the ceremony plays as usual). Game and badge detail link to Career from the Rewards section instead:
+    their shells already pin a "Browse all Contracts" footer to the same edge, and a second one covered it. {% endcomment %}
+    {% if p.claim_xp and claims_here %}
+    <div class="rpm__foot">
+        <button type="button" class="pp-cta rpm__claim" data-claim-slug="{{ p.slug }}">Claim {{ p.claim_xp|intcomma }} XP</button>
+    </div>
+    {% endif %}
 </div>

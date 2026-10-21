@@ -25,6 +25,8 @@ Expects: p (contract dict from build_contract_modal(None, slug)); profile is Non
         </div>
     </div>
 
+    {% include 'trophies/partials/contracts/_contract_rewards.html' with p=p show_state=False %}
+
     <div class="rpm__section">
         <div class="rpm__label">Jobs this Contract levels</div>
         <div class="rpm__jobs">

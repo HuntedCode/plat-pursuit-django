@@ -871,7 +871,7 @@
 /* Two-column body: LEFT the 5x5 job map, a faded vertical rule, RIGHT the reward stack. Fixed
    right column so the ring stack width is stable; the grid takes the rest. Identical on every
    card -> equal heights. */
-.rp-body { display: grid; grid-template-columns: minmax(0, 1fr) 1px 84px; gap: 10px; align-items: center; }
+.rp-body { display: grid; grid-template-columns: minmax(0, 1fr) 1px minmax(84px, auto); gap: 10px; align-items: center; }   /* auto: "Claim 6,000 XP" is wider than the ring */
 .rp-vdiv { align-self: stretch; background: linear-gradient(180deg, transparent, var(--pp-border) 12%, var(--pp-border) 88%, transparent); }
 
 /* Job map: all 25 jobs (one row per discipline, display_order). Lit = this contract's jobs in
@@ -1071,6 +1071,50 @@
 .rp-tier2-btn__arrow { width: 15px; height: 15px; flex: none; transition: transform 0.15s ease; }
 .rp-tier2-btn:hover .rp-tier2-btn__arrow { transform: translateX(2px); }
 
+/* Status chip on the banner: the house chip at the size the banner needs. `--solid` is a state the hunter
+   can act on or has finished (Ready to Claim, Claimed, Banked), filled so it reads over any cover art. */
+.rp-tile__badge { font-size: 0.68rem; padding: 2px 8px; box-shadow: 0 1px 6px rgb(0 0 0 / 0.35); }
+.rp-badge--solid { background: var(--c); color: var(--pp-bg-0); border-color: var(--c); }
+
+/* ---- Phone row (below 640px, where the board is one column) ----
+   The same card re-flowed into a list row (DL-05): portrait cover | title, own jobs + platforms, XP + action.
+   Hidden in the row: the banner (its status chip becomes the action), the 25-job map and the ring (`.rp-meta`
+   names the contract's own jobs instead), the tier bars (the modal spells the split out), and the details row,
+   which becomes the whole row: `.rp-tier2-btn` is stretched over the card, and the action sits above it.
+   640px, not 768px: the grid goes two-up at `sm`, and a tile is what a two-up column has room for. */
+.rp-row__thumb, .rp-meta { display: none; }
+@media (max-width: 639.98px) {
+    .rp-row { display: grid; grid-template-columns: 64px minmax(0, 1fr); column-gap: 12px; align-items: start; padding: 10px 10px 10px 14px; }
+    /* Scoped under `.rp-row`, for two reasons. SPECIFICITY: these pieces set their own display in rules that
+       may come later in this file (job detail's job-tile grid does), and a later equal-specificity rule would
+       win on source order and show them in the row. And REACH: Career's toolbar uses `.rp-plats` too, for its
+       platform filter, which an unscoped hide would take off phones. */
+    .rp-row .rp-tile__art, .rp-row .rp-plats, .rp-row .rp-div, .rp-row .rp-jobgrid, .rp-row .rp-jobtiles,
+    .rp-row .rp-vdiv, .rp-row .rp-ring-wrap, .rp-row .rp-tiers, .rp-row .rp-contribs { display: none; }
+    .rp-row__thumb { display: block; width: 64px; aspect-ratio: 3 / 4; border-radius: 7px; overflow: hidden; background: var(--pp-bg-3, var(--pp-bg-1)); }
+    .rp-row__thumb img { width: 100%; height: 100%; }
+    .rp-row__content { padding: 0; gap: 6px; min-width: 0; }
+    .rp-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
+    .rp-meta__job { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 6px; color: var(--disc); background: color-mix(in oklab, var(--disc) 16%, var(--pp-bg-1)); border: 1px solid color-mix(in oklab, var(--disc) 40%, transparent); }
+    .rp-meta__job svg { width: 14px; height: 14px; aspect-ratio: 1; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .rp-meta__job.is-this { border-color: var(--disc); box-shadow: 0 0 8px color-mix(in oklab, var(--disc) 45%, transparent); }
+    .rp-meta__plat { font-size: 0.62rem; font-weight: 700; letter-spacing: 0.02em; color: var(--rp-fam); margin-left: 2px; }
+    .rp-meta__new { font-size: 0.58rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; line-height: 1; padding: 3px 6px; border-radius: 5px; color: var(--pp-bg-0); background: var(--pp-secondary); }
+    .rp-body { display: block; }
+    .rp-side { flex-direction: row; align-items: center; justify-content: space-between; gap: 8px; }
+    .rp-reward-xp { flex-direction: row; align-items: baseline; gap: 5px; }
+    .rp-reward-xp__val { font-size: 16px; }
+    .rp-reward-xp__cap { margin-top: 0; white-space: nowrap; }
+    .rp-status { position: relative; z-index: 3; justify-content: flex-end; }
+    .rp-status .pp-cta { min-height: 40px; padding-inline: 14px; font-size: 0.8rem; }
+    .rp-tier2-btn { position: absolute; inset: 0; z-index: 2; width: auto; margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; }
+    .rp-tier2-btn:hover { background: transparent; }
+    /* The ring goes on the CARD (its rounded corners), not the stretched button, which the card's overflow clips. */
+    .rp-tier2-btn:focus-visible { outline: none; }
+    .rp-row:has(.rp-tier2-btn:focus-visible) { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+    .rp-tier2-btn > * { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+}
+
 /* Wider dialog for the contract modal (games grid needs the room); base .emodal stays 440px. */
 .emodal__dialog--wide { width: min(680px, 100%); padding: 0; }   /* content manages its own padding */
 
@@ -1105,6 +1149,30 @@
 
 /* Tier-2 job pills (the full pill deferred until now: icon + name + per-job XP). */
 .rpm__jobs { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* Rewards: the tier split in words, one line per tier, with the viewer's state (_contract_rewards.html). */
+.rpm__tiers { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.rpm__tier {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; column-gap: 12px; row-gap: 1px;
+    padding: 9px 12px; border-radius: 10px; border: 1px solid var(--pp-border); background: var(--pp-bg-2);
+}
+.rpm__tier-name { font-size: 0.85rem; font-weight: 700; color: var(--pp-text); }
+.rpm__tier-xp { grid-row: span 2; align-self: center; font-size: 1rem; color: var(--rp-fam, var(--pp-primary)); }
+.rpm__tier-state { font-size: 0.75rem; font-weight: 600; color: var(--pp-text-mute); }
+.rpm__tier.is-ready { border-color: color-mix(in oklab, var(--pp-primary) 50%, var(--pp-border)); background: color-mix(in oklab, var(--pp-primary) 8%, var(--pp-bg-2)); }
+.rpm__tier.is-ready .rpm__tier-state { color: var(--pp-primary); }
+.rpm__tier.is-banked .rpm__tier-state { color: var(--pp-success); }
+.rpm__tier.is-banked .rpm__tier-xp { color: var(--pp-text-dim); }
+
+/* The claim footer: sticky to the dialog's bottom edge (the dialog is the scroller), so the action stays in
+   reach while the games list scrolls. The fade above it says there is more underneath. */
+.rpm__foot {
+    position: sticky; bottom: 0; z-index: 4; padding: 12px 22px calc(14px + env(safe-area-inset-bottom, 0px));
+    background: linear-gradient(to top, var(--pp-bg-1) 72%, transparent);
+}
+.rpm__claim { width: 100%; min-height: 44px; }
+.rpm__claim-link { margin-top: 10px; }   /* hosts that cannot claim (game, badge detail): a link under the Rewards */
+.rpm__section:has(+ .rpm__foot) { padding-bottom: 8px; }
 
 /* ---- Shared job chip (.pp-jobchip): the rebuilt "jobs this X levels" cross-link pill --
    discipline-tinted, icon + name (+ optional XP). Reused by the Contract modal (which adds

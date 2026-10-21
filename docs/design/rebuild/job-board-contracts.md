@@ -424,6 +424,19 @@ the per-job contribution when a single job filter is active, the "biggest contri
 Claiming a Board contract graduates it to History. The job-detail modal's "Where the XP comes from" links
 into Contracts → History filtered to that job (per-job count/xp from `job_render.build_profile_jobs`).
 
+## The card and the modal (Career display)
+
+One card template (`_contract_card.html`) and one modal (`_contract_modal.html`), shared by Career, job
+detail, game detail and badge detail. Design record: `docs/design/reviews/contracts-board.md` (2026-10-21).
+
+| Piece | How it works | Why |
+|---|---|---|
+| **Phone row** | Below 640px the tile re-flows into a list row (portrait cover, title, own jobs, XP, action), CSS only. The banner, 25-job map, ring and tier bars hide; the details button stretches over the row | The tile was 643px a card on a phone. 640px, not 768px: the grid is two-up from `sm` |
+| **Claim label** | "Claim 4,200 XP", from `project_card`'s `claim_xp` (the platinum tier, the 100% tier, or both), sized by `contract_service.tier_amounts`, the same split accepting pays | "Claim plat" / "Claim both" were tier code names |
+| **Modal data** | `build_contract_modal` = `project_card` on the annotated contract, plus the member games | The modal and the card cannot disagree about status or what a claim pays |
+| **Modal Rewards** | `_contract_rewards.html`: one line per tier with its state (Banked, Ready to claim, % complete, After the platinum). The anonymous preview shows the split without state | The card only has room for "+4,200 at platinum" |
+| **Modal claim** | Career fetches the modal with `?claim=1` and gets a sticky footer button; career.js closes the modal, THEN fires `pp:contract-claim`, and the board's own `accept()` runs. Game and badge detail get a "Claim in Career" link (`claim_board_url`) under the Rewards | Only Career has a claim controller; a button elsewhere would do nothing, and those shells already pin their own footer |
+
 ## "Latest" — the 14-day recency window
 
 `NEW_CONTRACT_WINDOW_DAYS` (14) over `went_live_at`, with **one** cutoff helper
@@ -763,6 +776,11 @@ Home membership is derived, so a merge has **no membership rows to re-point**. `
   is guarded against the shape by `tests/engine/test_no_subquery_beside_aggregate.py` (a WRAPPED
   subquery, e.g. inside `Coalesce`, is what Django copies into the GROUP BY; a bare one is safe). Dev's
   few hundred contracts cannot show this: benchmark at prod scale.
+- **The modal's claim waits for the dialog to close.** It is handed over from `hideNow` (`closedFn`), not
+  fired on click: claiming at once opens the ceremony over a dialog still shrinking into its card. And a
+  host that cannot claim must not get `?claim=1`, or it renders a button with nothing listening.
+- **The phone row is the same markup.** A new piece of the tile must be checked below 640px: the row hides
+  by listing selectors (`elements.css`, "Phone row"), so anything not listed shows up in the row.
 - **Membership is a derived query, not a stored relation.** You cannot `prefetch_related` it or
   join a through-table. Read it via `member_concept_ids()` / `contract_by_concept_map()`, or in
   ORM subqueries via `concept__igdb_match__igdb_id=<contract.igdb_id>` **plus** the anchored +

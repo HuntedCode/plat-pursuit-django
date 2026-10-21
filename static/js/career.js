@@ -357,6 +357,8 @@ function ppCountUp(el, dur) {
     var zoom = document.getElementById('zoom-container');
     if (!details || !modal || !panel || !dialog) return;
     var flipEl = null, focusEl = null, afterFn = null, portaled = false, scrollFn = null;
+    var closedFn = null;   // runs once the dialog has fully closed (the modal's claim hand-off)
+    var closing = false;   // one close at a time: a second one (Escape mid-shrink) would run hideNow twice
     var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     var FOCUSABLE = 'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
@@ -424,6 +426,8 @@ function ppCountUp(el, dur) {
         resetDialog();
         if (focusEl && document.contains(focusEl)) focusEl.focus();   // restore focus to the trigger
         flipEl = focusEl = afterFn = null;
+        closing = false;
+        if (closedFn) { var f = closedFn; closedFn = null; f(); }
     }
 
     // Generic open: inject html, grow the dialog from flipTarget's rect, restore focus to focusTarget.
@@ -444,9 +448,7 @@ function ppCountUp(el, dur) {
         open(src.innerHTML, trigger, trigger, animateJobContent);
     }
     function openContract(card, btn) {
-        var tpl = card.querySelector('.rp-modal-src');
-        if (tpl) { openContractHtml(tpl.innerHTML, card, btn); return; }   // legacy in-page modal
-        var url = btn && btn.getAttribute('data-modal-url');               // server path: fetch on open
+        var url = btn && btn.getAttribute('data-modal-url');   // fetched on open (ContractModalView)
         if (!url) return;
         fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'same-origin' })
             .then(function (r) { return r.ok ? r.text() : null; })
@@ -483,6 +485,10 @@ function ppCountUp(el, dur) {
         scrollFn();   // set the initial state
     }
     function closeEl() {
+        // Ignored while a close is already shrinking the dialog. A second one ran hideNow again AFTER the first had
+        // handed a modal claim over, and its `pp-receded` removal cancelled the ceremony's own recede mid-play.
+        if (closing) return;
+        closing = true;
         if (zoom) zoom.classList.remove('pp-receded');
         if (!reduce && flipEl && document.contains(flipEl)) {
             var done = false;
@@ -511,6 +517,19 @@ function ppCountUp(el, dur) {
     if (rpListEl) rpListEl.addEventListener('click', function (e) {
         var b = e.target.closest('.rp-tier2-btn');
         if (b) { var card = b.closest('.rp-row'); if (card) openContract(card, b); }
+    });
+    // The modal's own Claim (DL-07). Handed to the board's claim path once the dialog has CLOSED, so the
+    // ceremony opens on the page rather than over a dialog still shrinking back into its card. The board
+    // block listens for `pp:contract-claim`; the two blocks share nothing else.
+    panel.addEventListener('click', function (e) {
+        var b = e.target.closest('.rpm__claim[data-claim-slug]');
+        if (!b) return;
+        var slug = b.getAttribute('data-claim-slug'), byKeyboard = e.detail === 0;
+        b.disabled = true;
+        closedFn = function () {
+            document.dispatchEvent(new CustomEvent('pp:contract-claim', { detail: { slug: slug, byKeyboard: byKeyboard } }));
+        };
+        closeEl();
     });
     modal.querySelectorAll('[data-close]').forEach(function (b) { b.addEventListener('click', closeEl); });
     document.addEventListener('keydown', function (e) {
@@ -875,17 +894,29 @@ function ppCountUp(el, dur) {
     async function accept(payload, btn, byKeyboard) {
         if (!API || claiming) return;
         claiming = true;
-        if (btn) { btn.disabled = true; btn.classList.add('btn-disabled'); }
+        if (btn) btn.disabled = true;
         try { applyResult(await API.post(ACCEPT_URL, payload), byKeyboard); }
         catch (err) {
             claiming = false;
             var data = err.response ? await err.response.json().catch(function () { return null; }) : null;
             if (Toast) Toast.show((data && data.error) || 'Could not claim the Contract.', 'error');
-            if (btn) { btn.disabled = false; btn.classList.remove('btn-disabled'); }
+            if (btn) btn.disabled = false;
         }
     }
     // `e.detail === 0`: a keyboard activation (a mouse click counts at least 1).
     list.addEventListener('click', function (e) { var b = e.target.closest('.rp-accept'); if (b) { e.preventDefault(); accept({ slug: b.dataset.slug }, b, e.detail === 0); } });
+    // A claim pressed in the contract modal (the modal block dispatches it once the dialog has closed). The
+    // card's own button rides along, so it disables while the claim is in flight exactly as a direct press.
+    document.addEventListener('pp:contract-claim', function (e) {
+        var slug = e.detail && e.detail.slug;
+        if (!slug) return;
+        // The modal has already closed, so a claim dropped here (the last claim's refresh is still running)
+        // would vanish without a word. The card's own button stays in place to press again; this cannot.
+        if (claiming) { if (Toast) Toast.show('Still banking your last claim. Try again in a moment.', 'info'); return; }
+        var sel = (window.CSS && CSS.escape) ? CSS.escape(slug) : slug;
+        var card = list.querySelector('.rp-row[data-slug="' + sel + '"]');
+        accept({ slug: slug }, card ? card.querySelector('.rp-accept') : null, e.detail.byKeyboard);
+    });
     // DELEGATED: Claim all is a refresh region, so the button is replaced after a claim.
     document.addEventListener('click', function (e) {
         var b = e.target.closest && e.target.closest('#rp-accept-all');
