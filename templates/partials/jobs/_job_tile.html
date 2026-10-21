@@ -1,7 +1,9 @@
 {% comment %}
 Job tile (skills-screen cell). Level is the hero number; the job's Lucide icon is the identity
 mark (line glyph in a discipline-tinted chip). Expects `card`: name, disc_slug, icon, level,
-progress (0-100), xp_current, xp_next, tier, tier_key, description.
+progress (0-100), xp_current, xp_next, tier, tier_key, description. Optional `waiting_to`: the level
+claiming every claimable contract would take this job to (`contract_service.claim_projection`), set only
+when it is higher, so 25 identical "1 Initiate" cards read as the Pursuer the hunter is about to be.
 The curve is cap-less, so the prestige tier is the label (no "maxed" state).
 {% endcomment %}
 {% load job_icons %}
@@ -10,7 +12,10 @@ The curve is cap-less, so the prestige tier is the label (no "maxed" state).
         <span class="job__mark">{% job_icon card.icon '' %}</span>
     </div>
     <div class="job__lvbox">
-        <span class="job__lv-num pp-tally" data-countup="{{ card.level }}">{{ card.level }}</span>
+        <span class="job__lv-row">
+            <span class="job__lv-num pp-tally" data-countup="{{ card.level }}">{{ card.level }}</span>
+            {% if card.waiting_to %}<span class="job__lv-to pp-tally" title="Lv {{ card.waiting_to }} once your contracts are claimed">&rarr; {{ card.waiting_to }}</span>{% endif %}
+        </span>
         <span class="job__lv-cap">{{ card.tier }}</span>
     </div>
     <div class="job__name">{{ card.name }}</div>

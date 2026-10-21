@@ -109,8 +109,7 @@
   "badge": 3
  },
  "templates/home/_hero_syncing.html": {
-  "badge": 6,
-  "btn": 3
+  "badge": 6
  },
  "templates/moderation/_queue_shell.html": {
   "badge": 3,

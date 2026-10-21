@@ -10,6 +10,7 @@ from trophies.mixins import StaffRequiredMixin
 from trophies.util_modules.cache import redis_client
 from core import whats_new
 from core.services import home_service
+from trophies.services.career_service import claim_board_url
 from core.services.site_heartbeat import get_cached_heartbeat
 
 logger = logging.getLogger('psn_api')
@@ -235,6 +236,7 @@ class HomeView(TemplateView):
             profile = self.request.user.profile
             context['profile'] = profile
             context.update(home_service.build_home_context(profile))
+            context['claim_board_url'] = claim_board_url()   # the claim prompt's href, as on Career
 
             # PlatPursuit 1.0 greeting for EXISTING users: joined before the cutover instant,
             # not yet greeted (ui_flags), fully dormant while PP_LAUNCH_DATE is unset.
@@ -296,6 +298,7 @@ class HomeView(TemplateView):
             # vs "quick refresh"). Holds up after unlink/relink because
             # total_trophies is reset to 0 on relink.
             context['is_initial_sync'] = (profile.total_trophies == 0)
+            context['claim_board_url'] = claim_board_url()   # the finale's "Claim your contracts"
 
             # ?preview=syncing renders from a SYNCED team account, which would otherwise fall
             # into the quick-refresh copy with no progress bar, no greeting, and no finale --

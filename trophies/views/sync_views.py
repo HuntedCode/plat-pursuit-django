@@ -97,6 +97,37 @@ def _get_queue_position(profile_id):
         return None
 
 
+def _pursuit_payload(profile):
+    """What the first-sync finale says once the sync lands: the contracts the hunter's history already
+    earned, and what claiming them makes them (FV-03; `contract_service.claim_projection`).
+
+    ONLY ON THE SYNCED RESPONSE, which navsync receives about once per sync (it stops polling on it), so
+    the syncing polls stay free. Contract detection runs inside `sync_complete`, before the profile is
+    marked synced, so the claimables already exist when this is read. A failure degrades to "nothing to
+    claim" rather than failing the status poll the whole sync UI depends on."""
+    from trophies.services import contract_service
+    try:
+        # The bare count, not `claimable_summary`: its XP total and peek are not shown here, and this runs
+        # on every synced response, including a returning hunter's manual refresh with nothing to claim.
+        count = contract_service._claimable_rows(profile).count()
+        if not count:
+            return {'count': 0}
+        projection = contract_service.claim_projection(profile)
+        return {
+            'count': count,
+            # The level NOW as well as after, so the finale states a level only when claiming moves it:
+            # one three-job contract pays each job 2,000 XP, short of a level, and "Claim it to reach
+            # Level 1" would be a promise of nothing.
+            'from_level': contract_service._pursuer_level(profile),
+            'level': projection['level'] if projection else None,
+            'rank': projection['rank']['label'] if projection else None,
+            'top': [{'name': j['name'], 'from': j['from'], 'to': j['to']} for j in (projection or {}).get('top', [])],
+        }
+    except Exception:
+        logger.exception('pursuit payload failed for profile %s', profile.pk)
+        return {'count': 0}
+
+
 class ProfileSyncStatusView(LoginRequiredMixin, View):
     """
     AJAX endpoint for polling profile sync status in navigation hotbar.
@@ -132,6 +163,9 @@ class ProfileSyncStatusView(LoginRequiredMixin, View):
             },
             'last_synced': naturaltime(profile.last_synced) if profile.last_synced else None,
         }
+
+        if profile.sync_status == 'synced':
+            data['pursuit'] = _pursuit_payload(profile)
 
         if profile.sync_status == 'syncing':
             # NOTE (audit-caught): the first-sync tally needs NO query of its own. The

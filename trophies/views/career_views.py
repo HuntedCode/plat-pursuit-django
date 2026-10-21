@@ -31,7 +31,7 @@ from trophies.views import board_helpers
 from trophies.views.board_helpers import suggest_json, window_params
 
 from trophies.services import contract_service, contracts_service
-from trophies.services.career_service import build_career_context
+from trophies.services.career_service import build_career_context, claim_board_url
 from trophies.services.job_render import DISCIPLINE_ICON, DISCIPLINE_LABELS, discipline_order
 from trophies.util_modules.leveling import xp_for_level
 from trophies.util_modules.constants import (
@@ -90,13 +90,14 @@ def _board_facets(profile, disc_levels, params, total):
     return {**f, 'suggest': suggest}
 
 
-def claim_board_url():
-    """Career's Contracts board on Ready to Claim with every platform lit: where every claim entry point
-    lands (the banner's href and its JS jump, job detail's Claim link). Every platform because the
-    claimable count ignores platform while the board defaults to current-gen, so a new tab, a copied
-    link or a no-JS tap still finds the N it was promised."""
-    return reverse('career') + '?' + urlencode(
-        [('view', 'contracts'), ('status', 'claimable')] + [('platform', p) for p in ALL_PLATFORMS])
+def _mark_waiting_levels(career, projection):
+    """Set each job tile's `waiting_to`: the level a claim would take it to, when that is higher."""
+    if not career or not projection:
+        return
+    for discipline in career['disciplines']:
+        for tile in discipline['jobs']:
+            to = projection['jobs'].get(tile['slug'], {}).get('to')
+            tile['waiting_to'] = to if to and to > tile['level'] else None
 
 
 class CareerView(LoginRequiredMixin, TemplateView):
@@ -139,6 +140,11 @@ class CareerView(LoginRequiredMixin, TemplateView):
         context['claimable_count'] = claim['count']
         context['claimable'] = claim
         context['claim_board_url'] = claim_board_url()   # the banner's href
+        # What claiming everything would make this hunter (the banner's "reach Level 103") and each job's
+        # level after it (the tiles' "1 -> 17"). Read only when something is claimable.
+        projection = contract_service.claim_projection(profile) if claim['count'] else None
+        context['projection'] = projection
+        _mark_waiting_levels(context.get('career'), projection)
         # Active tab on load: ?view=contracts deep-links the Contracts board.
         requested = self.request.GET.get('view')
         context['active_view'] = requested if requested in _CAREER_VIEWS else 'jobs'

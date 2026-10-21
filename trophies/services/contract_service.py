@@ -27,7 +27,7 @@ from decimal import Decimal, ROUND_HALF_UP
 
 from django.db import transaction
 from django.db.models import (
-    Case, Count, DecimalField, Exists, F, OuterRef, Q, Sum, Value, When, prefetch_related_objects,
+    Case, Count, DecimalField, Exists, F, OuterRef, Q, Subquery, Sum, Value, When, prefetch_related_objects,
 )
 from django.db.models.functions import Cast, Coalesce, Greatest, NullIf, Round
 from django.utils import timezone
@@ -701,6 +701,53 @@ def claimable_summary(profile, peek=3):
         'total_xp': int(agg['xp'] or 0),
         'items': items,
         'more': max(0, count - peek),
+    }
+
+
+def claim_projection(profile, top=3):
+    """What claiming every claimable contract would make this hunter: the Pursuer Level and rank it would
+    reach, each job's level before and after, and the `top` jobs it would raise furthest. The first
+    arrival's whole pitch ("your history already earned you Level 103") reads this. None when nothing
+    is claimable.
+
+    THE SPLIT IS A CLAIM'S, so the promise is what a claim pays. A claim splits each tier's XP evenly
+    across the contract's jobs (`_split`, remainder to the first jobs). Every standard contract's tiers
+    (4,200 + 1,800 of T = 6,000) divide evenly by one to six jobs, so the even split here is exact for
+    them; only an `xp_total_override` or an event multiplier leaves a remainder, worth a few XP.
+
+    AGGREGATED IN THE DATABASE, per job, over the claimable contracts' job rows: a hunter's claimables
+    are bounded by the catalogue, which runs to thousands. The two correlated subqueries are BARE and
+    feed only the per-row share inside `Sum`, the shape `/jobs/` was fixed to (2026-10), not a wrapped
+    subquery beside the aggregate, which Postgres would GROUP BY and run per joined row."""
+    through = Contract.jobs.through
+    claimable = _claimable_rows(profile)
+    pending = (claimable.filter(contract_id=OuterRef('contract_id')).annotate(px=_pending_xp_expr())
+               .values('px')[:1])
+    jobs_on_contract = (through.objects.filter(contract_id=OuterRef('contract_id')).order_by()
+                        .values('contract_id').annotate(n=Count('job_id')).values('n')[:1])
+    waiting = dict(
+        through.objects.filter(contract_id__in=claimable.values('contract_id'))
+        .annotate(px=Subquery(pending, output_field=_XP), nj=Subquery(jobs_on_contract, output_field=_XP))
+        .annotate(share=F('px') / F('nj'))
+        .order_by().values('job_id').annotate(xp=Sum('share')).values_list('job_id', 'xp')
+    )
+    if not waiting:
+        return None
+
+    held = dict(ProfileJobXP.objects.filter(profile=profile).values_list('job_id', 'total_xp'))
+    jobs = {}
+    for job_id in set(held) | set(waiting):
+        xp = held.get(job_id, 0) or 0
+        jobs[job_id] = {'from': level_for_xp(xp), 'to': level_for_xp(xp + int(waiting.get(job_id) or 0))}
+    level = pursuer_level_from(sum(j['to'] - 1 for j in jobs.values()))
+    names = dict(Job.objects.filter(pk__in=jobs).values_list('pk', 'name'))
+    raised = sorted((j for j in jobs.items() if j[1]['to'] > j[1]['from']),
+                    key=lambda j: (-(j[1]['to'] - j[1]['from']), -j[1]['to'], names.get(j[0], j[0])))
+    return {
+        'level': level,
+        'rank': pursuer_rank_for_level(level),
+        'jobs': jobs,
+        'top': [{'slug': slug, 'name': names.get(slug, slug), **lv} for slug, lv in raised[:top]],
     }
 
 

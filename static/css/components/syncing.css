@@ -7,21 +7,16 @@
 /* ── Finale ── */
 /* The card's warning accent flips to success when the Pursuer emerges. */
 [data-sync-card].is-emerged { border-left-color: var(--color-success); }
-.swf__stat {
-    display: flex; flex-direction: column; align-items: center; gap: 0.1rem;
-    padding: 0.5rem 0.25rem; border-radius: 0.5rem;
-    border: 1px solid color-mix(in oklab, currentColor 12%, transparent);
-    background: color-mix(in oklab, currentColor 5%, transparent);
-}
-.swf__n { font-weight: 800; font-size: 1.05rem; line-height: 1; }
-.swf__l { font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.55; }
+/* The Pursuer the hunter's history already earned (FV-03): the contracts waiting and the level claiming them
+   reaches, where four PSN trophy counts used to sit under "Your Pursuer has emerged". */
+.swf__pursuit { margin-top: 0.85rem; }
+.swf__pursuit-lead { font-size: 0.95rem; font-weight: 700; }
+.swf__pursuit-level { margin-top: 0.2rem; font-size: 0.85rem; color: var(--pp-text-dim); }
+.swf__pursuit-jobs { justify-content: center; margin-top: 0.4rem; }
+/* The banner drops this list on a phone (its narrow column stacks it); the finale is centred and full width,
+   and it is THE moment, so it keeps it. Two classes, to outrank the banner's rule. */
+@media (max-width: 767px) { .claim-banner__jobs.swf__pursuit-jobs { display: flex; } }
 @media (min-width: 768px) {
-    .swf__n { font-size: 1.3rem; }
-    .swf__l { font-size: 0.65rem; }
+    .swf__pursuit-lead { font-size: 1.1rem; }
+    .swf__pursuit-level { font-size: 0.95rem; }
 }
-/* Trophy tiers wear the house metal tokens. They once borrowed DaisyUI's info/warning/accent, which
-   made them move whenever a STATUS colour did (2026-10, SW-01). */
-.swf__stat--plat   .swf__n { color: var(--pp-metal-platinum); }
-.swf__stat--gold   .swf__n { color: var(--pp-metal-gold); }
-.swf__stat--silver .swf__n { opacity: 0.85; }
-.swf__stat--bronze .swf__n { color: var(--pp-metal-bronze); }

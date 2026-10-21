@@ -137,14 +137,21 @@ the one messages renderer (a second one double-renders every login message).
                     <div class="text-center py-2 md:py-4 pp-head-cascade" data-sync-complete hidden>
                         <p class="text-[0.65rem] md:text-xs font-semibold uppercase tracking-[0.14em] text-success">Sync complete</p>
                         <h2 class="text-2xl md:text-3xl lg:text-4xl font-bold leading-tight mt-1">Your Pursuer has emerged</h2>
-                        <p class="text-xs md:text-sm text-base-content/60 mt-2">Every trophy counted, every badge weighed, every job leveled. Here is your opening tally.</p>
-                        <div class="grid grid-cols-4 gap-2 md:gap-3 max-w-md mx-auto mt-4">
-                            <div class="swf__stat swf__stat--plat"><b class="swf__n tabular-nums" data-complete-stat="plats">0</b><span class="swf__l">Platinum</span></div>
-                            <div class="swf__stat swf__stat--gold"><b class="swf__n tabular-nums" data-complete-stat="golds">0</b><span class="swf__l">Gold</span></div>
-                            <div class="swf__stat swf__stat--silver"><b class="swf__n tabular-nums" data-complete-stat="silvers">0</b><span class="swf__l">Silver</span></div>
-                            <div class="swf__stat swf__stat--bronze"><b class="swf__n tabular-nums" data-complete-stat="bronzes">0</b><span class="swf__l">Bronze</span></div>
+                        {% comment %}THE PURSUER, NOT THE TROPHY COUNTS (FV-03). The heading promised a Pursuer and the
+                        block under it showed four PSN trophy counts the hunter already has. It now says what their
+                        history has already earned: the contracts waiting, and the level claiming them reaches.
+                        `syncing.js` fills it from the synced poll's `pursuit` block (`sync_views._pursuit_payload`)
+                        and shows exactly one of the two lines; both start hidden, so nothing flashes.{% endcomment %}
+                        <div class="swf__pursuit" data-pursuit-yes hidden>
+                            <p class="swf__pursuit-lead"><b class="pp-tally text-primary" data-pursuit-count>0</b> <span data-pursuit-noun>contracts are</span> ready to claim</p>
+                            <p class="swf__pursuit-level" data-pursuit-reach hidden>Claim <span data-pursuit-pronoun>them</span> to reach <b class="pp-tally text-primary">Level <span data-pursuit-level></span></b> &middot; <span data-pursuit-rank></span></p>
+                            <ul class="claim-banner__jobs swf__pursuit-jobs" data-pursuit-top aria-label="Jobs this claim raises most"></ul>
                         </div>
-                        <a href="{% url 'home' %}" class="btn btn-primary btn-wide mt-5 md:mt-6 font-bold" data-enter-pursuit>Enter your Pursuit</a>
+                        <p class="text-xs md:text-sm text-base-content/60 mt-2" data-pursuit-none hidden>Every trophy is counted. Each platinum from here on can complete a contract, and every contract levels your jobs.</p>
+                        <div class="flex flex-wrap items-center justify-center gap-2 md:gap-3 mt-5 md:mt-6">
+                            <a href="{{ claim_board_url }}" class="pp-cta" data-pursuit-claim hidden>Claim your contracts</a>
+                            <a href="{% url 'home' %}" class="pp-cta pp-cta--ghost" data-enter-pursuit>Enter your Pursuit</a>
+                        </div>
                     </div>
                     {% endif %}
                 </div>

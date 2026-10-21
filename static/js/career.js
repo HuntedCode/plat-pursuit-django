@@ -781,7 +781,6 @@ function ppCountUp(el, dur) {
         { sel: '#rank-ladder .prk-now', attrs: ['style'] },
         { sel: '#rank-ladder .prk-list', attrs: [] },
         { sel: '[data-career-panel="banner"]', attrs: [] },
-        { sel: '[data-career-panel="summary"]', attrs: [] },
         { sel: '[data-career-panel="claim-all"]', attrs: [] },
         { sel: '#career-panel-jobs .jdoss', attrs: [] },
         { sel: '#career-panel-jobs .jsheet', attrs: [] },

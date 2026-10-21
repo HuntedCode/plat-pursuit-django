@@ -225,6 +225,11 @@ def build_home_context(profile):
     career_ctx = _safe('career', profile, lambda: career_service.build_career_context(profile), {})
     hero = (career_ctx or {}).get('hero')
     glances = _build_glances(profile)
+    # What claiming the waiting contracts would make this hunter, for the lobby's claim prompt (DL-03):
+    # the `claimable_summary` above was computed on every render and shown nowhere but the launch modal.
+    # Read only when something is claimable.
+    projection = (_safe('claim_projection', profile, lambda: contract_service.claim_projection(profile), None)
+                  if glances['claimable']['count'] else None)
     return {
         # The identity data (name, Pursuer Level, rank title, discipline ring) for the Career CTA. The
         # full Pursuer Card that used to lead this page is gone: identity is Career's hero now, and the
@@ -232,6 +237,7 @@ def build_home_context(profile):
         # second rendering of what the CTA below already says.
         'hero': hero,
         'glances': glances,
+        'claim_projection': projection,
         # Proof for the Collection CTA: the medallions you most recently earned. Bounded, and off the
         # REBUILT badge tables.
         'recent_badges': _safe('recent_badges', profile, lambda: _recent_medallions(profile), []),

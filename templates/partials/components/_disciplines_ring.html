@@ -52,7 +52,8 @@ is a four-place edit.
 
     `{% templatetag openvariable %} f.total {% templatetag closevariable %}` is the levels gained in that
     discipline -- what it adds to the Pursuer Level, and the same figure Career's legend prints, not the
-    average. The five add up to the centre number less the 1 every Pursuer starts at.{% endcomment %}
+    average, said as a gain ("+7") as the legend says it. The five add up to the centre number less the 1 every
+    Pursuer starts at.{% endcomment %}
     {% for f in ring %}
     {% with pd=f.total|stringformat:"d"|length %}
     <div class="lab-dna__peek" data-disc="{{ f.slug }}" aria-hidden="true"
@@ -61,7 +62,7 @@ is a four-place edit.
         gained are open-ended -- `leveling.py` calls the curve "FLAT, CAP-LESS" -- and the first cut applied
         them to the Pursuer Level only, so a four-figure total would have been drawn at the one-figure size
         and spilled the hole. Same `stringformat` idiom, so the two stay in step.{% endcomment %}
-        <span class="lab-dna__level lab-dna__level--peek lab-dna__level--d{{ pd }} pp-tally">{{ f.total }}</span>
+        <span class="lab-dna__level lab-dna__level--peek lab-dna__level--d{{ pd }} pp-tally">+{{ f.total }}</span>
         {% comment %}THE SHORT FORM where there is one. Only "Exploration" needs it -- eleven characters
         against this ring's ~70px inner hole -- and `DISCIPLINE_SHORT` is sparse, so the other four render
         their full names. `default` rather than a template `if`, because the helper already resolves the

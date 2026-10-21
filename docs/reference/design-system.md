@@ -297,6 +297,15 @@ Toasts share the corner at every width and paint over it, so while one is up the
 (`chrome.css`, keyed on `.pp-toasts > .pp-toast`) and returns once the toast leaves. A keyboard user
 focused on it keeps it (`:not(:focus-visible)`), so a toast never drops their focus to `<body>`.
 
+### Claim Banner
+
+`templates/partials/components/_claim_banner.html`: contracts ready to claim, and what claiming them makes
+the hunter ("Claim them to reach Level 103 · Hunter V", the jobs it raises most, the XP waiting). One
+component on two hosts, Career's pending-rewards rail (`in_page=True`, so a click jumps to the board in
+place) and the lobby's claim prompt, so the promise reads the same in both. The projection comes from
+`contract_service.claim_projection` and is said only when it moves the level. The jobs list is dropped on
+phones, where the narrow column stacks it; the job tiles say the same.
+
 ### Page Header Card
 
 Every rebuilt page should have a header card that establishes context and houses page-level controls.
@@ -332,7 +341,7 @@ to sit at the end of the filter toolbar, icon-only on a phone, and was easy to m
 
 ### Tab Group / View Switcher (site-wide standard, 2026-07)
 
-**The one sanctioned tab treatment.** Any in-page tab group or view switcher -- 2-way (Series/Gallery) or multi-tab (Jobs/Radar/Contracts) -- uses the shared **`.pp-switch`** component (`static/css/components/switcher.css`): one bordered container holding transparent chips, active chip tinted, an icon per chip. Right-aligned in its own `flex items-center justify-end mt-5` row -- `mt-5` is the standard top gap above the switcher (it sits below the page-header card / whatever chrome precedes it). Used site-wide: Career, Badges (Series/Gallery). (Collection was a Case/Gallery switcher but is now a single Gallery, so it no longer carries one.) Unified 2026-07 from three near-identical class systems (`.lab-view-tab` / `.pp-collection__view-chip` / `.pp-vtoggle`, all retired).
+**The one sanctioned tab treatment.** Any in-page tab group or view switcher -- 2-way (Series/Gallery) or multi-tab (Jobs/Radar/Contracts) -- uses the shared **`.pp-switch`** component (`static/css/components/switcher.css`): one bordered container holding transparent chips, active chip tinted, an icon per chip. Right-aligned in its own `flex items-center justify-end mt-5` row -- `mt-5` is the standard top gap above the switcher (it sits below the page-header card / whatever chrome precedes it). A row may carry one quiet link at its LEFT end (Career's "How does my Career work?", 2026-10): then it is `justify-between` and the switcher takes `ml-auto`, so it still sits right when the row wraps on a phone. A sub-switch alone in its row under it (Career's Dossier / Sheet) right-aligns to match. Used site-wide: Career, Badges (Series/Gallery). (Collection was a Case/Gallery switcher but is now a single Gallery, so it no longer carries one.) Unified 2026-07 from three near-identical class systems (`.lab-view-tab` / `.pp-collection__view-chip` / `.pp-vtoggle`, all retired).
 
 ```html
 <div class="flex items-center justify-end mt-5">

@@ -37,7 +37,6 @@ _REGIONS = {
     """'#rank-ladder .prk-now'""": r'id="rank-ladder"[\s\S]*?class="prk-now"',
     """'#rank-ladder .prk-list'""": r'id="rank-ladder"[\s\S]*?class="prk-list"',
     """'[data-career-panel="banner"]'""": r'<div data-career-panel="banner">',
-    """'[data-career-panel="summary"]'""": r'data-career-panel="summary"',
     """'[data-career-panel="claim-all"]'""": r'<span data-career-panel="claim-all" class="contents">',
     """'#career-panel-jobs .jdoss'""": r'id="career-panel-jobs"[\s\S]*?class="jobs-layout jdoss"',
     """'#career-panel-jobs .jsheet'""": r'id="career-panel-jobs"[\s\S]*?class="jobs-layout jsheet"',
