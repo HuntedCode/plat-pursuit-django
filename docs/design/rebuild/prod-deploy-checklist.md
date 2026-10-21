@@ -1609,3 +1609,33 @@ both items are about knowing the blast radius before hunters find it.
       through the UI (the current call) or write a one-off cleanup. Do NOT add an automatic migration
       that deletes entries: silently removing a hunter's hand-curated row is the worse failure, which
       is the same reasoning that made `absorb()`'s `GameListItem` branch re-point rather than cascade.
+
+## 2026-10-21 - Pursuer Level counts levels gained (branch `feature/gamification/pursuer-level-from-one`)
+
+Owner's decision on DL-04 ([daily-loop.md](../reviews/daily-loop.md)): a hunter with 0 XP read
+**"Level 25"**, because Pursuer Level summed every job's held level and every job starts at 1. It now
+counts levels GAINED, `1 + Σ(level - 1)`: a newcomer is **1**, and adding a job to the catalogue no
+longer raises everyone's level. Supersedes the definition in the 2026-09-04 entry above. The owner chose
+**no announcement**.
+
+- [ ] **Run the backfill right after the deploy**: `python manage.py rescale_pursuer_levels` (add
+      `--dry-run` first to see the counts). It recomputes every `ProfileCareerStanding.pursuer_level`
+      from ProfileJobXP with the same SQL the live reads use, and sets each Pursuer rank milestone's
+      `level_at` to its new threshold. Chunked (2,000 rows per UPDATE) for the web shell's 15s statement
+      timeout; safe to re-run, and safe beside live claims (a claim writes the same value). Until it
+      runs, the Career XP board's "level" column shows old-scale numbers (about 24 higher) while every
+      page shows the new ones.
+- [ ] **Then** `python manage.py seed_milestones` (moves the Pursuer Ascent rungs down 25, in place by
+      index, keeping every earned tier and Discord role id) **and** `python manage.py recompute_milestones`
+      (current values onto the new scale; otherwise `/milestones/` shows old-scale progress until the
+      nightly run). Gains only: no rung is lost, and a hunter exactly at a new threshold may earn one.
+- [ ] **Expect every displayed Pursuer Level to DROP by 24.** Ranks and rungs moved down 25, one level
+      more generous than the exact 24 for round numbers (Recruit 10, Seeker 40, Hunter 90 ... Ascendant
+      2000; Ascent 15, 50, 125 ... 1975), so **nobody loses a rank, division or rung**. A hunter exactly
+      one level below an old threshold crosses it. That crossing is not logged as a rank milestone (the
+      log is forward-only), so their ladder shows the rank reached without a date, as it already does for
+      ranks reached before logging existed.
+- [ ] **Board ORDER does not change**: the Career board sorts on `total_xp`.
+- [ ] Optional: `python manage.py refresh_homepage_hourly` to re-render the landing's showcase Profile
+      Card now. It is cached, so `/` can show the old-scale level until the next hourly run.
+- [ ] Not needed: `recompute_job_xp --all`. Job XP and job levels did not change, only how they add up.

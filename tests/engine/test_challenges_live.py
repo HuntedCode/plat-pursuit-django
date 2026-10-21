@@ -2627,17 +2627,17 @@ def test_the_plaque_states_the_hunters_standing():
 
     hunter = _hunter('standinghunter')
     ProfileCareerStanding.objects.update_or_create(
-        profile=hunter, defaults={'pursuer_level': 985, 'total_xp': 412000})
+        profile=hunter, defaults={'pursuer_level': 960, 'total_xp': 412000})
     run = _filled_run(hunter, 2)
 
     spine = plaques_for([run])[run.pk]
-    assert spine['level'] == 985
+    assert spine['level'] == 960
     assert spine['career_xp'] == 412000
     # THE BAND, which nothing asserted on a POPULATED standing -- so hardcoding `'band': 'matte'` in the
     # service passed the whole suite, because the only other band assertion is on a hunter whose band really
     # is matte.
     assert spine['band'] == 'tinted', spine['band']
-    # 985 is `paragon`'s exact floor in PURSUER_RANKS, so this pins the boundary rather than a value
+    # 960 is `paragon`'s exact floor in PURSUER_RANKS, so this pins the boundary rather than a value
     # comfortably inside a band.
     assert spine['rank']['key'] == 'paragon', spine['rank']
 
@@ -2651,21 +2651,16 @@ def test_a_hunter_with_no_career_standing_still_gets_a_plaque():
     directly, so a missing entry would blank the plaque's whole lower half for exactly the hunters most
     likely to have finished that way -- silently, because Django templates swallow missing keys.
 
-    AND THE LEVEL IS THE FLOOR, NOT ZERO. This is the defect two independent audits both put first, and an
-    earlier version of this test asserted the bug as correct (`spine['level'] == 0`). A hunter has a level in
-    every job from the moment they exist -- an untouched job sits at level 1 -- so
-    `pursuer_level_from(None, None, 25)` is 25, and their own Career page reads Lv 25 while the plaque read
-    Lv 0. It is exactly the drift `UNTOUCHED_JOB_LEVEL`'s comment exists to prevent: the band was floored and
-    the level was not. The plaque also contradicted itself on one row, reporting five families averaging
-    level 1.0 across a 25-job catalogue beside a headline of Lv 0.
+    AND THE LEVEL IS THE STARTING LEVEL, 1, NOT ZERO. This is the defect two independent audits both put first, and an
+    earlier version of this test asserted the bug as correct (`spine['level'] == 0`). Every Pursuer is
+    level 1 from the moment they exist, so their own Career page reads Lv 1 and the plaque must too.
 
-    DERIVED FROM THE SHARED HELPER, NOT PINNED AS 25. The catalogue is staff-editable, so a literal would
-    turn a legitimate job addition into a test failure -- and, worse, a hard-coded 25 would still pass if
-    `plaques_for` stopped going through `pursuer_level_from` and happened to agree today.
+    DERIVED FROM THE SHARED HELPER as well as pinned: a literal alone would still pass if `plaques_for`
+    stopped going through `pursuer_level_from` and happened to agree today.
     """
     from challenges.services.plaque import plaques_for
     from trophies.models import ProfileCareerStanding
-    from trophies.services.contract_service import catalogue_job_count, pursuer_level_from
+    from trophies.services.contract_service import pursuer_level_from
 
     hunter = _hunter('nostanding')
     # CREATED AND THEN DELETED, so the fixture really does engineer the state. A bare
@@ -2681,11 +2676,8 @@ def test_a_hunter_with_no_career_standing_still_gets_a_plaque():
 
     spine = plaques_for([run])[run.pk]
 
-    expected = pursuer_level_from(None, None, catalogue_job_count())
-    assert expected > 0, 'the job catalogue is empty, so this test would pass vacuously'
-    assert spine['level'] == expected, (
-        'a hunter with no standing row must read the floored level their Career page shows (%d), not 0'
-        % expected)
+    assert spine['level'] == pursuer_level_from(None) == 1, (
+        'a hunter with no standing row must read the starting level their Career page shows (1), not 0')
 
     assert spine['career_xp'] == 0, 'no standing row means no Career XP -- that one really is zero'
     assert spine['rank']['key'] == 'newbie'
@@ -2970,16 +2962,17 @@ def test_the_family_band_reflects_real_job_xp():
     assert ring['combat']['avg'] == 40.0, (
         'combat should average exactly 40 with every one of its jobs at level 40: %r' % ring['combat'])
 
-    # AND THE UNTOUCHED ONES ARE AT THE FLOOR, not at zero -- the same floor `pursuer_level_from` applies.
+    # AND THE UNTOUCHED ONES AVERAGE THE FLOOR, not zero -- the Career page averages held levels.
     others = [f for slug, f in ring.items() if slug != 'combat']
     assert all(f['avg'] == 1.0 for f in others), others
 
-    # THE ARC IS PROPORTIONED BY `total`, NOT BY `avg`. Combat holds 5 jobs at level 40 = 200; each other
-    # discipline holds 5 at the floor = 5; the whole is 220, so combat's share is 200/220 = 91%. Pinning the
-    # arithmetic rather than "combat is biggest": a formula scaled against the wrong denominator, or against
-    # the average instead of the total, would also make combat biggest.
-    assert ring['combat']['share_pct'] == 91, ring['combat']
-    assert all(f['share_pct'] == 2 for f in others), [f['share_pct'] for f in others]
+    # THE ARC IS PROPORTIONED BY `total`, the levels GAINED, NOT BY `avg`. Combat's jobs each gained 39; the
+    # untouched disciplines gained nothing, so they draw no arc and combat draws the whole ring. Pinned with
+    # the arithmetic, because a ring proportioned by held levels (the pre-2026-10 rule) gave every untouched
+    # discipline a sliver.
+    assert ring['combat']['total'] == 39 * len(combat), ring['combat']
+    assert ring['combat']['share_pct'] == 100, ring['combat']
+    assert all(f['total'] == 0 and f['share_pct'] == 0 for f in others), others
 
 
 def test_an_a_z_hero_omits_the_paid_row_entirely(client):
@@ -3021,10 +3014,10 @@ def test_the_hero_carries_the_hunters_rank_hue_and_escalation_band(client):
     from trophies.models import ProfileCareerStanding
 
     hunter = _hunter('rankhunter')
-    # 985 is `paragon`'s floor, which `RANK_BANDS` maps to `tinted` -- so this one fixture pins the hue, the
+    # 960 is `paragon`'s floor, which `RANK_BANDS` maps to `tinted` -- so this one fixture pins the hue, the
     # band, and the join between them.
     ProfileCareerStanding.objects.update_or_create(
-        profile=hunter, defaults={'pursuer_level': 985, 'total_xp': 400000})
+        profile=hunter, defaults={'pursuer_level': 960, 'total_xp': 400000})
     _filled_run(hunter, 2)
 
     hero = _hero(client.get(reverse('challenges_hall_of_fame')).content.decode())
@@ -3168,13 +3161,15 @@ def test_each_ring_arc_peeks_its_disciplines_level_on_hover(client):
     assert hero.count('lab-dna__peek') == len(DISCIPLINE_LABELS), (
         'expected one peek per discipline, got %d' % hero.count('lab-dna__peek'))
 
-    # THE COMBAT PEEK CARRIES ITS SUMMED LEVEL (5 jobs x 40 = 200), which is `total` and not `avg` (40.0).
+    # THE COMBAT PEEK CARRIES ITS LEVELS GAINED (each job 1 -> 40, so 39 apiece), which is `total` and not
+    # `avg` (40.0).
     #
     # ANCHORED ON THE PEEK, not on `data-disc="combat"` alone. That string's LAST occurrence is the peek
     # today -- but if the peek lost or changed its key, the slice would silently land on the combat ARC and
     # every assertion below would keep passing against the wrong element.
+    gained = str(39 * Job.objects.filter(discipline='combat').count())
     combat = hero.split('lab-dna__peek" data-disc="combat"')[-1].split('</div>')[0]
-    assert '200' in combat, ('the combat peek should print its summed level, 200: %r' % combat)
+    assert '>%s<' % gained in combat, ('the combat peek should print its levels gained, %s: %r' % (gained, combat))
 
     # DECORATIVE TO AT. These duplicate the arcs for sighted hover; announcing five more numbers would add
     # ten words to an accessible name that is already one long run-on string for the whole row. The same
@@ -3273,7 +3268,7 @@ def test_each_ring_arc_peeks_its_disciplines_level_on_hover(client):
             profile=whale, job=job, defaults={'total_xp': 900000, 'level': 300})
     whale_hero = _hero(client.get(reverse('challenges_hall_of_fame')).content.decode())
     mind = whale_hero.split('lab-dna__peek" data-disc="mind"')[-1].split('</div>')[0]
-    assert '1500' in mind, 'expected mind to total 5 x 300 = 1500: %r' % mind
+    assert '1495' in mind, 'expected mind to have gained 5 x 299 = 1495 levels: %r' % mind
     assert 'lab-dna__level--d4' in mind, (
         'a four-figure total is not taking the --d4 rung, so it renders at the one-figure size and spills '
         'the ring hole: %r' % mind)

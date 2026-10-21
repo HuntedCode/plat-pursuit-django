@@ -27,9 +27,9 @@ from decimal import Decimal, ROUND_HALF_UP
 
 from django.db import transaction
 from django.db.models import (
-    Case, Count, DecimalField, Exists, OuterRef, Q, Sum, Value, When, prefetch_related_objects,
+    Case, Count, DecimalField, Exists, F, OuterRef, Q, Sum, Value, When, prefetch_related_objects,
 )
-from django.db.models.functions import Cast, Coalesce, NullIf, Round
+from django.db.models.functions import Cast, Coalesce, Greatest, NullIf, Round
 from django.utils import timezone
 
 from trophies.models import (
@@ -94,48 +94,40 @@ def _has_any_job_xp(profile):
     return ProfileJobXP.objects.filter(profile=profile, total_xp__gt=0).exists()
 
 
-def catalogue_job_count():
-    """How many jobs a Pursuer Level spans.
+def gained_levels():
+    """ORM aggregate: the job levels GAINED across a set of ProfileJobXP rows (each job's level - 1).
 
-    Scoped to the five real disciplines, matching `job_render.DISCIPLINE_LABELS`, which is what the
-    DISPLAY iterates: `build_profile_jobs` walks the discipline buckets, so a Job whose discipline
-    is not one of the five is invisible there. `Job.discipline` has `choices` but no DB constraint,
-    so a badly-seeded row is possible -- and a bare `Job.objects.count()` here would then re-split
-    the definition (display counting 25, the stored figure counting 26) with nothing raising. Read
-    off `Job.DISCIPLINES` rather than importing job_render's dict, so the model stays the source.
+    Pursuer Level counts levels gained, not levels held (2026-10, owner's decision; DL-04 in
+    docs/design/reviews/daily-loop.md). Every job starts at level 1, so the old sum of held levels made a
+    hunter with 0 XP "Level 25" and raised every hunter's level by one whenever a job was added to the
+    catalogue. Counting gains needs no catalogue at all: a job with no row has gained nothing.
+
+    `Greatest(..., 0)` because `ProfileJobXP.level` defaults to 0 and `revoke_contract` bulk-creates rows
+    at that default before recomputing them. A bare `Sum(level) - Count(rows)` would read such a row as
+    MINUS one level for as long as it exists.
+
+    Shared by every stored and live read (`_pursuer_level`, `recompute_career_standing`, the plaque's
+    ring, the `rescale_pursuer_levels` backfill), so the definition has one home in SQL.
+    `job_render.build_profile_jobs` computes the same sum in Python from its tiles, which are in hand.
     """
-    return Job.objects.filter(discipline__in=[key for key, _label in Job.DISCIPLINES]).count()
+    return Sum(Greatest(F('level') - 1, Value(0)))
 
 
-def pursuer_level_from(level_sum, row_count, n_jobs):
-    """Pursuer Level from a (Sum(level), Count(rows)) pair over a profile's ProfileJobXP.
+def pursuer_level_from(gained):
+    """Pursuer Level from the levels a hunter has gained (see `gained_levels`): 1, plus one per level.
 
-    THE FLOOR IS THE WHOLE POINT, and it is why this is a shared function rather than an inlined
-    `Sum('level')`. A hunter has a level in every one of the ~25 jobs from the moment they exist --
-    an untouched job sits at level 1, not level 0 -- but ProfileJobXP only materializes a row once
-    a job is actually paid. So `Sum(level)` alone counts only the jobs they have touched, and the
-    missing rows have to be added back at their level-1 floor.
-
-    This is not cosmetic. `PURSUER_RANKS` is explicitly calibrated against the floored scale
-    ("Pursuer Level ~= 25 floor + 2 per game"), so an unfloored figure lands a hunter one or two
-    ranks below where they actually are. It drifted exactly once: `recompute_career_standing`
-    summed the rows it had while `build_profile_jobs` floored across the catalogue, so the Career
-    XP leaderboard's "level" column and the hunter's own Career page showed different numbers for
-    the same hunter. Both now come through here.
-
-    `max(..., 0)` guards nothing reachable today (Job is CASCADE, so a deleted Job takes its rows
-    with it) but keeps a catalogue edit mid-flight from producing a negative level.
-    """
-    return (level_sum or 0) + max(n_jobs - (row_count or 0), 0)
+    A newcomer is level 1. `PURSUER_RANKS` and the Pursuer Ascent rungs are calibrated on this scale.
+    `None` (no rows to aggregate) is a newcomer, not an error."""
+    return 1 + max(gained or 0, 0)
 
 
 def _pursuer_level(profile):
-    """Pursuer Level for a profile, read live from ProfileJobXP (2 queries).
+    """Pursuer Level for a profile, read live from ProfileJobXP (1 query).
 
     The same figure `ProfileCareerStanding.pursuer_level` materializes and `build_profile_jobs`
-    computes for display -- see `pursuer_level_from` for the floor rule they all share."""
-    agg = ProfileJobXP.objects.filter(profile=profile).aggregate(s=Sum('level'), c=Count('id'))
-    return pursuer_level_from(agg['s'], agg['c'], catalogue_job_count())
+    computes for display."""
+    agg = ProfileJobXP.objects.filter(profile=profile).aggregate(gained=gained_levels())
+    return pursuer_level_from(agg['gained'])
 
 
 def _log_rank_milestones(profile, old_level, new_level, first_claim):
@@ -782,10 +774,10 @@ def ceremony_payload(profile, job_by_id, pre, pre_pursuer, *, total, accepted,
             still `is not None`, so passing one cannot be silently rewritten into a fresh read.
     """
     post = _levels_snapshot(profile, job_by_id.keys())
-    # NOT RE-READ WHEN THE CALLER HAS IT. `_pursuer_level` is an aggregate plus `catalogue_job_count`, so
-    # two queries -- and a caller that brackets the grant for milestone logging has already taken exactly
-    # this reading, inside the same transaction, with nothing in between that can change it. Those two
-    # queries were being spent while holding the run, slot and ProfileJobXP row locks.
+    # NOT RE-READ WHEN THE CALLER HAS IT. `_pursuer_level` is an aggregate query, and a caller that
+    # brackets the grant for milestone logging has already taken exactly this reading, inside the same
+    # transaction, with nothing in between that can change it. That query was being spent while holding
+    # the run, slot and ProfileJobXP row locks.
     if post_pursuer is None:
         post_pursuer = _pursuer_level(profile)
     pre_rank = pursuer_rank_for_level(pre_pursuer)
@@ -939,21 +931,16 @@ def recompute_career_standing(profile):
     Without it, a global Career XP board would aggregate ~24 rows per user across the whole population on
     every read; with it, the board is an indexed ORDER BY.
 
-    `pursuer_level` is the FLOORED figure (`pursuer_level_from`), the same one the Career page and the
-    share cards show. Storing a bare `Sum('level')` here was a real bug: the board labels that column
-    "level", so a hunter read one number on their own page and a smaller one next to their name on the
-    leaderboard. Changing this REQUIRES a backfill (`recompute_job_xp --all`) -- every row written
-    before it carries the old definition.
+    `pursuer_level` goes through `gained_levels` / `pursuer_level_from`, the same definition the Career
+    page and the share cards show. A copy of the arithmetic here was a real bug once: the board labels
+    that column "level", so a hunter read one number on their own page and another next to their name.
+    Changing the definition REQUIRES a backfill (`rescale_pursuer_levels`) -- every row written before
+    it carries the old one.
     """
-    from django.db.models import Count, Sum
     from trophies.models import ProfileCareerStanding, ProfileJobXP
 
-    # `rows` rides the aggregate that was already being issued, so the floor costs no extra query
-    # beyond the catalogue count. It used to store a bare `Sum('level')`, which is the SAME figure
-    # under a different definition of Pursuer Level than every other surface uses -- see
-    # `pursuer_level_from`.
     totals = ProfileJobXP.objects.filter(profile=profile).aggregate(
-        xp=Sum('total_xp'), lvl=Sum('level'), rows=Count('id'),
+        xp=Sum('total_xp'), gained=gained_levels(),
     )
     country = getattr(profile, 'country_code', '') or ''
     is_linked = bool(getattr(profile, 'is_linked', False))
@@ -961,7 +948,7 @@ def recompute_career_standing(profile):
         profile=profile,
         defaults={
             'total_xp': totals['xp'] or 0,
-            'pursuer_level': pursuer_level_from(totals['lvl'], totals['rows'], catalogue_job_count()),
+            'pursuer_level': pursuer_level_from(totals['gained']),
             'country_code': country,
             'is_linked': is_linked,
         },
@@ -1063,7 +1050,8 @@ def revoke_contract(profile, contract):
     # first means the concurrent claim finds them present and blocks on our lock instead.
     #
     # This invents nothing: every job is level 1 from birth, a row at (0 XP, level 1) is that exact
-    # state, and `pursuer_level_from` counts a missing row and a floored row identically. (A Job
+    # state, and `gained_levels` counts a missing row, a level-1 row and a level-0 row (the model default
+    # these are created at, until the recompute below) identically: none has gained a level. (A Job
     # added to the catalogue between this INSERT and the concurrent claim would still escape. The
     # catalogue is seeded and static, so that is a migration-shaped event, not a request-shaped one.)
     ProfileJobXP.objects.bulk_create(

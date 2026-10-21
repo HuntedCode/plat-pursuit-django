@@ -13,6 +13,7 @@ import logging
 
 from trophies.models import ProgressionMilestone, UserTitle
 from trophies.services import job_render
+from trophies.services.contract_service import pursuer_level_from
 from trophies.util_modules.leveling import JOB_TIERS, pursuer_rank_ladder, pursuer_rank_table
 
 logger = logging.getLogger(__name__)
@@ -67,9 +68,9 @@ def _compact(n):
 
 def _build_hero(profile, jobs):
     """The Pursuer hero: job identity at a glance. Pursuer Level + Total XP come from the jobs
-    totals (the single source of truth, level-1 floor applied). The disciplines ring frames the
-    Pursuer Level with a donut whose discipline arcs are each discipline's SHARE of the total
-    level; `dash`/`offset` are precomputed stroke-dash segments so the template just renders them."""
+    totals (the single source of truth). The disciplines ring frames the Pursuer Level with a donut
+    whose discipline arcs are each discipline's SHARE of the levels gained; `dash`/`offset` are
+    precomputed stroke-dash segments so the template just renders them."""
     active = (
         UserTitle.objects
         .filter(profile=profile, is_displayed=True)
@@ -78,15 +79,17 @@ def _build_hero(profile, jobs):
     )
     ring = []
     if jobs:
-        # `total` is re-derived by the helper as the sum of these per-discipline totals, which is the same
-        # figure `jobs['total_level']` carries: that IS the sum of every tile's floored level, and the
-        # discipline buckets cover every tile. Stated because the two look like different numbers.
+        # Each arc is a discipline's share of the levels GAINED (each tile's level - 1), the same quantity
+        # the Pursuer Level in the ring's centre counts, so the arcs add up to that number less its
+        # starting 1. A newcomer has gained nothing anywhere, which the helper draws as an even split.
         ring = job_render.discipline_ring([
             {'label': d['label'], 'slug': d['slug'], 'avg': d['avg'],
-             'total': sum(t['level'] for t in d['jobs'])}
+             'total': sum(t['level'] - 1 for t in d['jobs'])}
             for d in jobs['disciplines']
         ])
-    pursuer_level = jobs['total_level'] if jobs else 0
+    # With no jobs data, the starting level, never 0: no Pursuer is below 1, and at 0 the rank ladder
+    # would show Newbie as not yet reached.
+    pursuer_level = jobs['total_level'] if jobs else pursuer_level_from(None)
     # The Pursuer rank ladder (all 11 rungs + current position), with each reached rung's date from
     # the milestone log so the hero shows the journey, not just the current label.
     rank_ladder = pursuer_rank_ladder(pursuer_level)

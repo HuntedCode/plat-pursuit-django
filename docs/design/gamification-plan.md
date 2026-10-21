@@ -56,7 +56,7 @@ Key design decisions:
 - **The job catalog is locked**: 24 jobs (+ a Freelancer fallback) across 5 disciplines. See `job-board-contracts.md` / `jobs-taxonomy-data.md`.
 - **Job XP comes from completing Contracts, in two tiers.** Every Contract is worth the same global total `T` (override per Contract for specials), split **evenly** across its assigned jobs. The Platinum tier pays the bulk; the 100% tier pays the remainder (a game with no platinum pays its full `T` at 100%). Each tier is granted **at most once** per user, recorded to an **immutable ledger** (`ContractXPGrant`) at the moment's `base_t` x `multiplier`, so double-XP events and later config changes never rewrite history.
 - **Banking is a user action (the acceptance gate).** Completion is detected automatically on sync and makes the reward **claimable**; the user must **accept** the Contract to bank its XP toward levels. One accept banks all of a Contract's claimable tiers at once, plus a bulk "accept all." There is no "starting" a Contract; you end (accept) it.
-- **Job levels** scale 1 to N (cap starts at 50; RuneScape's 99 is the inspiration, the actual cap depends on XP-curve calibration with real data). **Pursuer Level = sum of all job levels.**
+- **Job levels** scale 1 to N (cap starts at 50; RuneScape's 99 is the inspiration, the actual cap depends on XP-curve calibration with real data). **Pursuer Level = 1 + every job level gained** (2026-10; it was the sum of all job levels, so a newcomer read 25).
 
 #### 2. The Pursuer
 

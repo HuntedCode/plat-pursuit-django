@@ -162,7 +162,7 @@ depth-runner has not. Reconnection is what turns a tree into a place.
 > **Trophies gate WIDTH. The base gates DEPTH.**
 >
 > The main path is gated **purely by in-game progress** (Hall tier, building levels). A player
-> at **Pursuer level 0** can grind the main road all the way to endgame. What trophy hunting
+> at **Pursuer level 1** (nothing claimed) can grind the main road all the way to endgame. What trophy hunting
 > buys is *different* content, not *more* of it.
 
 This replaces the earlier rule ("main path gates on total Pursuer level, side content on

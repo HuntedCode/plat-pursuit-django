@@ -16,6 +16,7 @@ import random
 from django.db.models import Case, Count, IntegerField, Sum, Value, When
 
 from trophies.models import ContractXPGrant, Job, ProfileJobXP
+from trophies.services.contract_service import pursuer_level_from
 from trophies.util_modules.leveling import xp_for_level, tier_for_level
 
 # The 5 disciplines (families), in canonical radar/seed order.
@@ -280,7 +281,7 @@ def build_profile_jobs(profile):
         jobs.sort(key=lambda j: j.display_order)
 
     disciplines, radar_values, all_tiles = [], [], []
-    total_level = total_xp = atomic = 0
+    held_levels = total_xp = atomic = 0
     for slug, label in DISCIPLINE_LABELS.items():
         tiles = []
         disc_xp = 0
@@ -290,7 +291,7 @@ def build_profile_jobs(profile):
             sn, sx = sources.get(job.slug, (0, 0))
             tile = job_dict(job, level, txp, atomic=atomic, slot_index=i, sources_count=sn, sources_xp=sx)
             tiles.append(tile)
-            total_level += tile['level']  # floored (>= 1), so Pursuer Level counts every job
+            held_levels += tile['level']  # floored (>= 1): every job is held at level 1 or more
             total_xp += txp
             disc_xp += txp
         all_tiles.extend(tiles)
@@ -310,7 +311,7 @@ def build_profile_jobs(profile):
         'disciplines': disciplines,
         # Aggregates the eye can't read off the grid (varies per user, unlike a
         # top-tier/started count that is ~0 or ~everything for most of the userbase).
-        'avg_level': round(total_level / atomic, 1) if atomic else 0,
+        'avg_level': round(held_levels / atomic, 1) if atomic else 0,
         'highest_level': max((t['level'] for t in all_tiles), default=1),
         # The Career radar's whole dataset, emitted once as a json_script island for static/js/career.js.
         'radar': {
@@ -327,7 +328,9 @@ def build_profile_jobs(profile):
             # Slug per radar index in each family mode, for the click-to-filter jump.
             'job_slugs': {d['slug']: [t['slug'] for t in d['jobs']] for d in disciplines},
         },
-        'total_level': total_level,
+        # Pursuer Level counts levels GAINED: each tile holds at least 1, so the gain is held - tiles. The
+        # stored and live reads take the same figure in SQL (`contract_service.gained_levels`).
+        'total_level': pursuer_level_from(held_levels - atomic),
         'total_xp': total_xp,
         'total': atomic,
     }

@@ -362,25 +362,50 @@ def test_tier_for_level():
 
 def test_pursuer_rank_for_level():
     pr = leveling.pursuer_rank_for_level
-    # Newbie: the divisionless floor -- a fresh account (Pursuer Level ~25) sits here.
-    fresh = pr(25)
+    # Newbie: the divisionless floor -- a fresh account (Pursuer Level 1) sits here.
+    fresh = pr(1)
     assert fresh['key'] == 'newbie' and fresh['division'] is None and fresh['label'] == 'Newbie'
-    assert fresh['next_label'] == 'Recruit' and fresh['levels_to_next'] == 10   # 35 - 25
-    # Recruit [35, 65): divisions enter at V and climb to I (gamer convention, I = top of tier).
-    assert pr(35)['label'] == 'Recruit V' and pr(35)['division'] == 5
-    assert pr(50)['label'] == 'Recruit III'
-    assert pr(59)['label'] == 'Recruit I' and pr(59)['division'] == 1
-    assert pr(59)['next_label'] == 'Seeker'            # the top division promotes to the next tier
-    assert pr(65)['label'] == 'Seeker V'               # crossing the floor is a promotion
+    assert fresh['next_label'] == 'Recruit' and fresh['levels_to_next'] == 9   # 10 - 1
+    # Recruit [10, 40): divisions enter at V and climb to I (gamer convention, I = top of tier).
+    assert pr(10)['label'] == 'Recruit V' and pr(10)['division'] == 5
+    assert pr(25)['label'] == 'Recruit III'
+    assert pr(34)['label'] == 'Recruit I' and pr(34)['division'] == 1
+    assert pr(34)['next_label'] == 'Seeker'            # the top division promotes to the next tier
+    assert pr(40)['label'] == 'Seeker V'               # crossing the floor is a promotion
     # Last divisioned tier promotes to the divisionless apex (not "<name> <numeral>").
-    luminary_top = pr(2024)
+    luminary_top = pr(1999)
     assert luminary_top['label'] == 'Luminary I' and luminary_top['next_label'] == 'Ascendant'
-    assert luminary_top['levels_to_next'] == 1         # 2025 - 2024
+    assert luminary_top['levels_to_next'] == 1         # 2000 - 1999
     # Ascendant: the open-ended, divisionless apex -- no next, the number just flexes on.
-    top = pr(2025)
+    top = pr(2000)
     assert top['key'] == 'ascendant' and top['division'] is None and top['label'] == 'Ascendant'
     assert top['next_level'] is None and top['levels_to_next'] == 0
     assert pr(99999)['key'] == 'ascendant'             # climbs forever past the top
+
+
+def test_the_2026_10_rescale_moved_every_rank_down_25_and_no_hunter_ranks_lower(monkeypatch):
+    """The ranks moved when Pursuer Level stopped counting the 25 held starting levels (a hunter's number
+    dropped by 24). Down 25, one level more generous than the exact 24, so no hunter lost a rank or a
+    division. Checked for every old level through the apex with the real rank function under each ladder."""
+    old_ranks = [(0, 'newbie', 'Newbie', False), (35, 'recruit', 'Recruit', True),
+                 (65, 'seeker', 'Seeker', True), (115, 'hunter', 'Hunter', True),
+                 (195, 'ranger', 'Ranger', True), (305, 'warden', 'Warden', True),
+                 (465, 'marshal', 'Marshal', True), (685, 'vanquisher', 'Vanquisher', True),
+                 (985, 'paragon', 'Paragon', True), (1405, 'luminary', 'Luminary', True),
+                 (2025, 'ascendant', 'Ascendant', False)]
+    new_ranks = leveling.PURSUER_RANKS
+    assert [r[0] for r in new_ranks] == [1] + [r[0] - 25 for r in old_ranks[1:]]
+    assert [r[1:] for r in new_ranks] == [r[1:] for r in old_ranks]
+    keys = [r[1] for r in old_ranks]
+
+    def standing(rank):  # tier, then division climbing V (5) -> I (1)
+        return keys.index(rank['key']), -(rank['division'] or 0)
+
+    monkeypatch.setattr(leveling, 'PURSUER_RANKS', old_ranks)
+    before = {lvl: standing(leveling.pursuer_rank_for_level(lvl)) for lvl in range(25, 2101)}
+    monkeypatch.setattr(leveling, 'PURSUER_RANKS', new_ranks)
+    lower = [lvl for lvl, was in before.items() if standing(leveling.pursuer_rank_for_level(lvl - 24)) < was]
+    assert not lower, f'old levels that rank lower after the rescale: {lower[:10]}'
 
 
 def test_contract_grant_unique_together_blocks_duplicate():

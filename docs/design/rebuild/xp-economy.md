@@ -16,11 +16,11 @@
 | **T** (`CONTRACT_XP_TOTAL`) | **6,000** | XP a Contract pays, split evenly across its 1–6 jobs (6,000 divides cleanly) |
 | **K** (`JOB_XP_PER_LEVEL`) | **3,000** | XP per level, **flat** |
 | Curve | `level = total_xp // K + 1` | **cap-less** — the number climbs forever |
-| Pursuer Level | sum of all 25 job levels | the headline identity number |
+| Pursuer Level | 1 + every job level gained | the headline identity number |
 
 The one identity that drives everything: **Pursuer Level ≈ (6,000 / K) × contracts completed** → at K=3,000, **a contract is worth ~2 Pursuer Levels.**
 
-> **Pursuer Level is floored at the catalogue, not the rows.** Every job sits at level 1 from the start, so Pursuer Level = `Sum(per-job level) + (jobs with no ProfileJobXP row yet)`. The rank thresholds below assume that ~25 floor. The single definition is `contract_service.pursuer_level_from`; the materialized copy on `ProfileCareerStanding.pursuer_level` goes through it too, and changing the rule needs a `recompute_job_xp --all` backfill.
+> **Pursuer Level counts levels gained, not levels held** (since 2026-10). Every job sits at level 1 from the start, so Pursuer Level = `1 + Σ(per-job level − 1)`: a newcomer is 1, and adding a job to the catalogue changes nobody's level. Until 2026-10 it was the sum of held levels across the catalogue (a newcomer was 25), and the rank thresholds and Ascent rungs moved down 25 when it changed. The single definition is `contract_service.gained_levels` + `pursuer_level_from`; the materialized copy on `ProfileCareerStanding.pursuer_level` goes through it too, and changing the rule needs a backfill (`rescale_pursuer_levels` for the 2026-10 change).
 
 ## Why flat + cap-less (not a RuneScape curve)
 
@@ -36,9 +36,9 @@ Per-job XP from one contract = `T / N` (N = jobs on it): solo-genre game → 6,0
 
 | Reach | Contracts (into that job) | Pursuer Level @ contracts |
 |---|---|---|
-| L10 | ~9 | 100 contracts → ~225 |
-| L25 | ~24 | 500 contracts → ~1,025 |
-| L50 | ~49 | 2,000 (whale) → ~4,025 |
+| L10 | ~9 | 100 contracts → ~201 |
+| L25 | ~24 | 500 contracts → ~1,001 |
+| L50 | ~49 | 2,000 (whale) → ~4,001 |
 | L99 | ~98 | |
 
 The absolute pool size is irrelevant to feel — it only ever **grows**, so "complete everything" is a moving target. Design from pacing (T, K), not from a supply count.
@@ -64,25 +64,25 @@ Cap-less levels carry the infinite endgame; a **bounded, named ladder** carries 
 
 ## Pursuer rank (the account-wide ladder)
 
-The element tiers above rank a *single* element's depth. The **Pursuer rank** ranks the whole account off the **Pursuer Level** (the sum of every element level) — a separate, deliberately **deep** ladder because there is one Pursuer per account, so it's the long-haul thing to reach toward. `leveling.PURSUER_RANKS` + `pursuer_rank_for_level(level)`.
+The element tiers above rank a *single* element's depth. The **Pursuer rank** ranks the whole account off the **Pursuer Level** (1 + every element level gained): a separate, deliberately **deep** ladder because there is one Pursuer per account, so it's the long-haul thing to reach toward. `leveling.PURSUER_RANKS` + `pursuer_rank_for_level(level)`.
 
 **Shape: military-flavored named tier + Roman-numeral division (`V → I`).**
 
-Thresholds are anchored on **games completed** (the meaningful unit), via `Pursuer Level ≈ 25 + 2 × games`:
+Thresholds are anchored on **games completed** (the meaningful unit), via `Pursuer Level ≈ 1 + 2 × games`. They moved down 25 in 2026-10 (from `≈ 25 + 2 × games`) when the level stopped counting held starting levels: one level more generous than the exact 24, for round numbers, so no hunter lost a rank.
 
 | Band | Games | Pursuer Level | Divisions |
 |---|---|---|---|
-| **Newbie** | 0 | 25 (floor) | none — the divisionless floor |
-| Recruit | ~5 | 35 | V → I |
-| Seeker | ~20 | 65 | V → I |
-| Hunter | ~45 | 115 | V → I |
-| Ranger | ~85 | 195 | V → I |
-| Warden | ~140 | 305 | V → I |
-| Marshal | ~220 | 465 | V → I |
-| Vanquisher | ~330 | 685 | V → I |
-| Paragon | ~480 | 985 | V → I |
-| Luminary | ~690 | 1,405 | V → I |
-| **Ascendant** | ~1,000 | 2,025+ | none — open-ended apex |
+| **Newbie** | 0 | 1 (where everyone starts) | none: the divisionless floor |
+| Recruit | ~5 | 10 | V → I |
+| Seeker | ~20 | 40 | V → I |
+| Hunter | ~45 | 90 | V → I |
+| Ranger | ~85 | 170 | V → I |
+| Warden | ~140 | 280 | V → I |
+| Marshal | ~220 | 440 | V → I |
+| Vanquisher | ~330 | 660 | V → I |
+| Paragon | ~480 | 960 | V → I |
+| Luminary | ~690 | 1,380 | V → I |
+| **Ascendant** | ~1,000 | 2,000+ | none: the open-ended apex |
 
 Fast early promotions (a division every ~3 games at Recruit) widening to ~60 games/division near the apex — the ramp falls out of the even split because the tiers themselves widen.
 

@@ -33,7 +33,7 @@ About 320 words, ~125 seconds spoken at conversational pace.
 - **Badges** — the collection moat. Earning badge tiers fills the gallery and accrues **badge XP**. Unchanged by the gamification update.
 - **The Job Board (Contracts)** — a staff-curated pool of games that grants **job XP once per game**. Completing a game levels the **Jobs** assigned to it. The 24 Jobs (plus a Freelancer fallback) sort into **five disciplines** (Combat, Exploration, Mind, Heart, Finesse), which are the radar axes of "what kind of player am I."
 
-**Pursuer Level** is the headline number: the sum of all job levels (RuneScape's Total Level). Jobs live on their own layer rather than on badge stages because a game sits in many badges, but job XP must be earned only **once per game** (tying it to badge stages would double-pay a game that's in both a Series and a Developer badge). A coverage audit keeps the Job Board a **superset of every badge game**, so completing the Badges you care about always levels your Pursuer; the Job Board just dedupes and curates underneath.
+**Pursuer Level** is the headline number: every job level gained, starting from 1 (RuneScape's Total Level, counted from zero). Jobs live on their own layer rather than on badge stages because a game sits in many badges, but job XP must be earned only **once per game** (tying it to badge stages would double-pay a game that's in both a Series and a Developer badge). A coverage audit keeps the Job Board a **superset of every badge game**, so completing the Badges you care about always levels your Pursuer; the Job Board just dedupes and curates underneath.
 
 > **The P.L.A.T.I.N.U.M. 8-stat system is retired** (2026-06). The 5 disciplines are the sole characterization; there is no separate stat radar.
 
@@ -217,7 +217,7 @@ Most surfacing work is *post-Phase-1* once the spine ships and engagement data i
 | **Badge XP** | Collection-progress XP from earning badge tiers (the `ProfileGamification` denorm). Rename pending (Renown / Prestige / Acclaim) | Committed (existing) |
 | **Job** | One of 24 player specializations (+ a Freelancer fallback). Leveled via the Job Board (Contracts), **not** badge stages | Committed |
 | **Discipline** | One of the 5 job categories (Combat, Exploration, Mind, Heart, Finesse). The radar axes; replaces the retired P.L.A.T.I.N.U.M. stats | Committed |
-| **Pursuer Level** | The headline number: sum of all job levels (RuneScape's Total Level) | Committed |
+| **Pursuer Level** | The headline number: every job level gained, starting from 1 (RuneScape's Total Level, counted from zero) | Committed |
 | **Contract / Job Board** | The staff-curated pool of games that grants job XP once per game. Both Badges and Contracts reference the shared Concept atom | Committed |
 | **Stage** | A Badge tier (Bronze, Silver, Gold, Platinum) | Committed (existing) |
 | **Element skin** | User-facing presentation lexicon over the Job/Contract models (periodic-table aesthetic): **Element** = Job, **Family** = Discipline, **Project** = Contract, **The Lab** = the identity surface. Models keep the Job/Contract names | Committed (presentation) |

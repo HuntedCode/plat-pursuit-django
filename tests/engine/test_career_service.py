@@ -37,8 +37,9 @@ def test_empty_profile_floors_every_element_to_level_one():
     n = _family_job_count()
     assert lab['total_xp'] == 0
     assert lab['total'] == n
-    assert lab['total_level'] == n          # every element floored to level 1
-    assert lab['highest_level'] == 1
+    assert lab['highest_level'] == 1        # every element floored to level 1
+    assert lab['total_level'] == 1          # ...and the Pursuer Level, which counts levels GAINED, is 1
+    assert ctx['hero']['pursuer_level'] == 1 and ctx['hero']['pursuer_rank']['key'] == 'newbie'
     assert ctx['total_xp_compact'] == '0'
 
 
@@ -50,9 +51,8 @@ def test_totals_reflect_profile_job_xp():
     ctx = build_career_context(profile)
     lab = ctx['career']
 
-    n = _family_job_count()
     assert lab['total_xp'] == 12300                     # only this element has XP
-    assert lab['total_level'] == (n - 1) + 5            # one element boosted from 1 -> 5
+    assert lab['total_level'] == 1 + 4                  # one element gained four levels, 1 -> 5
     assert lab['highest_level'] == 5
     assert ctx['total_xp_compact'] == '12.3K'           # compact label for the stat card
 
@@ -105,13 +105,13 @@ def test_hero_mirrors_lab_totals():
 
 
 def test_hero_carries_pursuer_rank():
-    """The hero exposes the account-wide Pursuer rank (off the summed element level) for the
-    DNA ring label. A fresh profile floors every element to level 1, so it sits at Newbie."""
+    """The hero exposes the account-wide Pursuer rank (off the Pursuer Level) for the DNA ring label.
+    A fresh profile has gained no levels, so it is Pursuer Level 1, which sits at Newbie."""
     profile = ProfileFactory()
 
     rank = build_career_context(profile)['hero']['pursuer_rank']
 
-    assert rank['key'] == 'newbie'          # ~25 total level is under the Recruit floor (35)
+    assert rank['key'] == 'newbie'          # level 1 is under the Recruit floor (10)
     assert rank['label'] == 'Newbie' and rank['division'] is None
 
 
@@ -140,9 +140,28 @@ def test_dna_ring_arcs_sum_to_the_whole():
     assert all(seg['offset'] <= 0 for seg in ring)
 
 
+def test_the_ring_counts_the_levels_gained_that_its_centre_counts():
+    """The arcs (and Career's legend, which prints each arc's `total`) count levels GAINED, the quantity
+    the Pursuer Level in the ring's centre counts, so the five add up to that level less the starting 1.
+    Under the pre-2026-10 rule a newcomer's legend read "5" in every discipline beside a centre of 25
+    (DL-04 in docs/design/reviews/daily-loop.md)."""
+    profile = ProfileFactory()
+    ProfileJobXP.objects.create(profile=profile, job=Job.objects.get(slug='gunslinger'), total_xp=21000, level=8)
+    ProfileJobXP.objects.create(profile=profile, job=Job.objects.get(slug='mage'), total_xp=6000, level=3)
+
+    hero = build_career_context(profile)['hero']
+
+    totals = {seg['slug']: seg['total'] for seg in hero['ring']}
+    assert sum(totals.values()) == hero['pursuer_level'] - 1 == 7 + 2
+    assert sorted(totals.values()) == [0, 0, 0, 2, 7]
+
+    newcomer = build_career_context(ProfileFactory())['hero']
+    assert newcomer['pursuer_level'] == 1 and {seg['total'] for seg in newcomer['ring']} == {0}
+
+
 def test_empty_profile_ring_splits_into_equal_family_arcs():
-    """A fresh profile floors every element to level 1, so each of the 5 evenly-sized
-    families holds the same share of the total level -> 5 equal arcs at 20% each."""
+    """A fresh profile has gained nothing in any family, which the ring draws as 5 equal arcs at 20%
+    each rather than as five zero-length ones (a ring of nothing reads as broken, not as new)."""
     profile = ProfileFactory()
 
     ring = build_career_context(profile)['hero']['ring']
@@ -162,8 +181,9 @@ def test_active_title_surfaces_displayed_user_title():
 
 
 def test_broken_lab_zone_degrades_without_500(monkeypatch):
-    """A failure in the element build leaves lab=None and degrades the hero to zeros
-    (still rendered) rather than raising a 500."""
+    """A failure in the element build leaves lab=None and degrades the hero to zeros and the starting
+    level (still rendered) rather than raising a 500. Level 1, not 0: no Pursuer is below 1, and at 0
+    the rank ladder showed Newbie as not yet reached."""
     monkeypatch.setattr(
         'trophies.services.career_service.job_render.build_profile_jobs',
         lambda profile: (_ for _ in ()).throw(RuntimeError('boom')),
@@ -174,7 +194,8 @@ def test_broken_lab_zone_degrades_without_500(monkeypatch):
 
     assert ctx['career'] is None
     assert ctx['total_xp_compact'] == '0'
-    assert ctx['hero']['pursuer_level'] == 0   # hero still builds, zeroed
+    assert ctx['hero']['pursuer_level'] == 1   # hero still builds, at the starting level
+    assert ctx['hero']['rank_ladder']['rungs'][0]['reached']
     assert ctx['hero']['ring'] == []
 
 

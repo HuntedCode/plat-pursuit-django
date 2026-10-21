@@ -22,7 +22,7 @@ the contracts waiting to be claimed.
 | DL-01 | High | Career's first screen is identical on every view: the chosen view's panel starts at y = 894 in a 900px desktop window (measured, all three views) and below 950px on a phone. Switching Jobs / Radar / Contracts changes nothing the hunter can see | `templates/trophies/career.html` | planned: Career + first arrival |
 | DL-02 | High | The unclaimed state, which every new hunter sees first, is a wall of zeros: four stat tiles (0, 0, 1.0, 1), 25 identical "1 / Initiate / 0 / 3,000 XP" cards, and a radar collapsed to a dot. The one meaningful action, claiming, is a banner between them | `templates/trophies/career.html`, `templates/trophies/partials/career/` | planned: Career + first arrival |
 | DL-03 | High | The lobby never mentions claimable contracts, although `home_service._build_glances` computes `claimable_summary` on every lobby render. Only the one-shot 1.0 launch modal reads it. A missed prompt and a wasted query | `core/services/home_service.py`, `templates/trophies/home.html` | planned: Career + first arrival (with FV-03) |
-| DL-04 | Medium | Three "level" numbers that disagree: the ring says **Level 25** for a hunter with 0 XP (Pursuer level is the sum of 25 job levels, `career_service`), the tiles say average 1.0 and highest 1, and the discipline legend shows 5 each | `trophies/services/career_service.py`, `templates/trophies/career.html` | planned: Career + first arrival, after the owner decides what a newcomer's level shows |
+| DL-04 | Medium | Three "level" numbers that disagree: the ring says **Level 25** for a hunter with 0 XP (Pursuer level is the sum of 25 job levels, `career_service`), the tiles say average 1.0 and highest 1, and the discipline legend shows 5 each | `trophies/services/career_service.py`, `templates/trophies/career.html` | fixed: `feature/gamification/pursuer-level-from-one` (owner: redefine it. Pursuer Level counts levels gained, so a newcomer is 1; the ring and legend show each discipline's levels gained, 0 for a newcomer; the tiles' average and highest job level, 1.0 and 1, are held levels and now agree with the rest) |
 | DL-05 | Medium | Contract cards are dense and tall: 643px each on a phone, so 60 claimable contracts is about 60 screens. Each card shows all six platform chips with one lit, all 25 job icons with one to four lit, a ring, XP, a claim button, a split XP bar and a details row | `templates/trophies/partials/contracts/_contract_card.html` | planned: contracts board |
 | DL-06 | Medium | On a phone the back-to-top button sits on top of a card's Claim button. Same element as [FV-10](first-visit.md), now blocking the page's main action | `templates/partials/back_to_top.html` | fixed: `feature/ui/site-wide-noise` (via SW-02) |
 | DL-07 | Medium | The contract modal has no claim action. A hunter opens a ready-to-claim contract, reads it, then has to close it and find the card's button | `templates/trophies/partials/contracts/_contract_modal.html` | planned: contracts board |
@@ -48,8 +48,8 @@ the contracts waiting to be claimed.
 - **The late-night toast copy** ("Late night plat session? We see you, legend."): an Easter egg in
   `static/js/easter-eggs.js`, between 2 and 5 AM, once per session. The copy is charm; its styling is
   DL-10.
-- **The ring's "25"**: not a rendering bug. It is the sum of job levels by design; whether that is the
-  right number to show a newcomer is DL-04.
+- **The ring's "25"**: not a rendering bug. It was the sum of job levels by design; whether that was the
+  right number to show a newcomer was DL-04 (since redefined: a newcomer is 1).
 
 ## Candidate lessons
 

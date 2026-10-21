@@ -290,3 +290,16 @@ def test_the_tab_survives_a_failed_card_build(client, monkeypatch):
 
     assert resp.status_code == 200
     assert b'could not be built' in resp.content
+
+
+def test_a_card_with_no_career_hero_reads_level_1_not_0(monkeypatch):
+    """No Pursuer is below level 1 (levels gained, since 2026-10), so the card's fallback when the Career
+    hero is missing is the starting level, not 0."""
+    from core.services import profile_card_service
+    from trophies.services import career_service
+
+    profile = _linked_profile()
+    monkeypatch.setattr(career_service, 'build_hero_context', lambda p: None)
+    assert profile_card_service.get_card_data(profile)['pursuer_level'] == 1
+    monkeypatch.undo()
+    assert profile_card_service.get_card_data(profile)['pursuer_level'] == 1   # a real newcomer, too

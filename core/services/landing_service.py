@@ -127,7 +127,7 @@ def _fixture_card_context():
                         'earn_rate': 1.2, 'earned_at': None},
         'latest_plat': {'name': 'Astro Bot', 'cover_cached': '', 'cover_url': '',
                         'earn_rate': None, 'earned_at': None},
-        'pursuer_level': 342,
+        'pursuer_level': 343,          # 1 + the ring's levels gained (96+78+66+55+47 = 342)
         'rank_label': 'Warden',
         'ring': [
             {'slug': slug, 'label': label, 'total': total, 'dash': dash, 'offset': offset,

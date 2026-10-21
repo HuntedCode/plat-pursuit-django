@@ -31,7 +31,7 @@ the list jump to its top and spill out of the box for the fade.
                 <svg class="pp-howto__title-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m17 11-5-5-5 5"/><path d="m17 18-5-5-5 5"/></svg>
                 Pursuer ranks
             </h2>
-            <p class="pp-forge__lede">Your Pursuer Level is the sum of all 25 job levels. It climbs through eleven ranks, and every rank between Newbie and Ascendant has five divisions, from V up to I.</p>
+            <p class="pp-forge__lede">Your Pursuer Level goes up by one for every job level you gain. It climbs through eleven ranks, and every rank between Newbie and Ascendant has five divisions, from V up to I.</p>
 
             <div class="prk-now" style="--rk: var(--rank-{{ table.current.key }});">
                 <span class="prk-now__label">{{ table.current.label }}</span>
@@ -48,7 +48,7 @@ the list jump to its top and spill out of the box for the fade.
                         {% if t.current %}<span class="prk__here">You are here</span>{% endif %}
                         <span class="prk__lv">Lv {{ t.min_level|intcomma }}{% if not t.next_level %}+{% endif %}</span>
                     </div>
-                    <p class="prk__meta">{% if t.reached and t.reached_at %}Reached {{ t.reached_at|date:'M j, Y' }}{% elif t.reached and t.min_level == 0 %}Where every Pursuer starts{% elif t.reached %}Reached{% else %}{{ t.levels_to|intcomma }} level{{ t.levels_to|pluralize }} to go{% endif %}{% if not t.next_level %}. The top rank, with no divisions.{% endif %}</p>
+                    <p class="prk__meta">{% if t.reached and t.reached_at %}Reached {{ t.reached_at|date:'M j, Y' }}{% elif t.reached and forloop.first %}Where every Pursuer starts{% elif t.reached %}Reached{% else %}{{ t.levels_to|intcomma }} level{{ t.levels_to|pluralize }} to go{% endif %}{% if not t.next_level %}. The top rank, with no divisions.{% endif %}</p>
                     {% if t.divisions %}
                     <ol class="prk__divs">
                         {% for d in t.divisions %}
