@@ -371,7 +371,7 @@ Lazy-fetched contract-card HTML injected into the shared `.pp-detail-modal` on t
 
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
-| GET | `/career/contracts/<slug>/modal/` | Login + linked | Full contract card with the **viewer's** per-game progress (`ContractModalView`) |
+| GET | `/career/contracts/<slug>/modal/` | Login + linked | Full contract card with the **viewer's** per-game progress and reward states (`ContractModalView`). `?claim=1` (Career's board only) adds a sticky in-place Claim footer; without it a ready contract links to Career's Ready to Claim board from its Rewards |
 | GET | `/career/contracts/<slug>/preview/` | **Public** | **Anonymised** contract card (member games show trophy composition, not progress) + a sign-up / link-PSN CTA, for logged-out / unlinked viewers (`ContractModalPreviewView`). Renders only public contract/game data (`build_contract_modal(None, slug)` — no per-user work). |
 
 ### Profile Cards & Badge Showcase — DELETED (2026-08)

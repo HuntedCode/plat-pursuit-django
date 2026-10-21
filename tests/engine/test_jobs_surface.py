@@ -136,9 +136,13 @@ def _component_css():
     These assertions are about RULES, not about which file holds them. Three of them broke when the
     `.rp-*` job variants moved from `jobs.css` to `elements.css` (beside the rules they override, to kill
     an import-order dependency) -- a correct refactor failing tests that had encoded a filename.
+
+    Comments are stripped: the readers below find a rule by its selector text, and a comment QUOTING that
+    selector (`.rp-jobtiles { display: grid }` in the phone-row notes) was found first and read as the rule.
     """
     root = pathlib.Path(__file__).resolve().parents[2] / 'static' / 'css' / 'components'
-    return '\n'.join(f.read_text(encoding='utf-8') for f in sorted(root.glob('*.css')))
+    css = '\n'.join(f.read_text(encoding='utf-8') for f in sorted(root.glob('*.css')))
+    return re.sub(r'/\*.*?\*/', '', css, flags=re.S)
 
 
 def _solo():

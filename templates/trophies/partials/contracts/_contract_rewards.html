@@ -1,0 +1,26 @@
+{% load humanize %}
+{% comment %}
+The contract's reward split, spelled out once (the card only has room for "+4,200 at platinum"): one line per
+tier, with the viewer's state on it. A contract whose games have no platinum pays everything at 100%, so it
+shows one line. Expects `p` (a `project_card` dict). `show_state=False` is the anonymous preview: the split
+as a pitch, with no progress to report. `claim_url`: a host that cannot claim (game, badge detail) links a
+ready contract to Career's board here, rather than in a sticky footer its shell's own footer would collide with.
+{% endcomment %}
+<div class="rpm__section">
+    <div class="rpm__label">Rewards</div>
+    <ul class="rpm__tiers">
+        {% if p.has_plat %}
+        <li class="rpm__tier{% if show_state and p.plat_banked %} is-banked{% elif show_state and p.claim_plat %} is-ready{% endif %}">
+            <span class="rpm__tier-name">Earn the platinum</span>
+            <span class="rpm__tier-xp pp-tally">+{{ p.plat_xp|intcomma }} XP</span>
+            {% if show_state %}<span class="rpm__tier-state">{% if p.plat_banked %}Banked{% elif p.claim_plat %}Ready to claim{% elif p.plat_fill %}{{ p.plat_fill }}% complete{% else %}Not started{% endif %}</span>{% endif %}
+        </li>
+        {% endif %}
+        <li class="rpm__tier{% if show_state and p.full_banked %} is-banked{% elif show_state and p.claim_full %} is-ready{% endif %}">
+            <span class="rpm__tier-name">{% if p.has_plat %}Then reach 100%{% else %}Reach 100%{% endif %}</span>
+            <span class="rpm__tier-xp pp-tally">+{{ p.bonus_xp|intcomma }} XP</span>
+            {% if show_state %}<span class="rpm__tier-state">{% if p.full_banked %}Banked{% elif p.claim_full %}Ready to claim{% elif p.has_plat and not p.plat_banked and not p.claim_plat %}After the platinum{% elif p.full_fill %}{{ p.full_fill }}% complete{% else %}Not started{% endif %}</span>{% endif %}
+        </li>
+    </ul>
+    {% if claim_url and p.claim_xp %}<a class="pp-cta pp-cta--sm rpm__claim-link" href="{{ claim_url }}">Claim in Career</a>{% endif %}
+</div>

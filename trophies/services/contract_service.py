@@ -528,14 +528,27 @@ def _pending_tiers(ec, contract):
     value and record another across an event boundary)."""
     t = contract.xp_total_override or CONTRACT_XP_TOTAL
     multiplier = _active_multiplier()
-    grand_total = _tier_total(1.0, t, multiplier)
-    platinum_total = _tier_total(CONTRACT_PLATINUM_FRAC, t, multiplier) if ec.has_platinum else 0
+    platinum_total, full_total = tier_amounts(t, ec.has_platinum, multiplier)
     tiers = []
     if plat_tier_pending(ec):
         tiers.append(('platinum', platinum_total))
     if full_tier_pending(ec):
-        tiers.append(('full', (grand_total - platinum_total) if ec.has_platinum else grand_total))
+        tiers.append(('full', full_total))
     return tiers, t, multiplier
+
+
+def tier_amounts(t, has_platinum, multiplier=None):
+    """(platinum tier XP, 100% tier XP) for a contract of total `t`: what accepting each tier pays. The ONE
+    place the split is computed, read by the accept path above and by the board card and modal
+    (`contracts_service.project_card`), so "Claim 4,210 XP" is exactly what the press banks, override
+    rounding included. The 100% tier is the grand total minus the platinum tier, so the two always sum to
+    the whole; a contract with no platinum pays everything at 100%. `multiplier` defaults to the active one."""
+    m = _active_multiplier() if multiplier is None else multiplier
+    grand_total = _tier_total(1.0, t, m)
+    if not has_platinum:
+        return 0, grand_total
+    platinum_total = _tier_total(CONTRACT_PLATINUM_FRAC, t, m)
+    return platinum_total, grand_total - platinum_total
 
 
 def accept_contract(profile, contract, *, first_claim=None):
