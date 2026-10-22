@@ -154,7 +154,7 @@ request.path); filtered states carry the noindex block above.{% endcomment %}
             {% include 'partials/browse/active_filters.html' with chip_base_url=tlb_url %}
 
             <div class="pp-bgal__advanced" id="tlb-advanced">
-            {% include 'partials/browse/drawer_precollapse.html' with panel_id='tlb-advanced' drawer_open=filter_chips|length only %}
+            {% include 'partials/browse/drawer_precollapse.html' with panel_id='tlb-advanced' drawer_open=filter_open_count only %}
               <div class="pp-bgal__advanced-in">
                 {# ── Platforms ── #}
                 <div class="pp-gbrowse__fsec">

@@ -143,7 +143,7 @@
                         {% for group_label, group_choices in form.SORT_GROUPS %}
                         <optgroup label="{{ group_label }}">
                             {% for value, display in group_choices %}
-                            <option value="{{ value }}" {% if request.GET.sort == value or not request.GET.sort and value == 'alpha' %}selected{% endif %}>{{ display }}</option>
+                            <option value="{{ value }}" {% if request.GET.sort == value or not request.GET.sort and value == default_sort %}selected{% endif %}>{{ display }}</option>
                             {% endfor %}
                         </optgroup>
                         {% endfor %}
@@ -168,7 +168,7 @@
 
             {# Collapsible advanced panel (JS-toggled; renders open for the no-JS case, collapsed on load). #}
             <div class="pp-bgal__advanced" id="gbrowse-advanced">
-            {% include 'partials/browse/drawer_precollapse.html' with panel_id='gbrowse-advanced' drawer_open=filter_chips|length only %}
+            {% include 'partials/browse/drawer_precollapse.html' with panel_id='gbrowse-advanced' drawer_open=filter_open_count only %}
               <div class="pp-bgal__advanced-in">
                 {# ── Platforms ── #}
                 <div class="pp-gbrowse__fsec">
@@ -414,13 +414,6 @@
     should not pay for the controller. The script itself is delegated from `document.body`, so an
     htmx grid swap does not need it re-run.{% endcomment %}
     <script src="{% static 'js/quick-add.js' %}"></script>
-{% if applied_default_query %}
-{% comment %}The bare hub rendered with bound defaults (SEO Lane 1): surface them in the URL
-without a redirect, so the scroller/pagination/filters -- which all read location.search --
-behave exactly as the old redirected flow. Crawlers never run this and index the bare 200.
-{% endcomment %}
-<script>if (!window.location.search) { history.replaceState(null, '', '?{{ applied_default_query|escapejs }}'); }</script>
-{% endif %}
     <script src="{% static 'js/browse-filters.js' %}"></script>
     <script>
     // Owns the page's motion + chrome: header count-up, the animated collapsible Filters panel (toggle +
@@ -446,9 +439,10 @@ behave exactly as the old redirected flow. Crawlers never run this and index the
             toggle: '#gbrowse-filters-toggle',
             panel: '#gbrowse-advanced',
             countEl: '#gbrowse-filter-count',
-            // platform/regions are SCOPE here, not filters: the saved-defaults dispatch redirect always
-            // carries a platform, so counting it would show a permanent "2" and auto-open the drawer on
-            // every landing. Tag detail counts the same params precisely because it has no such default.
+            // platform/regions stay out of the drawer's COUNT: a hunter's saved browse defaults usually
+            // carry them, and counting them would auto-open the drawer on every landing. They are still
+            // visible as removable chips. The view passes the same keys as drawer_skip, so the server's
+            // pre-collapse and this count agree.
             skip: { page: 1, view: 1, sort: 1, query: 1, platform: 1, regions: 1 },
             chipsHost: '.pp-gbrowse__toolbar',
         });

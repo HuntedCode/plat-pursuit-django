@@ -64,6 +64,10 @@ being always on screen. Every surface keeps its job in front and its depth one t
   them stand between the hunter and their trophies.
 - **Depth is findable.** Hiding something means putting it where a curious hunter looks next, with a label
   that says what is there. "Behind a tap" never means "gone".
+- **Actions are not depth.** Facts and stats can move behind a tap; the things a hunter can DO on the page
+  (on a game page: Share when it applies, Add to list, Report an issue) stay on the first screen at equal
+  weight, because a button nobody sees is a button nobody presses (owner, 2026-10-22). On a phone, shorten
+  a label ("Report") rather than drop the button.
 
 ### 5. A number counts what its label says, and agrees with the page
 

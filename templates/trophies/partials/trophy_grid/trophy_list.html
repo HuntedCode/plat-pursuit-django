@@ -36,7 +36,7 @@ Article ids are namespaced ({{ id_prefix }}trophy-{{ id }}); the predecessor's b
 
                 </div>
 
-                {# Rarity: one block. Desktop = right-hand stacked column with labels; mobile = wraps below the row, inline, labels hidden (CSS-driven, no duplicate markup). #}
+                {# Rarity: one block. Desktop = right-hand stacked column with labels; mobile = wraps below the row, inline, label beside each value (CSS-driven, no duplicate markup). #}
                 <div class="gd-trophy__rates">
                     {% if e.earned %}<span class="gd-trophy__got" title="Earned">{% include 'partials/icons/checkmark.html' with color='var(--pp-success)' size='w-4 h-4' %}</span>{% endif %}
                     <div class="gd-trate gd-trate--stacked">

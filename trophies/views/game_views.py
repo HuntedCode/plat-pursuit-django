@@ -22,7 +22,7 @@ from trophies.mixins import HtmxListMixin
 from trophies.views.concept_context import ConceptContextMixin
 from ..models import SHOVELWARE_FLAGGED_STATUSES, Game, Trophy, Profile, EarnedTrophy, ProfileGame, ProfileTrophyGroup, TrophyGroup, Concept, FeaturedGuide, Stage, UserConceptRating
 from ..forms import GameSearchForm, GameDetailForm, GuideSearchForm
-from trophies.util_modules.constants import MODERN_PLATFORMS, ALL_PLATFORMS
+from trophies.util_modules.constants import ALL_PLATFORMS
 from .browse_helpers import (
     annotate_ascii_name, annotate_community_ratings,
     apply_game_browse_filters, apply_game_browse_sort, get_active_filter_chips,
@@ -264,27 +264,24 @@ class GamesListView(HtmxListMixin, ListView):
     - Time-to-beat ranges (IGDB estimate and community reported)
     - Genre, Theme, and Game Engine (normalized IGDB data)
 
-    Defaults to modern platforms (PS4/PS5) and user's preferred region if authenticated.
+    A bare hit filters nothing and sorts by Trending (DS-01, DS-05); a signed-in hunter with saved browse
+    defaults is redirected to them (`dispatch`).
     """
     model = Game
     template_name = 'trophies/game_list.html'
     partial_template_name = 'trophies/partials/game_list/browse_results.html'
     paginate_by = 30
 
+    # A bare hit opens on what hunters are playing now, not on numeral-titled shovelware (DS-05).
+    DEFAULT_SORT = 'trending'
+
     def get_filter_form(self):
+        # A bare hit filters NOTHING (DS-01, owner 2026-10-22). It used to bind PS4 + PS5 as an
+        # invisible default, so the same search found 11 games from a link and 3 from this page's
+        # own box (which submitted the hidden platforms). A platform the hunter does pick shows as
+        # a removable chip beside the results (`get_active_filter_chips`).
         if not hasattr(self, '_filter_form'):
-            data = self.request.GET
-            if not data:
-                # A bare hit renders the default view IN PLACE (SEO Lane 1): the old force-302
-                # to ?platform=... meant the hub's canonical URL never returned a page, so the
-                # site's largest hub had no indexable front door. The form binds the same
-                # defaults the redirect used to carry; the template then history.replaceState()s
-                # the params into the URL, so the scroller, pagination and filter form all
-                # carry them exactly as the redirected flow did (the audit's find: without
-                # that, page 2 silently dropped the platform filter and duplicated cards).
-                data = {'platform': MODERN_PLATFORMS}
-                self._applied_defaults = True
-            self._filter_form = GameSearchForm(data)
+            self._filter_form = GameSearchForm(self.request.GET)
         return self._filter_form
 
     def dispatch(self, request, *args, **kwargs):
@@ -304,7 +301,7 @@ class GamesListView(HtmxListMixin, ListView):
         form = self.get_filter_form()
 
         if form.is_valid():
-            sort_val = form.cleaned_data.get('sort', '')
+            sort_val = form.cleaned_data.get('sort') or self.DEFAULT_SORT
             qs, annotations = apply_game_browse_filters(qs, form, sort_val)
             qs, order = apply_game_browse_sort(qs, sort_val, annotations)
         else:
@@ -353,16 +350,10 @@ class GamesListView(HtmxListMixin, ListView):
 
         form = self.get_filter_form()
         context['form'] = form
-        context.update(get_active_filter_chips(self.request, form))   # dismissable active-filter chips
-        # From the FORM, not request.GET: on a bare-defaulted hit the GET is empty while the
-        # queryset IS filtered, and unchecked boxes would submit no platform on first touch.
-        form = self.get_filter_form()
-        context['selected_platforms'] = (
-            form.cleaned_data.get('platform', []) if form.is_valid()
-            else self.request.GET.getlist('platform')
-        )
-        if getattr(self, '_applied_defaults', False):
-            context['applied_default_query'] = urlencode({'platform': MODERN_PLATFORMS}, doseq=True)
+        # drawer_skip mirrors this page's filterPanel `skip` (game_list.html), so server and script agree.
+        context.update(get_active_filter_chips(self.request, form, drawer_skip=('platform', 'regions')))
+        context['selected_platforms'] = self.request.GET.getlist('platform')
+        context['default_sort'] = self.DEFAULT_SORT
         # ItemList schema rows for this page (SEO Lane 2) -- bounded by paginate_by. Condensed
         # cards link the concept GAME page, so the ItemList must claim the same URLs the grid
         # renders; the conceptless floor keeps its list URL (no Game page exists).
@@ -1145,9 +1136,15 @@ class GameDetailView(ConceptContextMixin, DetailView):
         ]
         # Games/Trophy Lists IA: the concept Game page sits between the hub and this list, so the
         # trail reads Home > Games > <the work> > <this list's name>.
-        if game.concept_id and game.concept.unified_title:
-            crumbs.append({'text': game.concept.unified_title, 'url': game.concept.game_page_url()})
-        crumbs.append({'text': f"{game.title_name}"})
+        work = game.concept.unified_title if game.concept_id else ''
+        if work:
+            crumbs.append({'text': work, 'url': game.concept.game_page_url()})
+        # A list named after its game read "Jak 3 > Jak 3", which looks like a mistake (DS-13): name the
+        # list by what tells it apart instead. A list with its own name keeps it, and so does one with no
+        # platforms on record (platforms_display would make it "Unknown trophy list").
+        same_name = (work and game.title_platform
+                     and game.title_name.strip().casefold() == work.strip().casefold())
+        crumbs.append({'text': f"{game.platforms_display} trophy list" if same_name else game.title_name})
         return crumbs
 
     # PSN-global rarity tiers (Trophy.trophy_rarity): Common=3 .. Ultra_Rare=0.

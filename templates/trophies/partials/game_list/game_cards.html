@@ -92,9 +92,9 @@
             {% endif %}
 
             {% if cinfo %}
-            <span class="pp-gcard__ctr" style="{% if cinfo.band_bg %}background: {{ cinfo.band_bg }};{% endif %} --ctr-accent: {{ cinfo.accent }};" title="Contract: {{ cinfo.name }} &middot; {{ cinfo.xp }} XP">
+            <span class="pp-gcard__ctr" style="{% if cinfo.band_bg %}background: {{ cinfo.band_bg }};{% endif %} --ctr-accent: {{ cinfo.accent }};" title="Contract: {{ cinfo.name }} &middot; {{ cinfo.xp|intcomma }} XP">
                 <span class="pp-gcard__ctr-jobs">{% for job in cinfo.jobs %}<span class="pp-gcard__ctr-job" style="color: var(--disc-{{ job.discipline }});" title="{{ job.name }}">{% job_icon_use job.icon 'w-full h-full' %}</span>{% endfor %}</span>
-                <span class="pp-gcard__ctr-xp">{{ cinfo.xp }} XP</span>
+                <span class="pp-gcard__ctr-xp">{{ cinfo.xp|intcomma }} XP</span>
             </span>
             {% else %}
             <span class="pp-gcard__ctr pp-gcard__ctr--empty" title="No contract">
@@ -174,8 +174,10 @@
         {% if request.GET.query or has_advanced_filters or request.GET.letter %}
         {% comment %} Full-nav reset (not an HTMX swap) so the filter panel + toolbar controls reset too, not
         just the grid. empty_reset_url lets a tag-scoped page (genre/theme detail) reset to its own path instead
-        of ejecting to Browse Games; Browse omits it and gets the modern-platform default. {% endcomment %}
-        <a href="{% if empty_reset_url %}{{ empty_reset_url }}{% else %}{% url 'games_list' %}?platform=PS5&amp;platform=PS4{% endif %}" class="pp-gcard-empty__reset">
+        of ejecting to Browse Games; Browse omits it and gets Browse Games with nothing filtered. `?page=1`, not a
+        bare URL: a bare hit sends a signed-in hunter to their SAVED filters, and "Reset" must clear (DS-01:
+        this link used to bring back the old hidden PS4 + PS5 default). {% endcomment %}
+        <a href="{% if empty_reset_url %}{{ empty_reset_url }}{% else %}{% url 'games_list' %}?page=1{% endif %}" class="pp-gcard-empty__reset">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
             Reset filters
         </a>
