@@ -372,6 +372,29 @@ to sit at the end of the filter toolbar, icon-only on a phone, and was easy to m
 
 **Subtitle guidelines**: The subtitle should be dynamic and contextual, not generic. Change based on active filters, current sort, result count, or user state. Add personality (flavor text, playful phrasing) per the Platinum Pursuit Standard.
 
+**A browse header carries one number: what its grid shows** (the browse pass, 2026-10-22, DS-04 in the
+[Discovery review](../design/reviews/discovery.md)). The headline Tally counts the grid's own unit ("357 games
+shown"), and nothing else sits beside it. The four-tile `.scard` grids the browse list pages used to carry are
+gone: they counted a different unit from the grid ("Total games 40,125", which were trophy lists, over "15,824
+games shown"), and on a phone they pushed every result below the first screen (DS-02). Site-wide numbers belong
+on the landing. This holds on the six Discovery list pages (Games, Trophy Lists, Recently Added, Franchises,
+Companies, Genres & Themes). Jobs, Hunters and Badges still carry a tile grid: they belong to review slices not
+yet run (Challenges, Identity and social), which will apply the same rule.
+
+**A detail page's totals are one line of facts, `.pp-factline`** (franchise, company, genre/theme detail):
+
+```html
+<p class="pp-factline">
+    <span><b>12</b> games</span>
+    <span><b>18</b> trophy lists</span>
+    <span><b class="pp-factline__plat">12</b> platinums</span>
+</p>
+```
+
+The dots between items are drawn by CSS, so a wrapped line never starts with one. Leave out an item that would
+read zero or repeat its neighbour (no "0 platinums", no "12 trophy lists" beside "12 games"): Page Principles
+rule 3. Franchise and company share `trophies/partials/_catalog_factline.html`.
+
 ### Tab Group / View Switcher (site-wide standard, 2026-07)
 
 **The one sanctioned tab treatment.** Any in-page tab group or view switcher -- 2-way (Series/Gallery) or multi-tab (Jobs/Radar/Contracts) -- uses the shared **`.pp-switch`** component (`static/css/components/switcher.css`): one bordered container holding transparent chips, active chip tinted, an icon per chip. Right-aligned in its own `flex items-center justify-end mt-5` row -- `mt-5` is the standard top gap above the switcher (it sits below the page-header card / whatever chrome precedes it). A row may carry one quiet link at its LEFT end (Career's "How does my Career work?", 2026-10): then it is `justify-between` and the switcher takes `ml-auto`, so it still sits right when the row wraps on a phone. A sub-switch alone in its row under it (Career's Dossier / Sheet) right-aligns to match. Used site-wide: Career, Badges (Series/Gallery). (Collection was a Case/Gallery switcher but is now a single Gallery, so it no longer carries one.) Unified 2026-07 from three near-identical class systems (`.lab-view-tab` / `.pp-collection__view-chip` / `.pp-vtoggle`, all retired).
@@ -552,6 +575,26 @@ For game cards, badge cards, and similar grid items. Miniature versions of dashb
 ```
 
 **Hover**: Use colored shadow glow (`hover:shadow-lg hover:shadow-{color}/30`) instead of scale transforms. Scale can cause layout shifts and feels heavy.
+
+### Layout must line up (owner rule, 2026-10-22)
+
+Two rules for any desktop layout, from the owner's review of the Discovery mock-ups:
+
+1. **Repeated cards share one anatomy.** Every card in a grid puts the same thing at the same height, whatever
+   its data. Reserve the title's lines (`min-height` in `em` with a `line-clamp`) and give optional rows a
+   FIXED height that holds when they are empty; the footer then FOLLOWS them and its top lines up. Do not pin
+   a footer that can grow (wrapping chips) to the bottom with `margin-top: auto`: it grows upward and its
+   rule leaves the row's line.
+   Never fill an empty slot with a placeholder that says what is missing ("No badges", "No contract"): that is
+   absence shown as content (Page Principles rule 3). Hold the height instead.
+2. **Panels side by side share a width, a height and their neighbours' edges.** Two panels in a side column
+   are one width and split the column's height equally (`grid-template-rows: 1fr 1fr`); a column beside them
+   starts and ends on the same lines.
+
+The game card (`.pp-gcard`, `templates/trophies/partials/game_list/game_cards.html`) is the reference: title
+(two lines reserved), the trophy breakdown on one-list cards only, the hooks row (badge series, contract,
+"No Plat", 26px whether full or empty), the footer (platforms | rating, players) right under it. The hunter's mark
+("Platinum" or their %) sits on the cover, where the eye lands.
 
 ### Browse Rows (list items)
 
@@ -739,6 +782,12 @@ Use this when cells contain **compact, self-contained data** (numbers, icons, sh
 ---
 
 ## Mobile-Specific Patterns
+
+### Breadcrumbs (hidden on phones, site-wide)
+
+`partials/breadcrumb.html` renders `hidden md:flex` (owner call, 2026-10-22): on a phone the sub-nav already
+says where you are, and the trail cost a line above every page's first content. Search engines are unaffected,
+since `BreadcrumbList` JSON-LD is generated from the same `breadcrumb` context by `core/templatetags/seo_tags.py`.
 
 ### Icon-Only Buttons
 

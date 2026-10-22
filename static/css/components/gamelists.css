@@ -1191,9 +1191,11 @@
    three controls competing for one line, the adder is squeezed to a few characters and the row reads
    as three equal fragments rather than a label, a view control and an action.
  *
- * `order` ALONE DOES IT, because two things are already true: the shared bar wraps, and
- * `.pp-gbrowse__sort` is given `flex: 1 1 auto` below 768 by `game-browse.css`, so once the adder
- * leaves row one the sort grows to fill it. Nothing here needs to restate either.
+ * `order` does it, with the shared bar's wrap and a growing sort. The sort needs one restatement here:
+ * below 768 `game-browse.css` gives every bar's sort a ZERO basis (the browse pass, so search + sort +
+ * buttons share row two), and a zero-basis sort never forces a wrap, it takes what the row leaves. On
+ * this bar that is beside the title and the adder's home: 10px at 375, measured. `auto` keeps the
+ * sort's own width as its basis, so it wraps to a row of its own as it always had.
  *
  * 599/600, AND NOT THIS FILE'S USUAL 519/520, because the arithmetic that chose 519 was measured
  * against the wrong box. The flex container is the toolbar card's CONTENT box, which is the viewport
@@ -1211,6 +1213,9 @@
  * DESKTOP too, undoing the prominence it was just given. */
 @media (max-width: 599px) {
     .gl-toolbar .gl-adder { order: 1; flex: 1 1 100%; }
+}
+@media (max-width: 767px) {
+    .gl-toolbar .pp-gbrowse__sort { flex-basis: auto; }
 }
 
 /* An OVERLAY, like `.pp-navsearch__panel` and `.gd-lb__suggest`. In flow it pushed the whole grid

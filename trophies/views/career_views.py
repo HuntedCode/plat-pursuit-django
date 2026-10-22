@@ -413,7 +413,7 @@ class JobsBrowseView(HtmxListMixin, ListView):
                 {'text': 'Home', 'url': reverse_lazy('home')},
                 {'text': 'Jobs'},
             ],
-            # Header substance scards from the hourly heartbeat (the browse-family standard):
+            # Header substance scards from the hourly heartbeat:
             # full page only -- the guard mirrors HtmxListMixin's template selection exactly.
             # None until the cron warms the cache; the template hides the grid.
             'jobs_stats': self._header_stats(),

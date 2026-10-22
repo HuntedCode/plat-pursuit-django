@@ -146,20 +146,15 @@ def _warm_heartbeat(**expanded):
     return key
 
 
-def test_header_carries_the_family_tally_and_scard_grid(client):
-    """Jeffrey's beta catch: the header must look/function like the other browse headers --
-    the right-aligned headline Tally with its shown-sublabel plus the .scard substance grid,
-    LIST-scoped and fed by the hourly site heartbeat (the game_list pattern: zero computation
-    on the request path)."""
+def test_header_carries_the_tally_and_no_tiles(client):
+    """The header's one number is the lists the grid shows, with its shown-sublabel (DS-04). The four
+    catalogue tiles (Trophy lists / Regional / With a platinum / New this week) are gone, warm cache or
+    not, and so are the heartbeat stats only they read."""
     from django.core.cache import cache
 
     GameFactory(title_platform=['PS5'])
     GameFactory(title_platform=['PS5'])   # two lists -> the sublabel pluralizes to 'lists shown'
-    key = _warm_heartbeat(
-        lists_total={'value': 4821, 'delta': 37},
-        lists_regional={'value': 912},
-        lists_with_plat={'value': 3200},
-    )
+    key = _warm_heartbeat(lists_total={'value': 4821, 'delta': 37})
     try:
         resp = client.get(URL)
     finally:
@@ -169,44 +164,9 @@ def test_header_carries_the_family_tally_and_scard_grid(client):
     # The HEADER tally block specifically -- bare 'lists shown' also lives in the minibar's
     # title attribute, and #tlb-count predates this header (both vacuous alone).
     assert 'id="tlb-count" class="pp-tally text-primary' in content
-    assert 'lists shown</span>' in content
-    for label in ('Trophy lists', 'Regional', 'With a platinum', 'New this week'):
-        assert label in content, label
-    # Comma'd values are safe substring pins; bare '37' is not (it lives in footer SVG path
-    # data) -- the exact-dict context assertion below carries new_this_week instead.
-    assert '4,821' in content and '>912<' in content and '3,200' in content
-    assert resp.context['tlb_stats'] == {
-        'total': 4821, 'regional': 912, 'with_plat': 3200, 'new_this_week': 37,
-    }
-
-
-def test_scard_grid_hidden_until_the_cron_warms_the_heartbeat(client):
-    """Cold cache (cron hasn't run) -> tlb_stats is None and the grid is gated off entirely --
-    a rendered 0 would be a lie, not a stat. The page itself still renders fine."""
-    GameFactory(title_platform=['PS5'])
-
-    resp = client.get(URL)
-
-    assert resp.status_code == 200
-    assert resp.context['tlb_stats'] is None
-    assert 'With a platinum' not in resp.content.decode()
-
-
-def test_header_stats_never_run_on_grid_swaps(client):
-    """The gating that keeps the swap path lean: the XHR/HTMX branches re-render only the grid,
-    so the header block (heartbeat read included) is skipped for them."""
-    from django.core.cache import cache
-
-    GameFactory(title_platform=['PS5'])
-    key = _warm_heartbeat(lists_total={'value': 10, 'delta': 1})
-    try:
-        xhr = client.get(URL, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
-        htmx = client.get(URL, HTTP_HX_REQUEST='true')
-    finally:
-        cache.delete(key)
-
-    assert 'tlb_stats' not in xhr.context
-    assert 'tlb_stats' not in htmx.context
+    assert 'data-countup="2">2</span>' in content and 'lists shown</span>' in content
+    assert 'class="scard' not in content and 'With a platinum' not in content and '4,821' not in content
+    assert 'tlb_stats' not in resp.context
 
 
 # ── Filters + sort ────────────────────────────────────────────────────────────────────────────────
@@ -382,7 +342,7 @@ def test_htmx_filter_swap_returns_grid_with_oob_chips(client):
 
 
 def test_grid_contract_minibar_and_sentinel(client):
-    """The card contract (pursuer band via show_game_hooks) + the page chrome: sticky minibar,
+    """The card contract (the hooks row via show_game_hooks) + the page chrome: sticky minibar,
     its sentinel, the infinite-scroll sentinel, no Lucky button (deliberate v1 omission), and
     no leaked template syntax."""
     viewer = ProfileFactory(is_linked=True)
@@ -393,7 +353,9 @@ def test_grid_contract_minibar_and_sentinel(client):
     content = client.get(URL).content.decode()
 
     assert 'pp-gcard' in content and 'Contract Check' in content
-    assert 'No badges' in content and 'No contract' in content   # the pursuer band placeholders
+    assert 'class="pp-gcard__hooks"' in content                    # the hooks row, even when empty
+    assert 'No badges' not in content and 'No contract' not in content   # absence is not content (DS-06)
+    assert 'pp-gcard__tro' in content                             # one list per card: its breakdown
     assert '42%' in content                                       # viewer progress fill
     assert 'data-sticky-sentinel="#tlb-minibar-sentinel"' in content
     assert 'id="tlb-sentinel"' in content and 'id="tlb-count"' in content

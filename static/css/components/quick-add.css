@@ -64,9 +64,9 @@
  *
  * MEASURED FROM THE COVER, NOT FROM THE BOTTOM OF THE CARD. The first cut anchored with
  * `bottom: 32px`, derived from the strip's padding, facts line and gap -- and landed the button at the
- * bottom-right corner instead of beside the title, because `.pp-gcard__facts` becomes a TWO-ROW grid
- * in one of its variants (`game-card.css`'s `:has(> .pp-gcard__mid)` block). Anything measured up
- * from the bottom inherits every row below it, and those rows are not fixed.
+ * bottom-right corner instead of beside the title, because the rows under the title are not the same on
+ * every card (the facts row was a two-row grid on phones then; the one-list breakdown row comes and goes
+ * by page now). Anything measured up from the bottom inherits every row below it.
  *
  * The cover IS fixed: `aspect-ratio: 3 / 4`, so its height is exactly 4/3 of the card's width. A
  * PERCENTAGE MARGIN resolves against the containing block's WIDTH, which is the one place CSS will

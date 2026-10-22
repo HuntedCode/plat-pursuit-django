@@ -44,9 +44,6 @@
 
     function boot(first) {
         if (first) {
-            document.querySelectorAll('[data-scard-count]').forEach(function (el) {
-                if (PP.countUp) { PP.countUp(el, 900); }
-            });
             var pct = document.querySelector('.fr-prog__pct[data-countup]');
             if (pct && PP.countUp) { PP.countUp(pct, 900); }
             // Fill the your-progress bar from 0 on first paint (double-rAF so the 0% width lands before the

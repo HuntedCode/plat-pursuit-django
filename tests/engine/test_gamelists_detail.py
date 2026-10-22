@@ -3872,9 +3872,9 @@ def test_the_adder_takes_its_own_row_on_a_phone(client):
     is squeezed to a few characters and the row reads as three equal fragments rather than a label, a
     view control and an action. It drops beneath them instead.
 
-    `order` alone does it, because the shared bar already wraps and `game-browse.css` already gives
-    `.pp-gbrowse__sort` `flex: 1 1 auto` below 768 -- so once the adder leaves row one, the sort grows
-    to fill it. Restating either here would be a second copy that drifts."""
+    `order` does it, with the shared bar's wrap and a growing sort. The sort's `auto` basis is restated
+    for this bar (see test_the_list_sort_is_never_squeezed_beside_the_adder): the shared phone rule gives
+    every other bar's sort a zero basis."""
     css = _read('static/css/components/gamelists.css')
 
     # 599, not this file's usual 519: the row needs a ~591px VIEWPORT once the gutter and the
@@ -3883,6 +3883,18 @@ def test_the_adder_takes_its_own_row_on_a_phone(client):
     rule = rule[:rule.index('}\n}') + 3]
     assert 'order: 1' in rule, 'the adder does not move below the sort'
     assert 'flex: 1 1 100%' in rule, 'it does not take the full row it moved to'
+
+
+def test_the_list_sort_is_never_squeezed_beside_the_adder():
+    """The browse pass gave every bar's phone sort a ZERO basis so it shares row two with its buttons. A
+    zero-basis item never forces a wrap: here it sat beside the title and the adder's home and got 10px at
+    375 (measured on the built CSS). This bar's sort keeps an `auto` basis below 768, so it wraps to a row
+    of its own at full width, as it did before the pass."""
+    css = _read('static/css/components/gamelists.css')
+
+    block = css[css.index('@media (max-width: 767px) {\n    .gl-toolbar .pp-gbrowse__sort'):]
+    block = block[:block.index('}\n}') + 3]
+    assert 'flex-basis: auto' in block, 'the list sort takes the zero basis and is squeezed beside the adder'
 
 
 def test_the_phone_layout_cannot_reach_the_browse_toolbars(client):

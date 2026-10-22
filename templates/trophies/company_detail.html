@@ -37,6 +37,7 @@ doesn't; thousands of them dilute the crawl. Stays crawlable (follow) so its lin
                         <span class="text-[0.6rem] font-extrabold uppercase tracking-wider text-primary bg-primary/15 border border-primary/30 rounded-full px-2 py-0.5">Company</span>
                     </div>
                     <h1 class="text-lg md:text-xl lg:text-2xl font-bold leading-tight mt-1">{{ object.name }}</h1>
+                    {% include 'trophies/partials/_catalog_factline.html' %}
 
                     {% if object.country_display or object.start_date %}
                     <div class="flex items-center gap-1.5 text-xs md:text-sm text-base-content/55 mt-1 flex-wrap">
@@ -65,29 +66,6 @@ doesn't; thousands of them dilute the crawl. Stays crawlable (follow) so its lin
                     <p class="text-[0.7rem] md:text-xs text-base-content/40 mt-1.5">
                         Data sourced from <a href="https://www.igdb.com" target="_blank" rel="noopener noreferrer" class="link link-hover">IGDB</a>.
                     </p>
-                </div>
-            </div>
-
-            {# Catalogue totals (objective facts about the company's output). #}
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mt-3 md:mt-4">
-                <div class="scard">
-                    <div class="scard__label">Games</div>
-                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ total_games }}">{{ total_games|intcomma }}</div>
-                </div>
-                <div class="scard">
-                    <div class="scard__label">Versions</div>
-                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ total_versions }}">{{ total_versions|intcomma }}</div>
-                    <div class="scard__sub">on PSN</div>
-                </div>
-                <div class="scard">
-                    <div class="scard__label">Trophies</div>
-                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ total_trophies }}">{{ total_trophies|intcomma }}</div>
-                    <div class="scard__sub">defined</div>
-                </div>
-                <div class="scard">
-                    <div class="scard__label">Platinums</div>
-                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ total_platinums }}">{{ total_platinums|intcomma }}</div>
-                    <div class="scard__sub">to earn</div>
                 </div>
             </div>
 

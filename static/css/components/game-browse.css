@@ -7,6 +7,18 @@
  * ============================================================ */
 .pp-gbrowse { display: flex; flex-direction: column; }
 
+/* A detail page's totals as one line of facts, not a grid of tiles (DS-04, Page Principles rule 4): the
+   franchise, company and genre/theme headers. Wraps on a phone; the dots ride each item after the first, so a
+   wrapped line never starts with one dangling. */
+.pp-factline { display: flex; flex-wrap: wrap; align-items: baseline; row-gap: 2px; margin-top: 6px;
+    font-size: 0.8125rem; color: var(--pp-text-mute); }
+.pp-factline > span { display: inline-flex; align-items: baseline; gap: 4px; }
+.pp-factline > span + span::before { content: ''; align-self: center; width: 3px; height: 3px; margin: 0 4px 0 8px; /* + the 4px gap = 8px each side */
+    border-radius: 999px; background: currentColor; opacity: 0.6; }
+.pp-factline b { color: var(--pp-text); font-weight: 700; font-variant-numeric: tabular-nums; }
+.pp-factline b.pp-factline__plat { color: var(--color-trophy-platinum); }
+@media (min-width: 768px) { .pp-factline { font-size: 0.875rem; } }
+
 /* Mini-bar result-count pill: rides the shared .pp-minibar identity so the live count stays visible when
    the toolbar has scrolled away. Hidden on the tightest phones to keep the title + Filters reach intact. */
 .pp-minibar__count { flex-shrink: 0; font-size: 0.72rem; font-weight: 700; color: var(--pp-text-mute);
@@ -70,16 +82,14 @@
 .pp-gbrowse__bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .pp-gbrowse__bar > .pp-bgal__search { flex: 1 1 200px; }
 .pp-gbrowse__sort { flex: 0 1 auto; }
-/* The sort select may SHRINK on a phone rather than holding its longest option's width.
-   Sized to content it is 189px on Browse Games ("Least Platinums Earned"), and search takes row 1, so
-   row 2 wants sort + Lucky + Filters = 327px in a 319px well. Eight pixels over, and the cost is a whole
-   44px third row. Shrinking, it settles at ~181px there -- ample for a truncated label plus the arrow.
-   `min-width: 0` is required: a flex item will not shrink below its content without it, which is the
-   whole reason the select was holding the row open.
-   Safe on all twelve surfaces that share this bar because it only shrinks under competition; the others
-   (Companies 277px, the profile's Games 163px) already fit and are unaffected. */
+/* TWO ROWS ON A PHONE, ALWAYS (DS-02): search alone on the first, every other control on the second. The
+   search takes the full row outright; the sort grows from a ZERO basis, so it fills only what the buttons
+   beside it leave. From `auto` it started at its content width, and on Browse Games that pushed Filters onto
+   a third row of its own. The profile's Games bar (`--lib`) solved the same problem first with these same
+   two rules; they are shared now. Every bar that uses them was measured at 375px. */
 @media (max-width: 767px) {
-    .pp-gbrowse__sort { flex: 1 1 auto; min-width: 0; }
+    .pp-gbrowse__bar > .pp-bgal__search { flex-basis: 100%; }
+    .pp-gbrowse__sort { flex: 1 1 0; min-width: 0; }
     .pp-gbrowse__sort .pp-gallery__select { width: 100%; }
 }
 
@@ -264,15 +274,6 @@
        failure mode for an estimate that is a few pixels out is a second row, not an overflowing bar. */
     .pp-gbrowse__toolbar--lib .pp-gbrowse__fchips { gap: 6px; }
     .pp-gbrowse__toolbar--lib .pp-bgal__chip { padding: 5px 9px; font-size: 11px; }
-
-    /* Search takes the whole first line, the two selects split the second evenly.
-       Both halves are needed. Left alone, the search's `flex: 1 1 200px` basis is small enough that all
-       THREE fit one flex line -- and the selects, sized from a 0 basis, would then settle at ~40px each,
-       which is not a control. Giving search a 100% basis breaks the line under it deliberately, and only
-       then can the selects share what is left. */
-    .pp-gbrowse__toolbar--lib .pp-bgal__search { flex: 1 1 100%; }
-    .pp-gbrowse__toolbar--lib .pp-gbrowse__sort { flex: 1 1 0; min-width: 0; }
-    .pp-gbrowse__toolbar--lib .pp-gallery__select { width: 100%; }
 }
 
 /* Infinite-scroll loading spinner. NB: InfiniteScroller toggles the Tailwind `hidden` class on this element,

@@ -78,7 +78,7 @@ def test_franchise_detail_renders(client):
     assert 'Resident Evil 4' in content
     assert 'Resident Evil Village' in content
     assert '>Franchise<' in content               # identity chip
-    assert 'scard' in content                     # totals row
+    assert 'class="pp-factline"' in content    # totals: one line of facts (DS-04)
     assert '{#' not in content and '{%' not in content
 
 

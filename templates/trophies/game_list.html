@@ -41,44 +41,14 @@
                     </p>
                 </div>
 
-                {% comment %} Filtered-result count as the headline Tally (mirrors Collection/Badges). The
-                catalogue scale lives in the .scard grid below, so the sublabel just names the shown results. {% endcomment %}
+                {% comment %} The header's one number: the games the grid shows (DS-04). Catalogue-wide numbers belong
+                on the landing, not over a grid that counts something else. {% endcomment %}
                 {# Mobile: a compact single line that rides the title row. md+: the tall stacked Tally. #}
                 <div class="shrink-0 text-right flex items-baseline gap-1 whitespace-nowrap md:block">
                     <span id="gbrowse-count" class="pp-tally text-primary leading-none font-bold text-sm md:text-3xl" data-games-count data-countup="{{ paginator.count }}">{{ paginator.count|intcomma }}</span>
                     <span class="text-[0.65rem] md:text-xs text-base-content/50 md:mt-1 md:block md:uppercase md:tracking-wider">game{{ paginator.count|pluralize }} shown</span>
                 </div>
             </div>
-
-            {% comment %} Catalogue substance: a full-width .scard grid (the Career-header treatment) giving
-            the header body -- overall scale + how much of the catalogue is wired into the gamification
-            systems (discovery hooks) + fresh-sync momentum. Neutral (the filtered-count Tally is the one
-            primary hero). All four are cached hourly on the site heartbeat -> zero DB cost here, so the grid
-            only shows once the cron has warmed the cache. {% endcomment %}
-            {% if catalog_games_total %}
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mt-3 md:mt-4">
-                <div class="scard">
-                    <div class="scard__label">Total games</div>
-                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ catalog_games_total }}">{{ catalog_games_total|intcomma }}</div>
-                    <div class="scard__sub">in the catalogue</div>
-                </div>
-                <div class="scard">
-                    <div class="scard__label">In badge series</div>
-                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ catalog_games_in_badges|default:0 }}">{{ catalog_games_in_badges|default:0|intcomma }}</div>
-                    <div class="scard__sub">part of a badge</div>
-                </div>
-                <div class="scard">
-                    <div class="scard__label">In contracts</div>
-                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ catalog_games_in_contracts|default:0 }}">{{ catalog_games_in_contracts|default:0|intcomma }}</div>
-                    <div class="scard__sub">on the job board</div>
-                </div>
-                <div class="scard">
-                    <div class="scard__label">New this week</div>
-                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ catalog_games_new_this_week|default:0 }}">{{ catalog_games_new_this_week|default:0|intcomma }}</div>
-                    <div class="scard__sub">freshly synced</div>
-                </div>
-            </div>
-            {% endif %}
         </div>
     </section>
 
@@ -423,8 +393,6 @@
         if (window.PlatPursuit && PlatPursuit.countUp) {
             var countEl = document.querySelector('[data-games-count]');
             if (countEl) { PlatPursuit.countUp(countEl, 900); }
-            // Catalogue .scard values animate in on the same beat as the headline Tally.
-            document.querySelectorAll('[data-scard-count]').forEach(function (el) { PlatPursuit.countUp(el, 900); });
         }
 
         var form = document.getElementById('gbrowse-form');

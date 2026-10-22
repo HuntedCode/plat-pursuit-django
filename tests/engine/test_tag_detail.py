@@ -111,7 +111,7 @@ def test_tag_grid_condenses_to_one_card_per_page_identity(client):
 
 
 def test_cards_get_pursuer_hooks(client):
-    """The cards render the shared pursuer band (build_game_card_context sets show_game_hooks) -- the old
+    """The cards render the shared hooks row (build_game_card_context sets show_game_hooks) -- the old
     hand-built rating/user maps omitted it."""
     genre = GenreFactory(name='RPG', slug='rpg')
     game = GameFactory(title_name='Questy', title_platform=['PS5'])
@@ -123,8 +123,8 @@ def test_cards_get_pursuer_hooks(client):
 
     content = client.get(_url(genre)).content.decode()
 
-    assert 'RPG Legends' in content        # badge series band on the card
-    assert 'No contract' in content        # contract placeholder -> band is present
+    assert 'In 1 badge series: RPG Legends' in content   # the badge chip, its series named in the title
+    assert 'No contract' not in content                    # absence is not content (DS-06)
 
 
 # ── Filters / sort ────────────────────────────────────────────────────────────────────────────────────────
@@ -222,10 +222,13 @@ def test_header_stats_aggregate(client):
 
     content = client.get(_url(genre)).content.decode()
 
-    # 2 games; owned = 160; platinums = 8 (aggregated over the denormed columns).
-    assert 'data-countup="2"' in content     # games
-    assert 'data-countup="160"' in content   # owned (sum played_count)
-    assert 'data-countup="8"' in content      # platinums (sum plats_earned_count)
+    # One line of facts, not four tiles (DS-04): 2 lists; owned = 160; platinums = 8 (aggregated over the
+    # denormed columns). Labelled "trophy lists" and "times owned", since a hunter with two versions owns twice.
+    factline = content.split('class="pp-factline"')[1].split('</p>')[0]
+    assert '<b>2</b> trophy lists' in factline
+    assert '<b>160</b> times owned' in factline
+    assert '>8</b> platinums earned' in factline
+    assert 'class="scard' not in content
 
 
 # ── Related-tags rail (materialized co-occurrence) ────────────────────────────────────────────────────────

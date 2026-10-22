@@ -82,7 +82,7 @@ def test_company_detail_renders(client):
     assert 'fgroup' in content                 # shared grouped-game card
     assert 'The Last of Us' in content
     assert '>Company<' in content              # identity chip
-    assert 'scard' in content
+    assert 'class="pp-factline"' in content  # totals: one line of facts (DS-04)
     assert '{#' not in content and '{%' not in content
 
 

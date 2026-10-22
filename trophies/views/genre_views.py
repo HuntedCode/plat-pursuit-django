@@ -138,20 +138,16 @@ class GenreThemeListView(HtmxListMixin, ListView):
         context['current_query'] = self.request.GET.get('query', '').strip()
         context['item_count'] = len(context['items'])
 
-        # Header stats: how many genres / themes actually carry games -- from the hourly site
-        # heartbeat (the browse-header standard). These were hot DISTINCT counts over 4-table
-        # joins on EVERY request and filter swap until 2026-08; now a pure cache read. Runs
-        # unconditionally on purpose: it is one cache GET, and gating it on `request.htmx`
-        # would zero the captions on an htmx history-restore (which renders the FULL page --
-        # the trap the Recently Added guard documents). None until the cron warms the cache;
-        # the template gates on that.
+        # The tab switcher's counts: how many genres / themes actually carry games -- from the hourly
+        # site heartbeat. These were hot DISTINCT counts over 4-table joins on EVERY request and filter
+        # swap until 2026-08; now a pure cache read. Runs unconditionally on purpose: it is one cache
+        # GET, and gating it on `request.htmx` would zero the captions on an htmx history-restore (which
+        # renders the FULL page -- the trap the Recently Added guard documents). None until the cron
+        # warms the cache; the template gates on that.
         from core.services.site_heartbeat import heartbeat_values
-        _stats = heartbeat_values(
-            'genres_with_games', 'themes_with_games', 'games_tagged', 'tags_applied')
+        _stats = heartbeat_values('genres_with_games', 'themes_with_games')
         context['genre_count'] = _stats['genres_with_games']
         context['theme_count'] = _stats['themes_with_games']
-        context['games_tagged'] = _stats['games_tagged']
-        context['tags_applied'] = _stats['tags_applied']
 
         context['seo_description'] = (
             "Browse PlayStation games by genre and theme. "
@@ -227,14 +223,13 @@ class TagDetailBaseView(HtmxListMixin, ListView):
         is_xhr = self.request.headers.get('X-Requested-With') == 'XMLHttpRequest'
         if not getattr(self.request, 'htmx', False) and not is_xhr:
             # Header stats: one aggregate over the tag's games, off DENORMED Game columns -> whale-safe
-            # (bounded by game count, not player rows). games/plays/plats/avg-completion for the .scard row.
+            # (bounded by game count, not player rows). lists/owned/plats/avg-completion for the header's factline.
             stats = Game.objects.filter(self.get_tag_filter()).aggregate(
                 games=Count('id'),
                 owned=Sum('played_count'),   # total ownership records across the tag's games (not distinct players)
                 plats=Sum('plats_earned_count'),
                 avg_completion=Avg('avg_completion'),
             )
-            context['total_game_count'] = stats['games'] or 0
             context['tag_stats'] = stats
 
             # Related-tags rail: the materialized co-occurrence slug list, loaded + reordered,
@@ -280,8 +275,8 @@ class TagDetailBaseView(HtmxListMixin, ListView):
         )
 
         # Shared, batched, whale-safe card context (progress / DLC counts / ratings / badge + contract hooks),
-        # the same helper Browse Games + Recently Added use -- lights up the pursuer band the old hand-built
-        # rating/user maps were missing.
+        # the same helper Browse Games + Recently Added use -- lights up the badge + contract hooks the old
+        # hand-built rating/user maps were missing.
         context.update(build_game_card_context(context['object_list'], self.request, condensed=True))
 
         return context
@@ -311,7 +306,6 @@ class GenreDetailView(TagDetailBaseView):
         context['genre'] = self.genre
         context['tag_name'] = self.genre.name
         context['tag_type'] = 'Genre'
-        context['tag_intro_suffix'] = 'in this genre. Find your next platinum.'
         context['detail_url_name'] = 'genre_detail'
         context['detail_slug'] = self.genre.slug
         context['breadcrumb'] = [
@@ -351,7 +345,6 @@ class ThemeDetailView(TagDetailBaseView):
         context['theme'] = self.theme
         context['tag_name'] = self.theme.name
         context['tag_type'] = 'Theme'
-        context['tag_intro_suffix'] = 'with this theme.'
         context['detail_url_name'] = 'theme_detail'
         context['detail_slug'] = self.theme.slug
         context['breadcrumb'] = [

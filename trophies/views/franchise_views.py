@@ -107,16 +107,6 @@ class FranchiseListView(HtmxListMixin, ListView):
             {'text': 'Franchises'},
         ]
 
-        # Header substance scards from the hourly heartbeat (the browse-family standard): full
-        # page only (guard mirrors HtmxListMixin's template selection). None until the cron
-        # warms the cache; the template hides the grid.
-        is_xhr = self.request.headers.get('X-Requested-With') == 'XMLHttpRequest'
-        if not getattr(self.request, 'htmx', False) and not is_xhr:
-            from core.services.site_heartbeat import heartbeat_values
-            stats = heartbeat_values(
-                'franchises_total', 'series_total', 'franchise_games', 'franchise_spinoffs')
-            context['franchise_stats'] = stats if stats['franchises_total'] is not None else None
-
         context['sort_choices'] = FRANCHISE_SORT_CHOICES
         context['current_sort'] = self.request.GET.get('sort', 'alpha')
         context['show_solo'] = self.request.GET.get('show_solo') == '1'
@@ -139,7 +129,7 @@ class FranchiseListView(HtmxListMixin, ListView):
 class FranchiseDetailView(DetailView):
     """Detail page for a single franchise/series showing games grouped by IGDB entry.
 
-    Rebuilt to the Platinum standard: an accented header (cover thumb + .scard totals +
+    Rebuilt to the Platinum standard: an accented header (cover thumb + a one-line factline of totals +
     a completion bar for signed-in viewers), one IGDB-grouped game list, and a related
     franchises/series rail (shared `.pp-gtile`). No tabs -- the legacy "also featured"
     partition is gone and the related entries moved from a tab to a bottom rail. Sort is

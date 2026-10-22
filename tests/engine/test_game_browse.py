@@ -270,8 +270,10 @@ def test_lucky_redirects_to_the_game_page(client):
 
 
 def test_grid_renders_card_contract(client):
-    """The grid renders .pp-gcard cells with the game title, the colored B/S/G/P trophy counts, the pursuer-
-    hook placeholders (Browse Games sets show_game_hooks), and the infinite-scroll sentinel."""
+    """The grid renders .pp-gcard cells with the game title, the hooks row and the footer, and the
+    infinite-scroll sentinel. A game card stands for a whole game page, so it carries no one-list trophy
+    breakdown, and nothing on it says what the game lacks (DS-06): no "No badges", no "No contract", no
+    star for an unrated game."""
     GameFactory(title_name='Render Check Game', title_platform=['PS5'], has_trophy_groups=True,
                 concept__unified_title='Render Check Game')
     url, params = _url()
@@ -282,10 +284,10 @@ def test_grid_renders_card_contract(client):
     assert resp.status_code == 200
     assert 'pp-gcard' in content
     assert 'Render Check Game' in content
-    assert 'pp-gcard__tro' in content        # colored B/S/G/P trophy counts
-    assert 'pp-gcard__dlc' in content         # DLC tag (game has trophy groups)
-    assert 'No badges' in content            # badge-band placeholder (show_game_hooks on, game in none)
-    assert 'No contract' in content          # contract placeholder
+    assert 'class="pp-gcard__hooks"' in content and 'class="pp-gcard__foot"' in content
+    assert 'pp-gcard__tro' not in content and 'pp-gcard__dlc' not in content   # one-list cards only
+    assert 'No badges' not in content and 'No contract' not in content
+    assert 'pp-gcard__fact' not in content   # unrated: no rating at all, not a star and a dash
     assert 'gbrowse-sentinel' in content
     # No raw Django comment markers leak (multi-line {# #} is NOT a comment in Django and ships as text).
     assert '{#' not in content
@@ -309,8 +311,8 @@ def test_card_shows_badges_and_contract(client):
     url, params = _url()
     content = client.get(url, params).content.decode()
 
-    assert 'Hooked Franchise' in content     # the badge series name
-    assert 'pp-gcard__badges-n' in content   # the count element (not the placeholder)
+    assert 'In 1 badge series: Hooked Franchise' in content   # the series name rides the chip's title
+    assert 'pp-gcard__badges-n' in content   # the count element
     assert 'Hooked Contract' in content      # the contract chip
     assert 'No contract' not in content      # placeholder replaced by the real chip
     assert '6,000 XP' in content and '6000 XP' not in content   # thousands separator, as Career writes it (DS-14)
@@ -319,7 +321,8 @@ def test_card_shows_badges_and_contract(client):
 def test_card_dlc_tag_shows_pack_count(client):
     """A game with DLC trophy groups shows the count on the DLC tag (`DLC ×N`), counting only groups beyond
     the base 'default' group (4 groups incl. default -> ×3), batched whale-safely via dlc_map. A game with
-    no trophy groups shows no DLC tag at all (no count element)."""
+    no trophy groups shows no DLC tag at all (no count element). The tag rides the one-list breakdown, so
+    this reads Trophy Lists browse: a game card (Browse Games) carries neither."""
     from trophies.models import TrophyGroup
 
     game = GameFactory(title_name='DLC Count Game', title_platform=['PS5'], has_trophy_groups=True)
@@ -329,8 +332,7 @@ def test_card_dlc_tag_shows_pack_count(client):
     TrophyGroup.objects.create(game=game, trophy_group_id='003')
     GameFactory(title_name='No DLC Game', title_platform=['PS5'], has_trophy_groups=False)
 
-    url, params = _url()
-    content = client.get(url, params).content.decode()
+    content = client.get(reverse('trophy_lists')).content.decode()
 
     assert 'pp-gcard__dlc-n' in content       # the count element rendered for the DLC game
     assert '&times;3' in content or '×3' in content  # base 'default' excluded -> 3, not 4
@@ -650,13 +652,14 @@ def test_bare_games_renders_everything_in_place(client):
 
 
 def test_site_heartbeat_has_catalog_coverage():
-    """compute_site_heartbeat runs the new catalogue-coverage queries (games in badge series / contracts,
-    which feed the Browse Games header) and exposes them under `expanded`. Empty DB -> 0, no crash."""
+    """compute_site_heartbeat runs the games-in-contracts coverage query (the Jobs header reads it) and
+    exposes it under `expanded`. Empty DB -> 0, no crash. Its badge-series twin fed only the Browse Games
+    tiles and went with them (DS-04)."""
     from core.services.site_heartbeat import compute_site_heartbeat
 
     expanded = compute_site_heartbeat().get('expanded', {})
 
-    assert expanded.get('games_in_badges', {}).get('value') == 0
+    assert 'games_in_badges' not in expanded
     assert expanded.get('games_in_contracts', {}).get('value') == 0
 
 
@@ -690,22 +693,19 @@ def test_empty_state_shows_reset_cta_when_filtered(client):
     assert 'Reset filters' in filtered
 
 
-def test_header_scard_grid_renders_when_heartbeat_warm(client):
-    """When the hourly site-heartbeat cache is warm, the Browse Games header renders the catalogue .scard
-    grid (Total games / In badge series / In contracts / New this week) fed from those cached values -- zero
-    request-path DB cost. Cold cache (no cron yet) simply omits the grid, so this pins the warm path."""
+def test_header_has_no_tiles_even_when_the_heartbeat_is_warm(client):
+    """DS-04: the header's only number is the games the grid shows. The four catalogue tiles counted trophy
+    LISTS beside a grid of games ("15,824 games shown" under "Total games 40,125"), so they are gone, warm
+    cache or not."""
     from django.core.cache import cache
     from django.utils import timezone
 
-    GameFactory(title_name='Header Grid Game', title_platform=['PS5'])
+    GameFactory(title_name='Header Grid Game', title_platform=['PS5'], concept__unified_title='Header Grid Game')
     now = timezone.now()
     key = f"site_heartbeat_{now.date().isoformat()}_{now.hour:02d}"
     cache.set(key, {
         'always': {'games_total': {'value': 12847, 'delta': 156}},
-        'expanded': {
-            'games_in_badges': {'value': 1204},
-            'games_in_contracts': {'value': 312},
-        },
+        'expanded': {'games_in_contracts': {'value': 312}},
     }, 120)
     try:
         url, params = _url()
@@ -713,13 +713,9 @@ def test_header_scard_grid_renders_when_heartbeat_warm(client):
     finally:
         cache.delete(key)
 
-    assert 'scard' in content                 # the Career-header stat-card treatment
-    assert 'Total games' in content
-    assert 'In badge series' in content
-    assert 'In contracts' in content
-    assert 'New this week' in content
-    assert '12,847' in content                # catalogue total flows through from the cache
-    assert '156' in content                   # games_total.delta -> catalog_games_new_this_week (the one non-obvious mapping)
+    assert 'class="scard' not in content     # bare 'scard' also matches Discard in the base modal
+    assert 'Total games' not in content and '12,847' not in content
+    assert 'id="gbrowse-count"' in content and 'game shown' in content   # the one count: 1 game, as the grid
     assert '{#' not in content                # multi-line comment leak guard (header block)
 
 
