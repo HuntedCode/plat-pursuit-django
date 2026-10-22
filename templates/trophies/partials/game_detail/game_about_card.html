@@ -1,5 +1,6 @@
-{% comment %} Rebuilt About panel. The hero carries the CLAMPED teaser (with "More about this game" jumping
-here), so this shows the full summary unclamped -- no read-more, and no JS at all.
+{% comment %} Rebuilt About panel: where the Game page's depth lives (Page Principles rule 4). The hero keeps a
+one-line facts row; the full summary, credits and release date, time to beat, screenshots and the family are
+here. No read-more, and no JS of its own (the screenshots open the shared lightbox).
 
 Layout: STACKED full-width bands, not a grid. The sections have mismatched natural shapes (time-to-beat and
 links are wide+short, quick facts is tall), so pairing them side by side always left one card stretched or a
@@ -26,7 +27,28 @@ so the gating stays out of the template.
             {% endif %}
         </section>
         {% endif %}
+    {% endif %}
 
+    {% if image_urls.screenshot_urls %}
+    {% comment %}Screenshots (from the hero, DS-07). `#gd-shots [data-shot]` is what shot-lightbox.js binds and
+    the FLIP shrink-home target, so the id stays. Outside the about_has_info gate: the images can come
+    from PSN media on a game IGDB has not matched.{% endcomment %}
+    <section class="gd-acard">
+        <h3 class="gd-acard__h">Screenshots</h3>
+        <div class="gd-shots gd-shots--about" id="gd-shots">
+            {% for url in image_urls.screenshot_urls|slice:":6" %}
+                <button type="button" class="gd-shots__thumb" data-shot="{{ forloop.counter0 }}" aria-label="View screenshot {{ forloop.counter }}">
+                    <img src="{{ url }}" alt="{{ page_title }} screenshot {{ forloop.counter }}" loading="lazy" decoding="async" class="w-full h-full object-cover" />
+                    {% if forloop.last and image_urls.screenshot_urls|length > 6 %}
+                        <span class="gd-shots__more">+{{ image_urls.screenshot_urls|length|add:"-6" }}</span>
+                    {% endif %}
+                </button>
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+
+    {% if about_has_info %}
         {% if about_ttb %}
         <section class="gd-acard">
             <h3 class="gd-acard__h">Time to beat</h3>
@@ -95,23 +117,29 @@ so the gating stays out of the template.
         {% endif %}
     {% endif %}
 
-    {% comment %}about_hide_versions (the concept Game page): this card is redundant THERE --
-    "Other platforms" is the list switcher's own set restated relative to the host, and "In the
-    same family" is the hero's family band. On List detail (flag absent) it renders as always:
-    that page IS one version, so its relatives belong here. Gated on the whole card, heading
-    included, so no empty shell survives.{% endcomment %}
-    {% if not about_hide_versions %}{% if other_versions or family_versions %}
+    {% comment %}about_hide_other_platforms (an IGDB Game page): "Other platforms" is the list switcher's own
+    set restated, so it is left out there and only the family shows, its rows linking each sibling's GAME
+    page (the family band the hero carried before DS-07 moved it here). On a c/ page both sections stay:
+    other_versions is the sole surface reaching untrusted same-igdb siblings. Family rows link Game pages on
+    both, as the hero band did on both. Gated on the whole card,
+    heading included, so no empty shell survives.{% endcomment %}
+    {% if about_hide_other_platforms %}
+        {% if family_versions %}
+        <section class="gd-acard">
+            <h3 class="gd-acard__h">Versions &amp; editions</h3>
+            {% include 'trophies/partials/game_detail/_version_sections.html' with other_versions=None family_game_pages=True %}
+        </section>
+        {% endif %}
+    {% elif other_versions or family_versions %}
     <section class="gd-acard">
         <h3 class="gd-acard__h">Versions &amp; editions</h3>
-        {% include 'trophies/partials/game_detail/_version_sections.html' %}
+        {% include 'trophies/partials/game_detail/_version_sections.html' with family_game_pages=True %}
     </section>
-    {% endif %}{% endif %}
+    {% endif %}
 
-    {% comment %}When the versions card is gated off (about_hide_versions), the versions lists
-    must not ALSO suppress this empty state -- both audits caught the tab rendering a zero-length
-    <div> on every un-enriched split-concept page (`or` binds looser than `and` below, so this
-    reads: hide-flag set, OR genuinely nothing to show).{% endcomment %}
-    {% if not about_has_info %}{% if about_hide_versions or not other_versions and not family_versions %}
+    {% comment %}The empty state only when nothing above rendered: no IGDB info, no screenshots, and no
+    versions card (on an IGDB page that means no family; elsewhere, no versions of either kind).{% endcomment %}
+    {% if not about_has_info and not image_urls.screenshot_urls and not family_versions %}{% if about_hide_other_platforms or not other_versions %}
     <div class="gd-empty">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
         <p class="gd-empty__title">No extended info yet</p>

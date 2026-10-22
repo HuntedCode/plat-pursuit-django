@@ -122,7 +122,7 @@ plus `"game_ids": [12, 34]` on the versions endpoint.
 ## Integration Points
 
 - **Trophy list page** (`/games/<np_communication_id>/`): Report button in the hero, single-list submit
-- **Game page** (`/games/<igdb_id>/`): Report button in the hero's extras rail, version selector, multi-version submit
+- **Game page** (`/games/<igdb_id>/`): Report an issue in the hero's action row (with Share and Add to list), version selector, multi-version submit
 - **Django admin**: GameFlagAdmin with approve/dismiss bulk actions
 - **Shovelware system**: Approving `is_shovelware`/`not_shovelware` flags sets `shovelware_lock=True`, preventing auto-detection from overwriting the manual decision
 

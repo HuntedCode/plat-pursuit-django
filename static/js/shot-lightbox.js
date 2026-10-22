@@ -1,12 +1,13 @@
 /**
- * Hero screenshot lightbox (shared): FLIP grow-out/shrink-home open and close, directional
+ * Screenshot lightbox (shared): FLIP grow-out/shrink-home open and close, directional
  * carousel push with a ghost of the outgoing image, filmstrip, keyboard arrows and touch swipe.
  * Extracted verbatim from game-detail.js when the concept Game page adopted the hero, so both
  * detail pages drive one implementation.
  *
  * Contract: markup comes from templates/trophies/partials/game_detail/shot_lightbox.html
  * (#gd-shot-modal dialog + #gd-shot-data json_script) plus opener thumbnails matching
- * `#gd-shots [data-shot]` in the hero. Binds nothing when the dialog is absent.
+ * `#gd-shots [data-shot]` (List detail's hero; the Game page's About tab, where it works while that tab is
+ * hidden, since binding happens at load). Binds nothing when the dialog is absent.
  * Plain DOMContentLoaded on purpose: neither host restores this markup via htmx history
  * (List detail never push-swaps; the Game page switcher runs hx-push-url="false"), so the
  * onPageReady(first) restore contract buys nothing here.

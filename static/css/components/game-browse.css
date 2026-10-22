@@ -8,13 +8,11 @@
 .pp-gbrowse { display: flex; flex-direction: column; }
 
 /* A detail page's totals as one line of facts, not a grid of tiles (DS-04, Page Principles rule 4): the
-   franchise, company and genre/theme headers. Wraps on a phone; the dots ride each item after the first, so a
-   wrapped line never starts with one dangling. */
-.pp-factline { display: flex; flex-wrap: wrap; align-items: baseline; row-gap: 2px; margin-top: 6px;
-    font-size: 0.8125rem; color: var(--pp-text-mute); }
-.pp-factline > span { display: inline-flex; align-items: baseline; gap: 4px; }
-.pp-factline > span + span::before { content: ''; align-self: center; width: 3px; height: 3px; margin: 0 4px 0 8px; /* + the 4px gap = 8px each side */
-    border-radius: 999px; background: currentColor; opacity: 0.6; }
+   franchise, company and genre/theme headers, and the game page's facts. Plain flowing text: the dot rides the END
+   of every item but the last, glued to its last word, so a wrapped line ends on a dot rather than starting with one,
+   and a long item that wraps keeps its dot beside its text (as a flex item it floated to the far edge). */
+.pp-factline { margin-top: 6px; font-size: 0.8125rem; line-height: 1.55; color: var(--pp-text-mute); }
+.pp-factline > span:not(:last-child)::after { content: '\00b7'; margin: 0 4px 0 6px; font-weight: 700; opacity: 0.7; }
 .pp-factline b { color: var(--pp-text); font-weight: 700; font-variant-numeric: tabular-nums; }
 .pp-factline b.pp-factline__plat { color: var(--color-trophy-platinum); }
 @media (min-width: 768px) { .pp-factline { font-size: 0.875rem; } }

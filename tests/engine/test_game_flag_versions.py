@@ -379,8 +379,9 @@ def test_the_game_page_offers_a_report_button_to_a_linked_viewer(client):
 
     # Scoped to the button's own element. Bare `'Report an issue' in content` also matches the
     # modal's <h3> on the same page, so it passed with the button's visible label deleted.
-    assert re.search(r'<button[^>]*gp-report[^>]*>.*?Report an issue.*?</button>', content, re.S), (
-        'the report button rendered without its visible label')
+    # "an issue" is in its own span so a phone can show just "Report" and fit the three actions on one row.
+    assert re.search(r'<button[^>]*gp-report[^>]*>.*?Report<span class="gp-actions__long"> an issue</span>.*?</button>',
+                     content, re.S), 'the report button rendered without its visible label'
 
 
 def test_the_report_button_is_not_offered_to_anonymous_visitors(client):

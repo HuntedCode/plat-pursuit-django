@@ -1,6 +1,6 @@
-{% comment %}The hero screenshot lightbox dialog, shared by List detail and the concept
-Game page (shot-lightbox.js drives it; opener thumbs are `#gd-shots [data-shot]` in each
-hero). Include contract: shot_title (accessible name for the dialog and image alts) and the
+{% comment %}The screenshot lightbox dialog, shared by List detail and the concept
+Game page (shot-lightbox.js drives it; opener thumbs are `#gd-shots [data-shot]`: List detail's
+hero, the Game page's About tab). Include contract: shot_title (accessible name for the dialog and image alts) and the
 page-level image_urls. Belongs in {% block fixed_overlays %} -- outside the page content
 wrapper, so the recede effect can't drag the open dialog with it.{% endcomment %}
 {% if image_urls.screenshot_urls %}

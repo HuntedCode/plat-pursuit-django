@@ -1,21 +1,30 @@
 {% load humanize job_icons %}
 {% comment %}
-The Game page hero: the List-detail hero's CONCEPT-LEVEL portion, same visual anatomy (gd-hero
-grid: cover / main / extras), adopted per Jeffrey's call -- everything about the WORK is as
-relevant here as there. Deliberately absent: the list-level pieces (per-list platform/region
-chips, the authed progress readout, My Stats, plat-card CTA, Outlook, per-list flags) -- those describe
-ONE stack, and per-list data lives below the switcher, which is this page's whole anatomy. Flags EVERY list
-shares do show (`list_flags`, owner 2026-10-10). Platform
-chips here are the UNION across the list set; the players headline reads the aggregated
-community_stats. Badge affordances are plain links (List detail's open a modal its JS
-drives); screenshots open the SHARED lightbox (shot-lightbox.js + the shot_lightbox partial,
-extracted from List detail).
-{% endcomment %}
-<section class="gd-hero card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral">
-    <div class="card-body gd-hero__body p-3 md:p-5 lg:p-6">
-        <div class="gd-hero__grid">
+The Game page hero, rebuilt under the Page Principles (the Discovery fix plan's branch 4, DS-07; mock-ups the
+owner approved 2026-10-22). It answers, in order: what game is this, where do I stand on it, how hard is its
+platinum, and what can I do here.
 
-            <figure class="gd-cover">
+  cover      the art; a thumbnail beside the title on a phone, so the hunter's status reaches the first screen
+  head       platforms, title, ONE line of facts (developer, year, players), the flags every list shares
+  status     the signed-in hunter's card (`hunter_status`): platinumed, in progress, in the library, or not
+             owned. It describes their BEST list and stays put when the switcher below changes list
+  side       panels of one width and one height: the platinum's rarity (`plat_rarity`), the badge series,
+             the contract. Each only when it exists (rule 3: "Not in a badge series" is gone)
+  actions    Share (once finished), Add to list, Report an issue: equal weight, on the first screen, never
+             in a tab ("Actions are not depth", rule 4)
+
+Everything else the hero used to carry (publisher, release date, time to beat, the description and tags,
+screenshots, the family band) lives in the About tab, which is where depth goes (rule 4).
+
+Platform chips are the UNION across the list set; the players count is the page's distinct players
+(community_stats, DS-08).
+{% endcomment %}
+{% with status=hunter_status linked=user.profile.is_linked %}
+<section class="gd-hero gp-hero card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral">
+    <div class="card-body gd-hero__body p-3 md:p-5 lg:p-6">
+        <div class="gp-hero__grid{% if not plat_rarity and not badges and not pursuit_jobs %} gp-hero__grid--noside{% endif %}">
+
+            <figure class="gd-cover gp-hero__cover">
                 {% if host_game.display_image_url %}
                 <img src="{{ host_game.display_image_url }}" alt="{{ page_title }} {% if host_game.has_cover_art %}cover{% else %}icon{% endif %}"
                      loading="eager" decoding="async" fetchpriority="high"
@@ -23,13 +32,13 @@ extracted from List detail).
                 {% endif %}
             </figure>
 
-            <div class="gd-hero__main pp-head-cascade">
+            <div class="gp-hero__head pp-head-cascade">
                 <div class="gd-hero__chips">
                     {% for platform in all_platforms %}
                         <span class="gd-plat">{{ platform }}</span>
                     {% endfor %}
-                    {% comment %}SHOVELWARE IN THE PLATFORM ROW, where the Trophy List page shows it, and only when
-                    every list is flagged (`list_flags`, the flags all of this game's lists share).{% endcomment %}
+                    {% comment %}Shovelware rides the platform row, as on the Trophy List page, and only when every
+                    list is flagged (`list_flags`, the flags all of this game's lists share).{% endcomment %}
                     {% if list_flags.is_shovelware %}
                         <span class="gd-plat gd-plat--warn" title="Every trophy list for this game is flagged as shovelware">Shovelware</span>
                     {% endif %}
@@ -37,180 +46,132 @@ extracted from List detail).
 
                 <h1 class="gd-hero__title">{{ page_title }}</h1>
 
-                <div class="gd-hero__facts">
-                    {% for cc in concept.concept_companies.all %}{% if cc.is_developer %}
-                        <span class="gd-fact"><span class="gd-fact__k">Developer</span><a href="{% url 'company_detail' slug=cc.company.slug %}" class="gd-fact__v gd-fact__v--link">{{ cc.company.name }}</a></span>
-                    {% endif %}{% endfor %}
-                    {% for cc in concept.concept_companies.all %}{% if cc.is_publisher %}
-                        <span class="gd-fact"><span class="gd-fact__k">Publisher</span><a href="{% url 'company_detail' slug=cc.company.slug %}" class="gd-fact__v gd-fact__v--link">{{ cc.company.name }}</a></span>
-                    {% endif %}{% endfor %}
-                    {% comment %}concept.release_date, not the host list's platform date: this
-                    header describes the WORK, and a 2018 game with a 2020 PS5 list must not read
-                    "Released 2020" (audit M2). Host platform date is the fallback for concepts
-                    that never got one.{% endcomment %}
-                    {% with release_date=concept.release_date|default:host_game.platform_release_date %}{% if release_date %}
-                        <span class="gd-fact"><span class="gd-fact__k">Released</span><time datetime="{{ release_date|date:'Y-m-d' }}" class="gd-fact__v">{{ release_date|date }}</time></span>
-                    {% endif %}{% endwith %}
-                    {% with igdb=concept.igdb_match %}{% if igdb.is_trusted and igdb.completion_time_display %}
-                        <span class="gd-fact"><span class="gd-fact__k">Est. Completion</span><span class="gd-fact__v">{{ igdb.completion_time_display }}</span></span>
-                    {% endif %}{% endwith %}
-                    <span class="gd-fact"><span class="gd-fact__k">Trophy Lists</span><span class="gd-fact__v pp-tally">{{ list_set|length }}</span></span>
-                </div>
+                {% comment %}ONE line of facts (rule 4): who made it, when, how many hunters own it. The rest of the
+                facts are in About. concept.release_date first: this describes the WORK, and a 2018 game with a 2020
+                PS5 list must not read 2020 (audit M2).{% endcomment %}
+                {% with release_date=concept.release_date|default:host_game.platform_release_date %}
+                <p class="pp-factline gp-meta">
+                    {% if hero_developer %}<span><a href="{% url 'company_detail' slug=hero_developer.slug %}" class="gp-meta__dev">{{ hero_developer.name }}</a></span>{% endif %}
+                    {% if release_date %}<span><time datetime="{{ release_date|date:'Y-m-d' }}">{{ release_date|date:'Y' }}</time></span>{% endif %}
+                    {% if community_stats.played_count %}<span><a href="?{% if selected_game.np_communication_id != default_list_np %}list={{ selected_game.np_communication_id }}&amp;{% endif %}view=ratings" data-gp-goto="ratings" class="gp-meta__players" title="Community stats for {{ page_title }}">{{ community_stats.played_count|intcomma }} player{{ community_stats.played_count|pluralize }}</a></span>{% endif %}
+                </p>
+                {% endwith %}
 
-                {% comment %}THE FLAGS EVERY LIST SHARES (owner, 2026-10-10): the Trophy List page's own chips, shown here
-                only when they hold for all of this game's lists. One list delisted and another not is a fact about that
-                list, so it stays on that list's page. No "No Known Issues" chip : an empty shared set
-                does not mean no list has an issue: gating on `has_chips` (a real shared flag) is what keeps that chip
-                off, since the partial only draws it when nothing is flagged. Shovelware rides the platform row above,
-                as on the list page.{% endcomment %}
+                {% comment %}The flags EVERY list shares (owner, 2026-10-10). Gated on `has_chips` so the partial's
+                "No Known Issues" chip never draws: an empty shared set does not mean no list has an issue.{% endcomment %}
                 {% if list_flags.has_chips %}
                     {% include 'trophies/partials/_game_flags.html' with game=list_flags variant='full' hide_shovelware=True %}
                 {% endif %}
+            </div>
 
-                {% with igdb=concept.igdb_match %}
-                {% if igdb.is_trusted and igdb.igdb_summary %}
-                    <div class="gd-hero__about">
-                        <p class="gd-about-blurb">{{ igdb.igdb_summary }}</p>
-                        {% if concept.concept_genres.all or concept.concept_themes.all %}
-                            <div class="gd-about-tags">
-                                {% for cg in concept.concept_genres.all|slice:":3" %}<span class="gd-tag">{{ cg.genre.name }}</span>{% endfor %}
-                                {% for ct in concept.concept_themes.all|slice:":2" %}<span class="gd-tag gd-tag--theme">{{ ct.theme.name }}</span>{% endfor %}
-                            </div>
-                        {% endif %}
-                        <a class="gd-about-more" href="?{% if selected_game.np_communication_id != default_list_np %}list={{ selected_game.np_communication_id }}&amp;{% endif %}view=about" data-gp-goto="about">More about this game
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
-                        </a>
-                    </div>
-                {% endif %}
-                {% endwith %}
-
-                {% if community_stats.played_count %}
-                    {# Aggregated across every list -- jumps to the Ratings tab's community band. #}
-                    <a href="?{% if selected_game.np_communication_id != default_list_np %}list={{ selected_game.np_communication_id }}&amp;{% endif %}view=ratings" data-gp-goto="ratings" class="gd-hero__players" title="Community stats for {{ page_title }}">
-                        <span class="pp-tally pp-tally--lg gd-hero__players-n" data-gd-countup="{{ community_stats.played_count }}">{{ community_stats.played_count|intcomma }}</span>
-                        <span class="gd-hero__players-lbl">Player{{ community_stats.played_count|pluralize }} &rsaquo;</span>
-                    </a>
-                {% endif %}
-
-                {% comment %}The badge/contract spine as ONE band in the header itself (Jeffrey's
-                call): the vertical space freed by dropping the per-list progress readout gives the
-                two rows a shared line -- badges left, contract right -- instead of stacking under
-                the screenshots. Falls back to a single column at base width.{% endcomment %}
-                <div class="gd-spine gd-spine--band">
-                    {% if badges %}
-                        {% comment %}Each medallion links ITS OWN series page (audit M3: a game in
-                        two series showed "3 Badges" with every click going to the alphabetically
-                        first one -- List detail's modal listed them all, and a single row-link
-                        lost that). The row itself is not a link.{% endcomment %}
-                        <div class="gd-spine__row gd-spine__row--badges">
-                            <span class="gd-spine__disc" aria-hidden="true"></span>
-                            <div class="gd-spine__main">
-                                <div class="gd-spine__peek">
-                                    {% for badge in badges|slice:":3" %}<a class="gd-spine__obj gd-spine__obj--badge" href="{% url 'badge_detail' series_slug=badge.series_slug %}" title="{{ badge.name }} &middot; {{ badge.group_name }}">{% include 'components/badge_medallion.html' with frame=badge.frame no_id=True %}</a>{% endfor %}
-                                    {% if badges|length > 3 %}<span class="gd-spine__more">+{{ badges|length|add:"-3" }} more</span>{% endif %}
-                                </div>
-                                <span class="gd-spine__cap">{{ badges|length }} Badge{{ badges|length|pluralize }}</span>
-                            </div>
-                        </div>
+            {% if status %}
+            {% comment %}The hunter's status (rule 1). Plat beats progress; the list it describes is named only
+            when the page has several. "Not in your library yet" is the one absence it states: on a game page a
+            signed-in hunter's first question is "have I got this", and the answer is the card.{% endcomment %}
+            <div class="gp-status gp-status--{{ status.state }}">
+                <span class="gp-status__icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+                </span>
+                <div class="gp-status__txt">
+                    {% if status.state == 'plat' %}
+                        <p class="gp-status__head">You platinumed this{% if status.list_label %}<span class="gp-status__list">{{ status.list_label }}</span>{% endif %}</p>
+                        <p class="gp-status__sub">{% if status.plat_date %}Earned <time datetime="{{ status.plat_date|date:'Y-m-d' }}">{{ status.plat_date|date:'M j, Y' }}</time> &middot; {% endif %}{{ status.progress }}% complete</p>
+                    {% elif status.state == 'complete' %}
+                        <p class="gp-status__head">You finished this{% if status.list_label %}<span class="gp-status__list">{{ status.list_label }}</span>{% endif %}</p>
+                        <p class="gp-status__sub">100% complete</p>
+                    {% elif status.state == 'started' %}
+                        {% comment %}The counts only when the list's total is known and agrees: a stale earned count above
+                        the total would read "0 trophies to go" at 37%, and a list with no defined trophies "0 of 0".{% endcomment %}
+                        <p class="gp-status__head">{{ status.progress }}%{% if status.to_go %} &middot; {{ status.to_go|intcomma }} troph{{ status.to_go|pluralize:"y,ies" }} to go{% endif %}{% if status.list_label %}<span class="gp-status__list">{{ status.list_label }}</span>{% endif %}</p>
+                        {% if status.total and status.earned <= status.total %}<p class="gp-status__sub">{{ status.earned|intcomma }} of {{ status.total|intcomma }} earned</p>{% endif %}
+                        <span class="gp-status__bar" aria-hidden="true"><span class="gp-status__fill" style="width: {{ status.progress }}%"></span></span>
+                    {% elif status.state == 'owned' %}
+                        <p class="gp-status__head">In your library{% if status.list_label %}<span class="gp-status__list">{{ status.list_label }}</span>{% endif %}</p>
+                        {% if status.total %}<p class="gp-status__sub">{{ status.total|intcomma }} troph{{ status.total|pluralize:"y,ies" }} to earn</p>{% endif %}
                     {% else %}
-                        <div class="gd-spine__row gd-spine__row--empty">
-                            <div class="gd-spine__main">
-                                <div class="gd-spine__peek"><span class="gd-spine__obj gd-spine__obj--ph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg></span></div>
-                                <span class="gd-spine__cap">Not in a badge series</span>
-                            </div>
-                        </div>
-                    {% endif %}
-
-                    {% if pursuit_jobs %}
-                        {# The career board href IS the affordance here (List detail layers a modal on it). #}
-                        <a class="gd-spine__row gd-spine__row--contract"
-                           href="{% url 'career' %}?view=contracts#career-panel-contracts"
-                           style="{{ pursuit_disc_style|safe }}">
-                            <span class="gd-spine__disc" aria-hidden="true"></span>
-                            <div class="gd-spine__main">
-                                <div class="gd-spine__peek">
-                                    {% for job in pursuit_jobs %}<span class="gd-jobmini" style="--disc: var(--disc-{{ job.disc_slug }}, var(--pp-primary));" title="{{ job.name }}">{% job_icon job.icon '' %}</span>{% endfor %}
-                                </div>
-                                <span class="gd-spine__cap">{{ pursuit_jobs|length }} Job{{ pursuit_jobs|length|pluralize }}{% if pursuit_xp_per_job %} &middot; {{ pursuit_xp_per_job|intcomma }} XP/Job{% endif %}{% if pursuit_contract_state %} <span class="gd-spine__state gd-spine__state--{{ pursuit_contract_state.variant }}">{{ pursuit_contract_state.label }}</span>{% endif %}</span>
-                            </div>
-                            <svg class="gd-spine__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
-                        </a>
-                    {% else %}
-                        <div class="gd-spine__row gd-spine__row--empty">
-                            <div class="gd-spine__main">
-                                <div class="gd-spine__peek"><span class="gd-jobmini gd-jobmini--ph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="14" x="2" y="7" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg></span></div>
-                                <span class="gd-spine__cap">Not on the Job Board</span>
-                            </div>
-                        </div>
+                        <p class="gp-status__head">Not in your library yet</p>
+                        <p class="gp-status__sub">Add it to a list to plan the hunt</p>
                     {% endif %}
                 </div>
+            </div>
+            {% endif %}
 
-                {% if family_versions %}
-                    {% comment %}Family band (Jeffrey's call): the concept's siblings -- remasters,
-                    remakes, collections sharing the origin work but a DIFFERENT igdb id -- one hop
-                    from here to THEIR Game pages. The data was already computed for the About tab;
-                    this is the IA doc's "family is a section, never a nav layer" made swift.
-                    Progressive: no family, no band. fv.game.concept carries the select_related
-                    igdb_match, so game_page_url costs no query per item.{% endcomment %}
-                    <div class="gp-family">
-                        <span class="gp-family__label">In the same family</span>
-                        <div class="gp-family__row">
-                            {% for fv in family_versions|slice:":6" %}
-                                <a class="gp-family__item" href="{{ fv.game.concept.game_page_url }}">
-                                    <span class="gp-family__cover">
-                                        {% if fv.game.display_image_url %}
-                                            <img src="{{ fv.game.display_image_url }}" alt="" loading="lazy" decoding="async"
-                                                 class="w-full h-full {% if fv.game.has_cover_art %}object-cover object-top{% else %}object-contain p-0.5{% endif %}" />
-                                        {% endif %}
-                                    </span>
-                                    <span class="gp-family__name">{{ fv.game.concept.unified_title|default:fv.game.title_name }}</span>
-                                </a>
-                            {% endfor %}
-                            {% if family_versions|length > 6 %}<span class="gd-spine__more">+{{ family_versions|length|add:"-6" }} more</span>{% endif %}
+            {% if plat_rarity or badges or pursuit_jobs %}
+            {% comment %}Side panels: ONE width, ONE height (the owner's layout rule). Only what exists.{% endcomment %}
+            <div class="gp-hero__side">
+                {% if plat_rarity %}
+                {% comment %}How rare the platinum is (owner's pick for the headline number): PSN's own rate and tier,
+                in the house rarity grade. Names the list when the page has several, since their rates differ.{% endcomment %}
+                <div class="gp-rarity pp-rarity-surface" data-rarity="{{ plat_rarity.grade }}">
+                    <span class="gp-rarity__lbl">{{ plat_rarity.label }}{% if plat_rarity.list_label %} {{ plat_rarity.list_label }}{% endif %} platinum</span>
+                    <span class="gp-rarity__n">{{ plat_rarity.rate|floatformat:1 }}%</span>
+                </div>
+                {% endif %}
+
+                {% if badges %}
+                {% comment %}Each medallion links ITS OWN series page (audit M3); the row itself is not a link.{% endcomment %}
+                <div class="gd-spine__row gd-spine__row--badges gp-panel">
+                    <span class="gd-spine__disc" aria-hidden="true"></span>
+                    <div class="gd-spine__main">
+                        <div class="gd-spine__peek">
+                            {% for badge in badges|slice:":3" %}<a class="gd-spine__obj gd-spine__obj--badge" href="{% url 'badge_detail' series_slug=badge.series_slug %}" title="{{ badge.name }} &middot; {{ badge.group_name }}">{% include 'components/badge_medallion.html' with frame=badge.frame no_id=True %}</a>{% endfor %}
+                            {% if badges|length > 3 %}<span class="gd-spine__more">+{{ badges|length|add:"-3" }} more</span>{% endif %}
                         </div>
+                        <span class="gd-spine__cap">{{ badges|length }} Badge{{ badges|length|pluralize }}</span>
                     </div>
+                </div>
+                {% endif %}
+
+                {% if pursuit_jobs %}
+                {# The career board href IS the affordance here (List detail layers a modal on it). #}
+                <a class="gd-spine__row gd-spine__row--contract gp-panel"
+                   href="{% url 'career' %}?view=contracts#career-panel-contracts"
+                   style="{{ pursuit_disc_style|safe }}">
+                    <span class="gd-spine__disc" aria-hidden="true"></span>
+                    <div class="gd-spine__main">
+                        <div class="gd-spine__peek">
+                            {% for job in pursuit_jobs %}<span class="gd-jobmini" style="--disc: var(--disc-{{ job.disc_slug }}, var(--pp-primary));" title="{{ job.name }}">{% job_icon job.icon '' %}</span>{% endfor %}
+                        </div>
+                        <span class="gd-spine__cap">{{ pursuit_jobs|length }} Job{{ pursuit_jobs|length|pluralize }}{% if pursuit_xp_per_job %} &middot; {{ pursuit_xp_per_job|intcomma }} XP/Job{% endif %}{% if pursuit_contract_state %} <span class="gd-spine__state gd-spine__state--{{ pursuit_contract_state.variant }}">{{ pursuit_contract_state.label }}</span>{% endif %}</span>
+                    </div>
+                    <svg class="gd-spine__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+                </a>
                 {% endif %}
             </div>
+            {% endif %}
 
-            <div class="gd-hero__extras pp-head-cascade">
-                {% if concept and image_urls.screenshot_urls %}
-                    {% comment %}Same lightbox openers as List detail's hero (Jeffrey's call: the
-                    shared lightbox beats a raw image tab). shot-lightbox.js binds #gd-shots
-                    [data-shot], so the id must be gd-shots here too -- it doubles as the FLIP
-                    shrink-home target.{% endcomment %}
-                    <div class="gd-shots" id="gd-shots">
-                        {% for url in image_urls.screenshot_urls|slice:":3" %}
-                            <button type="button" class="gd-shots__thumb" data-shot="{{ forloop.counter0 }}" aria-label="View screenshot {{ forloop.counter }}">
-                                <img src="{{ url }}" alt="{{ page_title }} screenshot {{ forloop.counter }}" loading="lazy" decoding="async" class="w-full h-full object-cover" />
-                                {% if forloop.last and image_urls.screenshot_urls|length > 3 %}
-                                    <span class="gd-shots__more">+{{ image_urls.screenshot_urls|length|add:"-3" }}</span>
-                                {% endif %}
-                            </button>
-                        {% endfor %}
-                    </div>
-                {% else %}
-                    <div class="gd-shots gd-shots--empty" aria-hidden="true">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.09-3.09a2 2 0 0 0-2.82 0L6 21"/></svg>
-                        No screenshots
-                    </div>
+            {% if status.share or linked %}
+            {% comment %}The three actions, equal weight, on the first screen (owner: hiding a button kills its use).
+            Share only once the hunter's list is finished (the share card is the reward); Add to list needs a
+            concept (it is what a list holds); Report opens the concept-level modal (game-flag.js binds
+            data-flag-open). Add and Report need a linked profile, as their endpoints do. On a phone "Report an
+            issue" reads "Report" so all three fit one row.{% endcomment %}
+            <div class="gp-actions">
+                {% if status.share %}
+                <a href="{{ status.share.url }}" class="gd-btn gd-btn--ghost gp-actions__btn" title="Make a share card for this game">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.59 13.51 6.83 3.98M15.41 6.51l-6.82 3.98"/></svg>Share
+                </a>
                 {% endif %}
-
-                {% comment %}Report: the same affordance List detail's hero carries, gated the same
-                way (linked viewers -- the modal itself is only rendered for them, so an ungated
-                button would be a button that opens nothing). Here it opens the CONCEPT-level modal,
-                which asks which versions the issue applies to. `data-flag-open` is the shared
-                opener hook game-flag.js binds, so this needs no JS of its own.{% endcomment %}
-                {% if user.is_authenticated and user.profile and user.profile.is_linked %}
-                    {% comment %}No aria-label: one that does not CONTAIN the visible text replaces
-                    the accessible name, so "click Report an issue" matched nothing for voice control
-                    (WCAG 2.5.3, Label in Name). The visible label plus aria-haspopup says it.{% endcomment %}
-                    <button type="button" class="gd-btn gd-btn--ghost gp-report" data-flag-open
-                            aria-haspopup="dialog">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" x2="4" y1="22" y2="15"/></svg>Report an issue
-                    </button>
+                {% if concept and linked %}
+                <button type="button" class="gd-btn gd-btn--ghost gp-actions__btn" data-quick-add
+                        data-concept-id="{{ concept.id }}"
+                        data-lists-url="{% url 'lists_for_concept' concept.id %}"
+                        data-create-url="{% url 'list_create_with_concept' concept.id %}"
+                        data-game-name="{{ concept.unified_title }}"
+                        aria-haspopup="dialog" aria-expanded="false">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Add to list
+                </button>
                 {% endif %}
-
+                {% if linked %}
+                {% comment %}No aria-label: one that does not CONTAIN the visible text replaces the accessible name
+                (WCAG 2.5.3). The short phone label still begins the full one.{% endcomment %}
+                <button type="button" class="gd-btn gd-btn--ghost gp-actions__btn gp-report" data-flag-open aria-haspopup="dialog">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" x2="4" y1="22" y2="15"/></svg><span>Report<span class="gp-actions__long"> an issue</span></span>
+                </button>
+                {% endif %}
             </div>
+            {% endif %}
         </div>
     </div>
 </section>
+{% endwith %}

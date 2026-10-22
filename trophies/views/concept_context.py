@@ -19,6 +19,7 @@ The `game:imageurls:{np}` cache key stays keyed on the HOST game's np id -- deli
 between both pages (same content, one cache; redis_admin --flush-game-page keeps working).
 """
 
+import datetime
 import json
 import logging
 
@@ -26,6 +27,8 @@ from django.core.cache import cache
 from django.db.models import Case, IntegerField, Prefetch, Subquery, Value, When
 from django.db.models.functions import Lower
 from django.urls import reverse
+from django.utils import timezone
+from django.utils.formats import date_format
 
 from trophies.constants import CACHE_TIMEOUT_IMAGES
 from trophies.services.game_grouping_service import version_peer_qs
@@ -308,9 +311,8 @@ class ConceptContextMixin:
             if items:
                 facts.append({'label': single if len(items) == 1 else plural, 'items': items})
 
-        # Credits first (who made and shipped it), then the technical + lineage facts. The hero shows the
-        # lead developer/publisher as a glance; About repeats them so the panel reads as a complete credit
-        # list rather than jumping straight to "Ported by".
+        # Credits first (who made and shipped it), then the release date, then the technical + lineage facts.
+        # The Game page hero names one developer in its facts line; this is the complete credit list.
         developers, publishers, porting, supporting = [], [], [], []
         for cc in concept.concept_companies.all():
             entry = {'name': cc.company.name,
@@ -325,6 +327,13 @@ class ConceptContextMixin:
                 supporting.append(entry)
         add('Developer', 'Developers', developers)
         add('Publisher', 'Publishers', publishers)
+        # The full date, now the Game page hero shows only the year (DS-07: facts fold into one line, the
+        # rest here). The WORK's date first, the list's own platform date as the fallback (audit M2).
+        released = concept.release_date or game.platform_release_date
+        if released:
+            if isinstance(released, datetime.datetime) and timezone.is_aware(released):   # the fallback is a date
+                released = timezone.localtime(released)
+            add('Released', 'Released', [{'name': date_format(released, 'M j, Y'), 'url': ''}])
         add('Ported by', 'Ported by', porting)
         add('Additional dev', 'Additional devs', supporting)
 

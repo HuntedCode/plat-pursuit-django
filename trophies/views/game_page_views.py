@@ -21,7 +21,9 @@ from django.shortcuts import get_object_or_404
 from django.urls import reverse
 from django.views.generic import TemplateView
 
-from trophies.models import Concept, ConceptFranchise, EarnedTrophy, Game, ProfileGame
+from core.services import completion_card_service as cards
+from core.templatetags.custom_filters import psn_rarity_label
+from trophies.models import Concept, ConceptFranchise, EarnedTrophy, Game, ProfileGame, Trophy
 from trophies.util_modules.constants import PLATFORM_PRIORITY_ORDER, ordered_platform_union
 from trophies.views.concept_context import ConceptContextMixin
 from trophies.views.game_views import (
@@ -37,6 +39,62 @@ logger = logging.getLogger("psn_api")
 _EMPTY_EARNED_STATE = {
     'profile_earned': {}, 'profile_trophy_totals': {}, 'profile_group_totals': {},
 }
+
+# PSN's four rarity tiers (`Trophy.trophy_rarity`) onto the site's four rarity grades (rarity.css
+# `data-rarity`), so the rarity panel takes the house tint and material instead of one-off colours.
+# The tier NAMES come from the `psn_rarity_label` filter the trophy rows use.
+PSN_RARITY_GRADES = {0: 'mythic', 1: 'rare', 2: 'uncommon', 3: 'common'}
+
+
+def list_label(game):
+    """A trophy list told apart from its siblings by what the hunter sees on its chip: platforms, then
+    regions when the list is regional ("PS4", "PS5 / PS4", "PSVITA EU")."""
+    label = ' / '.join(game.title_platform or [])
+    if game.is_regional and game.region:
+        label = f"{label} {'/'.join(game.region)}".strip()
+    return label
+
+
+def defined_total(game):
+    """Every trophy the list defines, all grades summed (DLC included, as `progress` counts it)."""
+    defined = game.defined_trophies if isinstance(game.defined_trophies, dict) else {}
+    total = 0
+    for key in ('bronze', 'silver', 'gold', 'platinum'):
+        try:
+            total += int(defined.get(key) or 0)
+        except (TypeError, ValueError):
+            pass
+    return total
+
+
+def disambiguate_entries(entries):
+    """Give each switcher entry a `detail` ONLY when its chip would otherwise read the same as a sibling's
+    (DS-09: "0000" has six lists all titled "Zero Zero Zero Zero", three of them PSVITA with no region).
+    The first tell is the trophy count; when that matches too, the PSN list id, which always differs.
+    Entries that are already distinct get no detail, so the common page is unchanged. Mutates in place."""
+    groups = {}
+    for e in entries:
+        g = e['game']
+        regions = tuple(g.region or []) if g.is_regional else ()
+        groups.setdefault((e['name'], tuple(g.title_platform or []), regions), []).append(e)
+    for same in groups.values():
+        if len(same) < 2:
+            continue
+        totals = [defined_total(e['game']) for e in same]
+        for e, total in zip(same, totals):
+            detail = f"{total} troph{'y' if total == 1 else 'ies'}"
+            if totals.count(total) > 1:
+                detail = f"{detail} \u00b7 {e['game'].np_communication_id}"
+            e['detail'] = detail
+    return entries
+
+
+def has_platinum(game):
+    defined = game.defined_trophies if isinstance(game.defined_trophies, dict) else {}
+    try:
+        return int(defined.get('platinum') or 0) > 0
+    except (TypeError, ValueError):
+        return False
 
 
 def _platform_priority_case():
@@ -162,8 +220,8 @@ class GamePageView(ConceptContextMixin, TemplateView):
         return profile if (profile is not None and profile.is_linked) else None
 
     def _viewer_maps(self, viewer):
-        """(progress by game pk, plat'd game pks, play hours) over the list set -- two bounded
-        queries. The viewer's playtime rides the SAME ProfileGame query (one extra column,
+        """(progress by game pk, {plat'd game pk: when it popped}, play duration, earned trophies by
+        game pk) over the list set -- two bounded queries. The viewer's playtime rides the SAME ProfileGame query (one extra column,
         zero extra queries): the MAX play_duration across the set's rows, because a PS4+PS5
         auto-pop would double-count a sum. Returned RAW (a timedelta) -- the caller derives the
         quick-rate modal's whole-hours hint (>= 1h rounds, else None, List detail's old rule)
@@ -173,23 +231,25 @@ class GamePageView(ConceptContextMixin, TemplateView):
         (can_rate + own-rating lookups) -- tens of queries on a DLC-heavy game, inherited unchanged
         from GameDetailView. Anonymous pays none of it (pinned)."""
         if viewer is None:
-            return {}, set(), None
+            return {}, {}, None, {}
         game_ids = [g.pk for g in self.list_set]
         rows = list(
             ProfileGame.objects
             .filter(profile=viewer, game_id__in=game_ids)
-            .values_list('game_id', 'progress', 'play_duration')
+            .values_list('game_id', 'progress', 'play_duration', 'earned_trophies_count')
         )
-        progress = {game_id: prog for game_id, prog, _dur in rows}
-        durations = [dur for _gid, _prog, dur in rows if dur is not None]
+        progress = {game_id: prog for game_id, prog, _dur, _n in rows}
+        earned_counts = {game_id: n for game_id, _prog, _dur, n in rows}
+        durations = [dur for _gid, _prog, dur, _n in rows if dur is not None]
         play_duration = max(durations, default=None)
-        plats = set(
+        # {game pk: when the platinum popped} -- the date the status card names, on the same query.
+        plats = dict(
             EarnedTrophy.objects
             .filter(profile=viewer, earned=True, trophy__trophy_type='platinum',
                     trophy__game_id__in=game_ids)
-            .values_list('trophy__game_id', flat=True)
+            .values_list('trophy__game_id', 'earned_date_time')
         )
-        return progress, plats, play_duration
+        return progress, plats, play_duration, earned_counts
 
     def _host_game(self):
         """The list whose concept supplies the page's identity (title, canonical, About, ratings).
@@ -206,6 +266,74 @@ class GamePageView(ConceptContextMixin, TemplateView):
             if match is not None and match.is_trusted:
                 return g
         return self.list_set[0]
+
+    def _hunter_status(self, viewer, progress, plats, earned_counts):
+        """Where the signed-in hunter stands on this game (DS-07), from their BEST list (owner,
+        2026-10-22): a platinum on any list wins, else their highest percentage; ties go to the page's
+        platform order. It describes the game, so it does not follow the list switcher.
+
+        None signed out. Otherwise a dict the hero's status card reads:
+          state      'plat' | 'complete' (100% on a list with no platinum, or a platinum not synced yet)
+                     | 'started' | 'owned' (in the library, nothing earned) | 'none' (not owned)
+          game       the list it describes (absent for 'none')
+          list_label its platforms, only when the page has more than one list
+          progress, earned, total, to_go, plat_date
+          share      the share-card link once that list is finished (completion_card_service.share_link)
+        Zero queries beyond `_viewer_maps`, except the one share-link seek on a finished list."""
+        if viewer is None:
+            return None
+        owned = [g for g in self.list_set if g.pk in progress]
+        if not owned:
+            return {'state': 'none'}
+        platted = [g for g in owned if g.pk in plats]
+        pool = platted or owned
+        best = max(pool, key=lambda g: progress.get(g.pk) or 0)   # max() keeps the first of a tie
+        pct = progress.get(best.pk) or 0
+        total = defined_total(best)
+        earned = earned_counts.get(best.pk) or 0
+        if platted:
+            state = 'plat'
+        elif pct == 100:
+            state = 'complete'
+        elif pct > 0 or earned > 0:   # PSN can floor a sliver of progress to 0% while trophies are earned
+            state = 'started'
+        else:
+            state = 'owned'
+        return {
+            'state': state,
+            'game': best,
+            'list_label': list_label(best) if len(self.list_set) > 1 else '',
+            'progress': pct,
+            'earned': earned,
+            'total': total,
+            'to_go': max(total - earned, 0),
+            'plat_date': plats.get(best.pk),
+            'share': cards.share_link(viewer, best, pct) if (platted or pct == 100) else None,
+        }
+
+    def _plat_rarity(self, status):
+        """How rare this game's platinum is, for the hero's rarity panel: the platinum of the list the
+        status card describes, else of the list most hunters own (owner, 2026-10-22). PSN's own rate and
+        tier, as the trophy rows show them. None when no list has a platinum, or PSN has not reported a
+        rate yet (0.0 is the unsynced default, not a real 0%): the panel is left out, not shown empty.
+        One indexed query."""
+        candidates = [g for g in self.list_set if has_platinum(g)]
+        if not candidates:
+            return None
+        mine = status.get('game') if status else None
+        chosen = mine if mine in candidates else max(candidates, key=lambda g: g.played_count or 0)
+        row = (
+            Trophy.objects.filter(game=chosen, trophy_type='platinum')
+            .values('trophy_earn_rate', 'trophy_rarity').first()
+        )
+        if not row or not row['trophy_earn_rate'] or row['trophy_rarity'] not in PSN_RARITY_GRADES:
+            return None
+        return {
+            'rate': row['trophy_earn_rate'],
+            'label': psn_rarity_label(row['trophy_rarity']),
+            'grade': PSN_RARITY_GRADES[row['trophy_rarity']],
+            'list_label': list_label(chosen) if len(self.list_set) > 1 else '',
+        }
 
     def _default_list(self, progress):
         """The decided rule: the viewer's list when they have progress on EXACTLY one stack
@@ -259,7 +387,7 @@ class GamePageView(ConceptContextMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         viewer = self._viewer_profile()
-        progress, plats, play_duration = self._viewer_maps(viewer)
+        progress, plats, play_duration, earned_counts = self._viewer_maps(viewer)
         selected = self._selected_list(progress)
 
         if self._is_viewport_swap():
@@ -297,7 +425,7 @@ class GamePageView(ConceptContextMixin, TemplateView):
         from trophies.services.game_flag_service import GameFlagService
 
         context['flag_max_versions'] = GameFlagService.MAX_BULK_VERSIONS
-        context['switcher_entries'] = [
+        context['switcher_entries'] = disambiguate_entries([
             {
                 'game': g,
                 'name': names[g.np_communication_id],
@@ -306,7 +434,7 @@ class GamePageView(ConceptContextMixin, TemplateView):
                 'is_selected': g.pk == selected.pk,
             }
             for g in self.list_set
-        ]
+        ])
 
         # Concept furniture off the host (the lifted mixin builders).
         context['image_urls'] = self._build_images_context(host)
@@ -318,6 +446,13 @@ class GamePageView(ConceptContextMixin, TemplateView):
                 getattr(host.concept, 'igdb_match', None), play_duration,
             )
         context.update(self._build_pursuit_context(host, viewer))
+        context['hunter_status'] = self._hunter_status(viewer, progress, plats, earned_counts)
+        # The facts line names ONE developer (the first credited); the full credits are in About. Off the
+        # prefetched concept_companies, so no query.
+        context['hero_developer'] = next(
+            (cc.company for cc in host.concept.concept_companies.all() if cc.is_developer), None,
+        ) if host.concept_id else None
+        context['plat_rarity'] = self._plat_rarity(context['hunter_status'])
 
         # The Community band must describe the GAME, not the host list, on a page whose header
         # just said "N trophy lists": per-list denorms summed (platinums and 100%s ARE separate
@@ -341,12 +476,11 @@ class GamePageView(ConceptContextMixin, TemplateView):
         # PSN-tracked playtime as a whole-hours hint in the quick-rate modal; rides _viewer_maps.
         secs = play_duration.total_seconds() if play_duration else 0
         context['user_play_hours'] = round(secs / 3600) if secs >= 3600 else None
-        # The About tab's versions card is hidden on IGDB pages only: there "Other platforms" is
-        # the switcher's own list set and "In the same family" is the hero's family band. On a c/
-        # page it STAYS -- the audit found other_versions is the sole surface reaching untrusted
-        # same-igdb siblings (they are neither switcher lists there nor family, by the exclusion
-        # rule), and gating it made those concepts unreachable from each other.
-        context['about_hide_versions'] = self.kwargs.get('igdb_id') is not None
+        # The About tab leaves out "Other platforms" on IGDB pages only: there it is the switcher's own
+        # list set. The family stays (it moved here from the hero, DS-07). On a c/ page both stay -- the
+        # audit found other_versions is the sole surface reaching untrusted same-igdb siblings (they are
+        # neither switcher lists there nor family, by the exclusion rule).
+        context['about_hide_other_platforms'] = self.kwargs.get('igdb_id') is not None
 
         context.update(self._build_viewport_context(selected, viewer, names))
 

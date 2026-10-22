@@ -4,9 +4,11 @@
    secondary-control carve-out; precedent .jlayout__btn. Grid styles come from game-detail.css
    (the shared gd-* component classes). Depth per the ladder: chips sit on --pp-bg-1. */
 
+/* Equal cells, not content-width chips: chips sized to their text left a ragged right edge (the gap on a
+   phone, DS-09) and a row that did not line up on desktop. */
 .gp-lswitch {
-    display: flex;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 10rem), 1fr));
     gap: 0.5rem;
     margin-bottom: 1rem;
 }
@@ -40,19 +42,25 @@
 /* One list is still the same page shape -- the solo chip just reads as an identity strip. */
 .gp-lswitch--solo .gp-lchip { cursor: default; }
 
+/* Two lines, then clamped: the equal-width cells are narrower than the old content-width chips, and long
+   list names ("KINGDOM HEARTS FINAL MIX") were cut to their first word. */
 .gp-lchip__name {
     font-size: 0.8rem;
     font-weight: 600;
     line-height: 1.2;
-    max-width: 16rem;
     overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow-wrap: anywhere;
 }
 .gp-lchip__meta {
-    display: inline-flex;
+    display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 0.35rem;
+    gap: 0.25rem 0.35rem;
+    min-width: 0;
 }
 .gp-lchip__plat {
     font-size: 0.6rem;
@@ -74,6 +82,15 @@
     color: var(--pp-secondary);
     border: 1px solid color-mix(in oklab, var(--pp-secondary) 40%, var(--pp-border));
     opacity: 0.85;
+}
+.gp-lchip__detail {
+    font-size: 0.65rem;
+    color: var(--pp-text-mute);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
 }
 .gp-lchip__pct {
     font-size: 0.7rem;
@@ -132,39 +149,113 @@
 @media (prefers-reduced-motion: reduce) {
     #gp-viewport.is-swapping { transition: none; }
     .gp-lchip { transition: none; }
-    .gp-family__item { transition: none; }
 }
 
-/* The hero's badge/contract spine as one split band in the main column (Jeffrey's call): the two
-   rows share a line at md+ instead of stacking under the screenshots; base width stacks as the
-   original spine did. Pinned to the column bottom so it sits where the old hero anchored its
-   substance block. */
-.gd-spine--band { margin-top: auto; padding-top: 0.75rem; }
+/* ============================================================
+   The hero (Page Principles, DS-07). Five parts: cover, head (platforms, title, facts), the hunter's
+   status, side panels (rarity, badges, contract), actions. The markup is in that order; the grid places it.
+
+   Phone:   the cover is a 92px thumbnail beside the head, with the rarity under the head in the same
+            column, so the status card and the actions reach the first screen. The side wrapper is
+            `display: contents`, so its panels are grid items and `order` puts status, then actions,
+            then the badge and contract panels below.
+   Tablet:  a 168px cover down the left of head, status and actions; the side panels sit underneath as
+            a row of equal cells.
+   Desktop: three columns. Cover | story | side panels of ONE width and ONE height (`1fr` rows), which
+            start level with the title; the actions run under the story and the side.
+   ============================================================ */
+.gp-hero__grid { display: grid; grid-template-columns: 92px minmax(0, 1fr); column-gap: 14px; row-gap: 12px; align-items: start; }
+.gp-hero__cover.gd-cover { grid-column: 1; grid-row: 1 / span 2; width: 92px; max-width: none; margin: 0; border-radius: var(--pp-radius-sm); }
+.gp-hero__head { grid-column: 2; grid-row: 1; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.gp-hero__head .gd-hero__title { font-size: clamp(1.35rem, 5.5vw, 2.4rem); }
+.gp-hero__side { display: contents; }
+.gp-rarity { grid-column: 2; grid-row: 2; }
+.gp-status { grid-column: 1 / -1; order: 1; }
+.gp-actions { grid-column: 1 / -1; order: 2; }
+.gp-hero__grid .gp-panel { grid-column: 1 / -1; order: 3; }
+
 @media (min-width: 768px) {
-    .gd-spine--band {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 10px;
-        align-items: stretch;
-    }
-    .gd-spine--band .gd-spine__row { height: 100%; }
+    .gp-hero__grid { grid-template-columns: 168px minmax(0, 1fr); column-gap: 24px; row-gap: 14px; }
+    .gp-hero__cover.gd-cover { grid-row: 1 / span 3; width: 168px; border-radius: var(--pp-radius-md); }
+    .gp-hero__head { gap: 8px; }
+    .gp-status, .gp-actions { grid-column: 2; }
+    .gp-hero__side { display: grid; grid-column: 1 / -1; order: 3; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 12px; }
+    /* Two classes, so it outranks the phone placements (`.gp-hero__grid .gp-panel` is two classes too and
+       earlier): a panel's phone `grid-column: 1 / -1` inside this implicit grid put the contract first. */
+    .gp-hero__grid .gp-hero__side > * { grid-column: auto; grid-row: auto; order: 0; height: 100%; }
+}
+@media (min-width: 1024px) {
+    .gp-hero__grid { grid-template-columns: 168px minmax(0, 1fr) 300px; column-gap: 28px; }
+    .gp-hero__side { grid-column: 3; grid-row: 1 / span 2; grid-auto-flow: row; grid-auto-rows: minmax(0, 1fr); grid-auto-columns: auto; align-self: stretch; }
+    /* ONE panel keeps its own height: stretched down the story column it was a tall, mostly empty plate. */
+    .gp-hero__side:has(> :only-child) { align-self: start; }
+    .gp-actions { grid-column: 2 / -1; }
+    .gp-hero__grid--noside { grid-template-columns: 168px minmax(0, 1fr); }
+    .gp-hero__grid--noside .gp-actions { grid-column: 2; }
 }
 
-/* The band's badge row is a DIV holding per-medallion series links (audit M3), not List detail's
-   clickable row -- the inherited row affordances would advertise a click the row no longer
-   answers. Cursor, hover lift AND the :active press (game-detail.css .gd-spine__row rules) are
-   all neutralized; hover/active repeat the row's RESTING border/background from
-   .gd-spine__row--badges. The medallion links carry their own affordance instead (glow, not
-   scale). */
-.gd-spine--band div.gd-spine__row--badges { cursor: default; }
-.gd-spine--band div.gd-spine__row--badges:hover {
+/* ---- The hunter's status (rule 1). ---- */
+.gp-status { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: var(--pp-radius-md);
+    border: 1px solid var(--pp-border); background: var(--pp-bg-2); min-width: 0; }
+.gp-status__icon { width: 34px; height: 34px; flex: none; display: grid; place-items: center; border-radius: 999px;
+    color: var(--pp-text-mute); background: color-mix(in oklab, var(--pp-text-mute) 16%, transparent); }
+.gp-status__icon svg { width: 18px; height: 18px; }
+.gp-status__txt { flex: 1; min-width: 0; }
+.gp-status__head { font-weight: 700; color: var(--pp-text); font-size: 1rem; line-height: 1.25; }
+.gp-status__list { margin-left: 8px; padding: 1px 6px; border-radius: 4px; vertical-align: 2px; font-size: 0.625rem; font-weight: 700;
+    letter-spacing: 0.04em; text-transform: uppercase; color: var(--pp-text-dim); border: 1px solid var(--pp-border); }
+.gp-status__sub { color: var(--pp-text-mute); font-size: 0.8125rem; margin-top: 2px; }
+.gp-status__bar { display: block; height: 6px; margin-top: 8px; border-radius: 999px; background: var(--pp-bg-0); overflow: hidden; }
+.gp-status__fill { display: block; height: 100%; border-radius: inherit; background: var(--pp-accent); }
+.gp-status--plat { border-color: color-mix(in oklab, var(--color-trophy-platinum) 45%, transparent);
+    background: color-mix(in oklab, var(--color-trophy-platinum) 9%, var(--pp-bg-2)); }
+.gp-status--plat .gp-status__icon { color: var(--color-trophy-platinum); background: color-mix(in oklab, var(--color-trophy-platinum) 22%, transparent); }
+.gp-status--started .gp-status__icon, .gp-status--owned .gp-status__icon { color: var(--pp-accent); background: color-mix(in oklab, var(--pp-accent) 20%, transparent); }
+/* Finished without a platinum: green, the colour a finished list's bar takes everywhere else. */
+.gp-status--complete { border-color: color-mix(in oklab, var(--pp-success) 40%, transparent); background: color-mix(in oklab, var(--pp-success) 8%, var(--pp-bg-2)); }
+.gp-status--complete .gp-status__icon { color: var(--pp-success); background: color-mix(in oklab, var(--pp-success) 20%, transparent); }
+
+/* ---- The platinum's rarity: the house rarity grade (rarity.css `data-rarity` + `.pp-rarity-surface`). ---- */
+.gp-rarity { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 8px; padding: 6px 10px; border-radius: var(--pp-radius-md);
+    border: 1px solid color-mix(in oklab, var(--rar-c) var(--rar-edge), var(--pp-border)); min-width: 0; }
+.gp-rarity__n { order: -1; font-family: var(--pp-font-display); font-weight: 800; font-size: 1.25rem; line-height: 1;
+    color: var(--rar-c); font-variant-numeric: tabular-nums; }
+.gp-rarity__lbl { font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--pp-text-mute); }
+@media (min-width: 768px) {
+    .gp-rarity { flex-direction: row; justify-content: space-between; align-items: center; padding: 14px 16px; }
+    .gp-rarity__n { order: 0; font-size: 1.75rem; }
+}
+
+/* ---- Badge and contract panels: the spine rows, one height with their neighbours. ---- */
+.gp-hero .gp-panel { margin: 0; align-content: center; }
+/* The badge row is a DIV holding per-medallion series links (audit M3), not a clickable row: cursor, hover
+   and the :active press (game-detail.css .gd-spine__row) are neutralized to its RESTING look. */
+.gp-hero div.gd-spine__row--badges { cursor: default; }
+.gp-hero div.gd-spine__row--badges:hover {
     border-color: color-mix(in oklab, var(--pp-primary) 28%, var(--pp-border));
     background: color-mix(in oklab, var(--pp-primary) 9%, color-mix(in oklab, var(--pp-bg-2) 45%, transparent));
 }
-.gd-spine--band div.gd-spine__row--badges:active { transform: none; }
-.gd-spine--band a.gd-spine__obj--badge { border-radius: 9999px; transition: filter var(--pp-dur-fast) var(--pp-ease); }
-.gd-spine--band a.gd-spine__obj--badge:hover { filter: brightness(1.18); }
-.gd-spine--band a.gd-spine__obj--badge:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+.gp-hero div.gd-spine__row--badges:active { transform: none; }
+.gp-hero a.gd-spine__obj--badge { border-radius: 9999px; transition: filter var(--pp-dur-fast) var(--pp-ease); }
+.gp-hero a.gd-spine__obj--badge:hover { filter: brightness(1.18); }
+.gp-hero a.gd-spine__obj--badge:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+
+/* ---- Actions: equal weight; one row of equal cells on a phone. ---- */
+.gp-actions { display: flex; gap: 8px; }
+.gp-actions__btn { flex: 1 1 0; justify-content: center; min-height: 44px; white-space: nowrap; }
+.gp-actions__long { display: none; }
+@media (min-width: 768px) {
+    .gp-actions { flex-wrap: wrap; }
+    .gp-actions__btn { flex: 0 0 auto; }
+    .gp-actions__long { display: inline; }
+}
+
+/* ---- The facts line: the shared `.pp-factline`, its links quiet until hovered. ---- */
+.gp-meta { margin-top: 0; }
+.gp-meta a { color: inherit; text-decoration: none; }
+.gp-meta a.gp-meta__dev { color: var(--pp-text-dim); font-weight: 600; }
+.gp-meta a:hover, .gp-meta a.gp-meta__dev:hover { color: var(--pp-primary); text-decoration: underline; }
+.gp-meta a:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; border-radius: 2px; }
 
 /* Hero-jump landing guarantee (browser-repro'd): switching away from the tall Lists panel can
    shrink the document below the scroll distance the jump needs, leaving the hero filling the
@@ -175,59 +266,5 @@
    footer ~500px past a stub game's content (audit M4). */
 #gp-view-ratings, #gp-view-about { min-height: calc(100vh - 9rem); }
 
-/* Family band: sibling concepts (remasters/remakes, different igdb id) one hop away, below the
-   badge/contract band. Same quiet-row idiom as the spine; covers are tiny 3:4 plates so the row
-   reads as objects, not a gallery. */
-.gp-family {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.5rem 0.75rem;
-    padding: 9px 11px;
-    border-radius: var(--pp-radius-md);
-    border: 1px solid var(--pp-border);
-    background: color-mix(in oklab, var(--pp-bg-2) 45%, transparent);
-    margin-top: 8px;
-}
-.gp-family__label {
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    font-size: 0.62rem;
-    opacity: 0.6;
-    white-space: nowrap;
-}
-.gp-family__row { display: flex; flex-wrap: wrap; gap: 0.5rem; min-width: 0; }
-.gp-family__item {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.45rem;
-    padding: 0.25rem 0.55rem 0.25rem 0.25rem;
-    border: 1px solid transparent;
-    border-radius: 0.55rem;
-    text-decoration: none;
-    color: inherit;
-    transition: border-color var(--pp-dur-fast) var(--pp-ease), background var(--pp-dur-fast) var(--pp-ease);
-    min-width: 0;
-}
-.gp-family__item:hover {
-    border-color: color-mix(in oklab, var(--pp-accent) 45%, var(--pp-border));
-    background: var(--pp-bg-2);
-}
-/* --pp-primary, not accent: the band lives inside the hero, whose cohesive keyboard ring is primary. */
-.gp-family__item:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
-.gp-family__cover {
-    width: 1.6rem;
-    aspect-ratio: 3 / 4;
-    border-radius: 0.3rem;
-    overflow: hidden;
-    background: var(--pp-bg-1);
-    flex-shrink: 0;
-}
-.gp-family__name {
-    font-size: 0.78rem;
-    font-weight: 600;
-    max-width: 13rem;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
+/* The About tab's screenshots (from the hero, DS-07): three across on a phone, six from tablet up. */
+@media (min-width: 768px) { .gd-shots--about { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
