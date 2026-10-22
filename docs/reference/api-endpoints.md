@@ -47,7 +47,7 @@ Driven by `navbar-search.js` and `landing.js`.
 entire trophy history through rate-limited workers, so it is measured in minutes; the client has to
 narrate a wait, not await a response.
 
-`POST /api/search-sync-profile/` returns `{success, reason, message, psn_username, slug}`. Poll with
+`POST /api/search-sync-profile/` returns `{success, reason, message, psn_username, slug}`; the anonymous `sign_in` refusal also carries `claimable` (no account on the profile yet: the landing offers "Sign up free to claim it"). Poll with
 the **`psn_username` from the response, not the raw input**: a newly created Profile is stored
 lowercased. The client must read the body of a non-ok response to surface a refusal (see
 `API.failureBody` in [js-utilities](js-utilities.md)); `API.request` throws on any non-ok, so an
@@ -58,7 +58,7 @@ inferring from the status code. See the shared refusal contract below -- all thr
 return the same shape, pinned by `test_all_three_refresh_surfaces_return_one_body_shape`.
 
 `GET /api/add-sync-status/?psn_username=<name>` (`__iexact`) always returns 200 for a lookup that
-has a name. A known profile returns `{sync_status, account_id, psn_username, slug, stats}`; an unknown
+has a name. A known profile returns `{sync_status, account_id, psn_username, slug, claimable, stats}`; an unknown
 one returns only `{sync_status: 'error', account_id: ''}`, so a caller must not assume the rest are
 present. Three states matter:
 

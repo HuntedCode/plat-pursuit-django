@@ -15,10 +15,11 @@ section of [design-system.md](../reference/design-system.md); record:
 
 | Step | What the hunter sees | Notes |
 |---|---|---|
+| The landing's claim (optional start) | "Look up" finds a PSN name; a profile nobody has an account on adds "That's you? Sign up free to claim it." | The link is sign-up with `next=/accounts/link-psn/?psn=<name>`. `claimable` comes from the search and status payloads (no account on it). Sign-up also keeps the name in the session for that account only (`users/services/claimed_psn.py`). Record: [landing-pass.md](../design/reviews/landing-pass.md) |
 | Sign up | One email, one password, "Next: confirm your email, then link your PSN." | `ACCOUNT_SIGNUP_FIELDS = ['email*', 'password1*']`. The honeypot and the browser timezone input stay |
 | Check your inbox | The address the link went to, "Send another link" (the wait counts down), "Wrong address? Fix it" | `users/services/pending_signup.py`: one session record, written by `CustomAccountAdapter.send_confirmation_mail` after a real send |
-| Confirm | The link signs them in (`ACCOUNT_LOGIN_ON_EMAIL_CONFIRMATION`) and lands on the no-PSN welcome | |
-| Link PSN 1 to 3 | Name, then the code with where About is, then verifying | Step 2 regenerates an expired code and re-checks ownership on every return (FV-20) |
+| Confirm | The link signs them in (`ACCOUNT_LOGIN_ON_EMAIL_CONFIRMATION`) and lands on the no-PSN welcome, or on the sign-up's `next` | allauth keeps `next` on the pending login and resumes it on confirmation, in the same browser and within `ACCOUNT_LOGIN_TIMEOUT` (15 minutes, the default). Later, or in another browser, the link verifies the address and lands on sign-in (allauth's anonymous confirmation redirect); after signing in they reach the no-PSN welcome |
+| Link PSN 1 to 3 | Name, then the code with where About is, then verifying | Step 1 fills in the landing's claim: `?psn=<name>`, else the session's claimed name (which outlives allauth's pending login and "Fix it", and is shown only to the account that claimed it), used only when the field itself accepts it, and forgotten once step 1 is submitted. Step 2 regenerates an expired code and re-checks ownership on every return (FV-20) |
 
 **Resend and fix-it act only on this browser's sign-up.** Neither takes an address from the request;
 both read the session record. Fix-it deletes the account only while it is unverified, has never signed in

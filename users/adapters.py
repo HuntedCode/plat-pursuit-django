@@ -59,8 +59,11 @@ class CustomAccountAdapter(DefaultAccountAdapter):
             # "Check your inbox" knows the address from here, even if allauth's rate limit then skips the
             # email (FV-08; users/services/pending_signup.py).
             if _is_visitor(request):
-                from users.services import pending_signup
+                from users.services import claimed_psn, pending_signup
                 pending_signup.record_signup(request, user)
+                # The landing's claim: the name waits in the session for Link PSN, for THIS account only
+                # (users/services/claimed_psn.py).
+                claimed_psn.remember(request, user)
         return user
 
     def confirm_email(self, request, email_address):

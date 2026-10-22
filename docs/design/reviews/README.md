@@ -82,7 +82,7 @@ one of these branches (its status row names it). Run in this order:
 | 4 | Career + first arrival (`feature/ui/career-first-arrival`) | FV-03, FV-12, DL-01, DL-02, DL-03, DL-09 | Design record: [career-first-arrival.md](career-first-arrival.md). Every surface says what claiming makes the hunter (`claim_projection`); the lobby leads with the Pursuit; Career's summary folds into the hero. Done |
 | 5 | Onboarding rebuild (`feature/ui/onboarding-rebuild`) | FV-01, FV-07, FV-08, FV-09 step-2 help, FV-13, FV-20 | Design record: [onboarding-rebuild.md](onboarding-rebuild.md). One auth shell with focused chrome; house fields (`input`, `select`, `textarea`, `checkbox`, `progress` retired behind the guard); "Check your inbox" names the address, resends and fixes a typo; the sync card leads with the wait. Done |
 | 6 | Contracts board (`feature/ui/contracts-board-pass`) | DL-05, DL-07, DL-08, FV-14 | Design record: [contracts-board.md](contracts-board.md). The card is a list row on a phone; the claim names its XP; the modal explains the split and claims; the cover fan draws a game. Done |
-| 7 | Landing | FV-05, FV-06 | |
+| 7 | Landing (`feature/ui/landing-pass`) | FV-05, FV-06 | Design record: [landing-pass.md](landing-pass.md). "Look up" plus the claim, carried through sign-up to Link PSN; captions and a real-size viewer for the share pictures. Done |
 
 Career comes before onboarding because every hunter hits Career on every visit, while onboarding
 happens once per hunter.

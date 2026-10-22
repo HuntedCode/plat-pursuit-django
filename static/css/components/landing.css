@@ -187,6 +187,13 @@
     to { opacity: 1; transform: scale(1); }
 }
 .land-search__visit:hover { text-shadow: 0 0 10px color-mix(in oklab, var(--pp-primary) 45%, transparent); }
+/* The claim (FV-05): its own line under the found profile, for a profile nobody has an account on yet. */
+.land-search__claim { flex-basis: 100%; margin: 0; text-align: center; font-size: 0.85rem; line-height: 1.45; color: var(--pp-text-dim); }
+.land-search__claimlink { font-weight: 700; color: var(--pp-primary); text-decoration: underline; text-underline-offset: 3px; }
+.land-search__claimlink:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; border-radius: 4px; }
+@media (prefers-reduced-motion: no-preference) {
+    .land-search__claim:not([hidden]) { animation: ppRevealIn 0.4s var(--pp-ease) 0.18s backwards; }   /* just after the link's spring */
+}
 
 .land-hero__accounts {
     display: flex;
@@ -602,7 +609,10 @@
     margin: 2.25rem auto 0;
 }
 @media (min-width: 768px) { .land-proof { grid-template-columns: 1fr 1fr; } }
+.land-proof__item { margin: 0; }
+.land-proof__cap { margin-top: 0.7rem; text-align: center; font-size: 0.8rem; line-height: 1.45; color: var(--pp-text-mute); }
 .land-proof__img {
+    display: block;
     width: 100%;
     height: auto;
     border-radius: 12px;
@@ -668,3 +678,63 @@
 }
 .land-steps__warn svg { width: 1.1rem; height: 1.1rem; flex: 0 0 auto; margin-top: 0.1rem; color: var(--pp-warning); }
 .land-steps__warn p { font-size: 0.78rem; line-height: 1.5; opacity: 0.85; }
+
+/* ── The full-size view (FV-06, owner 2026-10-21) ──
+   A 1200x630 share card on a 375 phone is 0.28 scale, labels 3 to 4px. It stays a picture of what you get (its
+   caption says what is on it), and the picture opens a viewer at REAL size that pans. Openers: the picture
+   (`data-land-zoom-target`) and a "View full size" button under its caption; landing.js `wireZoom`. */
+.land-zoomable.is-live { cursor: zoom-in; }   /* only once wireZoom has run: no promise without a viewer */
+.land-zoombtn {
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    min-height: 44px; margin: 0.25rem auto 0; padding: 0 14px; border: 0; border-radius: 999px;
+    background: transparent; color: var(--pp-primary); font: inherit; font-size: 0.82rem; font-weight: 700;
+    cursor: zoom-in; transition: background 0.15s ease;
+}
+.land-zoombtn svg { width: 15px; height: 15px; flex: none; }
+.land-zoombtn:hover { background: color-mix(in oklab, var(--pp-primary) 10%, transparent); }
+.land-zoombtn:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+
+/* The viewer: a native <dialog>, full screen. The STAGE is the scroller; the item inside keeps its real
+   1200x630 and centres by `margin: auto` in a grid, which centres while it fits and falls back to the start
+   edge (rather than clipping the left side, as `place-items: center` does) when it overflows. */
+html.land-zoom-open { overflow: hidden; }
+.land-zoom {
+    position: fixed; inset: 0; width: 100%; height: 100%; max-width: none; max-height: none;
+    margin: 0; padding: 0; border: 0;
+    background: var(--pp-bg-0); color: var(--pp-text);
+}
+.land-zoom[open] { display: flex; flex-direction: column; }
+.land-zoom::backdrop { background: rgb(0 0 0 / 0.7); }
+.land-zoom__bar {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: calc(8px + env(safe-area-inset-top, 0px)) 16px 8px;
+    border-bottom: 1px solid var(--pp-border); background: var(--pp-bg-1);
+}
+.land-zoom__title { margin: 0; font-family: var(--pp-font-display); font-weight: 800; font-size: 1rem; }
+.land-zoom__close { min-width: 44px; min-height: 44px; }
+.land-zoom__close svg { width: 20px; height: 20px; }
+.land-zoom__stage {
+    flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain;
+    display: grid; padding: 16px; outline: none;
+}
+.land-zoom__stage:focus-visible { box-shadow: inset 0 0 0 2px var(--pp-primary); }
+.land-zoom__card,
+.land-zoom__img {
+    margin: auto; width: 1200px; height: 630px; max-width: none; flex: none;
+    box-sizing: content-box;   /* the border goes OUTSIDE the 1200x630, or it clips the card's own edge by 2px */
+    border-radius: 12px; overflow: hidden; border: 1px solid var(--pp-border);
+}
+@media (prefers-reduced-motion: no-preference) {
+    .land-zoom[open] .land-zoom__stage > * { animation: landZoomIn 0.28s cubic-bezier(0.2, 0.8, 0.2, 1); }
+}
+@keyframes landZoomIn { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: none; } }
+.land-zoom__hint {
+    margin: 0; padding: 8px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+    text-align: center; font-size: 0.8rem; color: var(--pp-text-mute);
+}
+/* The gesture the pointer has: a finger drags; a mouse has the arrow keys (the stage takes focus) or a sideways
+   scroll, since a plain wheel scrolls vertically and the item overflows sideways. A mouse drag pans nothing. */
+@media (pointer: fine) { .land-zoom__hint-touch { display: none; } }
+@media not all and (pointer: fine) { .land-zoom__hint-mouse { display: none; } }
+/* Wide enough to show it whole: nothing to drag, so no instruction. */
+@media (min-width: 1280px) { .land-zoom__hint { display: none; } }

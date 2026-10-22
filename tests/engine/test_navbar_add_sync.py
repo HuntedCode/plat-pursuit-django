@@ -1026,7 +1026,9 @@ def test_the_hero_does_not_call_a_stale_hunter_up_to_date():
     landing = _js('static/js/landing.js')
 
     hand_over = landing.split("res.data.reason === 'sign_in'", 1)[1].split('return;', 1)[0]
-    assert hand_over.count("'Found '") == 2, 'the two refusals still share one sentence'
+    # Three since FV-05: an UNCLAIMED hunter's `sign_in` reads just "Found X." because the claim line follows
+    # it ("That's you? Sign up free to claim it."), and two account pitches in one breath is one too many.
+    assert hand_over.count("'Found '") == 3, 'the two refusals still share one sentence'
     assert 'Already up to date' in hand_over
     assert 'Sign in to refresh' in hand_over
 
