@@ -119,8 +119,8 @@ def test_recently_added_stays_per_list_and_uncondensed(client):
 
 
 def test_base_cards_get_pursuer_hooks(client):
-    """Base-games cards render the shared card's pursuer band (badge series + contract placeholder), proving
-    build_game_card_context is wired in -- the whole point of the reuse (legacy Recently Added lacked it)."""
+    """Base-games cards render the shared card's hooks row (the badge series), proving build_game_card_context
+    is wired in -- the whole point of the reuse (legacy Recently Added lacked it)."""
     game = GameFactory(title_name='Hooked Arrival', title_platform=['PS5'])
     stage = StageFactory(series_slug='arr-series')
     stage.concepts.add(game.concept)
@@ -128,9 +128,10 @@ def test_base_cards_get_pursuer_hooks(client):
 
     content = client.get(reverse('recently_added')).content.decode()
 
-    assert 'Arrival Franchise' in content        # badge series name on the card
-    assert 'pp-gcard__badges-n' in content        # the real count element (not just the placeholder)
-    assert 'No contract' in content               # contract placeholder (game has none) -> band is present
+    assert 'In 1 badge series: Arrival Franchise' in content   # the badge chip, its series named in the title
+    assert 'pp-gcard__badges-n' in content        # the count element
+    assert 'No contract' not in content           # absence is not content (DS-06)
+    assert 'pp-gcard__tro' in content             # one list per card: its trophy breakdown stays
 
 
 # ── DLC category ──────────────────────────────────────────────────────────────────────────────────────────
@@ -219,7 +220,7 @@ def test_xhr_returns_rows_partial(client):
 def test_htmx_history_restore_gets_the_full_page_with_counts(client):
     """The audit's catch: an htmx history-restore sends HX-Request with NO HX-Target and
     receives the FULL page -- the header guard must mirror get_template_names exactly, or the
-    restored page renders zeroed captions and scards. Pin: full page template + counts present."""
+    restored page renders zeroed switcher captions. Pin: full page template + counts present."""
     GameFactory(title_name='Restored Game', title_platform=['PS5'])
 
     resp = client.get(reverse('recently_added'), HTTP_HX_REQUEST='true')

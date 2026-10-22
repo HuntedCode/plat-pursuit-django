@@ -152,7 +152,7 @@ class ProfilesListView(HtmxListMixin, ListView):
             {'text': 'Hunters'},
         ]
 
-        # Header substance scards from the hourly heartbeat (the browse-family standard) --
+        # Header substance scards from the hourly heartbeat --
         # ALL four are values the heartbeat already computed for the home ribbon, so this page
         # costs the cron nothing new. Full page only (guard mirrors HtmxListMixin's template
         # selection); None until the cron warms the cache, and the template hides the grid.

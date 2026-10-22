@@ -39,19 +39,22 @@ The dict shape is intentionally stable so the template can do simple nested look
 
 The `always` group renders as the four primary stat tiles. The `expanded` group is shown when the ribbon is expanded. `hours_hunted` and `trophies_24h` are computed live in the service from `ProfileGame.play_duration` and `EarnedTrophy` respectively. The other six values are sourced from `core.services.stats.compute_community_stats()` so the heartbeat doesn't double-query the same aggregates.
 
-The heartbeat is also the compute site for every **browse-header substance stat** (the 2026-08
-consolidation: hourly cron, never the request path -- every browse header carries the family
-four-scard grid). `expanded` additionally carries `games_in_badges` / `games_in_contracts`
-(Browse Games + Jobs), `lists_total` (+7-day `delta`) / `lists_regional` / `lists_with_plat`
-(Trophy Lists browse), `genres_with_games` / `themes_with_games` / `games_tagged` /
-`tags_applied` (Genres & Themes index), `jobs_total` / `contracts_live` / `job_xp_banked`
-(Jobs browse), `franchises_total` / `series_total` / `franchise_games` / `franchise_spinoffs`
-(Franchises browse), `companies_total` / `companies_developers` / `companies_publishers` /
-`company_games` (Companies browse), and the badge-catalog values the Badges browse header
-reads. Browse Hunters reuses four values the ribbon already computes (`profiles_total`,
-`trophies_total`, `platinums_total`, `trophies_24h`). Consuming views read via
-`heartbeat_values(*keys)` (searches `always` + `expanded`) or `get_cached_heartbeat()` and
-their templates hide the stat grid until the cron has warmed the cache.
+The heartbeat is also the compute site for the **browse-page stats** that remain (the 2026-08
+consolidation: hourly cron, never the request path). `expanded` additionally carries
+`genres_with_games` / `themes_with_games` (the Genres & Themes tab switcher's counts),
+`games_in_contracts` / `jobs_total` / `contracts_live` / `job_xp_banked` (Jobs browse), and the
+badge-catalog values the Badges browse header reads. Browse Hunters reuses four values the ribbon
+already computes (`profiles_total`, `trophies_total`, `platinums_total`, `trophies_24h`). Consuming
+views read via `heartbeat_values(*keys)` (searches `always` + `expanded`) or `get_cached_heartbeat()`
+and their templates hide the stat until the cron has warmed the cache.
+
+The six browse LIST pages (Games, Trophy Lists, Recently Added, Franchises, Companies, Genres &
+Themes) carry no tile grid since the browse pass (2026-10-22, DS-04): each header's one number is
+what its grid shows. The stats only those tiles read (`games_in_badges`, `lists_*`,
+`games_tagged`, `tags_applied`, `franchises_total`, `series_total`, `franchise_games`,
+`franchise_spinoffs`, `companies_*`, `company_games`) were deleted from the heartbeat with them, so
+the cron no longer computes them. A payload cached before the deploy still carries them for up to
+two hours; nothing reads them.
 
 ## How It's Read
 

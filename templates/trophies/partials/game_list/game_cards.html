@@ -47,75 +47,61 @@
             not yet earned = amber (the hunt); in progress w/o a plat = slate. {% endcomment %}
             {% if user_pg and user_pg.progress > 0 %}
             <span class="pp-gcard__bar"><span class="pp-gcard__barfill pp-gcard__barfill--{% if user_pg.has_plat and user_pg.progress == 100 %}plat{% elif user_pg.has_plat %}platdlc{% elif user_pg.progress == 100 %}full{% elif game.defined_trophies.platinum %}chase{% else %}prog{% endif %}" style="width: {{ user_pg.progress }}%"></span></span>
+            {% comment %} The hunter's mark (Page Principles rule 1): what THEY have done with this game, on the art
+            where the eye lands, not only as a thin line under it. "Platinum" once earned, else their percentage. {% endcomment %}
+            <span class="pp-gcard__mark{% if user_pg.has_plat %} pp-gcard__mark--plat{% endif %}">{% if user_pg.has_plat %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>Platinum{% else %}{{ user_pg.progress }}%{% endif %}</span>
             {% endif %}
         </div>
 
         <div class="pp-gcard__body">
             <h3 class="pp-gcard__title">{% if list_identity_cards %}{{ list_name_map|dict_get:game.np_communication_id|default:game.title_name }}{% elif condensed_cards and game.concept_id %}{{ game.concept.unified_title|default:game.title_name }}{% else %}{{ game.title_name }}{% endif %}</h3>
 
-            {% comment %} Facts: community rating + the trophy breakdown as colored B/S/G/P counts + the plat
-            availability tag (platinum-coloured once the viewer has earned it). {% endcomment %}
+            {% comment %} ONE ANATOMY FOR EVERY CARD, so a row of cards lines up (DS-06, design-system "Repeated
+            cards"): the title keeps two lines whether it needs them or not, the hooks row keeps its height when it
+            is empty, and the footer is pinned to the bottom. Nothing here says what a game LACKS (Page Principles
+            rule 3): no "No badges", no "No contract", no star for an unrated game. "No Plat" stays because a
+            platinum is the norm and its absence is what a hunter scans for.
+
+            The trophy breakdown is on ONE-LIST cards only (Trophy Lists, Recently Added): a condensed card stands
+            for a whole game page whose lists can differ, so one list's counts would describe part of it. {% endcomment %}
+            {% with dt=game.defined_trophies %}
+            {% if not condensed_cards %}
             <div class="pp-gcard__facts">
-                {% if ratings %}
-                <span class="pp-gcard__fact"><svg class="pp-gcard__star" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>{{ ratings.avg_rating|floatformat:1 }}</span>
-                {% else %}
-                <span class="pp-gcard__fact pp-gcard__fact--none"><svg class="pp-gcard__star" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>&mdash;</span>
-                {% endif %}
-                {% with dt=game.defined_trophies %}
-                <span class="pp-gcard__mid">
-                    <span class="pp-gcard__tro" title="Bronze / Silver / Gold / Platinum"><span style="color: var(--color-trophy-bronze)">{{ dt.bronze|default:0 }}</span><span class="pp-gcard__tro-d">/</span><span style="color: var(--color-trophy-silver)">{{ dt.silver|default:0 }}</span><span class="pp-gcard__tro-d">/</span><span style="color: var(--color-trophy-gold)">{{ dt.gold|default:0 }}</span><span class="pp-gcard__tro-d">/</span><span style="color: var(--color-trophy-platinum)">{{ dt.platinum|default:0 }}</span></span>
-                    {% if game.has_trophy_groups %}<span class="pp-gcard__dlc" title="{% if dlc_n %}{{ dlc_n }} DLC trophy pack{{ dlc_n|pluralize }}{% else %}Has DLC trophies{% endif %}">DLC{% if dlc_n %}<span class="pp-gcard__dlc-n">&times;{{ dlc_n }}</span>{% endif %}</span>{% endif %}
+                <span class="pp-gcard__tro" title="Bronze / Silver / Gold / Platinum"><span style="color: var(--color-trophy-bronze)">{{ dt.bronze|default:0 }}</span><span class="pp-gcard__tro-d">/</span><span style="color: var(--color-trophy-silver)">{{ dt.silver|default:0 }}</span><span class="pp-gcard__tro-d">/</span><span style="color: var(--color-trophy-gold)">{{ dt.gold|default:0 }}</span><span class="pp-gcard__tro-d">/</span><span style="color: var(--color-trophy-platinum)">{{ dt.platinum|default:0 }}</span></span>
+                {% if game.has_trophy_groups %}<span class="pp-gcard__dlc" title="{% if dlc_n %}{{ dlc_n }} DLC trophy pack{{ dlc_n|pluralize }}{% else %}Has DLC trophies{% endif %}">DLC{% if dlc_n %}<span class="pp-gcard__dlc-n">&times;{{ dlc_n }}</span>{% endif %}</span>{% endif %}
+            </div>
+            {% endif %}
+
+            {% comment %} The hooks row: the badge series the game is in, its home contract, "No Plat". Badge and
+            contract are batched concept-keyed in the view (show_game_hooks). {% endcomment %}
+            <div class="pp-gcard__hooks">
+                {% if show_game_hooks %}
+                {% with binfo=badge_map|dict_get:game.concept_id cinfo=contract_map|dict_get:game.concept_id %}
+                {% if binfo %}
+                <span class="pp-gcard__badges" title="In {{ binfo.total }} badge series: {% for name in binfo.names %}{{ name }}{% if not forloop.last %}, {% endif %}{% endfor %}{% if binfo.more %} and {{ binfo.more }} more{% endif %}">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg>
+                    <span class="pp-gcard__badges-n">{{ binfo.total }}</span>
                 </span>
-                {% if dt.platinum %}
-                <span class="pp-gcard__plat{% if user_pg.has_plat %} is-earned{% endif %}" title="{% if user_pg.has_plat %}Platinum earned{% else %}Has a platinum{% endif %}">Plat</span>
-                {% else %}
-                <span class="pp-gcard__plat--no" title="No platinum">No Plat</span>
+                {% endif %}
+                {% if cinfo %}
+                <span class="pp-gcard__ctr" style="{% if cinfo.band_bg %}background: {{ cinfo.band_bg }};{% endif %} --ctr-accent: {{ cinfo.accent }};" title="Contract: {{ cinfo.name }} &middot; {{ cinfo.xp|intcomma }} XP">
+                    <span class="pp-gcard__ctr-jobs">{% for job in cinfo.jobs %}<span class="pp-gcard__ctr-job" style="color: var(--disc-{{ job.discipline }});" title="{{ job.name }}">{% job_icon_use job.icon 'w-full h-full' %}</span>{% endfor %}</span>
+                    <span class="pp-gcard__ctr-xp">{{ cinfo.xp|intcomma }} XP</span>
+                </span>
                 {% endif %}
                 {% endwith %}
+                {% endif %}
+                {% if not dt.platinum %}<span class="pp-gcard__plat--no" title="No platinum">No Plat</span>{% endif %}
             </div>
-
-            {% comment %} Pursuer hooks (Browse Games only -- gated on show_game_hooks so the shared card stays
-            unaffected on the other browse pages). Badge series the game belongs to + its home contract, both
-            batched concept-keyed in the view. Placeholders keep a consistent height when a game has neither. {% endcomment %}
-            {% if show_game_hooks %}
-            {% with binfo=badge_map|dict_get:game.concept_id cinfo=contract_map|dict_get:game.concept_id %}
-            {% if binfo %}
-            <div class="pp-gcard__badges" title="In {{ binfo.total }} badge series">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg>
-                <span class="pp-gcard__badges-n">{{ binfo.total }}</span>
-                <span class="pp-gcard__badges-names">{% for name in binfo.names %}{{ name }}{% if not forloop.last %} &middot; {% endif %}{% endfor %}{% if binfo.more %} +{{ binfo.more }}{% endif %}</span>
-            </div>
-            {% else %}
-            <div class="pp-gcard__badges pp-gcard__badges--empty" title="Not part of any badge series">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg>
-                <span class="pp-gcard__badges-names">No badges</span>
-            </div>
-            {% endif %}
-
-            {% if cinfo %}
-            <span class="pp-gcard__ctr" style="{% if cinfo.band_bg %}background: {{ cinfo.band_bg }};{% endif %} --ctr-accent: {{ cinfo.accent }};" title="Contract: {{ cinfo.name }} &middot; {{ cinfo.xp|intcomma }} XP">
-                <span class="pp-gcard__ctr-jobs">{% for job in cinfo.jobs %}<span class="pp-gcard__ctr-job" style="color: var(--disc-{{ job.discipline }});" title="{{ job.name }}">{% job_icon_use job.icon 'w-full h-full' %}</span>{% endfor %}</span>
-                <span class="pp-gcard__ctr-xp">{{ cinfo.xp|intcomma }} XP</span>
-            </span>
-            {% else %}
-            <span class="pp-gcard__ctr pp-gcard__ctr--empty" title="No contract">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>
-                <span class="pp-gcard__ctr-label">No contract</span>
-            </span>
-            {% endif %}
             {% endwith %}
-            {% endif %}
 
             {% comment %} Footer: platforms on the left (the partition UNION on condensed grids,
-            this list's own on the others), the lists chip when the work has stacks, player count
-            on the right. Region chips removed 2026-08-30 (owner call: the card describes the
-            WORK; region stays a filter). Zero queries either way. {% endcomment %}
+            this list's own on the others; on every card, an owner call), the lists chip when the work
+            has stacks, rating and players on the right. Region chips removed 2026-08-30 (owner call:
+            the card describes the WORK; region stays a filter). Zero queries either way. ALWAYS
+            rendered, even with nothing on its left: it is the pinned last row of the one anatomy,
+            and its top rule must sit at the same height on every card in a row. {% endcomment %}
             {% with union=platform_union_map|dict_get:game.id list_n=list_count_map|dict_get:game.id %}
-            {% comment %}The lists chip is PARTITION metadata, not platform metadata -- it must
-    not vanish with an empty platform set (final-audit #8), so it joins the gate; the
-    list-identity mode's region chips join it for the same reason (a platform-less regional
-    list still shows its region).{% endcomment %}
-            {% if union or game.title_platform or list_n > 1 or list_identity_cards %}
             <div class="pp-gcard__foot">
                 <span class="pp-gcard__plats">
                     {% for p in union|default:game.title_platform %}<span class="pp-gcard__plat">{{ p }}</span>{% endfor %}
@@ -126,17 +112,24 @@
                     retired); this is the mode's own class.{% endcomment %}
                     {% if list_identity_cards %}{% if game.is_regional and game.region %}{% for r in game.region %}<span class="pp-gcard__region">{{ r }}</span>{% endfor %}{% else %}<span class="pp-gcard__region pp-gcard__region--global">Global</span>{% endif %}{% endif %}
                 </span>
-                {% comment %}A condensed card stands for the whole game page, so it shows the PAGE's players, each counted
-                once (`players_map`, DS-08): the number the Game page shows. A one-list card keeps its list's own count.{% endcomment %}
+                {% comment %}Right side: the community rating (only when rated) and the players. A condensed card stands for
+                the whole game page, so it shows the PAGE's players, each counted once (`players_map`, DS-08): the
+                number the Game page shows. A one-list card keeps its list's own count.{% endcomment %}
                 {% with players=players_map|dict_get:game.id|default:game.played_count %}
-                {% if players %}
-                <span class="pp-gcard__players" title="{{ players|intcomma }} players own this game">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>{{ players|compact_number }}
+                {% if ratings or players %}
+                <span class="pp-gcard__footr">
+                    {% if ratings %}
+                    <span class="pp-gcard__fact" title="Community rating {{ ratings.avg_rating|floatformat:1 }} out of 5"><svg class="pp-gcard__star" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>{{ ratings.avg_rating|floatformat:1 }}</span>
+                    {% endif %}
+                    {% if players %}
+                    <span class="pp-gcard__players" title="{{ players|intcomma }} players own this game">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>{{ players|compact_number }}
+                    </span>
+                    {% endif %}
                 </span>
                 {% endif %}
                 {% endwith %}
             </div>
-            {% endif %}
             {% endwith %}
         </div>
     </a>

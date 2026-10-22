@@ -178,7 +178,6 @@
         if (first && PP.countUp) {   // count up on first load only -- a history restore shows the number statically
             var countEl = document.querySelector('[data-radded-count]');
             if (countEl) { PP.countUp(countEl, 900); }
-            document.querySelectorAll('[data-scard-count]').forEach(function (el) { PP.countUp(el, 900); });
         }
 
         tablist = PP.wireTablist

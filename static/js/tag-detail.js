@@ -141,9 +141,6 @@
     // ── Element wiring: runs on first load AND on each history restore (fresh DOM). ──
     function boot(first) {
         handledGrid = null;
-        if (first && PP.countUp) {   // scard values count up on first load only
-            document.querySelectorAll('[data-scard-count]').forEach(function (el) { PP.countUp(el, 900); });
-        }
         initToolbar();
         wireMinibar();
         initReveal();

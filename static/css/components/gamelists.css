@@ -1192,7 +1192,7 @@
    as three equal fragments rather than a label, a view control and an action.
  *
  * `order` ALONE DOES IT, because two things are already true: the shared bar wraps, and
- * `.pp-gbrowse__sort` is given `flex: 1 1 auto` below 768 by `game-browse.css`, so once the adder
+ * `.pp-gbrowse__sort` is given `flex: 1 1 0` below 768 by `game-browse.css`, so once the adder
  * leaves row one the sort grows to fill it. Nothing here needs to restate either.
  *
  * 599/600, AND NOT THIS FILE'S USUAL 519/520, because the arithmetic that chose 519 was measured

@@ -42,8 +42,8 @@ def build_game_card_context(page_games, request, condensed=False):
 
     Returns a dict to `context.update(...)` into any ListView that renders the
     shared card (Browse Games, Recently Added). `show_game_hooks` is always set,
-    so the card's pursuer band renders wherever this helper is used; browse pages
-    that don't call it leave the band off (the card gates on the flag).
+    so the card's hooks row shows badge series + contract wherever this helper is
+    used; a page that doesn't call it gets the row with only "No Plat" in it.
 
     `condensed=True` (the elected one-card-per-page-identity grids: Browse Games,
     tag detail -- NEVER Recently Added, whose per-list rows are its point): adds
@@ -396,17 +396,6 @@ class GamesListView(HtmxListMixin, ListView):
                 for slug, label in Job.DISCIPLINES
             ]
 
-            # Header discovery stats from the hourly-cached site heartbeat (zero DB cost on the request path):
-            # catalogue scale + how many games are part of a badge series / a contract.
-            from core.services.site_heartbeat import get_cached_heartbeat
-            _hb = get_cached_heartbeat() or {}
-            _always = _hb.get('always') or {}
-            _expanded = _hb.get('expanded') or {}
-            context['catalog_games_total'] = (_always.get('games_total') or {}).get('value')
-            context['catalog_games_new_this_week'] = (_always.get('games_total') or {}).get('delta')
-            context['catalog_games_in_badges'] = (_expanded.get('games_in_badges') or {}).get('value')
-            context['catalog_games_in_contracts'] = (_expanded.get('games_in_contracts') or {}).get('value')
-
         # Check if any filters are active (for badge + auto-expanding the drawer)
         context['has_advanced_filters'] = any(
             v for k, v in self.request.GET.lists()
@@ -502,23 +491,6 @@ class TrophyListsBrowseView(HtmxListMixin, ListView):
             "platform stacks, and edition lists. Filter by platform, region, and platinum "
             "availability."
         )
-
-        # Header substance scards (the browse-family header standard), full page only -- the
-        # panel/grid swaps never re-render the header. Fed by the hourly site heartbeat, exactly
-        # like game_list's header: zero computation on the request path, and the scard grid
-        # stays hidden until the cron warms the cache (tlb_stats is None). Replaced the lazy
-        # cache.get_or_set of the first cut -- the with-a-platinum EXISTS semi-join belongs on
-        # the cron, not on the hour's first visitor.
-        is_xhr = self.request.headers.get('X-Requested-With') == 'XMLHttpRequest'
-        if not self.request.htmx and not is_xhr:
-            _exp = (get_cached_heartbeat() or {}).get('expanded') or {}
-            _lt = _exp.get('lists_total') or {}
-            context['tlb_stats'] = {
-                'total': _lt.get('value'),
-                'regional': (_exp.get('lists_regional') or {}).get('value'),
-                'with_plat': (_exp.get('lists_with_plat') or {}).get('value'),
-                'new_this_week': _lt.get('delta'),
-            } if _lt.get('value') is not None else None
 
         # LIST-IDENTITY cards (the page's third card mode): titles come from the observed PSN
         # list names -- Game.display_list_names, the batch that is the ONLY supported grid read
@@ -1641,18 +1613,6 @@ class RecentlyAddedView(HtmxListMixin, ListView):
             context['newest_added_at'] = max(
                 [t for t in (newest_game, newest_dlc) if t is not None], default=None,
             )
-
-            # The grid's heartbeat pair (fills it to the four-stat family standard): the 7-day
-            # catalogue delta + total scale, both values the cron already computes for the home
-            # ribbon. Stale <=2h beside the two LIVE window counts above -- acceptable, they
-            # answer different questions and the template labels them so.
-            # TRUTHY gate on the total: games_total routes through _community_value(default=0),
-            # so a failed community compute caches a ZERO -- "Catalogue 0" would be a lie. The
-            # delta rides the same gate (a legit quiet-week 0 delta still renders, because the
-            # gate is on the total).
-            _gt = ((get_cached_heartbeat() or {}).get('always') or {}).get('games_total') or {}
-            context['ra_new_this_week'] = _gt.get('delta') if _gt.get('value') else None
-            context['ra_catalog_total'] = _gt.get('value') or None
 
         # Base-games cards render the shared `.pp-gcard`, so feed it the same batched, whale-safe card
         # context Browse Games uses (progress / DLC counts / ratings / badge + contract pursuer hooks).

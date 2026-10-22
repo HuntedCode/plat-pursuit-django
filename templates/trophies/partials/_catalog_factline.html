@@ -1,0 +1,10 @@
+{% load humanize %}{% comment %}A franchise's or company's totals as one line of facts (DS-04): numbers in text, not four tiles
+that push the games off a phone's first screen. "Trophy lists" only when they differ from the games, since
+"12 games, 12 trophy lists" says nothing twice; platinums only when there are some (Page Principles rule 3).
+Context: total_games, total_versions (trophy lists), total_trophies, total_platinums.{% endcomment %}
+<p class="pp-factline">
+    <span><b>{{ total_games|intcomma }}</b> game{{ total_games|pluralize }}</span>
+    {% if total_versions != total_games %}<span><b>{{ total_versions|intcomma }}</b> trophy list{{ total_versions|pluralize }}</span>{% endif %}
+    <span><b>{{ total_trophies|intcomma }}</b> troph{{ total_trophies|pluralize:"y,ies" }}</span>
+    {% if total_platinums %}<span><b class="pp-factline__plat">{{ total_platinums|intcomma }}</b> platinum{{ total_platinums|pluralize }}</span>{% endif %}
+</p>

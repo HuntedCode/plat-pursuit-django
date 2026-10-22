@@ -24,31 +24,16 @@
                 <h1 class="text-lg md:text-xl lg:text-2xl font-bold">{{ tag_name }}</h1>
                 <span class="text-[0.6rem] font-extrabold uppercase tracking-wider text-primary bg-primary/15 border border-primary/30 rounded-full px-2 py-0.5">{{ tag_type }}</span>
             </div>
-            <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1">
-                {{ total_game_count|intcomma }} game{{ total_game_count|pluralize }} {{ tag_intro_suffix }}
+            {% comment %}One line of facts, not four tiles (DS-04). It counts TROPHY LISTS and says so: the grid
+            below shows one card per game, so "games" here would read above the cards (the DS-04 mismatch).
+            "Owned" sums each list's owners, so a hunter with two versions counts twice; it says "times owned".
+            The completion shows from 0.5 up: below that it would round to "0%", a zero shown as content.{% endcomment %}
+            <p class="pp-factline">
+                <span><b>{{ tag_stats.games|default:0|intcomma }}</b> trophy list{{ tag_stats.games|default:0|pluralize }}</span>
+                {% if tag_stats.owned %}<span><b>{{ tag_stats.owned|intcomma }}</b> times owned</span>{% endif %}
+                {% if tag_stats.plats %}<span><b class="pp-factline__plat">{{ tag_stats.plats|intcomma }}</b> platinum{{ tag_stats.plats|pluralize }} earned</span>{% endif %}
+                {% if tag_stats.avg_completion >= 0.5 %}<span><b>{{ tag_stats.avg_completion|floatformat:0 }}%</b> average completion</span>{% endif %}
             </p>
-
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mt-3 md:mt-4">
-                <div class="scard">
-                    <div class="scard__label">Games</div>
-                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ tag_stats.games|default:0 }}">{{ tag_stats.games|default:0|intcomma }}</div>
-                </div>
-                <div class="scard">
-                    <div class="scard__label">Owned</div>
-                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ tag_stats.owned|default:0 }}">{{ tag_stats.owned|default:0|intcomma }}</div>
-                    <div class="scard__sub">in libraries</div>
-                </div>
-                <div class="scard">
-                    <div class="scard__label">Platinums</div>
-                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ tag_stats.plats|default:0 }}">{{ tag_stats.plats|default:0|intcomma }}</div>
-                    <div class="scard__sub">earned</div>
-                </div>
-                <div class="scard">
-                    <div class="scard__label">Avg completion</div>
-                    <div class="scard__value pp-tally">{{ tag_stats.avg_completion|default:0|floatformat:0 }}%</div>
-                    <div class="scard__sub">across the {{ tag_type|lower }}</div>
-                </div>
-            </div>
         </div>
     </section>
 

@@ -369,8 +369,9 @@ def test_plats_sort_matches_what_the_live_join_counted(client):
 def test_index_header_counts_ride_the_heartbeat(client):
     """The Genres/Themes with-games counts come from the hourly site heartbeat (2026-08
     consolidation) -- they were two hot DISTINCT joins on EVERY request and swap. Warm cache:
-    the scard grid + tab captions render the cached values; cold cache: both are gated off
-    entirely (a rendered 0 would be a lie), and no distinct-join query runs either way."""
+    the tab captions render the cached values; cold cache: they are gated off (a rendered 0
+    would be a lie), and no distinct-join query runs either way. The header's tile grid is gone
+    (DS-04), so the counts live on the switcher alone."""
     from django.core.cache import cache
     from django.test.utils import CaptureQueriesContext
     from django.db import connection
@@ -384,7 +385,6 @@ def test_index_header_counts_ride_the_heartbeat(client):
     key = f"site_heartbeat_{now.date().isoformat()}_{now.hour:02d}"
     cache.set(key, {'expanded': {
         'genres_with_games': {'value': 23}, 'themes_with_games': {'value': 21},
-        'games_tagged': {'value': 5400}, 'tags_applied': {'value': 9800},
     }}, 120)
     try:
         with CaptureQueriesContext(connection) as ctx:
@@ -393,15 +393,12 @@ def test_index_header_counts_ride_the_heartbeat(client):
         cache.delete(key)
     warm = warm_resp.content.decode()
 
-    assert 'with games' in warm
     # Context assertions, not substring scans: bare '23'/'21' also live in navbar/footer SVG
     # path data, which made the rendered-value pin vacuous (the audit's catch).
     assert warm_resp.context['genre_count'] == 23
     assert warm_resp.context['theme_count'] == 21
-    assert '>23<' in warm and '>21<' in warm   # the scard value elements render the cached numbers
-    # The coverage pair (four-stat fill-out, 2026-08-31) -- individually gated, so a payload
-    # carrying them renders them:
-    assert 'Games tagged' in warm and '5,400' in warm and '9,800' in warm
+    assert '>23<' in warm and '>21<' in warm   # the tab captions render the cached numbers
+    assert 'class="scard' not in warm          # no tile grid over the index (DS-04)
     # On the genres tab the ONLY thing that ever queried trophies_theme was the header's
     # with-games count -- zero theme queries proves the header compute left the request path
     # (the genre tile grid legitimately joins trophies_genre, so that side can't be pinned).
@@ -410,5 +407,4 @@ def test_index_header_counts_ride_the_heartbeat(client):
 
     cold = raw.get(reverse('genres_list'))
     assert cold.status_code == 200
-    assert cold.context['genre_count'] is None
-    assert 'with games' not in cold.content.decode()
+    assert cold.context['genre_count'] is None and cold.context['theme_count'] is None

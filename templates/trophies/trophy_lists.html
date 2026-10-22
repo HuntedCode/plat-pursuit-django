@@ -18,7 +18,7 @@ request.path); filtered states carry the noindex block above.{% endcomment %}
 <div class="pp-gbrowse">
     {% include 'partials/breadcrumb.html' with items=breadcrumb %}
 
-    {# ── Page header: accented card + --pp-* substance, opening-beat cascade (the browse-family standard: left identity + flavor, right headline Tally, .scard substance grid). ── #}
+    {# ── Page header: accented card + --pp-* substance, opening-beat cascade (the browse-family standard: left identity + flavor, right the one count). ── #}
     <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
         <div class="card-body p-4 md:p-5 lg:p-6 pp-head-cascade">
             <div class="flex items-start justify-between gap-3 flex-wrap">
@@ -43,42 +43,13 @@ request.path); filtered states carry the noindex block above.{% endcomment %}
                 </div>
 
                 {% comment %} Filtered-result count as the headline Tally (mirrors Browse Games / Recently
-                Added). The catalogue scale lives in the .scard grid below; this names the shown results.
+                Added): the lists the grid shows, the header's only number (DS-04).
                 trophy-lists.js ticks #tlb-count live on every grid swap. {% endcomment %}
                 <div class="shrink-0 text-right flex items-baseline gap-1 whitespace-nowrap md:block">
                     <span id="tlb-count" class="pp-tally text-primary leading-none font-bold text-sm md:text-3xl" data-countup="{{ paginator.count }}">{{ paginator.count|intcomma }}</span>
                     <span class="text-[0.65rem] md:text-xs text-base-content/50 md:mt-1 md:block md:uppercase md:tracking-wider">list{{ paginator.count|pluralize }} shown</span>
                 </div>
             </div>
-
-            {% comment %} Catalogue substance: the family .scard grid, LIST-scoped (these count lists,
-            this page's honest unit -- not the games heartbeat values). Fed by the hourly site
-            heartbeat like every browse header, so the grid only shows once the cron has warmed the
-            cache; full page only (never re-rendered on swaps). {% endcomment %}
-            {% if tlb_stats %}
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mt-3 md:mt-4">
-                <div class="scard">
-                    <div class="scard__label">Trophy lists</div>
-                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ tlb_stats.total|default:0 }}">{{ tlb_stats.total|default:0|intcomma }}</div>
-                    <div class="scard__sub">in the catalogue</div>
-                </div>
-                <div class="scard">
-                    <div class="scard__label">Regional</div>
-                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ tlb_stats.regional|default:0 }}">{{ tlb_stats.regional|default:0|intcomma }}</div>
-                    <div class="scard__sub">territory-specific</div>
-                </div>
-                <div class="scard">
-                    <div class="scard__label">With a platinum</div>
-                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ tlb_stats.with_plat|default:0 }}">{{ tlb_stats.with_plat|default:0|intcomma }}</div>
-                    <div class="scard__sub">ship the prize</div>
-                </div>
-                <div class="scard">
-                    <div class="scard__label">New this week</div>
-                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ tlb_stats.new_this_week|default:0 }}">{{ tlb_stats.new_this_week|default:0|intcomma }}</div>
-                    <div class="scard__sub">freshly synced</div>
-                </div>
-            </div>
-            {% endif %}
         </div>
     </section>
 

@@ -32,43 +32,13 @@
                 </div>
 
                 {% comment %} Filtered pool count as the headline Tally (mirrors Browse). The active category's
-                sublabel names what's shown; the 30-day discovery scale lives in the .scard grid below. {% endcomment %}
+                sublabel names what's shown; the 30-day totals ride the category switcher. {% endcomment %}
                 <div class="shrink-0 text-right flex items-baseline gap-1 whitespace-nowrap md:block">
                     <span id="radded-count" class="pp-tally text-primary leading-none font-bold text-sm md:text-3xl" data-radded-count data-countup="{{ paginator.count }}">{{ paginator.count|intcomma }}</span>
                     <span id="radded-sublabel" class="text-[0.65rem] md:text-xs text-base-content/50 md:mt-1 md:block md:uppercase md:tracking-wider">
                         {% if active_category == 'dlc' %}pack{{ paginator.count|pluralize }} shown{% else %}game{{ paginator.count|pluralize }} shown{% endif %}
                     </span>
                 </div>
-            </div>
-
-            {% comment %} Discovery substance: the two LIVE 30-day window counts (computed in the view,
-            cheap + never lag the grid) padded to the four-stat family standard by the heartbeat pair
-            (7-day delta + catalogue scale, <=2h stale, individually gated for a cold cron). {% endcomment %}
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mt-3 md:mt-4">
-                <div class="scard">
-                    <div class="scard__label">New games</div>
-                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ category_counts.base_games|default:0 }}">{{ category_counts.base_games|default:0|intcomma }}</div>
-                    <div class="scard__sub">in the last 30 days</div>
-                </div>
-                <div class="scard">
-                    <div class="scard__label">New DLC</div>
-                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ category_counts.dlc|default:0 }}">{{ category_counts.dlc|default:0|intcomma }}</div>
-                    <div class="scard__sub">in the last 30 days</div>
-                </div>
-                {% if ra_new_this_week is not None %}
-                <div class="scard">
-                    <div class="scard__label">New this week</div>
-                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ ra_new_this_week|default:0 }}">{{ ra_new_this_week|default:0|intcomma }}</div>
-                    <div class="scard__sub">games, freshly synced</div>
-                </div>
-                {% endif %}
-                {% if ra_catalog_total is not None %}
-                <div class="scard">
-                    <div class="scard__label">Catalogue</div>
-                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ ra_catalog_total|default:0 }}">{{ ra_catalog_total|default:0|intcomma }}</div>
-                    <div class="scard__sub">games and counting</div>
-                </div>
-                {% endif %}
             </div>
         </div>
     </section>

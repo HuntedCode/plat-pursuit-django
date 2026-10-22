@@ -28,8 +28,8 @@
                     </p>
                 </div>
 
-                {% comment %} Active-tab count as the headline Tally; the catalogue scale (both taxonomies)
-                lives in the .scard grid below. {% endcomment %}
+                {% comment %} Active-tab count as the headline Tally; both taxonomies' counts ride the tab
+                switcher. {% endcomment %}
                 <div class="shrink-0 text-right flex items-baseline gap-1 whitespace-nowrap md:block">
                     <span id="gtl-count" class="pp-tally text-primary leading-none font-bold text-sm md:text-3xl" data-gtl-count data-countup="{{ item_count }}">{{ item_count|intcomma }}</span>
                     <span id="gtl-sublabel" class="text-[0.65rem] md:text-xs text-base-content/50 md:mt-1 md:block md:uppercase md:tracking-wider">
@@ -37,40 +37,6 @@
                     </span>
                 </div>
             </div>
-
-            {% comment %} Heartbeat-fed (hourly cron): hidden until the cache is warm, like every
-            browse-header scard grid -- a rendered 0 would be a lie, not a stat. {% endcomment %}
-            {% if genre_count is not None and theme_count is not None %}
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mt-3 md:mt-4">
-                <div class="scard">
-                    <div class="scard__label">Genres</div>
-                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ genre_count|default:0 }}">{{ genre_count|default:0|intcomma }}</div>
-                    <div class="scard__sub">with games</div>
-                </div>
-                <div class="scard">
-                    <div class="scard__label">Themes</div>
-                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ theme_count|default:0 }}">{{ theme_count|default:0|intcomma }}</div>
-                    <div class="scard__sub">with games</div>
-                </div>
-                {% comment %} Individually gated (unlike the with-games pair the grid gates on): a
-                pre-deploy heartbeat payload can stay warm for up to 2h without these keys, and a
-                rendered 0 would be a lie. {% endcomment %}
-                {% if games_tagged is not None %}
-                <div class="scard">
-                    <div class="scard__label">Games tagged</div>
-                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ games_tagged|default:0 }}">{{ games_tagged|default:0|intcomma }}</div>
-                    <div class="scard__sub">genre or theme</div>
-                </div>
-                {% endif %}
-                {% if tags_applied is not None %}
-                <div class="scard">
-                    <div class="scard__label">Tags applied</div>
-                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ tags_applied|default:0 }}">{{ tags_applied|default:0|intcomma }}</div>
-                    <div class="scard__sub">genre + theme links</div>
-                </div>
-                {% endif %}
-            </div>
-            {% endif %}
         </div>
     </section>
 
