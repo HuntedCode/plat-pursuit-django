@@ -51,6 +51,20 @@ def _refresh_response(outcome, profile=None):
     return JsonResponse(body, status=status_code)
 
 
+def _claimable(profile):
+    """Can a visitor who finds this profile still claim it? The landing hero's "That's you? Sign up free to claim
+    it." shows only then: no account on it, the rule the link flow refuses on
+    (`profile_views._claimed_by_someone_else`). `user` is set only when verification succeeds
+    (`VerificationService.link_profile_to_user`), so a profile mid-link is still claimable, as Link PSN would
+    still accept it.
+
+    NOT also gated on `account_id`, though it looks like a guard against typos: a name PSN does not know is
+    DELETED when its first sync fails (`Profile.set_sync_status('error')` drops a row with no `account_id`), so
+    an empty `account_id` only ever means "still in the sync queue". Gating on it hid the claim from real
+    hunters who searched twice while the queue was busy (audit-caught, after it was added)."""
+    return profile.user_id is None
+
+
 def _get_queue_position(profile_id):
     """
     Calculate approximate queue position for a syncing profile.
@@ -582,6 +596,7 @@ class SearchSyncProfileView(View):
                 'seconds_to_next_sync': 0,
                 'psn_username': profile.psn_username,
                 'slug': reverse('profile_detail', kwargs={'psn_username': profile.psn_username}),
+                'claimable': _claimable(profile),
             }, status=403)
 
         # One shape for BOTH outcomes of a refresh, so `already_syncing` (which is an ok) is not
@@ -716,12 +731,14 @@ class AddSyncStatusView(View):
             'account_id': profile.account_id,
             'psn_username': profile.psn_username,
             'slug': reverse('profile_detail', kwargs={'psn_username': profile.psn_username}),
+            'claimable': _claimable(profile),
             # The live tally, for a page watching a sync it asked for. Zero extra queries -- the
             # profile is already loaded, and these four denorms climb DURING the walk via the
             # EarnedTrophy post_save signal, unlike `total_trophies` which waits for finalize.
             # `ProfileSyncStatusView` sends the same block for the same reason.
             #
-            # Nothing here is exposed that the profile page does not already print.
+            # Nothing here is exposed that the profile page does not already print, except `claimable`: whether a
+            # site account holds this name, which the linked-only leaderboards already reveal.
             'stats': {
                 'plats': profile.total_plats,
                 'golds': profile.total_golds,

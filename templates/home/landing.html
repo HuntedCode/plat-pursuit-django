@@ -80,14 +80,20 @@ Keyed on home_state, not is_authenticated, so ?preview=landing previews the true
                 <h1 class="land-hero__h1">The hunt deserves a record.</h1>
                 <p class="land-hero__sub">Platinum Pursuit is free trophy tracking for PlayStation. Type a PSN name and we pull the whole history: every game, every trophy, every platinum.</p>
 
+                {% comment %} `data-url-signup` + `data-url-link`: the claim link is sign-up with `next` set to Link PSN
+                for the name found (landing.js builds it), so the hunter arrives there with the name filled in. {% endcomment %}
                 <form class="land-search" method="post" action="{% url 'search_sync_profile' %}" data-land-search
-                      data-url-status="{% url 'add_sync_status' %}">
+                      data-url-status="{% url 'add_sync_status' %}" data-url-signup="{% url 'account_signup' %}" data-url-link="{% url 'link_psn' %}">
                     {% csrf_token %}
                     <label class="sr-only" for="land-psn">PSN name</label>
                     <input id="land-psn" name="psn_username" type="text" class="land-search__input"
                            placeholder="Your PSN name" maxlength="16" autocomplete="off"
                            autocapitalize="none" spellcheck="false" required />
-                    <button type="submit" class="pp-cta land-search__go">Start tracking</button>
+                    {% comment %} "Look up", not "Start tracking" (FV-05, owner 2026-10-21): it finds a PSN name and pulls
+                    its history, which is all it does. Tracking is what signing up gets you, and the found profile
+                    offers exactly that below, so the hero has one first step instead of two that never said how
+                    they differed. {% endcomment %}
+                    <button type="submit" class="pp-cta land-search__go">Look up</button>
                 </form>
 
                 {% comment %}The honest line. A first sync is an entire history through rate-limited
@@ -104,6 +110,9 @@ Keyed on home_state, not is_authenticated, so ?preview=landing previews the true
                     <a class="land-search__visit" href="{% url 'profiles_list' %}" data-land-visit hidden>Open the profile
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
                     </a>
+                    {% comment %} The claim, for a profile nobody has an account on yet (`claimable` on the search and
+                    status payloads). Resting href is plain sign-up, so the anchor works before JS sets the name. {% endcomment %}
+                    <p class="land-search__claim" data-land-claim hidden>That's you? <a href="{% url 'account_signup' %}" class="land-search__claimlink" data-land-claimlink>Sign up free to claim it</a></p>
                 </div>
 
                 <div class="land-hero__accounts">
@@ -187,14 +196,18 @@ Keyed on home_state, not is_authenticated, so ?preview=landing previews the true
                 <p class="land-sec__sub">Twenty-five jobs across five disciplines turn your history into a career. Every platinum feeds the jobs it proves, and your card shows what you're made of.</p>
             </div>
             {% if showcase_card_html %}
-            <div class="land-card pp-arrive__it" style="--i: 1;">
-                <div class="land-card__frame" data-land-cardframe>
+            <div class="land-card pp-arrive__it" style="--i: 1;" data-land-zoom data-land-zoom-title="The Profile Card">
+                {% comment %} FV-06 (owner 2026-10-21): a 1200x630 share card is 0.28 scale on a phone, labels 3 to 4px.
+                It stays a picture of what you get, the note under it says what is on it, and the frame opens a
+                full-size viewer (landing.js, `data-land-zoom`) that pans at real size. {% endcomment %}
+                <div class="land-card__frame land-zoomable" data-land-cardframe data-land-zoom-target>
                     {% comment %}|safe is load-bearing: the cron path round-trips Redis (JSON serializer),
                     which strips SafeString -- without it the real card renders as escaped source
                     while the in-process fixture works by accident.{% endcomment %}
                     <div class="land-card__scaler" data-land-cardscaler>{{ showcase_card_html|safe }}</div>
                 </div>
-                <p class="land-card__note">{% if showcase_card_is_sample %}A sample Profile Card. Yours builds itself from your real history.{% else %}A real hunter's Profile Card, refreshed hourly. Yours builds itself from your real history.{% endif %}</p>
+                <p class="land-card__note">{% if showcase_card_is_sample %}A sample Profile Card{% else %}A real hunter's Profile Card, refreshed hourly{% endif %}: platinums, trophy record, Pursuer rank and badges on one card. Yours builds itself from your real history.</p>
+                <button type="button" class="land-zoombtn" data-land-zoom-open hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="m21 3-7 7"/><path d="m3 21 7-7"/></svg>View full size<span class="sr-only"> (the Profile Card)</span></button>
             </div>
             {% endif %}
         </div>
@@ -291,14 +304,26 @@ Keyed on home_state, not is_authenticated, so ?preview=landing previews the true
                 <p class="land-sec__sub">Every platinum earns a share card with your scores on it, and every month closes with a recap worth posting. The screenshot era is over.</p>
             </div>
             <div class="land-proof pp-arrive__it" style="--i: 1;">
-                <picture>
-                    <source srcset="{% static 'images/showcase/plat_card_example.webp' %}" type="image/webp" />
-                    <img src="{% static 'images/showcase/plat_card_example.png' %}" alt="A platinum share card" width="1200" height="630" class="land-proof__img" loading="lazy" decoding="async" />
-                </picture>
-                <picture>
-                    <source srcset="{% static 'images/showcase/recap_card_example.webp' %}" type="image/webp" />
-                    <img src="{% static 'images/showcase/recap_card_example.png' %}" alt="A monthly recap card" width="1200" height="630" class="land-proof__img" loading="lazy" decoding="async" />
-                </picture>
+                <figure class="land-proof__item" data-land-zoom data-land-zoom-title="A platinum share card">
+                    <div class="land-proof__frame land-zoomable" data-land-zoom-target>
+                        <picture>
+                            <source srcset="{% static 'images/showcase/plat_card_example.webp' %}" type="image/webp" />
+                            <img src="{% static 'images/showcase/plat_card_example.png' %}" alt="A platinum share card" width="1200" height="630" class="land-proof__img" loading="lazy" decoding="async" />
+                        </picture>
+                    </div>
+                    <figcaption class="land-proof__cap">Every platinum: the game, how rare it is, your scores and your take.</figcaption>
+                    <button type="button" class="land-zoombtn" data-land-zoom-open hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="m21 3-7 7"/><path d="m3 21 7-7"/></svg>View full size<span class="sr-only"> (the platinum share card)</span></button>
+                </figure>
+                <figure class="land-proof__item" data-land-zoom data-land-zoom-title="A monthly recap card">
+                    <div class="land-proof__frame land-zoomable" data-land-zoom-target>
+                        <picture>
+                            <source srcset="{% static 'images/showcase/recap_card_example.webp' %}" type="image/webp" />
+                            <img src="{% static 'images/showcase/recap_card_example.png' %}" alt="A monthly recap card" width="1200" height="630" class="land-proof__img" loading="lazy" decoding="async" />
+                        </picture>
+                    </div>
+                    <figcaption class="land-proof__cap">Every month: your trophies, platinums and best days, recapped.</figcaption>
+                    <button type="button" class="land-zoombtn" data-land-zoom-open hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="m21 3-7 7"/><path d="m3 21 7-7"/></svg>View full size<span class="sr-only"> (the monthly recap card)</span></button>
+                </figure>
             </div>
         </div>
     </section>
@@ -365,6 +390,20 @@ Keyed on home_state, not is_authenticated, so ?preview=landing previews the true
 {% endblock %}
 
 {% block fixed_overlays %}
+{% comment %}The full-size viewer (FV-06): the Profile Card or a share image at REAL size, in a stage that pans (and
+pinch-zooms, the browser's own). landing.js fills the stage from the opener. A native <dialog>, so showModal()
+brings the focus trap, Escape and the inert page with it. The hint names the gesture the pointer has: a mouse
+drag does not pan a scroller.{% endcomment %}
+<dialog class="land-zoom" data-land-zoom-dialog aria-labelledby="land-zoom-title">
+    <div class="land-zoom__bar">
+        <h2 class="land-zoom__title" id="land-zoom-title" data-land-zoom-heading>Full size</h2>
+        <button type="button" class="pp-cta pp-cta--icon pp-cta--ghost land-zoom__close" data-land-zoom-close aria-label="Close">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </button>
+    </div>
+    <div class="land-zoom__stage" data-land-zoom-stage tabindex="0" role="region" aria-label="Full size view"></div>
+    <p class="land-zoom__hint"><span class="land-zoom__hint-touch">Drag to look around.</span><span class="land-zoom__hint-mouse">Use the arrow keys, or scroll sideways, to look around.</span></p>
+</dialog>
 {% comment %}The badge inspect modal: the shared pick-it-up stage (medallion.js detailModal),
 fed by the anon-safe quick-peek endpoint -- the same experience badge detail hands a logged-out
 visitor. Lives in fixed_overlays so it sits outside #page-recede.{% endcomment %}

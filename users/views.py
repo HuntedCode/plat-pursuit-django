@@ -34,7 +34,7 @@ from users.constants import (ACTIVE_PREMIUM_TIERS, LADDER_SLUGS,
                              PREMIUM_PERKS, SUPPORT_TIERS,
                              SUPPORT_TIERS_ARE_PLACEHOLDERS)
 from users.forms import CustomPasswordChangeForm, EmailPreferencesForm
-from users.services import pending_signup
+from users.services import claimed_psn, pending_signup
 from users.services.email_preference_service import EmailPreferenceService
 from users.services.subscription_service import SubscriptionService
 from users.services.timezone_service import set_user_timezone
@@ -91,6 +91,8 @@ def fix_signup_address(request):
     email = pending_signup.discard(request)
     if email is None:
         return redirect('account_email_verification_sent')
+    # The landing's claim was made for the account just deleted: hand it to the sign-up this reopens.
+    claimed_psn.release(request)
     messages.info(request, 'No problem. Enter the right address and we will send a fresh link.')
     return redirect(f"{reverse('account_signup')}?{urlencode({'email': email})}")
     

@@ -13,6 +13,8 @@
  *     clamped at 1, no floor (the share modal's rule).
  *  3. Count up the heartbeat numbers when their band scrolls in, via the canonical
  *     PlatPursuit.countUp (data-countup) -- not a fourth hand-rolled ticker.
+ *  6. The full-size viewer: the Profile Card and the share images at real size in a native <dialog>
+ *     that pans, because at 375 a 1200x630 card is 0.28 scale and its labels are 3 to 4px (FV-06).
  *
  * Section arrival is PlatPursuit.arriveOnScroll (html.pp-arm is armed in extra_head).
  */
@@ -31,6 +33,8 @@
         var msg = document.querySelector('[data-land-msg]');
         var visit = document.querySelector('[data-land-visit]');
         var hint = document.querySelector('[data-land-hint]');
+        var claim = document.querySelector('[data-land-claim]');
+        var claimLink = claim && claim.querySelector('[data-land-claimlink]');
         var input = form.querySelector('input[name="psn_username"]');
         var button = form.querySelector('button[type="submit"]');
         // The form may exist while its satellites don't (a reshaped hero variant): every one of
@@ -49,6 +53,17 @@
 
         function stopPolling() {
             if (timer) { clearInterval(timer); timer = null; }
+        }
+
+        // "That's you? Sign up free to claim it." (FV-05), only for a profile nobody has an account on yet
+        // (`claimable`). Sign-up with `next` = Link PSN for this name: allauth resumes `next` when the email is
+        // confirmed in this browser, so the hunter lands on Link PSN with the name filled in.
+        function offerClaim(name, claimable) {
+            if (!claim || !claimLink) { return; }
+            claim.hidden = !claimable;
+            if (!claimable) { return; }
+            var next = form.dataset.urlLink + '?psn=' + encodeURIComponent(name);
+            claimLink.href = form.dataset.urlSignup + '?next=' + encodeURIComponent(next);
         }
 
         function poll(name) {
@@ -71,6 +86,7 @@
                     setState('ready', 'Found. Trophies are still arriving, so the numbers will keep climbing for a while.');
                     visit.href = data.slug;
                     visit.hidden = false;
+                    offerClaim(data.psn_username || name, data.claimable);
                 }
             }).catch(function () { /* transient; the next tick retries */ });
         }
@@ -82,12 +98,16 @@
             var name = (input.value || '').trim();
             if (!name) { return; }
             if (!PSN_RE.test(name)) {
+                stopPolling();   // and the last name's result goes with it, or its link and claim sat under this error
+                visit.hidden = true;
+                offerClaim(name, false);
                 setState('error', 'That does not look like a PSN name. Letters, numbers, dashes and underscores, 3 to 16 characters.');
                 return;
             }
             stopPolling();
             polls = 0;
             visit.hidden = true;
+            offerClaim(name, false);
             button.disabled = true;
             setState('waiting', 'Looking up ' + name + '...');
 
@@ -113,11 +133,14 @@
                     // up to date" is true. `sign_in` means only that we track them and refused the
                     // refresh -- it says NOTHING about freshness, and using the cooldown's wording for
                     // it told a visitor a five-day-stale hunter was current.
+                    // An unclaimed profile gets the claim line instead of "Sign in to refresh them": two account
+                    // pitches in one breath, and the second is the one that is actually theirs to take.
                     setState('ready', res.data.reason === 'cooldown'
                         ? 'Found ' + name + '. Already up to date.'
-                        : 'Found ' + name + '. Sign in to refresh them.');
+                        : (res.data.claimable ? 'Found ' + name + '.' : 'Found ' + name + '. Sign in to refresh them.'));
                     visit.href = res.data.slug;
                     visit.hidden = false;
+                    offerClaim(res.data.psn_username || name, res.data.claimable);
                     return;
                 }
                 if (res.status === 429) {
@@ -311,6 +334,86 @@
         }
     }
 
+    // --- 6. The full-size viewer -----------------------------------------------------------
+
+    function wireZoom() {
+        var dialog = document.querySelector('[data-land-zoom-dialog]');
+        // No <dialog> support (or no JS at all): the openers stay pictures, their captions still say what is on
+        // them, and the "View full size" buttons stay `hidden` rather than offering a press that does nothing.
+        if (!dialog || typeof dialog.showModal !== 'function') { return; }
+        var stage = dialog.querySelector('[data-land-zoom-stage]');
+        var heading = dialog.querySelector('[data-land-zoom-heading]');
+        var closeBtn = dialog.querySelector('[data-land-zoom-close]');
+        if (!stage || !heading || !closeBtn) { return; }
+        var root = document.documentElement;
+        var returnTo = null;
+
+        // The stage holds the thing at REAL size (1200x630): the Profile Card, which is HTML already on this page
+        // (the server-rendered card; no ids, no controls), copied whole; or a share image, by the source the page
+        // already chose for it (`currentSrc`: the WebP, a tenth of the PNG's bytes on a phone's data).
+        function fill(source) {
+            stage.textContent = '';
+            var scaler = source.querySelector('[data-land-cardscaler]');
+            if (!scaler) {
+                var pic = source.querySelector('img');
+                if (!pic) { return; }
+                var img = document.createElement('img');
+                img.src = pic.currentSrc || pic.src;
+                img.alt = pic.alt;
+                img.width = 1200;
+                img.height = 630;
+                img.draggable = false;   // a mouse drag would lift the image instead of doing nothing
+                img.className = 'land-zoom__img';
+                stage.appendChild(img);
+                return;
+            }
+            var card = document.createElement('div');
+            card.className = 'land-zoom__card';
+            card.innerHTML = scaler.innerHTML;
+            stage.appendChild(card);
+        }
+
+        function open(source, opener) {
+            fill(source);
+            if (!stage.firstChild) { return; }
+            heading.textContent = source.getAttribute('data-land-zoom-title') || 'Full size';
+            returnTo = opener;
+            root.classList.add('land-zoom-open');   // the page behind must not scroll under a drag
+            dialog.showModal();
+            stage.scrollLeft = 0;
+            stage.scrollTop = 0;
+            stage.focus({ preventScroll: true });   // arrow keys pan the stage straight away
+        }
+
+        dialog.addEventListener('close', function () {
+            root.classList.remove('land-zoom-open');
+            stage.textContent = '';
+            if (returnTo && returnTo.isConnected) { returnTo.focus({ preventScroll: true }); }
+            returnTo = null;
+        });
+        closeBtn.addEventListener('click', function () { dialog.close(); });
+        // The dialog is full screen, so there is no backdrop to press; the stage's empty space around the item is
+        // the lightbox's "outside", and a press there closes it. A press on the item itself (or a pan) does not.
+        stage.addEventListener('click', function (e) { if (e.target === stage) { dialog.close(); } });
+
+        // Each item (`data-land-zoom`) is the source. The picture (`data-land-zoom-target`) opens it on a tap, the
+        // natural gesture; the "View full size" button under the caption is the named, focusable control. The
+        // button sits OUTSIDE the picture: every corner of these cards holds content, and a button laid over one
+        // covered it.
+        document.querySelectorAll('[data-land-zoom]').forEach(function (item) {
+            var button = item.querySelector('[data-land-zoom-open]');
+            var target = item.querySelector('[data-land-zoom-target]');
+            if (target) {
+                target.classList.add('is-live');   // the zoom-in cursor, now that it is true
+                target.addEventListener('click', function () { open(item, button || target); });
+            }
+            if (button) {
+                button.hidden = false;   // shipped hidden: it only means something once this has run
+                button.addEventListener('click', function () { open(item, button); });
+            }
+        });
+    }
+
     function boot() {
         wireSearch();
         wireCardFit();
@@ -318,6 +421,7 @@
         wireBadgePeek();
         wireShelfNudge();
         wireRatingsCarousel();
+        wireZoom();
         if (window.PlatPursuit && PlatPursuit.arriveOnScroll) {
             // Deeper than the shared -8% default: on a long marketing scroll the entrance was
             // firing just below the fold and playing unseen (his note). -18% means a section is

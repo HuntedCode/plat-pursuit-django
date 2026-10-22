@@ -31,6 +31,7 @@ from trophies.mixins import HtmxListMixin
 from trophies.psn_manager import PSNManager
 from trophies.services.sync_service import SyncService
 from trophies.services.verification_service import PRIVATE_HISTORY_MESSAGE, VerificationService
+from users.services import claimed_psn
 
 logger = logging.getLogger("psn_api")
 
@@ -1141,7 +1142,17 @@ class LinkPSNView(LoginRequiredMixin, View):
             # for every already-linked visitor (audit-caught).
             return redirect('home')
 
-        form = self.form_class()
+        # The landing's "That's you? Sign up free to claim it" carries the name it found: as `?psn=` (allauth's `next`,
+        # when the email is confirmed promptly) or from the session (`claimed_psn`, which outlives allauth's 15-minute
+        # pending login and "Fix it", and is shown only to the account that claimed it). Only a name the field
+        # itself accepts is used; anything else is dropped silently, never shown as an error they did not cause.
+        initial = {}
+        psn = (request.GET.get('psn') or claimed_psn.claimed_name(request) or '').strip()
+        if psn:
+            probe = self.form_class({'psn_username': psn})
+            if probe.is_valid():
+                initial['psn_username'] = probe.cleaned_data['psn_username']
+        form = self.form_class(initial=initial)
         context = {'form': form, 'step': 1}
         return render(request, self.template_name, context)
 
@@ -1150,6 +1161,7 @@ class LinkPSNView(LoginRequiredMixin, View):
         psn_outage = bool(redis_client.get('site:psn_outage'))
 
         if action == 'submit_username':
+            claimed_psn.forget(request)   # the prefill has done its job, whatever name they submit
             form = self.form_class(request.POST)
             if form.is_valid():
                 psn_username = form.cleaned_data['psn_username'].lower().strip()
