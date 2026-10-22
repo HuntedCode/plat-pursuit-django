@@ -550,7 +550,7 @@ Logs PSN API calls for token monitoring: endpoint, status code, response time, r
 ### CustomUser
 Extends Django's AbstractUser with email-based authentication. Key fields: `stripe_customer_id`, `paypal_subscription_id`, `subscription_provider` (stripe/paypal), `premium_tier`, `user_timezone`, `email_preferences` (JSON). (`default_region` was deleted 2026-08: zero consumers.) The `is_premium()` method checks subscription status against both Stripe and PayPal.
 
-It still carries AbstractUser's unique `username` column, though nothing signs in with it. Leaving it empty works once, then the next empty one breaks the unique constraint. Signup fills it through allauth, the admin's "Add user" form (`users.forms.AdminAddUserForm`) calls the same allauth `populate_username`, and `UserFactory` uses a sequence. `UserManager.create_user` (and so `manage.py createsuperuser`) does not, so a second account made that way collides with the first.
+It still carries AbstractUser's unique `username` column, though nothing signs in with it. Leaving it empty works once, then the next empty one breaks the unique constraint. So `CustomUser.save()` fills an empty one through allauth's `populate_username` (the same call signup makes), which covers signup, the admin's "Add user" form, `UserManager.create_user` (and so `manage.py createsuperuser`), and the shell. An older row saved with an empty one is filled the next time it saves (a sign-in's `last_login` write is enough: the fill adds `username` to `update_fields`). `UserFactory` sets its own via a sequence.
 
 Key relationships:
 - Reverse: `profile` OneToOne from Profile
