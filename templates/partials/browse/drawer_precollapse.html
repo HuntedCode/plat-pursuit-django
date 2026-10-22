@@ -7,8 +7,9 @@ painted low and jumped up: a 0.465 CLS on /games/ in the Lighthouse baseline. Th
 runs while the grid below is still unparsed, so hiding the panel here shifts nothing. Closed
 state is the `hidden` attribute, exactly what animatePanel sets.
 
-`drawer_open` is SERVER truth: the view's own applied-filters signal (filter_chips on the pages
-that build chips, has_advanced_filters elsewhere). The first cut re-derived it from
+`drawer_open` is SERVER truth: the view's own applied-filters signal (filter_open_count on the pages
+that build chips, which skips the same keys as the page's filterPanel `skip`; has_advanced_filters
+elsewhere). The first cut re-derived it from
 location.search and misread parked range params (rating_min=0 is a non-empty value but not a
 filter), so filtered URLs kept the after-paint jump. The server already knows; don't re-decide.
 

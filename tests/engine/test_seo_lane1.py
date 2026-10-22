@@ -4,6 +4,8 @@ Strategy: docs/design/seo-strategy.md. The light concept-canonical election (no 
 one deterministic ordering, two consumers that cannot drift), the games hub returning 200, the
 casing 301, title/description unification.
 """
+import re
+
 import pytest
 
 from tests.factories import ConceptFactory, GameFactory, ProfileFactory
@@ -226,17 +228,14 @@ def test_the_two_electors_share_one_population():
     assert clean.id in elected and flagged_winner.id not in elected
 
 
-def test_the_bare_hub_renders_its_defaults_visibly(client):
-    """The audit's companion find: the queryset filtered by defaults while the checkboxes
-    rendered unchecked and page 2 dropped the filter. The form is the single source now, and
-    the template surfaces the params via history.replaceState for everything that reads
-    location.search."""
+def test_the_bare_hub_binds_no_hidden_filter(client):
+    """A bare /games/ used to bind PS4 + PS5 and history.replaceState() them into the URL. The
+    default was invisible, so one search answered differently by entry point (DS-01): the bare
+    hub now filters nothing, so there are no params to surface and no box ticked."""
     body = client.get('/games/', **CF).content.decode()
 
-    assert 'history.replaceState' in body, 'the default params never reach the URL'
-    # escapejs encodes '=' and '&' as unicode escapes; assert the payload around the call.
-    payload = body.split('history.replaceState')[1][:220]
-    assert 'PS4' in payload and 'PS5' in payload, 'the replaceState payload lost the defaults'
+    assert 'history.replaceState' not in body, 'a bare hit still writes default params into the URL'
+    assert not re.search(r'name="platform" value="[^"]+"\s+checked', body), 'a platform is pre-ticked'
 
 
 def test_og_url_follows_the_canonical_on_game_detail(client):

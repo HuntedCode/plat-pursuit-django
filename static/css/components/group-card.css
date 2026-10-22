@@ -5,8 +5,11 @@
  * trophy counts, and progress rings stay identical across both. Neutral surface + single cyan hover-warm
  * (colour restraint, depth-pass per playbook section 4).
  * ============================================================ */
-.fgroup-grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
-@media (min-width: 1280px) { .fgroup-grid { grid-template-columns: 1fr 1fr; gap: 12px; } }
+/* minmax(0, 1fr), never bare 1fr: a bare 1fr track grows to its content's min-content width, and a
+   version title is nowrap + ellipsis, so one long title ("Higurashi no Naku Koro ni Hou") stretched the
+   whole column and widened the page on a phone (DS-03: 399px and 503px layouts in a 375px screen). */
+.fgroup-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+@media (min-width: 1280px) { .fgroup-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; } }
 
 .fgroup {
     display: block; padding: 11px 12px 12px;

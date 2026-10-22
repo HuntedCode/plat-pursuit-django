@@ -955,7 +955,8 @@
 .gd-trate { display: inline-flex; align-items: center; gap: 3px; font-weight: 600; color: var(--pp-text-dim); }   /* per-trophy earn-rate readout (renamed from .gd-rate: collided with the ratings-panel block) */
 .gd-trate--stacked { flex-direction: row; align-items: center; gap: 4px; }
 .gd-trate__val { display: inline-flex; align-items: center; gap: 4px; font-size: 0.8rem; font-weight: 700; color: var(--pp-text-dim); }
-.gd-trate__lbl { display: none; font-size: 0.55rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--pp-text-mute); }
+/* Labelled at every width (DS-10): on a phone two percentages told apart only by a logo read as noise. */
+.gd-trate__lbl { display: inline; font-size: 0.55rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--pp-text-mute); }
 @media (min-width: 768px) {
     .gd-trophy { flex-wrap: nowrap; }
     .gd-trophy__rates { flex-basis: auto; padding-left: 0; gap: 12px; }

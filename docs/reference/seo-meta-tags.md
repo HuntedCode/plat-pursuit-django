@@ -266,7 +266,8 @@ These flow through the standard `plat_pursuit` logger → console handler → st
   the invariant test over BOTH GameSitemap and ListSitemap. (The old
   `concept_canonicals()`/`Game.canonical_sibling()` pair was deleted with the Games/Trophy
   Lists IA; list pages are SELF-canonical since the slim-down.)
-- **The games hub returns 200 bare**: anon hits bind the platform defaults into the form and
-  the template history.replaceState()s them into the URL (no redirect); signed-in hunters with
+- **The games hub returns 200 bare**: a bare hit binds no filter at all and sorts by Trending
+  (2026-10-22, DS-01 / DS-05: the old invisible PS4 + PS5 default made the same search answer
+  differently by entry point), so there is nothing to write into the URL; signed-in hunters with
   saved browse defaults keep their personalization redirect.
 - **Profile casing**: `/hunters/<Name>/` (+ the day pages) 301 to the lowercase stored form.

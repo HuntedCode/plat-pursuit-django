@@ -16,8 +16,10 @@ from trophies.models import (
 # ---------------------------------------------------------------------------
 # Active-filter chips (GameSearchForm) — dismissable pills of the applied CONTENT
 # filters (the ones hidden in the collapsed panel), each with a remove-URL. Search
-# (query) and SCOPE (platform/sort/page/view) are excluded — the search field owns
-# query; scope isn't a "filter" chip. REGIONS graduated from scope to a chip with
+# (query) and sort/page/view are excluded — the search field and the sort select show
+# those. PLATFORM graduated to a chip on 2026-10-22 (DS-01): Browse Games stopped binding
+# an invisible PS4 + PS5 default, so a platform the hunter picks must be visible beside the
+# results, or the same search silently answers differently. REGIONS graduated from scope to a chip with
 # the condensed catalogue (final-audit #7): the card lost its region chips and its
 # platform row shows the WORK's union, so an applied ?regions= had no visible
 # representation anywhere on the results.
@@ -40,16 +42,23 @@ _CHIP_SLIDERS = [
     ('igdb_time_min', 'igdb_time_max', 0, 1000, 'IGDB time', 'h'),
     ('community_time_min', 'community_time_max', 0, 1000, 'Time-to-beat', 'h'),
 ]
-_CHIP_MULTI = ('genres', 'themes', 'contract_jobs', 'regions')
+_CHIP_MULTI = ('platform', 'genres', 'themes', 'contract_jobs', 'regions')
 
 
-def get_active_filter_chips(request, form):
-    """Return {'filter_chips': [{label, remove_url}], 'filter_clear_url': str} for the applied content
-    filters. remove_url / filter_clear_url are urlencoded querystrings (page reset to 1), consumed as
+def get_active_filter_chips(request, form, drawer_skip=()):
+    """Return {'filter_chips': [{label, remove_url}], 'filter_clear_url': str, 'filter_open_count': int} for
+    the applied filters.
+
+    `filter_open_count` is the server's half of "does the filter drawer open on load"
+    (`drawer_precollapse.html`); the page's `PlatPursuit.filterPanel({skip})` is the client's half, and the
+    two must agree or the drawer jumps after paint. `drawer_skip` names the multi-select keys the page's
+    script does not count: Browse Games passes ('platform', 'regions'), because a hunter's saved browse
+    defaults usually carry them and counting them would open the drawer on every landing. Their chips still
+    SHOW (DS-01); they just do not open the drawer. remove_url / filter_clear_url are urlencoded querystrings (page reset to 1), consumed as
     `?{{ url }}`. Each remove drops one filter (one value for multi-selects); Clear all drops them all but
-    keeps the search query + scope. Rendered as chips + OOB-updated on filter swaps."""
+    keeps the search query, sort and view. Rendered as chips + OOB-updated on filter swaps."""
     if not form.is_valid():
-        return {'filter_chips': [], 'filter_clear_url': ''}
+        return {'filter_chips': [], 'filter_clear_url': '', 'filter_open_count': 0}
     cd = form.cleaned_data
     params = request.GET
 
@@ -90,7 +99,12 @@ def get_active_filter_chips(request, form):
 
     content_keys = list(_CHIP_BOOL_LABELS) + ['letter', 'engine', *_CHIP_MULTI] \
         + [k for s in _CHIP_SLIDERS for k in (s[0], s[1])]
-    return {'filter_chips': chips, 'filter_clear_url': _remove_key(*content_keys)}
+    skipped = sum(len(cd.get(key) or []) for key in drawer_skip)
+    return {
+        'filter_chips': chips,
+        'filter_clear_url': _remove_key(*content_keys),
+        'filter_open_count': len(chips) - skipped,
+    }
 
 
 # ---------------------------------------------------------------------------

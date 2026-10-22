@@ -23,7 +23,8 @@
             toggle: '#tlb-filters-toggle',
             panel: '#tlb-advanced',
             countEl: '#tlb-filter-count',
-            // Platform/regions have NO default here (unlike Browse Games), so they ARE filters.
+            // Platform/regions count here: nothing pre-fills them. Browse Games skips them only because saved
+            // browse defaults carry them. Matches the server's default `drawer_skip=()`.
             skip: { page: 1, view: 1, sort: 1, query: 1 },
         });
     }

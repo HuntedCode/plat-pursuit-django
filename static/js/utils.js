@@ -887,10 +887,10 @@ function filterPanel(opts) {
     }
 
     // Counts SET values, minus the ones that are display state rather than filtering (sort, view, the
-    // search box, pagination) and minus any scope selector the page pre-fills -- Browse Games always
-    // carries a platform default from its saved-defaults redirect, and counting that would show a
-    // permanent "2" and auto-open the drawer on every landing. A range parked at its own min/max is not
-    // a filter either.
+    // search box, pagination) and minus whatever the page's `skip` names -- Browse Games skips platform
+    // and regions, which a hunter's saved browse defaults usually carry, so the drawer does not open on
+    // every landing (their chips still show). The server's `get_active_filter_chips(drawer_skip=...)` must
+    // skip the same keys. A range parked at its own min/max is not a filter either.
     function defaultCount() {
         var n = 0;
         new FormData(form).forEach(function (value, key) {

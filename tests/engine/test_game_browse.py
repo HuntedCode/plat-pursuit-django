@@ -17,6 +17,7 @@ from django.utils import timezone
 
 from tests.factories import (
     BadgeSeriesFactory,
+    ConceptFactory,
     GroupBadgeFactory,
     PlatformGroupFactory,
     GameFactory,
@@ -312,6 +313,7 @@ def test_card_shows_badges_and_contract(client):
     assert 'pp-gcard__badges-n' in content   # the count element (not the placeholder)
     assert 'Hooked Contract' in content      # the contract chip
     assert 'No contract' not in content      # placeholder replaced by the real chip
+    assert '6,000 XP' in content and '6000 XP' not in content   # thousands separator, as Career writes it (DS-14)
 
 
 def test_card_dlc_tag_shows_pack_count(client):
@@ -365,8 +367,8 @@ def test_card_footer_shows_platform_without_players(client):
 
 
 def test_active_filter_chips_render(client):
-    """Applied content filters show as dismissable chips + a Clear all; a platform-only (scope) page shows
-    none (search + platform/regions/sort are excluded from chips)."""
+    """Applied filters show as dismissable chips + a Clear all, platform included since it stopped being an
+    invisible default (DS-01): a platform-only page shows that platform's chip and nothing else."""
     GameFactory(title_name='Chip Game', title_platform=['PS5'])
 
     filtered = client.get(reverse('games_list'),
@@ -376,19 +378,21 @@ def test_active_filter_chips_render(client):
     assert 'In a badge' in filtered
     assert 'Clear all' in filtered
 
-    scope_only = client.get(reverse('games_list'), {'platform': 'PS5'}).content.decode()
-    assert 'Clear all' not in scope_only          # no content filters -> no chips
-    assert 'Has platinum' not in scope_only
+    platform_only = client.get(reverse('games_list'), {'platform': 'PS5'}).content.decode()
+    chips = platform_only.split('id="gbrowse-active-filters"')[1].split('</div>')[0]
+    assert 'PS5' in chips, 'the chosen platform is not visible beside the results'
+    assert 'Has platinum' not in platform_only
 
 
 def test_active_filter_chip_remove_url_drops_only_that_filter():
-    """Each chip's remove_url drops its own filter (+ resets page) but keeps the others; Clear all drops all
-    content filters while keeping scope (platform)."""
+    """Each chip's remove_url drops its own filter (+ resets page) but keeps the others; Clear all drops every
+    filter, platform included (a chip since DS-01), and keeps the search query."""
     from django.test import RequestFactory
     from trophies.forms import GameSearchForm
     from trophies.views.browse_helpers import get_active_filter_chips
 
-    req = RequestFactory().get('/games/', {'platform': 'PS5', 'show_only_platinum': 'on', 'in_badge': 'on'})
+    req = RequestFactory().get('/games/', {'platform': 'PS5', 'show_only_platinum': 'on', 'in_badge': 'on',
+                                           'query': 'jak'})
     result = get_active_filter_chips(req, GameSearchForm(req.GET))
 
     labels = {c['label']: c for c in result['filter_chips']}
@@ -399,7 +403,9 @@ def test_active_filter_chip_remove_url_drops_only_that_filter():
     assert 'page=1' in plat_remove                   # page reset
     assert 'show_only_platinum' not in result['filter_clear_url']   # Clear all drops content filters
     assert 'in_badge' not in result['filter_clear_url']
-    assert 'platform=PS5' in result['filter_clear_url']             # ...but keeps scope
+    assert 'platform' not in result['filter_clear_url']             # ...and the platform
+    assert 'query=jak' in result['filter_clear_url']                # but keeps the search
+    assert 'PS5' in labels and 'platform=PS5' not in labels['PS5']['remove_url']
 
 
 def test_genre_chip_shows_name_not_id(client):
@@ -631,15 +637,16 @@ def test_exact_multiple_last_page_says_no_next(client):
     assert resp['X-Has-Next'] == '0'
 
 
-def test_bare_games_renders_defaults_in_place(client):
-    """A bare /games/ renders the modern-platform default view as a 200 (SEO Lane 1: the old
-    force-302 meant the hub's canonical URL never returned a page). The defaults still apply --
-    the form binds them and the template surfaces them via history.replaceState. The signed-in
-    saved-defaults redirect survives, pinned in test_seo_lane1."""
+def test_bare_games_renders_everything_in_place(client):
+    """A bare /games/ is a 200 (SEO Lane 1: the old force-302 meant the hub's canonical URL never
+    returned a page) and filters NOTHING (DS-01): a PS3 game is on it. It used to bind PS4 + PS5
+    invisibly, so the same search found 11 games from a link and 3 from the page's own box. The
+    signed-in saved-defaults redirect survives, pinned in test_seo_lane1."""
+    GameFactory(concept=ConceptFactory(unified_title='Old Gen Game'), title_name='Old Gen Game', title_platform=['PS3'])
     resp = client.get(reverse('games_list'))
 
     assert resp.status_code == 200
-    assert 'history.replaceState' in resp.content.decode()
+    assert 'Old Gen Game' in resp.content.decode()
 
 
 def test_site_heartbeat_has_catalog_coverage():

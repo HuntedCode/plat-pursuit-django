@@ -104,6 +104,36 @@ Also decided: the action names are **Sign in / Sign up / Sign out**, sentence ca
 `tests/engine/test_action_names.py`). A newcomer is **Pursuer Level 1**: the level counts levels gained,
 with ranks and rungs moved down 25 and no announcement (DL-04, 2026-10-21).
 
+## Discovery fix plan
+
+Agreed with the owner on 2026-10-22, after the [Discovery](discovery.md) review and the
+[Page Principles](../page-principles.md). The first pages built under the principles: the owner reviewed live
+mock-ups (the real dev pages rearranged in a browser) at phone and desktop before any of it was built. Run in
+this order:
+
+| # | Branch | Covers | Shape |
+|---|--------|--------|-------|
+| 1 | Quick fixes (`fix/discovery-quick-fixes`) | DS-01, DS-03, DS-05, DS-10, DS-12, DS-13 (breadcrumb), DS-14 | Browse Games binds no default filter and opens on Trending; a chosen platform shows as a chip; the franchise and company grid stops widening the page; rate labels on phones; the search button names what it searches; a list named after its game reads "PS4 trophy list"; "6,000 XP". Done |
+| 2 | Total players (`feature/models/concept-player-count`) | DS-08 | Each player counted once per game (distinct profiles across its lists), stored on the concept and refreshed nightly, the `Genre.player_count` pattern. Cards and the game page both read it, so neither double-counts a hunter who owns two versions |
+| 3 | Browse pass (`feature/ui/browse-pass`) | DS-02, DS-04, DS-06 | No stat tiles on the six browse list pages, one count that matches the grid; detail pages fold their tiles into one line. One card anatomy (title with two lines reserved, one hooks row that keeps its height, footer pinned); the hunter's mark on the cover; the trophy breakdown only on single-list cards, platforms on every card. Two-row phone toolbar. Breadcrumbs hidden on phones site-wide |
+| 4 | Game page pass (`feature/ui/game-page-pass`) | DS-07, DS-09, DS-13 (family row) | The hunter's status card; the platinum's rarity in a side panel; Share / Add to list / Report an issue on the first screen at equal weight; desktop in three columns (cover, story, two equal side panels); a phone thumbnail; facts into About; trophy list picker cards that can be told apart. The trophy list page's hero follows in the same branch |
+| 5 | Franchise art (`fix/franchise-cover-art`) | DS-11 | A franchise's card art comes from its own games, not a crossover it appears in |
+
+**Owner decisions** (2026-10-22):
+
+- **DS-01:** no default filter. **DS-05:** Trending first. **DS-08:** total players, each counted once.
+- **Breadcrumbs** are hidden on phones everywhere: the sub-nav already says where you are, and the
+  `BreadcrumbList` schema is generated separately (`core/templatetags/seo_tags.py`), so search is unaffected.
+- **Trophy breakdown** (19 / 10 / 5 / 1) stays on cards that are one trophy list and leaves cards for a whole
+  game; **platforms** are on every card.
+- **The game page's corner number** is the platinum's rarity ("Very Rare platinum 9.1%"), no "of players earn
+  it" line; the player count joins the one-line facts.
+- **Share, Add to list and Report an issue** stay on the first screen at equal weight. Hiding a button kills
+  its use; this became the "Actions are not depth" line in the Page Principles.
+- **Desktop layout must line up**: repeated cards share one anatomy, and panels side by side share a width,
+  a height and their neighbours' edges. Written into [design-system.md](../../reference/design-system.md) by
+  the browse pass.
+
 ## Page Principles re-pass
 
 The [Page Principles](../page-principles.md) were agreed on 2026-10-22, after First Visit and Daily loop had been

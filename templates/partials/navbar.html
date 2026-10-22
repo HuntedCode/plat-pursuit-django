@@ -58,12 +58,13 @@ data-nav-* hooks + the #nav-sync data-url-* attrs. The sync-search dropdown keep
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"/></svg>Support Us</a>
     </div>
 
-    {% comment %} PSN profile search: a persistent typeahead bar on md+ that collapses to an icon
-    trigger below md (navbar-search.js drives it: #navbar-sync-form + data-search-* hooks for the
-    typeahead over tracked profiles, and the .add-sync-* hooks for the add-and-sync fallback). {% endcomment %}
+    {% comment %} Site search: a persistent typeahead bar on md+ that collapses to an icon trigger
+    below md (navbar-search.js drives it: #navbar-sync-form + data-search-* hooks for the typeahead
+    over games, badges, franchises and hunters, and the .add-sync-* hooks for the add-and-sync
+    fallback). The trigger's label names what the box searches, same as the input's (DS-12). {% endcomment %}
     <div class="pp-navsearch" id="navbar-search">
         {# Mobile trigger: opens the bar as a sheet below the nav (hidden on md+). #}
-        <button type="button" class="pp-navsearch__trigger md:hidden" id="navbar-sync-search-btn" aria-label="Search PSN profiles" aria-expanded="false" aria-controls="navbar-sync-form">
+        <button type="button" class="pp-navsearch__trigger md:hidden" id="navbar-sync-search-btn" aria-label="Search games, badges, and hunters" aria-expanded="false" aria-controls="navbar-sync-form">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
         </button>
 
