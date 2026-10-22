@@ -91,7 +91,9 @@ Each version row shows:
 
 - **Anonymous / no profile**: trophy count strip (bronze/silver/gold/platinum)
 - **Logged in with progress**: compact conic-gradient progress ring with the percentage inside, plus a platinum icon if earned
-- **Logged in, no progress on this version**: small "UNPLAYED" label
+- **Logged in, no progress on this version**: small "UNPLAYED" label, but only when the hunter owns at
+  least one game on the page. Owning none, they get the anonymous view: no panel of zeros and no column of
+  "UNPLAYED" (Page Principles rule 3, 2026-10-22).
 
 ### Game Detail About Card
 

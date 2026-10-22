@@ -373,7 +373,10 @@ def compute_user_progress_stats(
         profile: The viewer's Profile (truthy gate — returns None when falsy).
 
     Returns:
-        dict | None: The stat dict, or None when ``profile`` is falsy.
+        dict | None: The stat dict, or None when ``profile`` is falsy OR the viewer owns none of the
+        games in ``groups``. A panel of zeros ("0%, 0/5 played, 0 trophies earned") says only what the
+        hunter has not done, which is absence shown as content (Page Principles rule 3); the page
+        drops the panel instead.
     """
     if not profile:
         return None
@@ -386,6 +389,8 @@ def compute_user_progress_stats(
     scoped_progress = {
         gid: pg for gid, pg in user_progress_map.items() if gid in in_scope_ids
     }
+    if not scoped_progress:
+        return None
     trophies_earned = sum(pg.earned_trophies_count or 0 for pg in scoped_progress.values())
     completion_pct = round((trophies_earned / total_trophies) * 100) if total_trophies else 0
 

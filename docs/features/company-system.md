@@ -9,7 +9,9 @@ The company pages closely mirror the franchise pages both visually and architect
 Three notable departures from the franchise pattern, each driven by what companies actually are:
 
 1. **Four roles (Developed / Published / Ported / Supporting Development) are split across tabs**, mirroring the franchise detail tab pattern. The original design stacked them as vertical sections with an anchor-link strip, but the role boundary was hard to perceive when scrolling quickly through a long catalog (you'd lose track of which role you were looking at). Tabs make the active role unambiguous. Only populated roles get a tab, and a single-role company skips the bar entirely and shows its games directly. The tab bar is rendered in `company_detail.html`; the active role's body (sort toolbar + grouped game list) lives in `partials/company_detail/tab_content.html` and is the HTMX swap target for both tab switches and sort changes.
-2. **Community Stats are preserved as a second header strip.** Franchise pages dropped company-wide community ratings (they don't apply). Companies do — "these devs make hard games" is real signal. When a logged-in user views a company page, they see "Your Progress" cells AND "Community Stats" cells stacked in the hero, both always visible.
+2. **Community Stats are preserved as a second header strip.** Franchise pages dropped company-wide community ratings (they don't apply). Companies do: "these devs make hard games" is real signal. When a logged-in user views a company page, they see "Your Progress" cells AND "Community Stats" cells stacked in the hero. "Your Progress" shows only
+when they own at least one of the company's games (see below); Community Stats show whenever the company's games
+have ratings.
 3. **Country display uses flag emojis + name.** IGDB stores country as ISO 3166-1 numeric codes (840, 392, 826). The browse card and detail header render these as "🇺🇸 United States" via the `Company.country_display` property, which delegates to `trophies/util_modules/countries.py`. Unknown codes render as empty (falls back gracefully).
 
 ## File Map
@@ -71,7 +73,7 @@ When `request.user.profile` exists, `fetch_user_progress_map` builds `{game_id: 
 
 `compute_user_progress_stats` then derives the franchise-wide stat dict (`games_played`, `versions_played`, `trophies_earned`, `games_platinumed`, `completion_pct`) scoped across all roles — a game you platinumed counts once regardless of whether the company is credited as developer, publisher, or both.
 
-Anonymous users (or users without a linked profile) get `user_progress_stats = None`, and the hero shows the totals-only view.
+Anonymous users (or users without a linked profile) get `user_progress_stats = None`, and the hero shows the totals-only view. So does a signed-in hunter who owns none of the company's games (2026-10-22): a panel of zeros says only what they have not done (Page Principles rule 3), so it is left out. Franchise detail shares the function and the rule.
 
 ## Integration Points
 

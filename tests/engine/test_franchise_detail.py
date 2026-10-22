@@ -131,6 +131,36 @@ def test_authed_your_progress_block(client):
     assert 'fgroup__ring' in content              # per-version progress ring (authed toggle)
 
 
+def test_a_hunter_with_none_of_its_games_gets_no_zero_panel(client):
+    """Signed in, owning nothing in the franchise: the panel read "0%, 0/1 played, 0 trophies earned, 0
+    platinums", which says only what the hunter has not done (Page Principles rule 3). It is left out."""
+    fr = _franchise('Ratchet', 'ratchet')
+    _member(fr, 'Ratchet & Clank')
+    profile = ProfileFactory()
+    ProfileGameFactory(profile=profile, game=GameFactory(title_platform=['PS5']))   # owns something, elsewhere
+
+    client.force_login(profile.user)
+    content = client.get(reverse('franchise_detail', kwargs={'slug': fr.slug})).content.decode()
+
+    assert 'Your progress' not in content and 'class="fr-prog"' not in content
+    # ...and no column of "Unplayed" either: the version rows read as they do signed out.
+    assert 'Unplayed' not in content and 'fgroup__ring' not in content
+
+
+def test_owning_a_game_with_nothing_earned_still_gets_the_panel(client):
+    """The boundary: owning counts, earning does not. A hunter with the game in their library at 0% has
+    started something here, and the panel says so ("1/1 played")."""
+    fr = _franchise('Sackboy', 'sackboy')
+    _, game = _member(fr, 'Sackboy: A Big Adventure')
+    profile = ProfileFactory()
+    ProfileGameFactory(profile=profile, game=game, progress=0, earned_trophies_count=0)
+
+    client.force_login(profile.user)
+    content = client.get(reverse('franchise_detail', kwargs={'slug': fr.slug})).content.decode()
+
+    assert 'class="fr-prog"' in content
+
+
 def test_anon_has_no_progress_block(client):
     fr = _franchise('God of War', 'god-of-war')
     _member(fr, 'God of War')

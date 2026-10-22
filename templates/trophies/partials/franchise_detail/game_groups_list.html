@@ -7,8 +7,9 @@
 
     Required context:
       - groups: iterable of group dicts (see FranchiseDetailView.get_context_data / build_igdb_groups)
-      - user_progress_stats: truthy when the viewer has a linked profile (toggles the per-row progress ring
-        vs. a trophy-count-only display)
+      - user_progress_stats: truthy when the viewer has a linked profile AND owns at least one of these
+        games (toggles the per-row progress ring / "Unplayed" vs. a trophy-count-only display). A hunter who
+        owns none sees the counts only: a column of "Unplayed" says nothing but what they have not done.
       - empty_message: text shown when the list is empty
       - group_reveal: set truthy by a page that runs staggerReveal on .fgroup (franchise detail AND company
         detail both do). A page that includes this partial WITHOUT reveal JS must leave it unset, or the cards

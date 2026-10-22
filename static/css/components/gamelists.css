@@ -1139,7 +1139,10 @@
    It hid well: below 520 the phone rule (already two classes) wins, and above ~768 the sort stops
    growing so the adder takes the slack anyway. Only 520-767 showed it, which is no viewport anybody
    was looking at. The test asserted the DECLARATION was in the file, which was true and proved
-   nothing about the cascade. */
+   nothing about the cascade.
+   That was while the adder was the bar's child. Since `parkAdder()`'s home wraps it (see "BELOW 768"
+   below), the shared child selector does not match it at all; the `.gl-toolbar` qualification is now
+   what keeps this rule on this page, and the home's `display: contents` is what makes it apply. */
 .gl-toolbar .gl-adder {
     /* Takes the bar's slack. At the shared 200px basis this sat roughly level with the sort select;
        the larger basis makes it the widest thing in the row wherever there is room, and the bar's
@@ -1187,23 +1190,22 @@
     box-shadow: 0 0 0 3px color-mix(in oklab, var(--pp-primary) 22%, transparent);
 }
 
-/* ON A PHONE THE ADDER TAKES ITS OWN ROW, beneath the title and the sort. Owner's call: with all
-   three controls competing for one line, the adder is squeezed to a few characters and the row reads
-   as three equal fragments rather than a label, a view control and an action.
+/* BELOW 768 THE ADDER TAKES ITS OWN ROW, beneath the title and the sort. Owner's call: with all three
+   controls competing for one line, the adder is squeezed to a few characters and the row reads as three
+   equal fragments rather than a label, a view control and an action.
  *
- * `order` does it, with the shared bar's wrap and a growing sort. The sort needs one restatement here:
- * below 768 `game-browse.css` gives every bar's sort a ZERO basis (the browse pass, so search + sort +
- * buttons share row two), and a zero-basis sort never forces a wrap, it takes what the row leaves. On
- * this bar that is beside the title and the adder's home: 10px at 375, measured. `auto` keeps the
- * sort's own width as its basis, so it wraps to a row of its own as it always had.
+ * THE ADDER'S HOME IS NOT A BOX. `[data-gl-adder-home]` is the slot `parkAdder()` returns the adder to
+ * (list-detail.js), so it wraps the adder in the bar -- and as a plain block it became the flex item in
+ * the adder's place, so neither this rule nor `.gl-toolbar .gl-adder`'s 420px basis above applied to
+ * anything from the day it was added. `display: contents` takes the slot out of layout and leaves it in
+ * the DOM, which is all parking needs; the adder is the flex item again. Scoped to `.gl-toolbar` (a list
+ * with items): an empty list's bar is the title and the adder, which fit one line as they are.
  *
- * 599/600, AND NOT THIS FILE'S USUAL 519/520, because the arithmetic that chose 519 was measured
- * against the wrong box. The flex container is the toolbar card's CONTENT box, which is the viewport
- * less 32px of page gutter and 28px of card padding -- so the ~531px this row needs (title ~64 +
- * sort ~131 + the adder's 320px basis + two 8px gaps) wants a ~591px VIEWPORT, not a 526px one.
- * At 519/520 the band from 520 to ~585 would have put the adder back on row one and left the sort
- * alone on row two as a 460px-wide select reading "A-Z". That was invisible only because the basis
- * above was losing the cascade; fixing one without the other would have shipped it.
+ * 767/768, THE SITE'S md BREAKPOINT, AND NOT 599/600. 599 was worked out for a 320px adder basis; at the
+ * owner's 420px (2026-09) the row needs ~650px of content box, a ~710px viewport, so 600 to ~705 put the
+ * adder on row one and stranded the sort alone on row two as a 520-620px select reading "A-Z" (measured on
+ * the built CSS). Nobody saw it because the rule was not applying. Below 768 the title and the sort share
+ * row one (the sort grows to fill it) and the adder has row two; from 768 all three fit one line.
  *
  * ONE TRADE, stated rather than hidden: this moves the adder visually AFTER the sort while leaving it
  * BEFORE in the DOM, so a keyboard user on a narrow viewport tabs to the adder (row two) before the
@@ -1211,11 +1213,9 @@
  * position -- so operability is preserved, which is the bar WCAG 2.4.3 actually sets. The only
  * mismatch-free alternative is reordering the DOM, which would move the adder behind the sort on
  * DESKTOP too, undoing the prominence it was just given. */
-@media (max-width: 599px) {
-    .gl-toolbar .gl-adder { order: 1; flex: 1 1 100%; }
-}
+.gl-toolbar [data-gl-adder-home] { display: contents; }
 @media (max-width: 767px) {
-    .gl-toolbar .pp-gbrowse__sort { flex-basis: auto; }
+    .gl-toolbar .gl-adder { order: 1; flex: 1 1 100%; }
 }
 
 /* An OVERLAY, like `.pp-navsearch__panel` and `.gd-lb__suggest`. In flow it pushed the whole grid
