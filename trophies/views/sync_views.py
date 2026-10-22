@@ -59,9 +59,12 @@ def _claimable(profile):
     still accept it.
 
     NOT also gated on `account_id`, though it looks like a guard against typos: a name PSN does not know is
-    DELETED when its first sync fails (`Profile.set_sync_status('error')` drops a row with no `account_id`), so
-    an empty `account_id` only ever means "still in the sync queue". Gating on it hid the claim from real
-    hunters who searched twice while the queue was busy (audit-caught, after it was added)."""
+    normally DELETED when its first sync fails (`Profile.set_sync_status('error')` drops a row with no
+    `account_id`), so an empty `account_id` almost always means "still in the sync queue", and gating on it hid
+    the claim from real hunters who searched twice while the queue was busy (audit-caught, after it was added).
+    The exception: a first sync cut short by a PSN outage is set `synced` by the outage recovery, not deleted,
+    so a typo searched during an outage stays claimable until the unregistered sweep refreshes it. Link PSN's
+    own lookup still refuses a name PSN does not know, so the cost is a wasted sign-up, not a wrong link."""
     return profile.user_id is None
 
 

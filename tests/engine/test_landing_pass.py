@@ -173,9 +173,9 @@ def test_the_name_survives_fix_it(client, settings):
     assert 'value="fixer"' in _prefilled(client.get(reverse('link_psn')).content.decode())
 
 
-def test_a_claim_never_reaches_another_account_on_a_shared_browser(client, settings):
-    """A claims "alice" on a library PC and confirms on their phone, never signing in here. B then signs up (or
-    signs in) on that PC: B's Link PSN must not arrive with "alice" in it."""
+def test_a_claim_never_reaches_someone_who_signs_up_next_on_a_shared_browser(client, settings):
+    """A claims "alice" on a library PC and confirms on their phone, never signing in here. B then signs up on
+    that PC: B's Link PSN must not arrive with "alice" in it."""
     _sign_up_claiming(client, settings, 'alice')
     from users.models import CustomUser
     client.post(reverse('account_signup'), {'email': 'b@example.com', 'password1': 'a-long-test-passphrase-52'})
@@ -183,8 +183,28 @@ def test_a_claim_never_reaches_another_account_on_a_shared_browser(client, setti
 
     assert 'value=""' in _prefilled(client.get(reverse('link_psn')).content.decode())
 
-    signed_in = UserFactory()   # and someone who only signs in
-    client.force_login(signed_in)
+
+def test_a_claim_never_reaches_someone_who_only_signs_in_on_a_shared_browser(client, settings):
+    """Nobody is signed in after A's claim, so a stranger's sign-in KEEPS the session data (Django only flushes
+    when a different user was signed in): the claim's own owner check is the only thing that stops it."""
+    _sign_up_claiming(client, settings, 'alice')
+    client.force_login(UserFactory())
+    assert client.session.get('pp_claimed_psn', {}).get('name') == 'alice', 'the session was wiped: proves nothing'
+
+    assert 'value=""' in _prefilled(client.get(reverse('link_psn')).content.decode())
+
+
+def test_someone_elses_fix_it_does_not_hand_them_the_claim(client, settings):
+    """A claims "alice" and leaves; C signs up on the same browser, mistypes, and presses Fix it. Releasing the
+    claim without checking whose it was made C's next sign-up adopt "alice" (audit-caught)."""
+    _sign_up_claiming(client, settings, 'alice')
+    from users.models import CustomUser
+    client.post(reverse('account_signup'), {'email': 'c-typo@example.com', 'password1': 'a-long-test-passphrase-52'})
+    client.post(reverse('account_verification_fix'))
+    assert not CustomUser.objects.filter(email='c-typo@example.com').exists(), 'Fix it did not run'
+    client.post(reverse('account_signup'), {'email': 'c@example.com', 'password1': 'a-long-test-passphrase-52'})
+    client.force_login(CustomUser.objects.get(email='c@example.com'))
+
     assert 'value=""' in _prefilled(client.get(reverse('link_psn')).content.decode())
 
 

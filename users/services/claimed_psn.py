@@ -11,7 +11,8 @@ THE RECORD BELONGS TO THE ACCOUNT THAT CLAIMED IT. A browser can be shared: the 
 confirm on their phone and never sign in here, and the next person to sign up or sign in on this browser must not
 find "alice" waiting. So the record carries the user it was made for, and only that user is shown it. "Fix it"
 deletes that account and reopens sign-up, so it RELEASES the record (`release`), and the next sign-up on this
-browser adopts it: the one hand-over, made on purpose rather than by any later sign-up inheriting it.
+browser adopts it: the one hand-over, made on purpose rather than by any later sign-up inheriting it. Only the
+claiming account's own Fix it releases it: a different person's Fix it on the same browser leaves it alone.
 
 Not part of `pending_signup`'s record on purpose: that one is forgotten at sign-in, and this one is needed after.
 """
@@ -45,10 +46,12 @@ def remember(request, user):
         request.session[SESSION_KEY] = {'name': record['name'], 'user_id': user.pk}
 
 
-def release(request):
-    """Fix it deleted the account this record was made for: let the next sign-up on this browser adopt it."""
+def release(request, deleted_user_id):
+    """Fix it deleted `deleted_user_id`. If this record was made for that account, let the next sign-up on this
+    browser adopt it. A record made for anyone else stays theirs: on a shared browser, C fixing C's own typo must
+    not hand A's claim to C's next sign-up (audit-caught)."""
     record = request.session.get(SESSION_KEY)
-    if isinstance(record, dict) and record.get('name'):
+    if isinstance(record, dict) and record.get('name') and record.get('user_id') == deleted_user_id:
         request.session[SESSION_KEY] = {'name': record['name'], 'user_id': None}
 
 

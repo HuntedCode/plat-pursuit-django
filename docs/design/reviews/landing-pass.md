@@ -54,12 +54,15 @@ Options:
   was one too many.
 - **`claimable` is `profile.user_id is None`**, the link flow's own rule (`_claimed_by_someone_else`); `user` is
   only set when verification succeeds, so a profile mid-link stays claimable, as Link PSN would. An
-  `account_id` gate was tried and removed: a name PSN does not know is deleted when its first sync fails
-  (`Profile.set_sync_status('error')`), so an empty `account_id` only means "still queued", and the gate hid the
-  claim from real hunters who searched twice while the queue was busy.
+  `account_id` gate was tried and removed: a name PSN does not know is normally deleted when its first sync
+  fails (`Profile.set_sync_status('error')`), so an empty `account_id` almost always means "still queued", and
+  the gate hid the claim from real hunters who searched twice while the queue was busy. The exception is a first
+  sync cut short by a PSN outage (set `synced`, not deleted): a typo searched then stays claimable until the
+  unregistered sweep, and Link PSN's own lookup still refuses it.
 - **The session's claimed name belongs to the account that claimed it.** On a shared browser the claimer may
   confirm on their phone and never sign in here; the next person to sign up or sign in must not find the name.
-  "Fix it" deletes the claiming account, so it releases the record and the next sign-up adopts it.
+  "Fix it" deletes the claiming account, so it releases the record and the next sign-up adopts it; only that
+  account's own Fix it does, so a different person fixing their typo on the same browser cannot inherit it.
 - **Link PSN's prefill** reads `?psn=`, else the session's claimed name, and is used only when `LinkPSNForm`
   itself accepts it; anything else is dropped silently. The claim link carries the server's lowercased name.
   The session's name is forgotten once step 1 is submitted.

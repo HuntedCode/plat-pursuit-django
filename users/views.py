@@ -88,11 +88,12 @@ def resend_verification(request):
 
 @require_POST
 def fix_signup_address(request):
+    record = pending_signup.pending(request)   # read before discard forgets it: whose account is about to go
     email = pending_signup.discard(request)
     if email is None:
         return redirect('account_email_verification_sent')
-    # The landing's claim was made for the account just deleted: hand it to the sign-up this reopens.
-    claimed_psn.release(request)
+    # A landing claim made by the account just deleted goes to the sign-up this reopens (and nobody else's does).
+    claimed_psn.release(request, record['user_id'])
     messages.info(request, 'No problem. Enter the right address and we will send a fresh link.')
     return redirect(f"{reverse('account_signup')}?{urlencode({'email': email})}")
     
