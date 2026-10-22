@@ -51,11 +51,19 @@ Absence is silence. No "No badges", no "Not on the Job Board", no tile of zeros.
 something to say. The one exception is an empty state that offers an action ("No games match. Clear filters",
 "Be the first to rate this").
 
-### 4. Cards preview, pages hold the depth
+### 4. Depth on demand
 
-A card answers "is this the one I want?" and nothing more: art, title, the hunter's mark (rule 1), and at most
-two facts that help choose. Everything else lives on the detail page, one tap away. When a card grows a row,
-ask whether that fact helps someone choose from a grid of 30.
+Hunters love the extras: the stats, the rarity maths, the breakdowns. They stay, all of them. They just stop
+being always on screen. Every surface keeps its job in front and its depth one tap or one scroll behind it:
+
+- **A card previews.** It answers "is this the one I want?" and nothing more: art, title, the hunter's mark
+  (rule 1), and at most two facts that help choose. Everything else lives on the detail page, one tap away.
+  When a card grows a row, ask whether that fact helps someone choose from a grid of 30.
+- **A page leads with its job, and keeps the rest below it or behind a tap**: a tab, an expanding section, a
+  "More stats" row, a modal. The game page's About tab is the pattern: the facts are all there, and none of
+  them stand between the hunter and their trophies.
+- **Depth is findable.** Hiding something means putting it where a curious hunter looks next, with a label
+  that says what is there. "Behind a tap" never means "gone".
 
 ### 5. A number counts what its label says, and agrees with the page
 
@@ -83,7 +91,7 @@ For a new page, a change, or a review pass:
 - [ ] Signed in: does the first screen say where the hunter stands on this page's subject?
 - [ ] What is this page's job, in one sentence? Does the 375px first screen show it working?
 - [ ] Is any row, tile or chip saying that something is absent?
-- [ ] Does each card carry only what helps choose it?
+- [ ] Does each card carry only what helps choose it, and does the page keep its extras behind its job?
 - [ ] Does every number count what its label says, and match its twin elsewhere?
 - [ ] Is every default that filters or orders the content visible next to the content?
 - [ ] For anything added: what did it replace?

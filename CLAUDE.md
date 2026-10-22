@@ -8,7 +8,7 @@ All pages should be designed with the "Platinum Pursuit Standard" in mind: Profe
 
 The full visual constitution lives in **[docs/design/visual-identity.md](docs/design/visual-identity.md)**: brief, six adjectives (prestigious, exploratory, rewarding, modern, charming, earnest), four signature primitives (Frame, Pursuer Card, Horizon, Tally), and explicit anti-references. Consult it before any non-trivial visual work. The companion **[docs/design/product-identity.md](docs/design/product-identity.md)** is the strategic frame that visual-identity.md serves.
 
-What a page shows, and in what order, is governed by **[docs/design/page-principles.md](docs/design/page-principles.md)** (2026-10): the signed-in hunter is the focal point, one job per page leads, absence is never shown as content, cards preview while pages hold the depth, numbers count what they say, defaults are visible, and adding means replacing. Run its checklist on every new page and every page change.
+What a page shows, and in what order, is governed by **[docs/design/page-principles.md](docs/design/page-principles.md)** (2026-10): the signed-in hunter is the focal point, one job per page leads, absence is never shown as content, extras stay but sit behind the job (depth on demand), numbers count what they say, defaults are visible, and adding means replacing. Run its checklist on every new page and every page change.
 
 ---
 
