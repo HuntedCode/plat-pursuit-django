@@ -14,7 +14,7 @@ the hand-offs between pages.
 |-------|--------|--------|--------|
 | First visit | Anon landing, sign up / sign in, email verify, link PSN, first sync, first arrival on the lobby + Career | Reviewed 2026-10-20 | [first-visit.md](first-visit.md) |
 | Daily loop | Lobby, Career, contracts and claims | Reviewed 2026-10-20 | [daily-loop.md](daily-loop.md) |
-| Discovery | Browse games, game detail, trophy lists, search | Not started | |
+| Discovery | Browse games, game detail, trophy lists, search | Reviewed 2026-10-22 | [discovery.md](discovery.md) |
 | Challenges | The Challenges system (public since 2026-10-18) | Not started | |
 | Identity and social | Profiles, badges, leaderboards, share cards | Not started | |
 | Account | Settings, membership, fundraiser | Not started | |
@@ -104,6 +104,20 @@ Also decided: the action names are **Sign in / Sign up / Sign out**, sentence ca
 `tests/engine/test_action_names.py`). A newcomer is **Pursuer Level 1**: the level counts levels gained,
 with ranks and rungs moved down 25 and no announcement (DL-04, 2026-10-21).
 
+## Page Principles re-pass
+
+The [Page Principles](../page-principles.md) were agreed on 2026-10-22, after First Visit and Daily loop had been
+reviewed and fixed. Those two slices get a **re-pass**: the checklist only, not a fresh review, recorded as a
+"Principles re-pass" section in each record, with any new findings numbered on from the record's last ID.
+
+| Slice | Pages | Expectation | Status |
+|-------|-------|-------------|--------|
+| First visit | Landing (signed out: rules 2 to 6), sign up and link PSN (focused flows), first arrival on the lobby and Career | Small: the flows already do one job each; the landing is the place site-wide numbers belong | Not started |
+| Daily loop | Lobby, Career (Jobs, Radar, Contracts), contracts board and history, contract modal | Small to medium: branch 4 made the claim lead, but Career and the board carry many systems at once | Not started |
+
+Discovery (2026-10-22) was reviewed before the rules existed but is fixed under them: its fix plan applies
+the rules, and is the pilot.
+
 ## How a review is run
 
 1. **Judge rendered pages, not templates.** Playwright screenshots at phone (375), tablet (768) and
@@ -127,6 +141,9 @@ with ranks and rungs moved down 25 and no announcement (DL-04, 2026-10-21).
 7. **Measure before claiming.** Text size, tap targets, overflow and load time are cheap to measure in
    the browser. A finding that says "unreadable" should carry the number.
 8. **Rank findings by impact** and record each with where it lives, the evidence, and a status.
+9. **Then run the [Page Principles](../page-principles.md) checklist** on every page in the slice, signed in and
+   signed out. Second, not first: the screenshot pass finds what a visitor feels, the checklist names why and
+   catches what the eye got used to.
 
 ## Lifecycle of a finding
 
