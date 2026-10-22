@@ -4,9 +4,10 @@
     {% comment %}Condensed grids (Browse Games, tag detail -- condensed_cards set) link the
     concept GAME page and title by the concept; Recently Added and conceptless rows keep the
     List-detail link + list title (a new list is that page's point; a conceptless row has no
-    Game page). The flags overlay + played_count below stay the ELECTED row's own columns on
-    purpose: the election picks the most-played real row, so played ~= the partition max --
-    never sum siblings (auto-pop double-counts). rating/badge/DLC maps stay elected-row /
+    Game page). The flags overlay below stays the ELECTED row's own columns on purpose. The player
+    count does not: a condensed card shows the PAGE's distinct players (`players_map`, from
+    Concept.page_player_count) so it agrees with the Game page -- never a sum of siblings, which
+    double-counts a hunter who owns two versions. rating/badge/DLC maps stay elected-row /
     host-concept keyed (the Game page's recorded split-concept interim). Search matches
     title_name (the LIST) while the card displays unified_title -- same recorded divergence as
     the alpha sort; a stack-specific query can return a card whose visible title omits the
@@ -125,11 +126,15 @@
                     retired); this is the mode's own class.{% endcomment %}
                     {% if list_identity_cards %}{% if game.is_regional and game.region %}{% for r in game.region %}<span class="pp-gcard__region">{{ r }}</span>{% endfor %}{% else %}<span class="pp-gcard__region pp-gcard__region--global">Global</span>{% endif %}{% endif %}
                 </span>
-                {% if game.played_count %}
-                <span class="pp-gcard__players" title="{{ game.played_count|intcomma }} players own this game">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>{{ game.played_count|compact_number }}
+                {% comment %}A condensed card stands for the whole game page, so it shows the PAGE's players, each counted
+                once (`players_map`, DS-08): the number the Game page shows. A one-list card keeps its list's own count.{% endcomment %}
+                {% with players=players_map|dict_get:game.id|default:game.played_count %}
+                {% if players %}
+                <span class="pp-gcard__players" title="{{ players|intcomma }} players own this game">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>{{ players|compact_number }}
                 </span>
                 {% endif %}
+                {% endwith %}
             </div>
             {% endif %}
             {% endwith %}

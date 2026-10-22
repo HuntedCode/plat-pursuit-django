@@ -116,6 +116,9 @@ def build_game_card_context(page_games, request, condensed=False):
             sibling_ids_by_elected[eid] = [m[0] for m in members]
         ctx['list_count_map'] = list_count_map
         ctx['platform_union_map'] = platform_union_map
+        # The card stands for the whole PAGE here, so it shows the page's players, each counted once,
+        # the same number the Game page shows (DS-08). Zero queries: callers select_related concept.
+        ctx['players_map'] = {g.id: g.page_players for g in page_games}
 
     # User-specific game data (1 query): progress + plat state for the card's bottom-edge fill.
     # Condensed grids query over ALL partition siblings (same single query, wider id set) and
@@ -303,7 +306,7 @@ class GamesListView(HtmxListMixin, ListView):
         if form.is_valid():
             sort_val = form.cleaned_data.get('sort') or self.DEFAULT_SORT
             qs, annotations = apply_game_browse_filters(qs, form, sort_val)
-            qs, order = apply_game_browse_sort(qs, sort_val, annotations)
+            qs, order = apply_game_browse_sort(qs, sort_val, annotations, by_page=True)
         else:
             qs = annotate_ascii_name(qs)
             order = ['is_ascii_name', Lower('title_name'), 'pk']

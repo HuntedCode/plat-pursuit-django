@@ -16,21 +16,35 @@ related_tags (Genres/Themes only -- the detail-page rail): the top-`RELATED_N` O
 game co-occurrence, stored as an ordered slug list. The co-occurrence GROUP BY is the reason this is
 materialized: it scans a tag's concepts x their memberships, fine nightly but heavy per page load.
 
+Browse counts (`_recompute_counts`): Franchise/Company game + version counts, Genre/Theme game + player
+counts and ratings, and `Concept.page_player_count` (distinct players on each game page, DS-08). The player
+counts are full-table COUNT(DISTINCT profile) aggregates over ProfileGame, which is why this command widens
+its statement timeout.
+
 Idempotent -- recomputes from scratch. Run on a daily cadence (after `recalc_earn_rates`) + once at cutover.
-(Command name kept for continuity though it now covers franchises too.)
+(Command name kept for continuity though it now covers franchises and page player counts too.)
 """
 
 import hashlib
+import logging
 
 from django.core.management.base import BaseCommand
+from django.db import connection
 from django.db.models import Avg, Count, Exists, OuterRef, Q
 
 from trophies.models import (
-    Genre, Theme, Franchise, Company, Game, Contract,
+    Genre, Theme, Franchise, Company, Game, Contract, Concept, IGDBMatch, ProfileGame,
     ConceptGenre, ConceptTheme, ConceptFranchise, ConceptCompany,
 )
 from trophies.services.game_grouping_service import _MOST_RECENT_RELEASE_ORDER
 
+
+logger = logging.getLogger(__name__)
+
+# The player counts are full-table COUNT(DISTINCT profile) aggregates over ProfileGame, too long for the
+# 60s service default (and the web shell's 15s, if run by hand after a deploy). recalc_earn_rates widens
+# its connection the same way, for the same reason.
+STATEMENT_TIMEOUT_MS = 600_000  # 10 minutes per statement
 
 # A game "has real art" when it carries a genuine cover source (not merely the generic PS title icon).
 _HAS_ART = (
@@ -48,7 +62,8 @@ _FRANCHISE_COVER_FILTER = Q(
 class Command(BaseCommand):
     help = (
         "Materialize Genre/Theme/Franchise/Company.representative_game (the tile cover) + Genre/Theme."
-        "related_tags (the detail rail's co-occurring tags). Read O(1) at render."
+        "related_tags (the detail rail's co-occurring tags) + the browse counts, Concept.page_player_count "
+        "included. Read O(1) at render."
     )
 
     POOL_CAP = 50   # bound the per-grouping contract pool so the offline shuffle never scans a whole big one
@@ -75,6 +90,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **opts):
         dry = opts['dry_run']
+        self._widen_statement_timeout()
         # Correlated EXISTS (indexed on Contract.igdb_id) rather than an id IN-list, so this stays fast even
         # if the contract catalogue grows to tens of thousands.
         contract_exists = Exists(
@@ -92,6 +108,16 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(
             f"Done. {total + counts_changed} grouping row(s) {'to change' if dry else 'updated'}."
         ))
+
+    def _widen_statement_timeout(self):
+        """Raise statement_timeout for this connection only (see STATEMENT_TIMEOUT_MS)."""
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(f'SET statement_timeout = {STATEMENT_TIMEOUT_MS}')
+        except Exception:
+            # Non-fatal: a restrictive inherited timeout may still cancel an aggregate, but that
+            # surfaces as a loud QueryCanceled rather than silently stale counts.
+            logger.warning('recompute_tag_covers: could not raise statement_timeout', exc_info=True)
 
     def _recompute(self, cfg, contract_exists, dry):
         Model = cfg['model']
@@ -131,6 +157,8 @@ class Command(BaseCommand):
           page's _VISIBLE_LINK_FILTER); game_count = distinct IGDB ids (NULL ids ignored by
           COUNT DISTINCT, matching the live undercount note), version_count = distinct Games.
         - Company: same pair over ALL links (ConceptCompany has no visibility flags).
+        - Concept.page_player_count: distinct profiles across every list on the concept's game
+          page (`_page_player_rows`).
         - Genre/Theme: game_count = distinct member Games; player_count = distinct profiles
           across their ProfileGame rows (the sort that scanned the whole table per load);
           avg_rating = concept-level community average (base-game ratings only). The avg runs
@@ -167,7 +195,41 @@ class Command(BaseCommand):
             changed += self._apply_counts(
                 Model, rows, {'game_count': 'g', 'player_count': 'p', 'avg_rating': 'a'},
                 dry, float_fields=('avg_rating',))
+
+        changed += self._apply_counts(
+            Concept, self._page_player_rows(), {'page_player_count': 'p'}, dry)
         return changed
+
+    def _page_player_rows(self):
+        """{concept id: {'p': distinct players on its game page}} (DS-08, 2026-10-22).
+
+        A concept's page is the one its card links to (`Concept.game_page_url`): a TRUSTED match sends it to
+        /games/<igdb_id>/, otherwise it is its own /games/c/<id>/ page. The lists on an igdb page are what
+        `GamePageView._resolve` shows there: every list whose concept's match carries that igdb id, trusted
+        or not (membership is deliberately trust-ungated), minus blank-np rows (the view's floor). So count
+        DISTINCT profiles over exactly those lists, two grouped aggregates in all, then hand each concept its
+        page's total. Summing the lists' `played_count` instead counted a hunter who owns the PS4 and PS5
+        versions twice, which is what the game page did before this."""
+        listed = ProfileGame.objects.filter(game__np_communication_id__isnull=False).exclude(
+            game__np_communication_id='')
+        by_igdb = dict(
+            listed.filter(game__concept__igdb_match__igdb_id__isnull=False)
+            .values('game__concept__igdb_match__igdb_id')
+            .annotate(p=Count('profile', distinct=True))
+            .values_list('game__concept__igdb_match__igdb_id', 'p')
+        )
+        trusted = Q(game__concept__igdb_match__status__in=IGDBMatch.TRUSTED_STATUSES,
+                    game__concept__igdb_match__igdb_id__isnull=False)
+        rows = {
+            r['game__concept']: {'p': r['p']}
+            for r in listed.filter(game__concept__isnull=False).exclude(trusted)
+            .values('game__concept').annotate(p=Count('profile', distinct=True))
+        }
+        for concept_id, igdb_id in Concept.objects.filter(
+            igdb_match__status__in=IGDBMatch.TRUSTED_STATUSES, igdb_match__igdb_id__isnull=False,
+        ).values_list('id', 'igdb_match__igdb_id'):
+            rows[concept_id] = {'p': by_igdb.get(igdb_id, 0)}
+        return rows
 
     def _apply_counts(self, Model, rows, mapping, dry, float_fields=()):
         """Diff the aggregate results onto every Model row (a row absent from the aggregates --

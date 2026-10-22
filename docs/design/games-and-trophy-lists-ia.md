@@ -73,7 +73,8 @@ model) around ONE list viewport tab:
   (owner's call) -- extracted into `shot-lightbox.js` + the `shot_lightbox.html` partial, one
   implementation driven by both pages, so the hero thumbs open the full FLIP/carousel viewer
   here too instead of raw image tabs. Platform chips show the UNION across the list
-  set; the players headline reads the aggregated community stats; Released is
+  set; the players headline is the page's distinct players (`Concept.page_player_count`, each
+  hunter once however many versions they own, since 2026-10-22); Released is
   `concept.release_date` (the work's date, not the host list's platform date). The badge/contract
   spine sits IN the hero as one split band (badges left, contract right; each badge medallion
   links its own series page), using the vertical room the dropped progress readout freed.
@@ -201,7 +202,9 @@ Page-by-page during the rebuild, never a big-bang rename:
   chips retired from the shared card (owner call -- the card describes the WORK; region stays a
   filter); `seo_item_list` + Lucky follow. Recently Added stays deliberately PER-LIST with
   List-detail links (pinned). Interims recorded in the card's comments: flags overlay +
-  played_count are the ELECTED row's own columns (election ~= partition max; never sum);
+  played_count were the ELECTED row's own columns (election ~= partition max; never sum) until
+  2026-10-22, when the card's player count became the page's distinct players (`players_map`, DS-08)
+  so card and page agree; the flags overlay is still the elected row's;
   rating/badge/DLC maps stay elected-row/host-concept keyed; alpha sort AND text search operate
   on the elected row's title_name while the card displays unified_title (they rarely diverge; a
   stack-specific search can return a card whose visible title omits the query). Window cost at

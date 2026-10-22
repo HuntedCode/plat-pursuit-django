@@ -5,7 +5,7 @@ from django.db.models import (
     Q, F, Subquery, OuterRef, Value, IntegerField, FloatField, Avg, Case,
     When, Count, OrderBy, Exists,
 )
-from django.db.models.functions import Coalesce, Lower, Cast
+from django.db.models.functions import Coalesce, Lower, Cast, Greatest
 
 from trophies.models import (
     BadgeSeries, Trophy, UserConceptRating, Stage, ConceptGenre, ConceptTheme,
@@ -366,7 +366,7 @@ def apply_game_browse_filters(qs, form, sort_val=''):
     return qs, annotations_applied
 
 
-def apply_game_browse_sort(qs, sort_val, annotations_applied=None):
+def apply_game_browse_sort(qs, sort_val, annotations_applied=None, by_page=False):
     """Apply sort ordering to a Game queryset.
 
     Args:
@@ -376,6 +376,11 @@ def apply_game_browse_sort(qs, sort_val, annotations_applied=None):
         sort_val: The sort key from ``GameSearchForm.cleaned_data['sort']``.
         annotations_applied: Set of annotation group names already on
             the queryset (from ``apply_game_browse_filters``).
+        by_page: True on grids whose cards stand for a whole game PAGE (Browse Games, tag
+            detail): Most Played then orders by the number those cards show,
+            ``Game.page_players`` (the page's distinct players, floored by the row's own
+            count), not by one list's ``played_count``. A one-list grid (Trophy Lists) leaves
+            it False, because its cards show the list's own count (DS-08).
 
     Returns:
         (qs, order_by_list): Queryset (possibly with new annotations)
@@ -387,10 +392,15 @@ def apply_game_browse_sort(qs, sort_val, annotations_applied=None):
     order = list(_ALPHA_SECONDARY)
 
     # --- Popularity ---
-    if sort_val == 'played':
-        order = ['-played_count'] + _ALPHA_SECONDARY
-    elif sort_val == 'played_inv':
-        order = ['played_count'] + _ALPHA_SECONDARY
+    if sort_val in ('played', 'played_inv'):
+        key = 'played_count'
+        if by_page:
+            # Exactly Game.page_players, so a card reading "1,500" never sorts below one reading
+            # "1,200" because its biggest single list is smaller.
+            qs = qs.annotate(_page_players=Greatest(
+                Coalesce(F('concept__page_player_count'), Value(0)), F('played_count')))
+            key = '_page_players'
+        order = [('-' if sort_val == 'played' else '') + key] + _ALPHA_SECONDARY
 
     # --- Platinum counts (conditional annotation) ---
     elif sort_val in ('plat_earned', 'plat_earned_inv', 'plat_rate', 'plat_rate_inv'):
