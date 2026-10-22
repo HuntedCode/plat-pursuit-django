@@ -14,7 +14,7 @@ the hand-offs between pages.
 |-------|--------|--------|--------|
 | First visit | Anon landing, sign up / sign in, email verify, link PSN, first sync, first arrival on the lobby + Career | Reviewed 2026-10-20 | [first-visit.md](first-visit.md) |
 | Daily loop | Lobby, Career, contracts and claims | Reviewed 2026-10-20 | [daily-loop.md](daily-loop.md) |
-| Discovery | Browse games, game detail, trophy lists, search | Not started | |
+| Discovery | Browse games, game detail, trophy lists, search | Reviewed 2026-10-22 | [discovery.md](discovery.md) |
 | Challenges | The Challenges system (public since 2026-10-18) | Not started | |
 | Identity and social | Profiles, badges, leaderboards, share cards | Not started | |
 | Account | Settings, membership, fundraiser | Not started | |
