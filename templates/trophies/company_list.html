@@ -33,7 +33,7 @@
 
                 <div class="shrink-0 text-right flex items-baseline gap-1 whitespace-nowrap md:block">
                     <span id="co-count" class="pp-tally text-primary leading-none font-bold text-sm md:text-3xl" data-co-count data-countup="{{ total_company_count }}">{{ total_company_count|intcomma }}</span>
-                    <span class="text-[0.65rem] md:text-xs text-base-content/50 md:mt-1 md:block md:uppercase md:tracking-wider">shown</span>
+                    <span class="text-[0.65rem] md:text-xs text-base-content/50 md:mt-1 md:block md:uppercase md:tracking-wider">compan{{ total_company_count|pluralize:"y,ies" }} shown</span>
                 </div>
             </div>
         </div>

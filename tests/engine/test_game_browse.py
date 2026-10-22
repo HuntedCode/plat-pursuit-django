@@ -270,7 +270,7 @@ def test_lucky_redirects_to_the_game_page(client):
 
 
 def test_grid_renders_card_contract(client):
-    """The grid renders .pp-gcard cells with the game title, the hooks row and the pinned footer, and the
+    """The grid renders .pp-gcard cells with the game title, the hooks row and the footer, and the
     infinite-scroll sentinel. A game card stands for a whole game page, so it carries no one-list trophy
     breakdown, and nothing on it says what the game lacks (DS-06): no "No badges", no "No contract", no
     star for an unrated game."""

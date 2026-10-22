@@ -2,8 +2,8 @@
  * GAME COVER CARD (.pp-gcard) -- the from-scratch browse game cell. A 3:4 cover (community flags + quick-add
  * + the viewer's progress on the bottom edge, with their mark over it) over a body of ONE ANATOMY (DS-06): the
  * title with two lines reserved; on one-list cards the B/S/G/P breakdown; the hooks row (badge series, home
- * contract, "No Plat") at a fixed height, empty or not; the footer (platforms | rating, players) pinned to the
- * bottom. So every card in a row puts the same thing at the same height. Neutral surface, single cyan
+ * contract, "No Plat") at a fixed height, empty or not; then the footer (platforms | rating, players). So every
+ * card in a row puts the same thing at the same height. Neutral surface, single cyan
  * hover-warm (colour restraint). Shared via game_cards.html by Browse Games, Trophy Lists, Recently Added
  * and the genre/theme pages. Depth-pass card per playbook section 4.
  * ============================================================ */
@@ -76,6 +76,11 @@
 }
 .pp-gcard__mark svg { width: 11px; height: 11px; flex-shrink: 0; }
 .pp-gcard__mark--plat { color: var(--color-trophy-platinum); border-color: color-mix(in oklab, var(--color-trophy-platinum) 55%, transparent); }
+/* The other states take the bar's own colour, read off the fill's state class so the template decides the state
+   once: amber (the default) is the hunt for a platinum; a finished list without one is green; progress on a
+   list with no platinum to chase is the bar's slate. */
+.pp-gcard__cover:has(.pp-gcard__barfill--full) .pp-gcard__mark { color: var(--pp-success); }
+.pp-gcard__cover:has(.pp-gcard__barfill--prog) .pp-gcard__mark { color: color-mix(in oklab, var(--pp-info) 52%, var(--pp-text)); }
 
 /* Footer: platform chips on the left (the partition UNION on condensed grids), the lists chip
    when the work has stacks, rating (when rated) and player count on the right. A solid body row (top divider) so
@@ -93,9 +98,12 @@
 /* The stacks tally: secondary-tinted so it reads as META (how many lists share this page), not
    as another platform. Same chip anatomy as its neighbors. */
 .pp-gcard__lists { font-size: 0.58rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; line-height: 1; padding: 3px 6px; border-radius: 4px; color: var(--pp-secondary); background: color-mix(in oklab, var(--pp-bg-0) 55%, transparent); border: 1px solid color-mix(in oklab, var(--pp-secondary) 40%, var(--pp-border)); }
-/* Pinned: `__hooks` is the card's own marker, so the other `.pp-gcard__foot` users (list tiles, profile
-   rows) keep their own layout. */
-.pp-gcard__hooks ~ .pp-gcard__foot { margin-top: auto; }
+/* The footer FOLLOWS the hooks row; it is not pinned to the card's bottom. Every row above it has a fixed
+   height (two reserved title lines, the one-line breakdown, the 26px hooks row), so its top rule lands at the
+   same height on every card in a row. Pinned (`margin-top: auto`, the first cut), a footer whose platform
+   chips wrapped to a second line grew UPWARD and lifted its rule 22px above its neighbours' (Beat Saber's
+   PS4 / PSVR2 / PSVR / GLOBAL at 768, five cards a page on a phone). Following, the wrap grows downward
+   and any spare height in a row falls below the footers, where nothing has to line up. */
 .pp-gcard__footr { display: inline-flex; align-items: center; gap: 10px; flex-shrink: 0; }
 .pp-gcard__players { display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; font-size: 0.7rem; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--pp-text-mute); }
 .pp-gcard__players svg { width: 13px; height: 13px; color: var(--pp-info); flex-shrink: 0; }
@@ -155,7 +163,10 @@
    on a 375px phone badge + contract + "No Plat" need ~152px of a 149px body. --ctr-accent + the band
    background come in inline. */
 .pp-gcard__ctr { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; overflow: hidden; height: 100%; padding: 0 8px; border-radius: 7px; background: var(--pp-bg-2); border: 1px solid color-mix(in oklab, var(--ctr-accent, var(--pp-secondary)) 34%, var(--pp-border)); }
-.pp-gcard__ctr-jobs { display: inline-flex; align-items: center; gap: 3px; flex: 1; min-width: 0; overflow: hidden; }
+/* WRAP inside one icon's height: an icon that does not fit drops to a second line the overflow hides, so the
+   chip shows whole icons only. A plain `overflow: hidden` on one line sliced the last one into an "E" sliver
+   beside the XP on a phone. */
+.pp-gcard__ctr-jobs { display: inline-flex; flex-wrap: wrap; align-items: center; align-content: flex-start; gap: 0 3px; height: 15px; flex: 1; min-width: 0; overflow: hidden; }
 .pp-gcard__ctr-job { display: inline-flex; width: 15px; height: 15px; flex-shrink: 0; }
 .pp-gcard__ctr-job svg { width: 100%; height: 100%; }
 .pp-gcard__ctr-xp { font-size: 10px; font-weight: 800; color: var(--pp-text); font-variant-numeric: tabular-nums; flex-shrink: 0; }

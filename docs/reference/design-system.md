@@ -581,8 +581,10 @@ For game cards, badge cards, and similar grid items. Miniature versions of dashb
 Two rules for any desktop layout, from the owner's review of the Discovery mock-ups:
 
 1. **Repeated cards share one anatomy.** Every card in a grid puts the same thing at the same height, whatever
-   its data. Reserve the title's lines (`min-height` in `em` with a `line-clamp`), give optional rows a FIXED
-   height that holds when they are empty, and pin the footer with `margin-top: auto` in a column flex body.
+   its data. Reserve the title's lines (`min-height` in `em` with a `line-clamp`) and give optional rows a
+   FIXED height that holds when they are empty; the footer then FOLLOWS them and its top lines up. Do not pin
+   a footer that can grow (wrapping chips) to the bottom with `margin-top: auto`: it grows upward and its
+   rule leaves the row's line.
    Never fill an empty slot with a placeholder that says what is missing ("No badges", "No contract"): that is
    absence shown as content (Page Principles rule 3). Hold the height instead.
 2. **Panels side by side share a width, a height and their neighbours' edges.** Two panels in a side column
@@ -591,7 +593,7 @@ Two rules for any desktop layout, from the owner's review of the Discovery mock-
 
 The game card (`.pp-gcard`, `templates/trophies/partials/game_list/game_cards.html`) is the reference: title
 (two lines reserved), the trophy breakdown on one-list cards only, the hooks row (badge series, contract,
-"No Plat", 26px whether full or empty), the footer (platforms | rating, players) pinned. The hunter's mark
+"No Plat", 26px whether full or empty), the footer (platforms | rating, players) right under it. The hunter's mark
 ("Platinum" or their %) sits on the cover, where the eye lands.
 
 ### Browse Rows (list items)

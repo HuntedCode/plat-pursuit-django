@@ -3,7 +3,7 @@
 - No stat tiles on the six browse list pages: each header's one number is what its grid shows. The heartbeat
   stats only those tiles read are deleted, not left computing for nobody.
 - Detail pages (franchise, company, genre/theme) fold their four tiles into one line of facts.
-- One card anatomy: the title keeps two lines, the hooks row keeps its height, the footer is pinned; nothing
+- One card anatomy: the title keeps two lines, the hooks row keeps its height, the footer follows; nothing
   says what a game lacks; the trophy breakdown is on one-list cards only; the hunter's mark on the cover.
 - A two-row phone toolbar, and breadcrumbs hidden on phones site-wide.
 """
@@ -73,6 +73,14 @@ def test_no_browse_list_page_renders_tiles_even_with_a_warm_heartbeat(client, ur
     assert 'class="scard' not in content
     for gone in ('40,125', '7,895', '9,800', '5,400', 'In badge series', 'Spin-offs', 'Catalogue'):
         assert gone not in content, gone
+
+
+def test_the_companies_count_names_its_unit(client):
+    """It is the header's only number now, so it says what it counts, as the other five do."""
+    content = client.get(reverse('companies_list')).content.decode()
+
+    header = content[content.index('id="co-count"'):]
+    assert 'companies shown</span>' in header[:400]   # 0 companies; it read a bare "shown"
 
 
 def test_the_heartbeat_no_longer_computes_what_only_the_tiles_read():
@@ -230,9 +238,13 @@ def test_the_rating_rides_the_footer_only_when_rated(client):
 
     content = client.get(reverse('trophy_lists')).content.decode()
 
-    assert content.count('class="pp-gcard__fact"') == 1
-    foot = content.split('class="pp-gcard__footr"')[1].split('</a>')[0]
-    assert '4.0' in foot
+    def card(title):
+        start = content.index(f'alt="{title}"')
+        return content[start:content.index('</a>', start)]
+
+    assert 'pp-gcard__star' not in card('Unrated Game')   # no star of any kind, not a placeholder one
+    rated_foot = card('Rated Game').split('class="pp-gcard__footr"')[1]
+    assert 'pp-gcard__star' in rated_foot and '4.0' in rated_foot
 
 
 def test_the_footer_renders_even_with_no_platform(client):
@@ -262,8 +274,26 @@ def test_the_hooks_row_keeps_a_fixed_height():
     assert re.search(r'(?<![-\w])height:\s*26px', body), 'the hooks row must keep its height when empty'
 
 
-def test_the_footer_is_pinned_to_the_card_bottom():
-    assert 'margin-top: auto' in _rule(CARD_CSS, '.pp-gcard__hooks ~ .pp-gcard__foot')
+def test_the_footer_follows_the_fixed_rows_rather_than_pinning_to_the_bottom():
+    """Pinned with `margin-top: auto`, a footer whose platform chips wrapped grew UPWARD and lifted its top rule
+    22px above its neighbours' (the final audit's catch). Following the fixed-height rows, it lines up and a
+    wrap grows downward. So no rule may pin the card's footer."""
+    for m in re.finditer(r'([^{}]*pp-gcard__foot[^{}]*)\{([^}]*)\}', CARD_CSS):
+        assert 'margin-top: auto' not in m.group(2), f'{m.group(1).strip()} pins the footer to the bottom again'
+
+
+def test_contract_job_icons_drop_out_whole():
+    """One line with `overflow: hidden` sliced the last icon into a sliver on a phone. Wrapping inside one
+    icon's height drops an icon that does not fit to a hidden second line instead."""
+    jobs = _rule(CARD_CSS, '.pp-gcard__ctr-jobs')
+    assert 'flex-wrap: wrap' in jobs and 'height: 15px' in jobs and 'overflow: hidden' in jobs
+
+
+def test_the_mark_takes_the_bars_colour():
+    """Amber is the hunt for a platinum; a finished list without one reads green and progress with no platinum
+    to chase reads slate, as the bar under the mark does."""
+    assert 'var(--pp-success)' in _rule(CARD_CSS, '.pp-gcard__cover:has(.pp-gcard__barfill--full) .pp-gcard__mark')
+    assert 'var(--pp-info)' in _rule(CARD_CSS, '.pp-gcard__cover:has(.pp-gcard__barfill--prog) .pp-gcard__mark')
 
 
 def test_no_plat_is_never_the_thing_that_gets_clipped():

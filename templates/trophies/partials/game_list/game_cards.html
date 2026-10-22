@@ -58,7 +58,7 @@
 
             {% comment %} ONE ANATOMY FOR EVERY CARD, so a row of cards lines up (DS-06, design-system "Repeated
             cards"): the title keeps two lines whether it needs them or not, the hooks row keeps its height when it
-            is empty, and the footer is pinned to the bottom. Nothing here says what a game LACKS (Page Principles
+            is empty, and the footer follows them, so its top rule sits at one height across a row. Nothing here says what a game LACKS (Page Principles
             rule 3): no "No badges", no "No contract", no star for an unrated game. "No Plat" stays because a
             platinum is the norm and its absence is what a hunter scans for.
 
@@ -99,8 +99,8 @@
             this list's own on the others; on every card, an owner call), the lists chip when the work
             has stacks, rating and players on the right. Region chips removed 2026-08-30 (owner call:
             the card describes the WORK; region stays a filter). Zero queries either way. ALWAYS
-            rendered, even with nothing on its left: it is the pinned last row of the one anatomy,
-            and its top rule must sit at the same height on every card in a row. {% endcomment %}
+            rendered, even with nothing on its left: it is the last row of the one anatomy, and its
+            top rule must sit at the same height on every card in a row. {% endcomment %}
             {% with union=platform_union_map|dict_get:game.id list_n=list_count_map|dict_get:game.id %}
             <div class="pp-gcard__foot">
                 <span class="pp-gcard__plats">
