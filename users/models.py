@@ -1,3 +1,4 @@
+from allauth.account.adapter import get_adapter
 from django.db import models
 from django.db.models import Q
 from django.conf import settings
@@ -152,6 +153,13 @@ class CustomUser(AbstractUser):
                 or self.email)
 
     def save(self, *args, **kwargs):
+        # AbstractUser's unique `username` is still a column, though nothing signs in with it. An empty one saves
+        # once, then the next empty one breaks the constraint, so every save fills it the way allauth's signup does:
+        # createsuperuser, the admin's Add user, the shell, and an older row left empty all go through here.
+        if not self.username:
+            get_adapter().populate_username(None, self)
+            if kwargs.get('update_fields'):   # an empty list still means "save nothing"
+                kwargs['update_fields'] = list(kwargs['update_fields']) + ['username']
         # The lockstep enforces exactly two directions: an admin role guarantees Django-admin
         # access, and a demotion to moderator cannot leave admin access behind by accident.
         # A bare is_staff with NO role is left alone -- forcing it off would silently demote

@@ -1,6 +1,5 @@
 from django import forms
 from django.contrib.auth.forms import AdminUserCreationForm, PasswordChangeForm
-from allauth.account.adapter import get_adapter
 from allauth.account.forms import SignupForm
 from .models import CustomUser
 from .services.timezone_service import normalize_zone
@@ -59,12 +58,6 @@ class AdminAddUserForm(AdminUserCreationForm):
         if CustomUser.objects.filter(email__iexact=email).exists():
             raise forms.ValidationError("This email is already in use.")
         return email
-
-    def save(self, commit=True):
-        # The model still carries AbstractUser's unique `username`, which allauth fills on signup. Fill it the
-        # same way, or every admin-added account after the first collides on an empty one.
-        get_adapter().populate_username(None, self.instance)
-        return super().save(commit=commit)
 
 class CustomPasswordChangeForm(PasswordChangeForm):
     def __init__(self, *args, **kwargs):
