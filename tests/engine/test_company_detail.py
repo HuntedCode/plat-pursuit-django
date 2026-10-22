@@ -144,6 +144,18 @@ def test_authed_your_progress_block(client):
     assert 'fgroup__ring' in content
 
 
+def test_a_hunter_with_none_of_its_games_gets_no_zero_panel(client):
+    """The shared compute_user_progress_stats drops the panel when the viewer owns none of the games."""
+    co = _company('Bend Studio', 'bend-studio')
+    _link(co, 'Days Gone')
+    profile = ProfileFactory()
+
+    client.force_login(profile.user)
+    content = client.get(reverse('company_detail', kwargs={'slug': co.slug})).content.decode()
+
+    assert 'Your progress' not in content and 'class="fr-prog"' not in content
+
+
 def test_community_stats_strip(client):
     co = _company('Rated Studio', 'rated-studio')
     concept, _ = _link(co, 'Rated Game')

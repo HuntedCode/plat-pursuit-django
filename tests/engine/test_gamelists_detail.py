@@ -3867,34 +3867,43 @@ def test_the_section_counts_are_the_real_ones_again(client):
     assert '<span class="gl-section__count">2</span>' in head
 
 
-def test_the_adder_takes_its_own_row_on_a_phone(client):
-    """Owner's call: with the title, the adder and the sort competing for one line at 375px, the adder
-    is squeezed to a few characters and the row reads as three equal fragments rather than a label, a
-    view control and an action. It drops beneath them instead.
+def test_the_adder_takes_its_own_row_below_768(client):
+    """Owner's call: with the title, the adder and the sort competing for one line, the adder is squeezed
+    to a few characters and the row reads as three equal fragments rather than a label, a view control and
+    an action. It drops beneath them instead.
 
-    `order` does it, with the shared bar's wrap and a growing sort. The sort's `auto` basis is restated
-    for this bar (see test_the_list_sort_is_never_squeezed_beside_the_adder): the shared phone rule gives
-    every other bar's sort a zero basis."""
+    767, not the 599 this started at: 599 was worked out for a 320px adder basis, and at the owner's 420px
+    the band from 600 to ~705 put the adder on row one and stranded the sort alone on row two as a 520px+
+    select (measured on the built CSS)."""
     css = _read('static/css/components/gamelists.css')
 
-    # 599, not this file's usual 519: the row needs a ~591px VIEWPORT once the gutter and the
-    # card padding are taken off, which is the arithmetic the first version got wrong.
-    rule = css[css.index('@media (max-width: 599px) {', css.index('.gl-adder input:focus')):]
+    rule = css[css.index('@media (max-width: 767px) {', css.index('.gl-adder input:focus')):]
     rule = rule[:rule.index('}\n}') + 3]
+    assert '.gl-toolbar .gl-adder' in rule
     assert 'order: 1' in rule, 'the adder does not move below the sort'
     assert 'flex: 1 1 100%' in rule, 'it does not take the full row it moved to'
+    assert '@media (max-width: 599px)' not in css, 'the 320px-era breakpoint is back'
 
 
-def test_the_list_sort_is_never_squeezed_beside_the_adder():
-    """The browse pass gave every bar's phone sort a ZERO basis so it shares row two with its buttons. A
-    zero-basis item never forces a wrap: here it sat beside the title and the adder's home and got 10px at
-    375 (measured on the built CSS). This bar's sort keeps an `auto` basis below 768, so it wraps to a row
-    of its own at full width, as it did before the pass."""
+def test_the_adder_home_is_not_a_layout_box():
+    """THE RULES ABOVE WERE DEAD FOR A RELEASE. `parkAdder()` needs a slot to return the adder to, so the
+    template wraps the adder in `[data-gl-adder-home]` inside the bar -- and a plain block there became the
+    flex item in the adder's place, so `.gl-toolbar .gl-adder`'s order and basis styled nothing. The
+    declaration-in-the-file pin above passed the whole time.
+
+    So this pins the PAIR: while the template wraps the adder in its home, the home must be
+    `display: contents`. If the wrapper ever goes, the first assertion fails and this can be retired."""
+    import re
+    template = _read('templates/gamelists/detail.html')
     css = _read('static/css/components/gamelists.css')
 
-    block = css[css.index('@media (max-width: 767px) {\n    .gl-toolbar .pp-gbrowse__sort'):]
-    block = block[:block.index('}\n}') + 3]
-    assert 'flex-basis: auto' in block, 'the list sort takes the zero basis and is squeezed beside the adder'
+    assert re.search(r'<div data-gl-adder-home>\s*<div class="pp-bgal__search gl-adder"', template), (
+        'the adder is no longer wrapped in its home -- retire this pin'
+    )
+    rule = re.search(r'\.gl-toolbar \[data-gl-adder-home\]\s*\{([^}]*)\}', css)
+    assert rule and 'display: contents' in rule.group(1), (
+        'the adder home is a layout box again, so the adder rules style the wrong element'
+    )
 
 
 def test_the_phone_layout_cannot_reach_the_browse_toolbars(client):
@@ -3902,10 +3911,11 @@ def test_the_phone_layout_cannot_reach_the_browse_toolbars(client):
     the search field on Browse Games, Companies and the rest -- pages this branch has no business
     touching."""
     css = _read('static/css/components/gamelists.css')
-    start = css.index('@media (max-width: 599px) {', css.index('.gl-adder input:focus'))
+    start = css.index('@media (max-width: 767px) {', css.index('.gl-adder input:focus'))
     rule = css[start:start + 200]
 
     assert '.gl-toolbar ' in rule, 'the rule is not scoped to this page'
+    assert '.gl-toolbar [data-gl-adder-home] { display: contents; }' in css, 'the home rule is not scoped'
 
     # ...and the hook is actually rendered, which is the half a CSS-only assertion cannot see.
     owner = _staff(client)

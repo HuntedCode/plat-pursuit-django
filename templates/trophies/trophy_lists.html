@@ -37,7 +37,7 @@ request.path); filtered states carry the noindex block above.{% endcomment %}
                         {% elif request.GET.letter %}
                             {{ paginator.count|intcomma }} list{{ paginator.count|pluralize }} starting with "{{ request.GET.letter }}". Happy hunting!
                         {% else %}
-                            Every stack, every region &mdash; the catalogue at list level. Siblings that share one game page each get their own card here.
+                            Every stack, every region: the catalogue at list level. Siblings that share one game page each get their own card here.
                         {% endif %}
                     </p>
                 </div>

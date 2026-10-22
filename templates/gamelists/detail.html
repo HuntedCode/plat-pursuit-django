@@ -328,11 +328,11 @@ below with no outer wrapper.
     keystroke AND serialize the search text into the sort URL. Keeping the form around the sort alone
     is what makes the two coexist in one bar.{% endcomment %}
     {% if items or is_owner %}
-    {% comment %}`gl-toolbar` SCOPES two rules to this toolbar: the adder's wider flex basis and the
-    phone reorder. `.pp-gbrowse__bar` and `.pp-bgal__search` are shared with twelve browse surfaces, so
-    an unqualified rule would restyle the search field on Browse Games too -- and the basis rule needs
-    the second class for a further reason, since the shared `.pp-gbrowse__bar > .pp-bgal__search` is
-    (0,2,0) and outranks a lone class whatever the source order.
+    {% comment %}`gl-toolbar` SCOPES three rules to this toolbar: the adder's wider flex basis, the
+    below-768 reorder, and `display: contents` on the adder's home (without which the home, not the
+    adder, is the flex item and the other two style nothing). `.pp-gbrowse__bar` and `.pp-bgal__search`
+    are shared with twelve browse surfaces, so an unqualified rule would restyle the search field on
+    Browse Games too.
 
     ONLY WHEN THERE ARE ITEMS, because the sort form is itself `{% templatetag openblock %} if items
     {% templatetag closeblock %}`: on an empty list the bar holds just the title and the adder, which
