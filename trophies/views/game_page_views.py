@@ -320,11 +320,14 @@ class GamePageView(ConceptContextMixin, TemplateView):
         context.update(self._build_pursuit_context(host, viewer))
 
         # The Community band must describe the GAME, not the host list, on a page whose header
-        # just said "N trophy lists": sum the per-list denorms, played-weighted for the average.
+        # just said "N trophy lists": per-list denorms summed (platinums and 100%s ARE separate
+        # earnings), played-weighted for the average. PLAYERS are people, not earnings: a hunter
+        # with the PS4 and PS5 versions is one player, so it is the page's distinct count
+        # (Concept.page_player_count, nightly), floored by the biggest live list count (DS-08).
         played = [g.played_count or 0 for g in self.list_set]
         total_played = sum(played)
         context['community_stats'] = {
-            'played_count': total_played,
+            'played_count': max(host.page_players, *played),
             'plats_earned_count': sum(g.plats_earned_count or 0 for g in self.list_set),
             'full_completion_count': sum(g.full_completion_count or 0 for g in self.list_set),
             'avg_completion': (

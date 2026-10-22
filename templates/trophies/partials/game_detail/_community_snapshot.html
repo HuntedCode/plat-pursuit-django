@@ -2,9 +2,10 @@
 {% comment %}The community-stats snapshot (players / plats / 100% club / avg completion),
 shared by BOTH detail pages since the slim-down. Include contract:
   game             required -- the four denormalized columns + defined_trophies.platinum gate
-  community_stats  optional dict (the concept Game page passes its across-every-list
-                   aggregation); absent, each |default falls through to game's own columns --
-                   which on List detail is exactly right: THIS list's community.
+  community_stats  optional dict (the concept Game page passes its across-every-list figures:
+                   platinums and 100%s summed, players DISTINCT across the lists since DS-08);
+                   absent, each |default falls through to game's own columns -- which on List
+                   detail is exactly right: THIS list's community.
   snapshot_chrome  optional boolean. TRUE (List detail) renders the strip as page-level CHROME:
                    a .scard grid with .pp-tally faces -- the house stat-strip vocabulary
                    (Collection / Rate My Games / Browse headers), per the design audit that found
@@ -43,9 +44,9 @@ page's revealRatings each animate their own copy.{% endcomment %}
     </div>
 {% else %}
     <section class="gd-acard gd-rate__snapshot">
-        {% comment %}community_stats (set by the concept Game page) aggregates the four denorms
-        across EVERY list of the game; absent, each |default falls through to this one list's own
-        columns. Without this the Game page showed one stack's numbers under a heading that had
+        {% comment %}community_stats (set by the concept Game page) describes EVERY list of the
+        game (players counted once each, the rest summed); absent, each |default falls through to
+        this one list's own columns. Without this the Game page showed one stack's numbers under a heading that had
         just said "6 trophy lists".{% endcomment %}
         <h3 class="gd-acard__h">Community</h3>
         <div class="gd-rate__stats">

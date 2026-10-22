@@ -495,15 +495,23 @@ def test_rows_without_an_np_communication_id_are_excluded(client):
 
 def test_community_band_aggregates_across_the_list_set(client):
     """The audit's M3: 'Players' under a header that just said '2 trophy lists' must describe the
-    game, not the host stack."""
+    game, not the host stack. Since DS-08 that is the page's DISTINCT players (the nightly
+    Concept.page_player_count), not the lists' sum, which counted a two-version owner twice."""
     a = _game(igdb_id=993, title_platform=['PS5'], played_count=100, plats_earned_count=10)
     b = _game(igdb_id=None, title_platform=['PS4'], played_count=900, plats_earned_count=90)
     _match(b.concept, 993)
     TrophyFactory(game=a, trophy_id=1)
 
-    content = client.get('/games/993/').content.decode()
+    before = client.get('/games/993/').content.decode()
+    assert 'data-gd-countup="900"' in before, 'before the nightly run: floored by the biggest list'
 
-    assert '1,000' in content, 'the header/Community numbers must sum every list'
+    for concept in (a.concept, b.concept):
+        concept.page_player_count = 950       # 50 hunters own both versions
+        concept.save(update_fields=['page_player_count'])
+    after = client.get('/games/993/').content.decode()
+
+    assert 'data-gd-countup="950"' in after
+    assert 'data-gd-countup="1000"' not in after, 'the players headline summed the lists again'
 
 
 def test_the_ratings_tab_is_active_here(client):

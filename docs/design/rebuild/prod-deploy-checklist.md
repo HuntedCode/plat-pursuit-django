@@ -1610,6 +1610,26 @@ both items are about knowing the blast radius before hunters find it.
       that deletes entries: silently removing a hunter's hand-curated row is the worse failure, which
       is the same reasoning that made `absorb()`'s `GameListItem` branch re-point rather than cascade.
 
+## 2026-10-22 - Players counted once per game page (branch `feature/models/concept-player-count`)
+
+DS-08 ([discovery.md](../reviews/discovery.md)): a game's card and its page disagreed (60 vs 229 for one
+game), and the page's number summed every list's players, so a hunter with the PS4 and PS5 versions
+counted twice. Migration `trophies/0345` adds `Concept.page_player_count`, the distinct players on the
+concept's game page, filled by the existing 03:45 UTC `recompute_tag_covers`.
+
+- [ ] **Run `python manage.py recompute_tag_covers` once after migrating** (`--dry-run` first shows how
+      many concepts change). Not deploy-critical: until it runs, cards and game pages read the column as 0
+      and fall back to a live list count (`Game.page_players`): the card its own list's, the game page its
+      biggest list's. Numbers dip rather than vanish. The command now widens its own statement timeout
+      to 10 minutes, so it is safe to run from the web shell. Idempotent.
+- [ ] Expect most game pages' player count to DROP slightly (the double-counting goes) and Browse Games
+      cards to RISE to match their page (a card used to show one list's count). **Most Played** on Browse
+      Games and genre pages now orders by that same page count, so the order can shift for games sold on
+      several platforms.
+- [ ] Spot-check the run time in the cron log: the step is two grouped `COUNT(DISTINCT profile)`
+      aggregates over ProfileGame. Nightly, off the request path; if it ever crowds the 03:45 slot, it
+      can move to its own command.
+
 ## 2026-10-21 - Pursuer Level counts levels gained (branch `feature/gamification/pursuer-level-from-one`)
 
 Owner's decision on DL-04 ([daily-loop.md](../reviews/daily-loop.md)): a hunter with 0 XP read

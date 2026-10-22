@@ -941,6 +941,15 @@ class Game(models.Model):
         return bool(self.title_image)
 
     @property
+    def page_players(self):
+        """Players on this game's PAGE, each counted once (DS-08): the nightly distinct count across every
+        list on the page, floored by this list's own live `played_count`. A page can never have fewer
+        players than one of its lists, and the floor keeps a page that appeared since the last nightly run
+        from reading 0. Callers that already hold `concept` (browse select_related) pay no query."""
+        stored = self.concept.page_player_count if self.concept_id else 0
+        return max(stored, self.played_count or 0)
+
+    @property
     def platforms_display(self):
         """Format platforms for display: 'PS5, PS4' or 'PS5'."""
         if not self.title_platform:
@@ -1190,6 +1199,15 @@ class Concept(models.Model):
     guide_slug = models.CharField(max_length=50, blank=True, null=True)
     guide_created_at = models.DateTimeField(null=True, blank=True)
     slug = models.SlugField(max_length=300, unique=True, blank=True, null=True)
+    page_player_count = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "Denormalized: distinct profiles across every trophy list on this concept's GAME PAGE "
+            "(its trusted IGDB id's lists, else its own), so a hunter who owns two versions counts "
+            "once. Concepts whose cards link the same page carry the same value. Nightly via "
+            "recompute_tag_covers; read through Game.page_players, which floors it with live counts."
+        ),
+    )
     anchor_migration_completed_at = models.DateTimeField(
         null=True, blank=True, db_index=True,
         help_text=(
