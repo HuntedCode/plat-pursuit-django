@@ -154,15 +154,16 @@ same StickyReveal/sentinel/data-mb-active contract, wired in game-page.js). The 
 also carries a LIST SWITCH select beside the title: options server-rendered from
 switcher_entries (the chips' own source), a pick proxied to a real chip CLICK so the swap runs
 the one htmx path, and the select follows swaps made from either control.
-Group headers do NOT pin (2026-10-23). The pinned bar names the group under it instead, with the
-hunter's percentage in it when the header shows one (`partials/trophy_grid/_minibar_group.html`, filled
-by `trophy-grid.js` from the headers on each scroll, so swaps need no wiring), in place of the page
-title. With the sub-nav giving way to the bar, the pinned stack on a trophy list is the navbar plus that
-one bar: 111px, down from 215px.
 `<details>` is deliberate: the grid is htmx-swapped on both hosts, and a native disclosure plus
 document-delegated enhancements (`trophy-grid.js`, loaded by both hosts) needs zero rebinding.
 Rows keep `data-gd-groupjump`, so List detail's smooth-jump delegate and minibar sync work
 unchanged; without JS the rows are plain anchor jumps.
+
+Group headers do NOT pin (2026-10-23). The pinned bar names the group under it instead, with the
+hunter's percentage in it when the header shows one (`partials/trophy_grid/_minibar_group.html`, filled
+by `trophy-grid.js` from the headers on each scroll, so swaps need no wiring; a group jump parks its section at the
+scroll padding, just under the bar, so that line counts too), in place of the page title. With the sub-nav giving way to the bar, the pinned stack on a trophy list is the navbar plus that
+one bar: 111px, down from 215px.
 
 **One control row above it, on both pages** (GL-10): the count (and on the Game page the list's own page),
 "All / Unearned" (only with a hunter displayed), Sort, and "More filters" with Type, Rarity and DLC

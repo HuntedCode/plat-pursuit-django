@@ -20,7 +20,9 @@ document.addEventListener('DOMContentLoaded', function() {
         // bar has the higher z-index, so it paints over the lapped pixel). Desktop and emulated-mobile snap
         // to integer device pixels and never gap, which is why it only showed on a physical phone.
         const LAP = 1;
-        const navH = Math.round(navbar.getBoundingClientRect().height);
+        // The navbar's bottom, not just its height: the PSN outage banner pins it lower (its `top`), and
+        // everything stacked below must clear that too.
+        const navH = Math.round(navbar.getBoundingClientRect().height + (parseFloat(getComputedStyle(navbar).top) || 0));
         let bottom = navH;   // running bottom edge of the pinned chrome stack
 
         const subnav = document.querySelector('.pp-sub');

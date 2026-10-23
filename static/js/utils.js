@@ -1732,10 +1732,14 @@ const StickyReveal = {
         const pin = sentinel.getBoundingClientRect().top < chromeH;
         if (pin !== target.classList.contains('is-pinned')) {
             const prev = target.style.transition;
+            const html = document.documentElement;
             target.style.transition = 'none';
+            html.classList.add('pp-chrome-instant');   // the sub-nav and the shift adopt it un-animated too
             target.classList.toggle('is-pinned', pin);
+            this._syncRoot();
             void target.offsetWidth;            // flush the un-animated state
             target.style.transition = prev;
+            html.classList.remove('pp-chrome-instant');
         }
         this._syncRoot();
     },

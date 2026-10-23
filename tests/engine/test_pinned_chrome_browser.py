@@ -8,8 +8,12 @@ third of a 1366x657 laptop. Now:
 - The group headers no longer pin; the bar names the group under it, with the hunter's progress in it
   (trophy-grid.js), in place of the page title.
 
-Renders the real group label partial and a real trophy grid with the real utils.js, main.js and trophy-grid.js
-against the BUILT output.css in Chromium.
+Also: a group jump (parked at the scroll padding, just under the bar) names THAT group; the stack starts at the
+navbar's bottom when the PSN outage banner pins it lower; the sub-nav's open phone sheet closes as it goes; on a phone
+the Game page's list switch steps aside so the group name has room.
+
+Renders the real sub-nav, group label partial and trophy grid with the real utils.js, main.js, subnav.js and
+trophy-grid.js against the BUILT output.css in Chromium.
 
 Skips with a reason where Playwright's browser is not installed; CI installs it (see test_plat_card_layout).
 """
@@ -20,7 +24,7 @@ from django.template.loader import render_to_string
 
 ROOT = Path(__file__).resolve().parents[2]
 CSS = ROOT / 'static' / 'css' / 'output.css'
-SCRIPTS = [ROOT / 'static' / 'js' / name for name in ('utils.js', 'main.js', 'trophy-grid.js')]
+SCRIPTS = [ROOT / 'static' / 'js' / name for name in ('utils.js', 'main.js', 'subnav.js', 'trophy-grid.js')]
 
 
 def _browser_missing():
@@ -42,7 +46,15 @@ pytestmark = pytest.mark.skipif(_SKIP_REASON is not None, reason=_SKIP_REASON or
 GROUPS = [('default', 'Golf With Your Friends', 45), ('001', 'New Worlds Pack', 100)]
 
 
-def _page(tmp_path, signed_in=True):
+SUBNAV = {
+    'hub_section': 'browse', 'hub_subnav_label': 'Browse', 'hub_subnav_icon': 'search',
+    'hub_subnav_active_slug': 'trophy-lists', 'hub_subnav_active_label': 'Trophy Lists',
+    'hub_subnav_items': [{'group': 'Catalog', 'slug': slug, 'label': label, 'url': '#'}
+                         for slug, label in (('games', 'Games'), ('trophy-lists', 'Trophy Lists'), ('badges', 'Badges'))],
+}
+
+
+def _page(tmp_path, signed_in=True, outage=False):
     groups = {gid: {'trophy_group_name': name, 'trophy_group_icon_url': '', 'defined_trophies': {'bronze': 4}}
               for gid, name, _ in GROUPS}
     grid = render_to_string('trophies/partials/trophy_grid/grid.html', {
@@ -51,6 +63,9 @@ def _page(tmp_path, signed_in=True):
         'profile': signed_in, 'show_group_nav': False, 'id_prefix': '',
     })
     label = render_to_string('trophies/partials/trophy_grid/_minibar_group.html', {'view': 'trophies'})
+    subnav = render_to_string('partials/hub_subnav.html', SUBNAV)
+    # The PSN outage banner's own rule: it pins the navbar 36px lower (psn_outage_banner.html).
+    outage_css = '.pp-nav { top: 36px; }' if outage else ''
     scripts = ''.join(f'<script src="{s.as_uri()}"></script>' for s in SCRIPTS)
     page = tmp_path / 'chrome.html'
     page.write_text(
@@ -58,14 +73,18 @@ def _page(tmp_path, signed_in=True):
         '<meta name="viewport" content="width=device-width, initial-scale=1">'
         f'<link rel="stylesheet" href="{CSS.as_uri()}">'
         # Each group stands a few screens tall, as a real list's rows would make it.
-        '<style>.gd-group { min-height: 1600px; }</style></head><body class="bg-base-100">'
+        f'<style>.gd-group {{ min-height: 1600px; }} {outage_css}</style></head><body class="bg-base-100">'
         '<header class="pp-nav"><div style="height:58px">Platinum Pursuit</div></header>'
-        '<nav class="pp-sub"><div class="pp-sub__inner container mx-auto flex"><a class="pp-subpill" href="#">Games</a></div></nav>'
+        f'{subnav}'
         '<main class="container mx-auto px-4"><div style="height:400px">hero</div>'
         '<span id="mb-sentinel" class="pp-sentinel"></span>'
         '<div class="pp-minibar gd-minibar" data-sticky-reveal data-sticky-sentinel="#mb-sentinel" data-mb-active="trophies">'
         '<div class="pp-minibar__inner container mx-auto"><span class="pp-minibar__id">'
-        f'<span class="pp-minibar__title" data-minibar-page-title>Jak 3</span>{label}</span></div></div>'
+        # The Game page's bar, controls and all: its list switch beside the title, the jump select beside that.
+        '<span class="pp-minibar__title" data-minibar-page-title>Jak 3</span>'
+        '<select class="pp-gallery__select pp-minibar__listswitch"><option>Jak 3 (PS4) &middot; 4 packs</option></select>'
+        f'{label}</span><div class="pp-minibar__controls"><select class="pp-gallery__select pp-minibar__groupjump">'
+        '<option>Jump to pack</option></select></div></div></div>'
         f'<div id="browse-results">{grid}</div></main>{scripts}'
         "<script>document.addEventListener('DOMContentLoaded', () => PlatPursuit.StickyReveal.init());</script>"
         '</body></html>', encoding='utf-8')
@@ -85,7 +104,8 @@ STATE = """() => {
     label: label.hidden ? null : document.querySelector('[data-minibar-group-name]').textContent,
     pct: pct.hidden ? null : pct.textContent,
     titleShown: getComputedStyle(document.querySelector('[data-minibar-page-title]')).display !== 'none',
-    nameShown: document.querySelector('[data-minibar-group-name]').getBoundingClientRect().width > 0,
+    nameWidth: Math.round(document.querySelector('[data-minibar-group-name]').getBoundingClientRect().width),
+    switchShown: getComputedStyle(document.querySelector('.pp-minibar__listswitch')).display !== 'none',
     headPosition: getComputedStyle(document.querySelector('.gd-group__head')).position,
   };
 }"""
@@ -125,7 +145,9 @@ def test_the_bar_takes_the_rails_place_and_names_the_group(tmp_path, width, heig
             assert not first['subVisible'] and first['subBottom'] <= first['navBottom'], f'the sub-nav is still down: {first}'
             assert first['barTop'] == first['navBottom'] - 1, f'the bar does not sit under the navbar: {first}'
             assert first['pct'] == '45%' and not first['titleShown'], first
-            assert first['nameShown'], f'the group name is in the bar but not shown (a bare % names nothing): {first}'
+            # The name has room to be read (a bare % names nothing), on a phone too, where the list switch steps aside.
+            assert first['nameWidth'] >= 100, f'the group name is squeezed out of the bar: {first}'
+            assert first['switchShown'] == (width > 767), first
             assert first['headPosition'] == 'static', f'the group header still pins: {first}'
 
             _scroll_to_group(pg, 1)
@@ -173,5 +195,57 @@ def test_a_grid_that_is_not_showing_gives_the_title_back(tmp_path):
             }''')
             state = _settled(pg, None)
             assert state['pinned'] and state['titleShown'], state
+        finally:
+            b.close()
+
+
+def test_a_group_jump_names_the_group_it_lands_on(tmp_path):
+    """scrollIntoView parks the section at the scroll padding, a little UNDER the bar; the previous group ends just
+    above it. The label must name the group the hunter jumped to."""
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as p:
+        b = p.chromium.launch()
+        try:
+            pg = b.new_page(viewport={'width': 1366, 'height': 657})
+            pg.goto(_page(tmp_path))
+            _scroll_to_group(pg, 0)
+            _settled(pg, 'Golf With Your Friends')
+            pg.evaluate('document.querySelectorAll(".gd-group")[1].scrollIntoView({block: "start"})')
+            state = _settled(pg, 'New Worlds Pack')
+            assert state['pct'] == '100%', state
+        finally:
+            b.close()
+
+
+def test_the_bar_clears_a_navbar_pinned_lower_by_the_outage_banner(tmp_path):
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as p:
+        b = p.chromium.launch()
+        try:
+            pg = b.new_page(viewport={'width': 1366, 'height': 657})
+            pg.goto(_page(tmp_path, outage=True))
+            _scroll_to_group(pg, 0)
+            state = _settled(pg, 'Golf With Your Friends')
+            assert state['navBottom'] > 90, f'the banner rule did not apply: {state}'
+            assert state['barTop'] == state['navBottom'] - 1, f'the bar sits behind the navbar: {state}'
+        finally:
+            b.close()
+
+
+def test_an_open_phone_sheet_closes_as_the_sub_nav_gives_way(tmp_path):
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as p:
+        b = p.chromium.launch()
+        try:
+            pg = b.new_page(viewport={'width': 390, 'height': 844})
+            pg.goto(_page(tmp_path))
+            pg.click('[data-subnav-toggle]')
+            assert pg.evaluate('document.querySelector("[data-subnav-sheet]").classList.contains("is-open")')
+            _scroll_to_group(pg, 0)
+            _settled(pg, 'Golf With Your Friends')
+            sheet = pg.evaluate("""() => { const s = document.querySelector('[data-subnav-sheet]');
+                return {open: s.classList.contains('is-open'), visibility: getComputedStyle(s).visibility,
+                        expanded: document.querySelector('[data-subnav-toggle]').getAttribute('aria-expanded')}; }""")
+            assert sheet == {'open': False, 'visibility': 'hidden', 'expanded': 'false'}, sheet
         finally:
             b.close()

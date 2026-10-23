@@ -340,7 +340,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const views = document.querySelectorAll('.gd-view');
         if (!viewTabs.length || !views.length) return;
         const VIEW_ORDER = ['trophies', 'leaderboard'];   // Ratings/About live on the concept Game page (slim-down)
-        // The minibar's per-view extras (sort / count / Filters) are gated by data-mb-active, which showView()
+        // The minibar's per-view extras (group label / sort / Filters) are gated by data-mb-active, which showView()
         // keeps in sync with the active view.
         const minibar = document.querySelector('.gd-minibar');
 
@@ -370,7 +370,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 t.setAttribute('aria-selected', on ? 'true' : 'false');
                 if (on) activeTab = t;
             });
-            if (minibar) minibar.dataset.mbActive = name;   // gates the per-view extras (sort/count/Filters)
+            if (minibar) minibar.dataset.mbActive = name;   // gates the per-view extras (group label/sort/Filters)
             if (tablist) tablist.syncTabindex();
             if (changed && activeTab && PlatPursuit.igniteTab) PlatPursuit.igniteTab(activeTab);
             if (PlatPursuit.syncViewParam) {

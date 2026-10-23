@@ -61,6 +61,9 @@
 .gd-minibar .gd-minibar__group .pp-minibar__title { display: block; }
 .gd-minibar__gpct { flex-shrink: 0; font-size: 0.8rem; font-weight: 800; color: var(--pp-primary); line-height: 1; }
 .gd-minibar.has-group [data-minibar-page-title] { display: none; }
+/* Phones: beside the jump select, the Game page's list switch left the group name a few letters. While the
+   label shows, the switch steps aside; the real list chips sit just above the grid. */
+@media (max-width: 767px) { .gd-minibar.has-group .pp-minibar__listswitch { display: none; } }
 
 /* ============================================================
    Hero parts. Both heroes (the Game page's and the Trophy List page's) are laid out by game-page.css

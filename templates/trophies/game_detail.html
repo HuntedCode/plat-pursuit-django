@@ -33,7 +33,7 @@ rich result.{% endcomment %}
 
         {% comment %} Sticky minibar: persists across both views (page-level, outside the panels), pinned by
         StickyReveal once the real switcher scrolls under the chrome. It always re-surfaces the view switcher +
-        game identity; per-view extras (sort / count / Filters reach for Trophies) are gated by data-mb-active,
+        game identity; per-view extras (group label / sort / Filters reach for Trophies) are gated by data-mb-active,
         so each view can utilize the bar differently as its panel is rebuilt. Controls are proxied to the real
         toolbar in JS (no duplicate form fields). {% endcomment %}
         <div class="pp-minibar gd-minibar" data-sticky-reveal data-sticky-sentinel="#gd-minibar-sentinel" data-mb-active="trophies">

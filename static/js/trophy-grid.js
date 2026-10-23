@@ -154,9 +154,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const nameEl = groupLabel.querySelector('[data-minibar-group-name]');
         const pctEl = groupLabel.querySelector('[data-minibar-group-pct]');
         let shown = null;
+        // The line is the bar's bottom, or the page's scroll padding when that is lower: a group jump
+        // (scrollIntoView) parks its section at the scroll padding, a little under the bar, and that is the
+        // group the label must name, not the one ending just above it.
         const groupUnderBar = () => {
             if (!bar.classList.contains('is-pinned')) return null;
-            const line = bar.getBoundingClientRect().bottom;
+            const padding = parseFloat(getComputedStyle(document.documentElement).scrollPaddingTop) || 0;
+            const line = Math.max(bar.getBoundingClientRect().bottom, padding) + 1;
             let hit = null;
             for (const section of document.querySelectorAll('.gd-group')) {
                 if (!section.getClientRects().length) continue;
@@ -186,6 +190,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // The bar pins from an IntersectionObserver, which can land after the scroll frame, and a view switch
         // changes what is showing without a scroll.
         new MutationObserver(schedule).observe(bar, { attributes: true, attributeFilter: ['class', 'data-mb-active'] });
+        bar.addEventListener('transitionend', schedule);   // its entrance moves the line it measures from
         schedule();
     }
 });
