@@ -269,7 +269,7 @@
         return li;
     }
 
-    var PAGE_SIZE = 5;   // jobs per page -- a page of 5 keeps the roomy list; more jobs paginate
+    var PAGE_SIZE = 5;   // jobs per page at most -- more jobs paginate; a short screen gets fewer (fitPageSize)
     var CHEVRON = {
         prev: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>',
         next: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>',
@@ -465,7 +465,21 @@
         var doneBtn = root.querySelector('.ccx__done');
         var lastFocus = document.activeElement;
 
-        var pages = chunk(payload.jobs, PAGE_SIZE);
+        // Jobs per page: as many as the card holds, up to PAGE_SIZE. The list never scrolls and is the one
+        // block that shrinks when the card hits its height cap, so on a screen too short for a full page its
+        // last tiles spilled out under the ladder and the pager. Measured with the pager in place whenever
+        // the smaller size would need one, and by layout offsets, not rects: a tile still sits 10px low
+        // (its entrance transform) at this point.
+        function fitPageSize() {
+            var n = payload.jobs.length;
+            for (var size = Math.min(PAGE_SIZE, n); ; size--) {
+                pagerEl.hidden = n <= size;
+                var tiles = buildPage(jobsEl, payload.jobs.slice(0, size));
+                var last = tiles[tiles.length - 1];
+                if (size === 1 || last.offsetTop + last.offsetHeight <= jobsEl.offsetTop + jobsEl.offsetHeight) return size;
+            }
+        }
+        var pages = chunk(payload.jobs, fitPageSize());
         var pageIdx = 0;
         var interactive = false;   // the arrows go live only once every page has auto-played
         var flipping = false;      // one shared-axis flip at a time
