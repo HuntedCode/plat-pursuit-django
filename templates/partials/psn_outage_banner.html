@@ -16,7 +16,9 @@
 </div>
 <style>
     /* Push the sticky navbar + sub-nav down by the banner's height so they stack vertically below it
-       instead of being overlapped. :has() scopes this to when the banner is actually rendered.
+       instead of being overlapped. :has() scopes this to when the banner is actually rendered. These are the
+       pre-JS guess (one line of text): main.js's alignStickyChrome then sets the navbar's top to the
+       banner's measured height (it wraps on phones) and the sub-nav's top below that.
        (Class names track the rebuilt chrome: .pp-nav / .pp-sub.) */
     body:has(#site-banner-psn-outage) .pp-nav { top: 36px; }
     body:has(#site-banner-psn-outage) .pp-sub { top: calc(36px + 3.625rem); }

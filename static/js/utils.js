@@ -1723,6 +1723,7 @@ const StickyReveal = {
         const target = entry.target, sentinel = entry.sentinel;
         entry.obs = new IntersectionObserver((es) => {
             target.classList.toggle('is-pinned', es[0].boundingClientRect.top < chromeH);
+            this._syncRoot();
         }, { rootMargin: `-${chromeH}px 0px 0px 0px`, threshold: [0, 1] });
         entry.obs.observe(sentinel);
         // Adopt the correct state immediately, WITHOUT animating, so a target inserted while already scrolled
@@ -1731,11 +1732,22 @@ const StickyReveal = {
         const pin = sentinel.getBoundingClientRect().top < chromeH;
         if (pin !== target.classList.contains('is-pinned')) {
             const prev = target.style.transition;
+            const html = document.documentElement;
             target.style.transition = 'none';
+            html.classList.add('pp-chrome-instant');   // the sub-nav and the shift adopt it un-animated too
             target.classList.toggle('is-pinned', pin);
+            this._syncRoot();
             void target.offsetWidth;            // flush the un-animated state
             target.style.transition = prev;
+            html.classList.remove('pp-chrome-instant');
         }
+        this._syncRoot();
+    },
+    // `pp-bar-pinned` on <html> while any bar is pinned: the sub-nav gives way to it (chrome.css), so
+    // mid-scroll the pinned stack is the navbar plus one bar.
+    _syncRoot() {
+        const pinned = this._entries.some((e) => e.target.classList.contains('is-pinned') && document.contains(e.target));
+        document.documentElement.classList.toggle('pp-bar-pinned', pinned);
     },
     init(root) {
         root = root || document;
@@ -1764,6 +1776,7 @@ const StickyReveal = {
             }
             return true;
         });
+        this._syncRoot();
         root.querySelectorAll('[data-sticky-reveal]').forEach((target) => {
             if (target._stickyReveal) return;   // already wired
             const sel = target.getAttribute('data-sticky-sentinel');

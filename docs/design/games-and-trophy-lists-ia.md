@@ -159,6 +159,14 @@ document-delegated enhancements (`trophy-grid.js`, loaded by both hosts) needs z
 Rows keep `data-gd-groupjump`, so List detail's smooth-jump delegate and minibar sync work
 unchanged; without JS the rows are plain anchor jumps.
 
+Group headers do NOT pin (2026-10-23). The pinned bar names the group under it instead, with the
+hunter's percentage in it when the header shows one (`partials/trophy_grid/_minibar_group.html`, filled
+by `trophy-grid.js` from the headers on each scroll, so swaps need no wiring; a group jump parks its section at the
+scroll padding, just under the bar, so that line counts too), in place of the page title. With the sub-nav giving way to the bar, the pinned stack on a trophy list is the navbar plus that
+one bar: 111px, down from 215px. On phones the Game page's bar has room for the list switch OR the group
+name: the name wins while the trophies scroll past (owner, 2026-10-23), and the list chips sit just
+above the grid. Laptop and tablet keep both.
+
 **One control row above it, on both pages** (GL-10): the count (and on the Game page the list's own page),
 "All / Unearned" (only with a hunter displayed), Sort, and "More filters" with Type, Rarity and DLC
 (`trophy_grid/_controls.html`). Both pages filter with ONE function, `game_views.filter_and_sort_rows`; the
@@ -230,6 +238,10 @@ Page-by-page during the rebuild, never a big-bang rename:
   the identity chip retired; the community numbers moved behind Ranks; short earned dates, fixed rate columns,
   a sideways DLC strip on phones; PSN-weighted group percentages. First trophy on a phone: 1,883px to 963px
   (Golf With Your Friends PS4), 1,605px to 843px (Jak 3 PS4).
+- **2026-10-23 -- the pinned chrome.** On a laptop the navbar, sub-nav, mini-bar and a sticky group header
+  pinned 215px (a third of 1366x657). The sub-nav now gives way to a pinned page bar (site-wide, see
+  [ia-and-subnav.md](../architecture/ia-and-subnav.md)), group headers stopped pinning, and the bar names
+  the group under it with its percentage, replacing the bar's shown-trophies count. Mid-scroll: 111px.
 
 - **2026-08-30 -- PHASE 4: Trophy Lists browse shipped** (7 commits incl. rail pins + audit response) -- the IA's LAST canonical
   page. `/games/lists/` (the neutral `lists` SEGMENT per the naming insurance; url name

@@ -546,6 +546,17 @@ own swap target).
 | `setCount(row, n)` | element, number | Counts the row's total up to `n` from what it showed (after a swap) |
 | `setBusy(row, on)` | element, boolean | The row's loading bar, delay-gated 220ms so an instant filter never flashes it |
 
+`trophy-grid.js` also fills the page bar's group label (`[data-minibar-group]`, both pages): the `.gd-group` under
+the pinned `.gd-minibar`, its name and percentage read off its header on each scroll frame, and `has-group` on the
+bar so its page title steps aside. Nothing to call: it wires itself when the label is on the page.
+
+### PlatPursuit.StickyReveal
+
+Reveals a condensed bar (`[data-sticky-reveal]`, the house `.pp-minibar`) once its sentinel
+(`data-sticky-sentinel`) scrolls under the chrome, by toggling `.is-pinned`. `init(root)` is idempotent and safe to
+re-run after a swap. While ANY bar is pinned it puts `pp-bar-pinned` on `<html>`, which sends the sub-nav away so
+the bar takes its place (chrome.css; see the Gotchas in [ia-and-subnav.md](../architecture/ia-and-subnav.md)).
+
 ### PlatPursuit.runScripts
 
 | Method | Parameters | Purpose |

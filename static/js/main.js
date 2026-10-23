@@ -20,14 +20,25 @@ document.addEventListener('DOMContentLoaded', function() {
         // bar has the higher z-index, so it paints over the lapped pixel). Desktop and emulated-mobile snap
         // to integer device pixels and never gap, which is why it only showed on a physical phone.
         const LAP = 1;
-        const navH = Math.round(navbar.getBoundingClientRect().height);
+        // The PSN outage banner pins above the navbar. Its CSS guesses one line (36px, 40px at lg) for the
+        // pre-JS paint; on a phone it wraps to about three, so pin the navbar at its measured height.
+        const outage = document.getElementById('site-banner-psn-outage');
+        if (outage) navbar.style.top = Math.round(outage.getBoundingClientRect().height) + 'px';
+        // The navbar's bottom, not just its height: the outage banner pins it lower (its `top`), and
+        // everything stacked below must clear that too.
+        const navH = Math.round(navbar.getBoundingClientRect().height + (parseFloat(getComputedStyle(navbar).top) || 0));
         let bottom = navH;   // running bottom edge of the pinned chrome stack
 
         const subnav = document.querySelector('.pp-sub');
+        let railH = 0;
         if (subnav) {
             subnav.style.top = (bottom - LAP) + 'px';
-            bottom = (bottom - LAP) + Math.round(subnav.getBoundingClientRect().height);
+            railH = Math.round(subnav.getBoundingClientRect().height) - LAP;
+            bottom += railH;
         }
+        // --chrome-rail: what the sub-nav adds to the stack. While a page bar is pinned the sub-nav slides
+        // away and everything below it moves up by this much (--rail-shift, chrome.css).
+        document.documentElement.style.setProperty('--chrome-rail', railH + 'px');
 
         // --chrome-nav-height: bottom of navbar + sub-nav. The pinned Badge Art Reveal banner offsets its
         // own sticky top by this (already lapped, so the banner overlaps the sub-nav too).

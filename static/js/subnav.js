@@ -156,6 +156,16 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
+    // The sub-nav gives way to a pinned page bar (pp-bar-pinned on <html>, StickyReveal): close what it has
+    // open on the way out, or the sheet (visibility: visible on its own) would ride up with it and float over
+    // the bar with its trigger gone, and the More menu would reopen by itself when the sub-nav returns.
+    new MutationObserver(function () {
+        if (!document.documentElement.classList.contains('pp-bar-pinned')) return;
+        if (root.contains(document.activeElement)) document.activeElement.blur();   // not left on a hidden link
+        if (sheet && sheet.classList.contains('is-open')) setSheet(false);
+        if (moreWrap && moreWrap.classList.contains('is-open')) closeMore();
+    }).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+
     // Escape closes whichever surface is open (sheet returns focus to its trigger).
     document.addEventListener('keydown', function (e) {
         if (e.key !== 'Escape') return;

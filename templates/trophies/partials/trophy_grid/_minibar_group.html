@@ -1,0 +1,7 @@
+{% comment %}
+The page bar's group label (both pages' .gd-minibar): the trophy group under the pinned bar, and the hunter's
+progress in it. trophy-grid.js fills it from the group headers as the trophies scroll past, and it stands in for the
+bar's title while it shows; the group headers no longer pin. `view` is the view that shows the grid (List detail's
+"trophies", the Game page's "lists"), for the bar's data-mb-only gating.
+{% endcomment %}
+<span class="gd-minibar__group" data-minibar-group data-mb-only="{{ view }}" hidden><span class="pp-minibar__title" data-minibar-group-name></span><span class="gd-minibar__gpct pp-tally" data-minibar-group-pct hidden></span></span>
