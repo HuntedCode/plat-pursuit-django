@@ -280,9 +280,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // the first fires and the other direction is starved until the user scrolls it out and back. Re-arming
     // pumps the starved side; it self-terminates because each load grows the list past the zone.
     // Height of the fixed chrome above the board: the measured nav (--sticky-top, kept accurate by main.js)
-    // plus the 52px minibar. Insets the jump target so it lands just below the chrome.
+    // plus the 52px minibar. Insets the jump target so it lands just below the chrome. The board sits below
+    // the minibar's sentinel, so where a jump lands the bar is pinned and the sub-nav has given way to it
+    // (--chrome-rail less).
     function lbChromeInset() {
-        const nav = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sticky-top')) || 58;
+        const root = getComputedStyle(document.documentElement);
+        const nav = (parseFloat(root.getPropertyValue('--sticky-top')) || 58) - (parseFloat(root.getPropertyValue('--chrome-rail')) || 0);
         return Math.round(nav + 52);
     }
 
@@ -664,8 +667,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const n = parseInt(data.dataset.trophyCount, 10);
         if (isNaN(n)) return;
         if (controls()) controls().setCount(controlRow, n);
-        const mb = document.querySelector('[data-minibar-count]');   // keep the minibar total in sync
-        if (mb) mb.textContent = n.toLocaleString();
     }
 
     document.body.addEventListener('htmx:beforeRequest', (e) => {

@@ -154,6 +154,11 @@ same StickyReveal/sentinel/data-mb-active contract, wired in game-page.js). The 
 also carries a LIST SWITCH select beside the title: options server-rendered from
 switcher_entries (the chips' own source), a pick proxied to a real chip CLICK so the swap runs
 the one htmx path, and the select follows swaps made from either control.
+Group headers do NOT pin (2026-10-23). The pinned bar names the group under it instead, with the
+hunter's percentage in it when the header shows one (`partials/trophy_grid/_minibar_group.html`, filled
+by `trophy-grid.js` from the headers on each scroll, so swaps need no wiring), in place of the page
+title. With the sub-nav giving way to the bar, the pinned stack on a trophy list is the navbar plus that
+one bar: 111px, down from 215px.
 `<details>` is deliberate: the grid is htmx-swapped on both hosts, and a native disclosure plus
 document-delegated enhancements (`trophy-grid.js`, loaded by both hosts) needs zero rebinding.
 Rows keep `data-gd-groupjump`, so List detail's smooth-jump delegate and minibar sync work
@@ -230,6 +235,10 @@ Page-by-page during the rebuild, never a big-bang rename:
   the identity chip retired; the community numbers moved behind Ranks; short earned dates, fixed rate columns,
   a sideways DLC strip on phones; PSN-weighted group percentages. First trophy on a phone: 1,883px to 963px
   (Golf With Your Friends PS4), 1,605px to 843px (Jak 3 PS4).
+- **2026-10-23 -- the pinned chrome.** On a laptop the navbar, sub-nav, mini-bar and a sticky group header
+  pinned 215px (a third of 1366x657). The sub-nav now gives way to a pinned page bar (site-wide, see
+  [ia-and-subnav.md](../architecture/ia-and-subnav.md)), group headers stopped pinning, and the bar names
+  the group under it with its percentage, replacing the bar's shown-trophies count. Mid-scroll: 111px.
 
 - **2026-08-30 -- PHASE 4: Trophy Lists browse shipped** (7 commits incl. rail pins + audit response) -- the IA's LAST canonical
   page. `/games/lists/` (the neutral `lists` SEGMENT per the naming insurance; url name

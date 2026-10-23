@@ -24,10 +24,15 @@ document.addEventListener('DOMContentLoaded', function() {
         let bottom = navH;   // running bottom edge of the pinned chrome stack
 
         const subnav = document.querySelector('.pp-sub');
+        let railH = 0;
         if (subnav) {
             subnav.style.top = (bottom - LAP) + 'px';
-            bottom = (bottom - LAP) + Math.round(subnav.getBoundingClientRect().height);
+            railH = Math.round(subnav.getBoundingClientRect().height) - LAP;
+            bottom += railH;
         }
+        // --chrome-rail: what the sub-nav adds to the stack. While a page bar is pinned the sub-nav slides
+        // away and everything below it moves up by this much (--rail-shift, chrome.css).
+        document.documentElement.style.setProperty('--chrome-rail', railH + 'px');
 
         // --chrome-nav-height: bottom of navbar + sub-nav. The pinned Badge Art Reveal banner offsets its
         // own sticky top by this (already lapped, so the banner overlaps the sub-nav too).

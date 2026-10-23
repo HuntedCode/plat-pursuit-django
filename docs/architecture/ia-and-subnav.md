@@ -345,6 +345,15 @@ push the navbar 1-2px off 64px and cause a visible shift). The hotbar template b
 
 ## Gotchas and Pitfalls
 
+- **The sub-nav gives way to a pinned page bar** (2026-10-23). While a page's mini-bar (`.pp-minibar`, revealed
+  by `StickyReveal`) is pinned, `StickyReveal` puts `pp-bar-pinned` on `<html>`; the sub-nav then slides up
+  behind the navbar and turns `visibility: hidden` (its links leave the tab order), and the bar moves up into
+  its place. Back above the bar's sentinel, the sub-nav returns. `main.js` publishes the sub-nav's share of the
+  stack as `--chrome-rail`; `--rail-shift` (chrome.css) is that while a bar is pinned and 0 otherwise, and
+  anything pinned below the sub-nav subtracts it (the mini-bar, the art reveal banner). `--sticky-top` itself
+  does not change, so StickyReveal's pin threshold stays put and nothing flaps. Why: nav, sub-nav, mini-bar and
+  a sticky group header held 215px of a 1366x657 laptop on a trophy list; mid-scroll the rail is the least
+  needed of them, and the navbar's hub buttons stay.
 - **Longest-prefix-wins + the exact-`/` case are load-bearing.** `/profiles/<u>/` must match Browse,
   not the personal hub's `/`. The bare-root match is an equality check, separate from prefix
   `startswith`.

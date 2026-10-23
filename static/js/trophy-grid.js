@@ -6,6 +6,7 @@
  *    that drive it from elsewhere (the minibar's Filters reach, a list switch's reset).
  *  - the adaptive "Jump to pack" menu that replaces the group-nav chip cloud on many-DLC lists
  *    (partials/trophy_grid/grid.html). The control is a native <details>, so open/close needs no JS.
+ *  - the page bar's group label: the group under the pinned minibar, and the hunter's progress in it.
  *
  * Everything here is bound exactly once. The control row stands OUTSIDE every swap target on both pages,
  * so it is wired at load; the grid is htmx-swapped (filter swaps, list switches), so its jump menu is
@@ -140,4 +141,51 @@ document.addEventListener('DOMContentLoaded', () => {
         const none = menu.querySelector('[data-gd-jumpnone]');
         if (none) none.hidden = true;
     }, true);
+
+    // ── The page bar names the group under it ────────────────────────────────────────────────────
+    // Group headers do not pin: with the navbar, the sub-nav and the minibar they held a third of a laptop
+    // screen. Instead the pinned minibar shows the trophy group under it, with the hunter's progress in it
+    // when the header has one, in place of the page title. Read off the headers on every scroll rather than
+    // cached, so a filter swap or a list switch needs no wiring; a section with no box is in a view that is
+    // not showing.
+    const groupLabel = document.querySelector('[data-minibar-group]');
+    const bar = groupLabel && groupLabel.closest('.gd-minibar');
+    if (bar) {
+        const nameEl = groupLabel.querySelector('[data-minibar-group-name]');
+        const pctEl = groupLabel.querySelector('[data-minibar-group-pct]');
+        let shown = null;
+        const groupUnderBar = () => {
+            if (!bar.classList.contains('is-pinned')) return null;
+            const line = bar.getBoundingClientRect().bottom;
+            let hit = null;
+            for (const section of document.querySelectorAll('.gd-group')) {
+                if (!section.getClientRects().length) continue;
+                if (section.getBoundingClientRect().top > line) break;
+                hit = section;
+            }
+            return hit;
+        };
+        const sync = () => {
+            const section = groupUnderBar();
+            if (section === shown) return;
+            shown = section;
+            bar.classList.toggle('has-group', !!section);
+            groupLabel.hidden = !section;
+            if (!section) return;
+            const name = section.querySelector('.gd-group__name');
+            const pct = section.querySelector('.gd-group__pct');
+            nameEl.textContent = name ? name.textContent.trim() : '';
+            pctEl.textContent = pct ? pct.textContent.trim() : '';
+            pctEl.hidden = !pct;
+        };
+        let raf = 0;
+        const schedule = () => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; sync(); }); };
+        window.addEventListener('scroll', schedule, { passive: true });
+        window.addEventListener('resize', schedule);
+        document.body.addEventListener('htmx:afterSettle', schedule);
+        // The bar pins from an IntersectionObserver, which can land after the scroll frame, and a view switch
+        // changes what is showing without a scroll.
+        new MutationObserver(schedule).observe(bar, { attributes: true, attributeFilter: ['class', 'data-mb-active'] });
+        schedule();
+    }
 });
