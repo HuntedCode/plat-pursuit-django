@@ -127,6 +127,7 @@ member must meet them — see the `ConceptBundle` docstring in `trophies/models.
 | `trophies/services/collection_service.py` | The hunter's Collection wall + `closest_badge` |
 | `trophies/services/badge_coverage_service.py` | Curator audit: games missing from a series' stages. `series_candidates()` is THE definition of a series' games (audit + stage generator) |
 | `trophies/services/badge_stage_service.py` | `generate_badge_stages`: plans/writes one stage per origin game |
+| `trophies/services/badge_candidate_service.py` | `badge_candidates`: franchises/series with 2+ live-contracted games GATING on one edition, ranked by average game-page players. Counts in the unit of a stage: origin games (`origin_key`; a bundle-only contract is one game), gating by `evaluate_stage`, membership as `series_candidates()`. Also owns the "subject already has a badge" rule, in two shapes kept in step: `existing_badge` (one subject, `build_badge` refuses on it) and `_subjects_with_badges` (the catalogue, `badge_candidates` hides on it) |
 | `trophies/services/developer_family_service.py` | A developer badge's studio family (`developer_family_ids`), its developer credits, and which studio a game or stage is filed under (`filing_studio`, `concepts_filing_studio`). Shared by the audit, the stage generator and the badge page's studio sections |
 | `trophies/management/commands/evaluate_badges.py` | The only runner: one hunter, `--all`, `--series`, `--dry-run` |
 
@@ -344,6 +345,8 @@ bundle members included, by `concepts_filing_studio`, the same rule `generate_ba
 | `audit_badge_coverage` | `--dry-run`, `--always` | Emails franchise/collection/developer series that are missing games (developer = studio + subsidiaries + former identities, developed credits only), plus developer series pinned to a renamed company |
 | `generate_badge_stages` | `<series_slug>`, `--append`, `--dry-run` | Builds a series' stages, one per origin game (see [management-commands](../guides/management-commands.md)) |
 | `convert_series_to_groups` | see `--help` | Cutover seeding: builds `BadgeSeries` + `GroupBadge` from the legacy rows |
+| `badge_candidates` | `--limit`, `--include-existing` | Read-only: which franchises/series would make a good badge (2+ live-contracted games on one edition), best attended first |
+| `build_badge` | `--franchise`, `--series`, `--developer`, `--slug`, `--dry-run` | One-shot authoring: creates the `BadgeSeries`, runs `generate_badge_stages`, then `convert_series_to_groups` (hidden editions), in one transaction |
 
 ## Related Docs
 
