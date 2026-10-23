@@ -13,12 +13,22 @@ filed under NA. Regions and `is_regional` are also append-only, so none of this 
 READ-ONLY. This module only measures. The rules live here, not in the command, so the rebuild that
 follows classifies exactly the way the report that sized it did (the `job_drift` precedent).
 
-THE REGIONAL UNIT. Lists are regional versions of each other when they belong to the same IGDB
-VERSION (raw `IGDBMatch.igdb_id`, trusted matches only) on the same platform. Not the Concept: a
-Concept also requires a matching trophy fingerprint, so a regional list with any trophy difference
-(Chinese Astro Bot) lives in an `X-N` sibling Concept. Not the `X`/`X-N` canonical family either: it
-holds other versions (canonical 1009 holds The Last of Us, Remastered and Part I). Lists without a
-trusted match fall back to their Concept, then to themselves.
+THE REGIONAL UNIT. Candidate siblings are lists of the same IGDB VERSION (raw `IGDBMatch.igdb_id`,
+trusted matches only) on the same HARDWARE platform. Not the Concept: a Concept also requires a
+matching trophy fingerprint, so a regional list with any trophy difference (Chinese Astro Bot) lives in
+an `X-N` sibling Concept. Not the `X`/`X-N` canonical family either: it holds other versions (canonical
+1009 holds The Last of Us, Remastered and Part I). Lists without a trusted match fall back to their
+Concept, then to themselves. VR and PC tags are not platforms here: a PS4 list and a PS5 list of No
+Man's Sky both carry `PSVR`, and grouping on it made them each other's siblings (2026-10-23 baseline).
+
+THE REGIONAL RULE (`regional_verdicts`), settled against the prod baseline (2026-10-23). Being a
+candidate sibling is NOT enough: Dead by Daylight splits one game's trophies across several lists,
+Fall Guys got a new list at its free-to-play relaunch, and Call of Duty HQ carries several PS5 lists,
+all from the same regions. What separates a regional split is the REGIONS: a list is regional when
+another product in its unit covers regions that do not overlap with its own (Astro Bot's AS/EU/JP/NA
+list beside its CN list). Owner decisions: a list from Asian regions only is regional even with no
+sibling (it is regional to that region), and a list that cannot be judged because it or a sibling has
+no region data keeps whatever flag it has today.
 
 KNOWN BLIND SPOT. "What the title IDs say" reads `TitleID.region`, and sync overwrites every row it
 finds holding `IP` with whatever the US store answered. That covers title IDs missing from the dataset
@@ -31,6 +41,7 @@ provenance on TitleID, which the rebuild adds.
 from collections import defaultdict
 
 from trophies.models import Game, IGDBMatch, TitleID
+from trophies.util_modules.constants import PLATFORM_PRIORITY_ORDER
 
 # --- the corrected region table ---------------------------------------------
 
@@ -49,8 +60,12 @@ PREFIX_REGIONS = {
     'CN': 'CN',
 }
 
-#: Regions served by the Asian storefronts, used to describe a lone regional list.
+#: Regions served by the Asian storefronts. A list from these alone is regional by itself.
 ASIAN_REGIONS = frozenset({'JP', 'AS', 'KR', 'CN'})
+
+#: The hardware platforms siblings are grouped on. `PLATFORM_PRIORITY_ORDER` lists exactly the
+#: consoles, without the PSVR/PSVR2/PSPC tags that ride along on a console list.
+BASE_PLATFORMS = frozenset(PLATFORM_PRIORITY_ORDER)
 
 
 def normalize_region(code):
@@ -81,31 +96,10 @@ def unit_key(concept_pk, igdb_id, match_status):
     return None
 
 
-# --- buckets ----------------------------------------------------------------
-
-DATASET_DISAGREES = 'dataset_disagrees'
-KOREA_AS_JP = 'korea_as_jp'
-NA_FROM_UNKNOWN = 'na_from_unknown'
-REGIONAL_MISSED = 'regional_missed'
-SAME_REGION_SIBLINGS = 'same_region_siblings'
-REGIONAL_STALE = 'regional_stale'
-REGIONAL_NO_REGION = 'regional_no_region'
-
-#: Display order: wrong labels first, then the regional flag.
-BUCKETS = [
-    DATASET_DISAGREES, KOREA_AS_JP, NA_FROM_UNKNOWN,
-    REGIONAL_MISSED, SAME_REGION_SIBLINGS, REGIONAL_STALE, REGIONAL_NO_REGION,
-]
-
-BUCKET_LABELS = {
-    DATASET_DISAGREES: "stored region differs from what the list's title IDs say",
-    KOREA_AS_JP: 'has a Korean (KP) title ID, no Japanese one, and is labeled JP',
-    NA_FROM_UNKNOWN: 'labeled NA, but none of its title IDs has a known region',
-    REGIONAL_MISSED: 'has another list of the same game on its platform (a different product), but is not flagged regional',
-    SAME_REGION_SIBLINGS: 'shares an identical region label with another list of the same game on its platform',
-    REGIONAL_STALE: 'flagged regional, but no other product of its game shares its platform',
-    REGIONAL_NO_REGION: 'flagged regional with no region stored, so it shows no chip',
-}
+def sibling_platforms(platforms):
+    """The platforms a list is grouped on: its consoles, or its tags when it has no console."""
+    base = [p for p in platforms if p in BASE_PLATFORMS]
+    return base or list(platforms)
 
 
 def _as_list(raw):
@@ -139,11 +133,106 @@ def _products(pks, tids_by_pk):
     return {pk: find(pk) for pk in pks}
 
 
+# --- the regional verdict ---------------------------------------------------
+
+REGIONAL = 'regional'
+NOT_REGIONAL = 'not_regional'
+UNJUDGED = 'unjudged'
+
+#: Why a verdict came out the way it did. Printed beside each row and tallied in the summary.
+DISJOINT_SIBLING = 'disjoint_sibling'
+ASIA_ONLY = 'asia_only'
+OVERLAPPING_SIBLINGS = 'overlapping_siblings'
+GLOBAL = 'global'
+NO_REGION_DATA = 'no_region_data'
+SIBLING_WITHOUT_REGION_DATA = 'sibling_without_region_data'
+
+
+def regional_verdicts(groups, tids_by_pk, regions_by_pk):
+    """`{pk: (verdict, reason)}` for every list, by THE REGIONAL RULE (module docstring).
+
+    `groups` maps `(unit, platform)` to the list pks in it; a list on several platforms sits in
+    several groups and is regional if ANY of them gives it a disjoint sibling. `regions_by_pk` holds
+    what each list's title IDs say, not its stored label: the stored label is what is being judged.
+
+    A list is judged by its PRODUCT's regions (every list sharing a title ID with it), so the lists of
+    one storefront product cannot come out with opposite verdicts.
+    """
+    disjoint, unknown_sibling, overlap = set(), set(), set()
+    product_regions = {pk: set(regions) for pk, regions in regions_by_pk.items()}
+    for pks in groups.values():
+        if len(pks) < 2:
+            continue
+        product = _products(pks, tids_by_pk)
+        regions = defaultdict(set)
+        for pk in pks:
+            regions[product[pk]] |= regions_by_pk[pk]
+        for pk in pks:
+            product_regions[pk] |= regions[product[pk]]
+        for pk in pks:
+            own = regions[product[pk]]
+            others = [r for root, r in regions.items() if root != product[pk]]
+            if not others:
+                continue
+            if own and any(r and not (r & own) for r in others):
+                disjoint.add(pk)
+            elif any(not r for r in others):
+                unknown_sibling.add(pk)
+            else:
+                overlap.add(pk)
+
+    verdicts = {}
+    for pk, own in product_regions.items():
+        if pk in disjoint:
+            verdicts[pk] = (REGIONAL, DISJOINT_SIBLING)
+        elif not own:
+            verdicts[pk] = (UNJUDGED, NO_REGION_DATA)
+        # Ahead of the unknown-sibling check: an Asia-only list is regional on its own data, whatever
+        # an unknown sibling turns out to be.
+        elif own <= ASIAN_REGIONS:
+            verdicts[pk] = (REGIONAL, ASIA_ONLY)
+        elif pk in unknown_sibling:
+            verdicts[pk] = (UNJUDGED, SIBLING_WITHOUT_REGION_DATA)
+        elif pk in overlap:
+            verdicts[pk] = (NOT_REGIONAL, OVERLAPPING_SIBLINGS)
+        else:
+            verdicts[pk] = (NOT_REGIONAL, GLOBAL)
+    return verdicts
+
+
+# --- buckets ----------------------------------------------------------------
+
+WRONG_REGION = 'wrong_region'
+MISSING_REGION = 'missing_region'
+KOREA_AS_JP = 'korea_as_jp'
+NA_FROM_UNKNOWN = 'na_from_unknown'
+REGIONAL_MISSED = 'regional_missed'
+REGIONAL_STALE = 'regional_stale'
+REGIONAL_NO_REGION = 'regional_no_region'
+
+#: Display order: wrong labels first, then the regional flag.
+BUCKETS = [
+    WRONG_REGION, MISSING_REGION, KOREA_AS_JP, NA_FROM_UNKNOWN,
+    REGIONAL_MISSED, REGIONAL_STALE, REGIONAL_NO_REGION,
+]
+
+BUCKET_LABELS = {
+    WRONG_REGION: "stored region includes one the list's title IDs do not support",
+    MISSING_REGION: "stored region lacks one the list's title IDs support (and has nothing wrong)",
+    KOREA_AS_JP: 'has a Korean (KP) title ID, no Japanese one, and is labeled JP',
+    NA_FROM_UNKNOWN: 'labeled NA, but none of its title IDs has a known region',
+    REGIONAL_MISSED: 'regional by the rule, but not flagged regional',
+    REGIONAL_STALE: 'flagged regional, but not regional by the rule',
+    REGIONAL_NO_REGION: 'flagged regional with no region stored, so it shows no chip',
+}
+
+
 def scan(platform=None):
     """Classify every trophy list. Returns `(rows, stats)`.
 
     `rows` holds ONLY the lists in at least one bucket, one dict each. `stats` holds the denominators:
-    lists scanned, lists skipped for `region_lock`, and per-platform region coverage.
+    lists scanned, lists skipped for `region_lock`, per-platform region coverage, and how many lists
+    got each verdict.
 
     Catalogue-wide rather than per-user, but it never builds a model instance: one `values_list` over
     Game read as tuples (held for two passes, so the whole catalogue is in memory at once as plain
@@ -160,40 +249,27 @@ def scan(platform=None):
         )
     )
 
-    # (unit, platform) -> [pk, ...]; plus each list's stored label and title IDs for the checks below.
     groups = defaultdict(list)
-    stored_by_pk = {}
-    tids_by_pk = {}
-    for (pk, _name, _np, plats, region, tids, _reg, _lock, _played, concept_pk, _cid,
+    stored_by_pk, tids_by_pk, regions_by_pk = {}, {}, {}
+    for (pk, _name, _np, plats, region, tids, _reg, locked, _played, concept_pk, _cid,
          igdb_id, status) in lists:
         stored_by_pk[pk] = frozenset(_as_list(region))
         tids_by_pk[pk] = _as_list(tids)
+        # A locked list's region was set by an admin, so it is the truth its siblings are judged
+        # against. Everyone else is judged by what their title IDs say.
+        regions_by_pk[pk] = (set(stored_by_pk[pk]) if locked
+                             else expected_regions(tids_by_pk[pk], tid_map))
         unit = unit_key(concept_pk, igdb_id, status)
         if unit is None:
             continue
-        for plat in _as_list(plats):
+        for plat in sibling_platforms(_as_list(plats)):
             groups[(unit, plat)].append(pk)
+    verdicts = regional_verdicts(groups, tids_by_pk, regions_by_pk)
 
-    has_sibling = set()
-    same_label = set()
-    for pks in groups.values():
-        if len(pks) < 2:
-            continue
-        product = _products(pks, tids_by_pk)
-        if len(set(product.values())) < 2:
-            continue
-        has_sibling.update(pks)
-        # label -> the PRODUCTS wearing it. Two lists of one product share a label by construction,
-        # so only a label worn by two different products is a duplicate.
-        by_label = defaultdict(set)
-        for pk in pks:
-            if stored_by_pk[pk]:
-                by_label[stored_by_pk[pk]].add(product[pk])
-        for pk in pks:
-            if len(by_label.get(stored_by_pk[pk], ())) > 1:
-                same_label.add(pk)
-
-    stats = {'scanned': 0, 'locked': 0, 'coverage': defaultdict(lambda: [0, 0])}
+    stats = {
+        'scanned': 0, 'locked': 0, 'coverage': defaultdict(lambda: [0, 0]),
+        'verdicts': defaultdict(int), 'unjudged_flagged': 0,
+    }
     rows = []
     for (pk, name, np_id, plats, _region, _tids, is_regional, locked, played, concept_pk, concept_id,
          igdb_id, status) in lists:
@@ -211,25 +287,30 @@ def scan(platform=None):
             stats['locked'] += 1
             continue
 
+        verdict, reason = verdicts[pk]
+        stats['verdicts'][verdict] += 1
+        if verdict == UNJUDGED and is_regional:
+            stats['unjudged_flagged'] += 1
+
         tids = tids_by_pk[pk]
-        expected = expected_regions(tids, tid_map)
+        expected = regions_by_pk[pk]
         raw = [(tid, tid_map.get(tid)) for tid in tids]
         buckets = []
-        if expected and stored != expected:
-            buckets.append(DATASET_DISAGREES)
+        if expected and stored - expected:
+            buckets.append(WRONG_REGION)
+        elif expected - stored:
+            buckets.append(MISSING_REGION)
         if 'JP' in stored and 'JP' not in expected and any(
                 (code or '').strip().upper() == 'KP' for _tid, code in raw):
             buckets.append(KOREA_AS_JP)
         # Problem 3 only: NA with title IDs that name no region at all (`IP` or missing). A list with
         # no title IDs gives no evidence either way, and NA beside a KNOWN non-NA title ID is the
-        # storefront bug, which dataset_disagrees already counts.
+        # storefront bug, which wrong_region already counts.
         if 'NA' in stored and tids and not expected:
             buckets.append(NA_FROM_UNKNOWN)
-        if pk in has_sibling and not is_regional:
+        if verdict == REGIONAL and not is_regional:
             buckets.append(REGIONAL_MISSED)
-        if pk in same_label:
-            buckets.append(SAME_REGION_SIBLINGS)
-        if is_regional and pk not in has_sibling:
+        if verdict == NOT_REGIONAL and is_regional:
             buckets.append(REGIONAL_STALE)
         if is_regional and not stored:
             buckets.append(REGIONAL_NO_REGION)
@@ -239,11 +320,12 @@ def scan(platform=None):
                 'stored': sorted(stored), 'expected': sorted(expected), 'title_ids': raw,
                 'is_regional': is_regional, 'played': played or 0, 'concept_id': concept_id,
                 'unit': unit_key(concept_pk, igdb_id, status), 'buckets': buckets,
-                # A lone regional list whose labels are all Asian is the one REGIONAL_STALE case
-                # that may be intended (a JP-only release). Counted apart so the rebuild's rule for
-                # lone lists can be decided from data rather than guessed.
-                'asian_only': bool(stored) and stored <= ASIAN_REGIONS,
+                'verdict': verdict, 'reason': reason,
+                # Chips render only for a regional list with a stored region, so this is the
+                # difference between a wrong label hunters SEE and one sitting unread in the column.
+                'shown': bool(is_regional and stored),
             })
 
     stats['coverage'] = dict(stats['coverage'])
+    stats['verdicts'] = dict(stats['verdicts'])
     return rows, stats

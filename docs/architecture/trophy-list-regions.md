@@ -26,9 +26,25 @@ How a trophy list gets its region chips (NA, EU, JP, AS, KR, CN) and its `is_reg
 
 ## The regional unit
 
-Lists are regional versions of each other when they belong to the **same IGDB version on the same platform**: the raw `IGDBMatch.igdb_id` of their concept, trusted matches only (`IGDBMatch.TRUSTED_STATUSES`). Trophy setups do not have to match. Lists with no trusted match fall back to their Concept.
+Candidate siblings are lists of the **same IGDB version on the same console**: the raw `IGDBMatch.igdb_id` of their concept, trusted matches only (`IGDBMatch.TRUSTED_STATUSES`). Trophy setups do not have to match. Lists with no trusted match fall back to their Concept.
 
-Within a unit, lists that share a title ID are one product carrying two trophy lists, so they are not each other's regional siblings.
+- **Consoles only** (`PLATFORM_PRIORITY_ORDER`). `PSVR`, `PSVR2` and `PSPC` are tags that ride along on a console list, so a PS4/PSVR list and a PS5/PSVR list of one game are NOT siblings (No Man's Sky, RE7 and Hitman 3 were, in the first baseline). A list with only tags is grouped on its tags.
+- **Products, not lists.** Lists that share a title ID are one product carrying two trophy lists, so they are not each other's siblings.
+
+## The regional rule
+
+Being a candidate sibling is not enough. The 2026-10-23 prod baseline showed same-region siblings everywhere: Dead by Daylight splits one game's trophies across several EU/NA lists, Fall Guys got a new list at its free-to-play relaunch, Call of Duty HQ carries several PS5 lists. What separates a regional split is the **regions**, read from title IDs (never from the stored label, which is what is being judged).
+
+| Verdict | When | Reason code |
+|---|---|---|
+| Regional | another product in its unit covers regions that do **not overlap** its own (Astro Bot AS/EU/JP/NA beside Astro Bot CN) | `disjoint_sibling` |
+| Unjudged (flag left as is) | it has no region data | `no_region_data` |
+| Regional | its regions are Asian only (JP/AS/KR/CN), with or without a sibling | `asia_only` |
+| Unjudged (flag left as is) | a sibling has no region data, so a disjoint sibling cannot be ruled out | `sibling_without_region_data` |
+| Not regional | every sibling's regions overlap its own (split list, reissue, relaunch) | `overlapping_siblings` |
+| Not regional | no sibling at all | `global` |
+
+Checked top to bottom. "Its regions" are its product's: every list sharing a title ID with it, so one storefront product cannot get two verdicts. A region-locked list counts with its admin-set region, since that is the truth its siblings are judged against. The two owner decisions (2026-10-23): an Asia-only list is regional to its region even alone, and a list that cannot be judged keeps whatever flag it has today (most of PS3/Vita, until a follow-up finds their regions). The rule is `region_service.regional_verdicts`, which the rebuild reuses.
 
 ## Region sources, by trust
 
@@ -57,7 +73,7 @@ Prefix table: `UP/UB/US/UT` NA, `EP/EB` EU, `JP/JA/JB` JP, `HP/HA/HB/HT` AS, `KP
 | `audit_regions` | Read-only. Buckets every list by what is wrong with its region or flag, with most-played samples, a per-platform coverage table, and a `region_lock` count. Run before and after any region fix. | `python manage.py audit_regions`, `--bucket korea_as_jp`, `--platform PS5`, `--sample N` |
 | `populate_title_ids` | Refresh `TitleID` from the andshrew dataset | `python manage.py populate_title_ids` |
 
-**Audit buckets:** `dataset_disagrees`, `korea_as_jp`, `na_from_unknown` (NA, with title IDs that name no known region), `regional_missed`, `same_region_siblings`, `regional_stale`, `regional_no_region`. A list can be in several. Region-locked lists are skipped and left out of the percentages, but still count as another list of their game when judging siblings (unlike `check_and_mark_regional`, which ignores them).
+**Audit buckets:** `wrong_region` (stored has a code its title IDs do not support), `missing_region` (stored only lacks one), `korea_as_jp`, `na_from_unknown` (NA, with title IDs that name no known region), `regional_missed` / `regional_stale` (the flag disagrees with the regional rule, tallied by reason code), `regional_no_region`. A list can be in several. The `shown` column counts lists whose chips actually render (flagged regional, with a stored region); a wrong label on an unflagged list is never seen. A "Regional verdicts" table shows how the rule splits the catalogue. Region-locked lists are skipped and left out of the percentages, but still count as another list of their game when judging siblings (unlike `check_and_mark_regional`, which ignores them).
 
 **Run order on prod:** `populate_title_ids` first (it resets the dataset's TitleID rows that sync overwrote), then `audit_regions`.
 
@@ -69,7 +85,8 @@ Prefix table: `UP/UB/US/UT` NA, `EP/EB` EU, `JP/JA/JB` JP, `HP/HA/HB/HT` AS, `KP
 - **Not `GameFamily`, not the `X`/`X-N` family.** Both group other versions (The Last of Us original, Remastered and Part I share canonical 1009), so either would flag a remaster as a regional version.
 - **The audit's blind spot:** sync overwrites every TitleID stored as `IP` with the US store's answer. That covers title IDs missing from the dataset (auto-created as `IP`) and the ~9.7k dataset rows with no region (also stored as `IP`). Those rows hold the same wrong NA as their lists, so the audit cannot see those lists as wrong. `populate_title_ids` resets the dataset rows only. Telling the rest apart needs provenance on `TitleID`, which the fix adds.
 - **`partials/region_badges.html` renders anything that is not NA, EU or JP as "AS"**, so a KR or CN list shows an AS chip there. The fix must update it when it starts storing KR.
-- **Lone regional lists are not all stale.** A list labeled only JP/AS/KR/CN with no sibling is probably an Asia-only release; the audit counts those separately.
+- **A sibling is not a regional version.** Two lists of one game on one console are regional only when their regions do not overlap. Same-region siblings (split lists, relaunches) read as not regional, and `disambiguate_entries` keeps their switcher chips apart.
+- **Lone does not mean global for Asia.** A list from Asian regions only is regional by itself (owner decision), so it keeps its JP/AS chip with no sibling.
 - **Querying another storefront** is just the `country`/`language` parameters on the same catalog call, with the same NPSSO. Responses come back localized (name, description, rating), so a non-US response must never overwrite Concept fields (the existing `used_fallback_region` gate in `sync_title_id`).
 
 ## Related Docs
