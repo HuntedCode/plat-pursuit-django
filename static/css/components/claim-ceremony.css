@@ -88,13 +88,13 @@
 /* ---- Job tiles ----
  * A page holds up to 5 tiles in the single-column list -- it never scrolls. Bigger claims paginate
  * and the pager below flips between pages. A screen too short for 5 even with compact tiles gets
- * fewer per page (fitPageSize in claim-ceremony.js) rather than tiles spilling under the ladder. */
+ * fewer per page (fitPage in claim-ceremony.js) rather than tiles spilling under the ladder. */
 .ccx__jobs {
     list-style: none; margin: 14px 0 6px; padding: 2px; min-height: 0;
     display: flex; flex-direction: column; gap: 6px;
     transition: opacity 0.15s ease, transform 0.15s ease;
 }
-.ccx__jobs.is-out { opacity: 0; transform: translateY(-6px); }   /* autoplay page turn: fade the old 5 out */
+.ccx__jobs.is-out { opacity: 0; transform: translateY(-6px); }   /* autoplay page turn: fade the old page out */
 
 /* Manual arrow flips: Material "shared axis" (X). Outgoing leaves toward the pressed direction,
  * incoming arrives from the opposite side -- spatial, directional, GPU-only (transform + opacity). */
@@ -315,10 +315,11 @@
 .ccx.is-live .ccx__foot, .ccx.is-static .ccx__foot { opacity: 1; transform: none; }
 .ccx__done { flex: 0 0 auto; }
 
-/* ---- Short screens (a laptop at 150% scaling is about 1280x630) ----
- * Tightens the card's spacing, never the tiles, so a full page of 5 jobs plus the pager fits under the
- * height cap. Without it such a screen fell back to 4 jobs a page (fitPageSize), lengthening every claim
- * of 5 or more by a page turn. Placed after the rules it overrides so it wins the same-specificity tie. */
+/* ---- Short screens (a laptop at 150% scaling is about 1280x630; short phones too, e.g. 375x667) ----
+ * Tightens the card's spacing and trims the award number, never the tiles, so a full page of 5 jobs plus
+ * the pager fits under the height cap. Without it such a screen fell back to 4 jobs a page (fitPage),
+ * lengthening every claim of 5 or more by a page turn. Placed after the rules it overrides so it wins the
+ * same-specificity tie. */
 @media (max-height: 700px) {
     .ccx__stage { padding: 18px 20px 14px; }
     .ccx__award { margin: 4px 0 2px; }

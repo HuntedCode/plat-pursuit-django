@@ -106,7 +106,7 @@ almost always a specific detail that question surfaces:
   (1366x657 is common, and about 1280x630 at 150% scaling): the job list, which never scrolls and is the
   one block that shrinks, overflowed, and its last tiles painted under the Pursuer ladder and the pager
   (found 2026-10-23). The roomy look now also needs `min-height: 820px`, a `max-height: 700px` block
-  tightens the card's spacing, and as a last resort `fitPageSize()` in `claim-ceremony.js` shows fewer
+  tightens the card's spacing, and as a last resort `fitPage()` in `claim-ceremony.js` shows fewer
   jobs a page rather than spill. `test_claim_ceremony_fit_browser.py` plays it at laptop sizes. Any
   dense overlay with a height cap needs its fit pass at a short desktop window, not only a phone.
 - **Career is the bar, not a component library.** Reuse the *patterns*

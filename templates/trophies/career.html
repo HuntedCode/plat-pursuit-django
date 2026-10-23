@@ -516,8 +516,9 @@ page join THIS panel as extra rows. {% endcomment %}
         };
     }
     // Layout stress: two FULL pages (5 + 5) where every job crosses all seven tiers, so the recap shows
-    // the widest it ever can -- all 7 chips at double-digit counts. Confirms a full page of 5 tiles + the
-    // maxed summary + pager + rank bar + footer all fit with no scroll. Pursuer stays in-division (no
+    // the widest it ever can -- all 7 chips at double-digit counts. Checks the tiles + the maxed summary
+    // + pager + rank bar + footer all fit with no scroll (5 a page on a tall screen; a shorter one may page
+    // fewer). Pursuer stays in-division (no
     // hand-off), so the whole settled stack is on screen at once, controls and all.
     var ALL_TIERS = [
         { key: 'apprentice', name: 'Apprentice', level: 10, rank: 1 }, { key: 'adept', name: 'Adept', level: 25, rank: 2 },
@@ -597,7 +598,7 @@ page join THIS panel as extra rows. {% endcomment %}
             ],
             pursuer: { from_level: 1365, to_level: 1395 },   // post-process rebuilds -> Paragon I -> Luminary V
         },
-        // Stress tests: the paged reveal (5 per page auto-play, then arrows to flip back).
+        // Stress tests: the paged reveal (up to 5 per page auto-play, then arrows to flip back).
         get big13() { return bigClaim(13); },   // 3 pages (5 + 5 + 3)
         get big25() { return bigClaim(25); },   // 5 pages
         get maxfit() { return maxFit(); },       // 2 full pages of 5 + the widest recap (all 7 tier chips)

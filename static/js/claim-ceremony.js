@@ -269,7 +269,7 @@
         return li;
     }
 
-    var PAGE_SIZE = 5;   // jobs per page at most -- more jobs paginate; a short screen gets fewer (fitPageSize)
+    var PAGE_SIZE = 5;   // jobs per page at most -- more jobs paginate; a short screen gets fewer (fitPage)
     var CHEVRON = {
         prev: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>',
         next: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>',
@@ -469,17 +469,22 @@
         // block that shrinks when the card hits its height cap, so on a screen too short for a full page its
         // last tiles spilled out under the ladder and the pager. Measured with the pager in place whenever
         // the smaller size would need one, and by layout offsets, not rects: a tile still sits 10px low
-        // (its entrance transform) at this point.
-        function fitPageSize() {
+        // (its entrance transform) at this point. Fitted once, at open: a window resized shorter mid-ceremony
+        // keeps the page size (and the height lock below) it opened with. Leaves page 1 built.
+        function fitPage() {
             var n = payload.jobs.length;
             for (var size = Math.min(PAGE_SIZE, n); ; size--) {
                 pagerEl.hidden = n <= size;
                 var tiles = buildPage(jobsEl, payload.jobs.slice(0, size));
                 var last = tiles[tiles.length - 1];
-                if (size === 1 || last.offsetTop + last.offsetHeight <= jobsEl.offsetTop + jobsEl.offsetHeight) return size;
+                // The tiles' offsets are the list's own when it is their offsetParent (a list that gains a
+                // position, transform or containment), else the stage's, like the list's.
+                var base = last.offsetParent === jobsEl ? 0 : jobsEl.offsetTop;
+                if (size === 1 || last.offsetTop + last.offsetHeight <= base + jobsEl.offsetHeight) return { size: size, tiles: tiles };
             }
         }
-        var pages = chunk(payload.jobs, fitPageSize());
+        var fitted = fitPage();
+        var pages = chunk(payload.jobs, fitted.size);
         var pageIdx = 0;
         var interactive = false;   // the arrows go live only once every page has auto-played
         var flipping = false;      // one shared-axis flip at a time
@@ -501,9 +506,9 @@
             pagerEl.hidden = false;   // reserves its space now (revealed at settle); no layout shift later
         }
 
-        // Build page 1 immediately (tiles invisible) and LOCK the container to that height, so the box
-        // opens at its final size -- no "pop" when tiles arrive -- and shorter pages don't shrink it.
-        var firstTiles = buildPage(jobsEl, pages[0]);
+        // Page 1 is built (the fit left it built, tiles invisible); LOCK the container to its height, so the
+        // box opens at its final size -- no "pop" when tiles arrive -- and shorter pages don't shrink it.
+        var firstTiles = fitted.tiles;
         jobsEl.style.minHeight = jobsEl.offsetHeight + 'px';
         function updatePager() {
             var dots = dotsEl.children;
@@ -528,7 +533,7 @@
             wait(90).then(function () {
                 if (torn) { flipping = false; return; }
                 pageIdx = p; updatePager();
-                settlePage(buildPage(jobsEl, pages[p]), pages[p]);   // build the new 5 already at rest
+                settlePage(buildPage(jobsEl, pages[p]), pages[p]);   // build the new page already at rest
                 jobsEl.style.animation = (dir > 0 ? 'ccxPageInR' : 'ccxPageInL') + ' 260ms cubic-bezier(0.05, 0.7, 0.1, 1) both';
                 return wait(260);
             }).then(function () {
@@ -742,9 +747,9 @@
             return dismissed;
         }
 
-        // ---- full motion: bloom -> award -> auto-play each page of 5 -> hand over the arrows ----
+        // ---- full motion: bloom -> award -> auto-play each page -> hand over the arrows ----
         // Page 0 reuses the tiles already built for the height lock; later pages fade the old page
-        // out, build the next 5, and reveal.
+        // out, build the next one, and reveal.
         function autoplay(p, prebuilt) {
             if (torn) return Promise.resolve();
             var pre = prebuilt ? Promise.resolve(prebuilt) : fadeOut().then(function () { return buildPage(jobsEl, pages[p]); });

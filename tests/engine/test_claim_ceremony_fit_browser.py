@@ -7,7 +7,7 @@ output.css in Chromium, with reduced motion so it settles at once, and checks:
 
 - A laptop-height window fits a full page of 5 with no tile outside the list (compact tiles, no summary, the
   tighter short-screen spacing).
-- A window too short even for that gets fewer jobs a page rather than a spill (fitPageSize).
+- A window too short even for that gets fewer jobs a page rather than a spill (fitPage).
 - A tall desktop keeps the roomy tiles and the "Tiers earned" summary.
 
 Skips with a reason where Playwright's browser is not installed; CI installs it (see test_plat_card_layout).
@@ -69,36 +69,37 @@ MEASURE = """() => {
 }"""
 
 
-@pytest.fixture(scope='module')
-def browser():
+def _play(tmp_path, width, height, count):
+    """Plays a claim of `count` jobs and measures the settled card. Waits for the real faces first: the fit
+    measures at open, and a fallback font sets shorter lines than Inter, so a fit taken before the swap could
+    pass a page that spills once the font arrives."""
     from playwright.sync_api import sync_playwright
-    with sync_playwright() as p:
-        b = p.chromium.launch()
-        yield b
-        b.close()
-
-
-def _play(browser, tmp_path, width, height, count):
     page_file = tmp_path / 'ceremony.html'
     page_file.write_text(
         '<!doctype html><html data-theme="plat-pursuit-dark"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width, initial-scale=1">'
         f'<link rel="stylesheet" href="{CSS.as_uri()}"></head><body class="bg-base-100">'
         f'<script src="{CEREMONY_JS.as_uri()}"></script></body></html>', encoding='utf-8')
-    ctx = browser.new_context(viewport={'width': width, 'height': height}, reduced_motion='reduce')
-    pg = ctx.new_page()
-    pg.goto(page_file.as_uri())
-    pg.evaluate('(p) => { window.PlatPursuit.ClaimCeremony.play(p); }', _payload(count))
-    pg.wait_for_selector('.ccx.is-static')
-    result = pg.evaluate(MEASURE)
-    ctx.close()
-    return result
+    with sync_playwright() as p:
+        b = p.chromium.launch()
+        try:
+            pg = b.new_page(viewport={'width': width, 'height': height}, reduced_motion='reduce')
+            pg.goto(page_file.as_uri())
+            faces = pg.evaluate("Promise.all([document.fonts.load('700 14px Inter'), "
+                                "document.fonts.load('800 32px \"Bricolage Grotesque\"')])"
+                                ".then((f) => document.fonts.ready.then(() => f.map((x) => x.length)))")
+            assert all(faces), f'a face did not load, so the fit would be measured in a fallback font: {faces}'
+            pg.evaluate('(p) => { window.PlatPursuit.ClaimCeremony.play(p); }', _payload(count))
+            pg.wait_for_selector('.ccx.is-static')
+            return pg.evaluate(MEASURE)
+        finally:
+            b.close()
 
 
 @pytest.mark.parametrize('width,height', [(1280, 633), (1366, 657), (1536, 730)])
 @pytest.mark.parametrize('count', [5, 13])
-def test_a_laptop_fits_a_full_page_with_nothing_under_the_ladder(browser, tmp_path, width, height, count):
-    m = _play(browser, tmp_path, width, height, count)
+def test_a_laptop_fits_a_full_page_with_nothing_under_the_ladder(tmp_path, width, height, count):
+    m = _play(tmp_path, width, height, count)
     assert m['spill'] <= 0, f'a tile overflows the job list by {m["spill"]}px, under the ladder: {m}'
     assert m['ladderGap'] >= 0, f'the ladder overlaps the last tile: {m}'
     assert m['stageInView'], m
@@ -107,19 +108,20 @@ def test_a_laptop_fits_a_full_page_with_nothing_under_the_ladder(browser, tmp_pa
     assert m['pages'] == (0 if count == 5 else 3), m
 
 
-# 615px fits 5 tiles only WITHOUT the pager, so it catches a fit measured before the pager is in place.
-@pytest.mark.parametrize('height', [520, 615])
-def test_a_screen_too_short_for_five_pages_fewer_instead_of_spilling(browser, tmp_path, height):
-    m = _play(browser, tmp_path, 1280, height, 13)
+# The windows that catch a fit measured before the pager is in place: at 615px 13 jobs fit 5 a page only
+# without the pager (which they have from the first try); at 540px 5 jobs fit 4 only without it (the fit has
+# to bring the pager in as it drops below 5).
+@pytest.mark.parametrize('height,count', [(520, 13), (615, 13), (540, 5)])
+def test_a_screen_too_short_for_five_pages_fewer_instead_of_spilling(tmp_path, height, count):
+    m = _play(tmp_path, 1280, height, count)
     assert 1 <= m['perPage'] < 5, f'expected a smaller page on a {height}px window: {m}'
     assert m['spill'] <= 0 and m['ladderGap'] >= 0, m
-    assert m['pages'] == -(-13 // m['perPage']), f'the pager does not cover every job: {m}'
+    assert m['pages'] == -(-count // m['perPage']), f'the pager does not cover every job: {m}'
 
 
-def test_a_tall_desktop_keeps_the_roomy_tiles_and_the_summary(browser, tmp_path):
-    tall = _play(browser, tmp_path, 1920, 950, 5)
-    short = _play(browser, tmp_path, 1366, 657, 5)
+def test_a_tall_desktop_keeps_the_roomy_tiles_and_the_summary(tmp_path):
+    tall = _play(tmp_path, 1920, 950, 5)
+    short = _play(tmp_path, 1366, 657, 5)
     assert tall['perPage'] == 5 and tall['spill'] <= 0, tall
     assert tall['summary'] == 'flex', f'the tall desktop lost the Tiers earned summary: {tall}'
     assert tall['tileH'] > short['tileH'], f'the roomy tile is not roomier than the short screen tile: {tall} {short}'
-
