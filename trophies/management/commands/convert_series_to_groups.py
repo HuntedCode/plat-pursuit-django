@@ -52,7 +52,6 @@ def _metadata_from(base):
         'badge_type': base.badge_type,
         'completion_policy': policy,
         'min_required': min_required,
-        'display_series': base.effective_display_series or '',
         'franchise': base.effective_franchise,
         'collection': base.effective_collection,
         'developer': base.effective_developer,

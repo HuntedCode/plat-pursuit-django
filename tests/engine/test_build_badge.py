@@ -184,7 +184,8 @@ def test_a_subject_with_a_badge_is_refused(badge_slug, args):
     franchise = _subject("LittleBigPlanet", "littlebigplanet")
     BadgeSeriesFactory(series_slug=badge_slug, franchise=franchise)
 
-    with pytest.raises(CommandError, match=re.escape(f'"{badge_slug}" is already the badge for this subject.')):
+    # Anchored: `--franchise` alone must not offer the drop-franchise hint.
+    with pytest.raises(CommandError, match=re.escape(f'"{badge_slug}" already covers this franchise.') + '$'):
         _run('--franchise', 'littlebigplanet', *args)
 
 
@@ -192,27 +193,54 @@ def test_a_developer_with_a_badge_is_refused():
     studio = CompanyFactory(name="Naughty Dog", slug="naughty-dog")
     BadgeSeriesFactory(series_slug='nd', badge_type='developer', developer=studio)
 
-    with pytest.raises(CommandError, match='"nd" is already the badge for this subject.'):
+    with pytest.raises(CommandError, match=re.escape('"nd" already covers this developer.') + '$'):
         _run('--developer', 'naughty-dog')
 
 
-@pytest.mark.parametrize('existing, args', [
-    # A badge naming both covers both: The Last of Us, asked for as either subject.
-    ({'franchise': True, 'collection': True}, ('--series', 'ico')),
-    ({'franchise': True, 'collection': True}, ('--franchise', 'team-ico')),
+@pytest.mark.parametrize('existing, args, message', [
+    # A badge naming both covers both: The Last of Us, asked for as either one.
+    ({'franchise': True, 'collection': True}, ('--series', 'ico'), 'already covers this series.'),
+    ({'franchise': True, 'collection': True}, ('--franchise', 'team-ico'), 'already covers this franchise.'),
+    ({'franchise': True, 'collection': True}, ('--series', 'ico', '--franchise', 'team-ico'),
+     'already covers this franchise and series.'),
     # A series-only badge covers the series however it is asked for again.
-    ({'collection': True}, ('--series', 'ico', '--franchise', 'team-ico')),
-    # A franchise badge covers every franchise game, so a series badge that also names the franchise repeats it.
-    ({'franchise': True}, ('--series', 'ico', '--franchise', 'team-ico')),
+    ({'collection': True}, ('--series', 'ico', '--franchise', 'team-ico'), 'already covers this series.'),
+    # A franchise badge covers every franchise game, so a series badge that also names the franchise repeats
+    # it. The way out (a sister series badge) is named.
+    ({'franchise': True}, ('--series', 'ico', '--franchise', 'team-ico'),
+     'already covers this franchise. Drop --franchise to build a series badge beside it.'),
 ])
-def test_a_subject_any_badge_names_is_refused(existing, args):
+def test_a_subject_any_badge_names_is_refused(existing, args, message):
     franchise = _subject("Team Ico", "team-ico")
     series_subject = _subject("Ico", "ico", 'collection')
     BadgeSeriesFactory(series_slug='old-ico', franchise=franchise if existing.get('franchise') else None,
                        collection=series_subject if existing.get('collection') else None)
 
-    with pytest.raises(CommandError, match='"old-ico" is already the badge for this subject.'):
+    with pytest.raises(CommandError, match=re.escape(f'"old-ico" {message}') + '$'):
         _run(*args, '--slug', 'new-ico')
+
+
+def test_no_drop_franchise_hint_when_another_badge_holds_the_series():
+    """Two badges, one each: dropping --franchise would only hit the series badge, so the hint is withheld."""
+    franchise = _subject("Team Ico", "team-ico")
+    series_subject = _subject("Ico", "ico", 'collection')
+    BadgeSeriesFactory(series_slug='franchise-badge', franchise=franchise)
+    BadgeSeriesFactory(series_slug='series-badge', collection=series_subject)
+
+    with pytest.raises(CommandError, match=re.escape('"franchise-badge" already covers this franchise.') + '$'):
+        _run('--series', 'ico', '--franchise', 'team-ico', '--slug', 'new-ico')
+
+
+def test_a_franchise_with_only_a_series_badge_can_get_its_own():
+    """The other sister direction: a badge naming only the series leaves the franchise free."""
+    franchise = _subject("Souls", "souls")
+    series_subject = _subject("Dark Souls", "dark-souls", 'collection')
+    _game("Demon's Souls", ['PS3'], [franchise, series_subject])   # shared game: a real sister pair
+    BadgeSeriesFactory(series_slug='dark-souls', collection=series_subject)
+
+    _run('--franchise', 'souls')
+
+    assert BadgeSeries.objects.get(series_slug='souls').badge_type == 'franchise'
 
 
 def test_leftover_stages_on_the_slug_are_refused_up_front():

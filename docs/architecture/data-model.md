@@ -109,7 +109,8 @@ live edition" (the set the badge pages serve) is `BadgeSeries.objects.live()`; u
 `group_badges__is_live` join, which duplicates a series per live edition.
 
 Key fields: `series_slug` (unique), `name`, `badge_type`, `completion_policy` (`all` / `min_count`),
-`min_required`, `description`, `display_series`, `badge_image`, `holo_badge_image`.
+`min_required`, `description`, `badge_image`, `holo_badge_image`. `name` is the one label everywhere
+(the old `display_series` override was removed in 2026-10).
 
 Key relationships:
 - `franchise` / `collection` FK to `Franchise`, `developer` FK to `Company` (drives the coverage audit)
