@@ -63,15 +63,23 @@ model) around ONE list viewport tab:
 - **Default list rule (deterministic, decided here)**: the viewer's own in-progress list when they
   have progress on exactly one stack; otherwise `PLATFORM_PRIORITY_ORDER`. Personalized when it
   can be, stable when anonymous.
-- **Identity chip** on the viewport: list name + platform badges + region, with the link to the
-  List detail page living IN the chip -- identity and escape hatch are one object.
+- **A switcher only when there is something to switch** (GL-05, 2026-10-22). One list: no picker (a picker
+  with one card has nothing to pick). Several: the selected chip already says which list is showing. The old
+  identity chip ("Viewing list: ...") retired with that; its one useful part, the link to the list's own page
+  ("List details, leaderboard & stats"), rides the control row above the trophies and follows each swap.
 - **Lazy**: default list renders server-side; other lists fetch on switch.
 - **The hero leads with the hunter** (rebuilt 2026-10-22 under the Page Principles, DS-07; the owner
   approved mock-ups first, in four rounds). Five parts: the cover; the head (platform UNION chips, title,
   ONE facts line: developer, year, the page's distinct players); the signed-in hunter's **status card**
   from their BEST list (a platinum on any list wins, else the highest percentage; it does not follow the
   switcher); the **platinum stat**; and the **actions**, Share (once finished, the share card), Add to list,
-  Report an issue, at equal weight on the first screen.
+  Report an issue, at equal weight on the first screen. The status card and the platinum stat are shared
+  partials (`game_page/_status_card.html`, `_plat_stat.html`, fed by `views/hero_context.py`): List detail's
+  hero asks the same questions of one list (below).
+  - **Signed out, the status slot invites** (GL-09): "N hunters here are chasing this platinum" (named only
+    from 25 players; "hunting these trophies" when no list has a platinum), else "Track your platinum
+    journey", with Start tracking free and Sign in; signed in without a linked PSN, Link your PSN
+    (`_status_invite.html`). Without it a visitor's hero was a title, one line of facts and empty space.
   - **The platinum stat** has no box: a cut gem in the house rarity grade beside the rate and its PSN tier
     (the hunter's list, else the most-played list). The light climbs with the grade (Common flat, a halo
     from Rare, a glint from Very Rare, a sweeping gleam only on Ultra Rare). With no platinum on any list
@@ -86,9 +94,9 @@ model) around ONE list viewport tab:
     every viewer, so they are depth. The one personal part, a contract ready to claim, is the status
     card's last line, linking the Contracts board.
   Everything else the hero carried (publisher, the full release date, time to beat, the description and
-  tags, screenshots, the family) moved to the About tab. The screenshot LIGHTBOX is shared with List detail
-  (`shot-lightbox.js` + `shot_lightbox.html`); its thumbs now open from About. Released is
-  `concept.release_date` (the work's date, not the host list's platform date).
+  tags, screenshots, the family) moved to the About tab. The screenshot LIGHTBOX (`shot-lightbox.js` +
+  `shot_lightbox.html`) opens from About's thumbs; List detail's hero no longer has screenshots, so this page
+  is its only host. Released is `concept.release_date` (the work's date, not the host list's platform date).
 - **Flags come back for the WHOLE game only** (owner, 2026-10-10). The hero shows a game flag (Shovelware,
   Delisted, Unobtainable, Online Trophies, Buggy Trophies) only when EVERY list in the set carries it
   (`game_page_views.shared_list_flags`; Unobtainable means no list is obtainable). It reuses List detail's
@@ -104,6 +112,29 @@ model) around ONE list viewport tab:
 - **No "Other platforms" in About on igdb pages** (owner's call: it restates the switcher's own set):
   `about_hide_other_platforms` leaves it out there; the family stays. `/games/c/` pages KEEP both: there
   "Other platforms" is the sole surface linking untrusted same-igdb sibling concepts.
+
+## List detail anatomy: the Game page's hero, asked of one list
+
+The trophy list pass (2026-10-22; the review record is
+[reviews/game-and-list-lower.md](reviews/game-and-list-lower.md), GL-01..GL-11, mock-ups approved in two
+rounds). Before it, a hunter on a phone scrolled almost three screens to the first trophy.
+
+- **The hero is the Game page's** (`gp-hero gp-hero--list`, the same grid and edges): the cover; the head
+  ("Part of <game> - View game", this page's way back up, over the list's platform and region chips; the
+  title; ONE facts line: developer, the list's own year, players opening Ranks, and "N versions" opening
+  Versions & editions when it has any); the status card; the platinum stat of THIS list; the actions.
+- **The status card carries the detail** (`_status_card.html` with `detail`): the bar by trophy group, its
+  legend, the grade counts (earned/defined, the group headers' own `_grade_counts.html`) and **My stats**,
+  which moved here from the action row (owner, round 2: it is this hunter's stats for this list). On a phone
+  and a tablet the card is rows, every row the card's full width; desktop keeps one footer row. "Contract
+  ready to claim" is its last line, never on another hunter's page. Signed out, the invitation, naming what
+  there is to earn.
+- **Actions**: Share (the share card, once the VIEWER finished this list), Add to list, Report (this list).
+- **Gone from this hero**: the facts grid, the description and tags, screenshots, the badge and Jobs spine,
+  the trophy grade cards, the Platinum Outlook. They are the Game page's (About), one tap up. "Not in a badge
+  series" and "No screenshots" were absences shown as content (rule 3).
+- **The four community numbers sit behind Ranks** (GL-03): they are this list's community, so they head the
+  Ranks view, server-rendered above the board's lazy host (`#gd-lb-host`), counting up on its first showing.
 
 ## The trophy grid is ONE COMPONENT, rendered on both pages
 
@@ -127,6 +158,23 @@ the one htmx path, and the select follows swaps made from either control.
 document-delegated enhancements (`trophy-grid.js`, loaded by both hosts) needs zero rebinding.
 Rows keep `data-gd-groupjump`, so List detail's smooth-jump delegate and minibar sync work
 unchanged; without JS the rows are plain anchor jumps.
+
+**One control row above it, on both pages** (GL-10): the count (and on the Game page the list's own page),
+"All / Unearned" (only with a hunter displayed), Sort, and "More filters" with Type, Rarity and DLC
+(`trophy_grid/_controls.html`). Both pages filter with ONE function, `game_views.filter_and_sort_rows`; the
+Game page's viewport accepts the same GET params. Each host owns its `<form>`: List detail swaps
+`#browse-results` and pushes the URL; the Game page's form stands OUTSIDE `#gp-viewport` (so a swap never
+closes the panel or steals a select's focus), carries the list in a hidden input, does not push the URL
+(game-page.js owns `?list=`), and shares ONE `hx-sync` scope with the list picker. A list switch starts the
+new list unfiltered and resets the row. "More filters" is the house `PlatPursuit.filterPanel`; the count and
+load bar are `PlatPursuit.TrophyControls` (trophy-grid.js), shared by both pages' scripts.
+
+**The rows** (GL-06, GL-07): "Earned Jun 8, 2026" with the exact time on hover; the green edge is the one
+earned mark (no check). The two rates sit in fixed-width columns with tabular figures, so they line up row to
+row, and never wrap on a phone. **The DLC packs** scroll sideways on a phone instead of stacking one per row
+(GL-04). **The group headers use PSN's percentage** (GL-11, `util_modules/trophy_progress.psn_progress`: bronze
+15, silver 30, gold 90 points, the platinum left out, floored), as does the hero's bar, so a list shows one
+number: counting trophies put Jak 3's base game at 49% under a hero that said 45%.
 
 SEO stays clean because the PAGES differ even though the component is shared: Game detail answers
 "the game" queries; List detail is the canonical, indexable home of stack-specific intent
@@ -169,12 +217,19 @@ Page-by-page during the rebuild, never a big-bang rename:
 2. Game detail + Games browse are the new builds.
 3. When URLs move, 301 the old ones -- the SEO lane just stabilized; migrations are deliberate.
 4. Universal search: Games (concepts) are the primary result type; lists are reachable through
-   them. A list-specific query match may surface the list directly, labeled by its identity chip.
+   them. A list-specific query match may surface the list directly, labeled by its platforms.
 5. `audit_psn_capture --names` (main branch) reports how often list names diverge from concept
    titles, classified by kind. It is a DIAGNOSTIC, not a gate -- nothing in this design branches
    on the number. Consult it mid-build if a sizing question actually comes up.
 
 ## Rollout log
+
+- **2026-10-22 -- the trophy list pass** (GL-01..GL-11, [reviews/game-and-list-lower.md](reviews/game-and-list-lower.md)).
+  List detail's hero became the Game page's (shared status card, platinum stat and invitation partials,
+  `views/hero_context.py`); one control row and one filter for both pages; no picker for a one-list game and
+  the identity chip retired; the community numbers moved behind Ranks; short earned dates, fixed rate columns,
+  a sideways DLC strip on phones; PSN-weighted group percentages. First trophy on a phone: 1,883px to 963px
+  (Golf With Your Friends PS4), 1,605px to 843px (Jak 3 PS4).
 
 - **2026-08-30 -- PHASE 4: Trophy Lists browse shipped** (7 commits incl. rail pins + audit response) -- the IA's LAST canonical
   page. `/games/lists/` (the neutral `lists` SEGMENT per the naming insurance; url name
@@ -274,6 +329,7 @@ Page-by-page during the rebuild, never a big-bang rename:
   - Split-concept pages show the HOST concept's ratings only; merging sibling concepts' rating
     sets is the refinement phase's design problem.
   - The identity chip shows name+platforms; "region" has no data source on Game and is deferred.
+    (The chip itself retired with the trophy list pass, 2026-10-22.)
   - The `/games/c/` fallback tail is CRAWLABLE and sitemap-advertised. (An earlier draft of this
     bullet claimed a robots.txt `/games/*/*` disallow covered it -- that rule was REMOVED in SEO
     Lane 0 on 2026-08-23 precisely because wildcards also blocked canonical pages; the final audit
@@ -295,7 +351,15 @@ Page-by-page during the rebuild, never a big-bang rename:
   `display_image_url` already handle stubs -- keep new surfaces on those helpers.
 - **Do not hand-copy the trophy grid markup** into a second template; both pages include the one
   partial. Two hand-written copies drifting was the original argument against rendering it twice
-  at all.
+  at all. The same goes for the control row and the filter behind it (`_controls.html`,
+  `filter_and_sort_rows`).
+- **A GET form's htmx swap has the list in `finalRequestPath`, not `requestPath`.** For the Game page's filter
+  form, `pathInfo.requestPath` is the bare `hx-get` path and the query htmx appends lives only in
+  `finalRequestPath`; reading the first sent every filter back to the default list, switching the chips
+  under the viewer. Caught in the browser; pinned in test_trophy_list_hero.py.
+- **A filter and a list switch must share one sync scope** (`hx-sync="#gp-viewport:replace"` on the form AND
+  the picker). In separate scopes both can be in flight and land in either order, leaving one list's
+  trophies under the other's controls.
 - **Family != franchise** in UI copy, ever.
 - **Ratings/roadmaps are concept/CTG-level** -- they belong on Game detail's tabs, not List
   detail, no matter how tempting "list ratings" sounds. List detail owns what is genuinely

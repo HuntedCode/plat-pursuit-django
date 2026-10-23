@@ -468,6 +468,13 @@ Compact card for search, sort, and filter controls. Collapsible drawer for secon
 
 > The snippet above is the **legacy DaisyUI** shape. The rebuilt house toolbar uses `.pp-bgal__*` / `.pp-gbrowse__*` (see `game_list.html`, `components/{browse-gallery,game-browse}.css`). Follow that on rebuilt pages, plus the shared premium features below.
 
+**A results row, not a card, above a single list's items** (2026-10-22): the trophy grid's control row
+(`partials/trophy_grid/_controls.html`, shared by the trophy list page and the Game page) is the light version for
+a page whose job is the list below it. No card: the count on the left, then the primary filter as a radio-backed
+`.pp-switch` ("All / Unearned"), Sort, and "More filters" opening the rest in a `filterPanel` drawer with its count
+badge. The three controls share one 40px height; on a phone the count takes a line, Sort takes the slack, and More
+filters drops to its icon (its label visually hidden, never `display: none`).
+
 ### Search toolbar — shared premium features (2026-07)
 
 Two shared helpers (in `static/js/utils.js`) give **any** search toolbar — browse or bespoke — the same premium behavior. The `.pp-search-*` visuals live in shared CSS (`components/browse-gallery.css`) keyed on `[data-search-wrap]` + `.has-value`/`.is-searching`, so they work on any positioned wrapper. **Live on: Browse Games, Badge list (Series + Gallery), Collection Gallery, Career Contracts.** (`browse-filters.js` calls the same helper internally; bespoke controllers call it directly.)
