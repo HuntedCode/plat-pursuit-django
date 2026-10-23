@@ -86,14 +86,15 @@
 }
 
 /* ---- Job tiles ----
- * A page holds up to 5 tiles in the roomy single-column list -- it never scrolls. Bigger claims
- * paginate (5 at a time) and the pager below flips between pages. */
+ * A page holds up to 5 tiles in the single-column list -- it never scrolls. Bigger claims paginate
+ * and the pager below flips between pages. A screen too short for 5 even with compact tiles gets
+ * fewer per page (fitPage in claim-ceremony.js) rather than tiles spilling under the ladder. */
 .ccx__jobs {
     list-style: none; margin: 14px 0 6px; padding: 2px; min-height: 0;
     display: flex; flex-direction: column; gap: 6px;
     transition: opacity 0.15s ease, transform 0.15s ease;
 }
-.ccx__jobs.is-out { opacity: 0; transform: translateY(-6px); }   /* autoplay page turn: fade the old 5 out */
+.ccx__jobs.is-out { opacity: 0; transform: translateY(-6px); }   /* autoplay page turn: fade the old page out */
 
 /* Manual arrow flips: Material "shared axis" (X). Outgoing leaves toward the pressed direction,
  * incoming arrives from the opposite side -- spatial, directional, GPU-only (transform + opacity). */
@@ -174,8 +175,11 @@
 
 /* Mobile trims the tile's airiness (padding, gap, subtitle margin, bar height) so a full page of 5 clears
  * a short phone with no scroll -- the icon (40px) and name (14px) are untouched, so the tiles keep their
- * weight. Tablet/desktop have the vertical room, so they get the roomier tile back. */
-@media (min-width: 768px) {
+ * weight. A wide screen gets the roomier tile back only when it is TALL too: a laptop is wide but short
+ * (1366x657 is common), and there the roomy tiles + the summary pushed a page of 5 past the card's height
+ * cap, under the ladder and pager. 820px is what a full roomy page needs (measured: about 805px).
+ * Keep the three `min-height: 820px` queries in this file in step. */
+@media (min-width: 768px) and (min-height: 820px) {
     .ccx__jobs { gap: 8px; }
     .ccx__job { padding: 10px 12px; }
     .ccx__jtier { margin-bottom: 4px; }
@@ -227,9 +231,9 @@
     from { transform: translate(-50%, -50%) scale(1); opacity: 1; }
     to { transform: translate(-50%, -80%) scale(1.03); opacity: 0; }
 }
-/* Tier-up stamp: sized to match the roomier tile on tablet/desktop (mobile keeps it tighter, above, so it
- * doesn't dwarf the compacted tiles). Placed after the base rules so it wins the same-specificity tie. */
-@media (min-width: 768px) {
+/* Tier-up stamp: sized to match the roomier tile (compact tiles keep it tighter, above, so it doesn't
+ * dwarf them). Placed after the base rules so it wins the same-specificity tie. */
+@media (min-width: 768px) and (min-height: 820px) {
     .ccx__tierstamp { gap: 5px; padding: 4px 11px; }
     .ccx__ts-lv { font-size: 10px; }
     .ccx__ts-name { font-size: 12px; }
@@ -247,13 +251,13 @@
  * Omitted on mobile: it's the only unbounded block in the stack (its wrapped-chip height grows with the
  * number of tiers crossed) and the most redundant (every tier it tallies just bloomed on its own tile and
  * keeps a resting-tier subtitle). Dropping it is what keeps a full page of 5 tiles from overflowing a short
- * phone with no scroll. Tablet/desktop have the room, so they keep the full tally. */
+ * phone with no scroll. Short laptops drop it for the same reason; tall wide screens keep the full tally. */
 .ccx__summary {
     display: none; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px;
     margin-top: 10px; opacity: 0; transition: opacity 0.45s ease;
 }
 .ccx.is-settled .ccx__summary, .ccx.is-static .ccx__summary { opacity: 1; }
-@media (min-width: 768px) { .ccx__summary:not([hidden]) { display: flex; } }
+@media (min-width: 768px) and (min-height: 820px) { .ccx__summary:not([hidden]) { display: flex; } }
 .ccx__summary-label { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: color-mix(in oklab, var(--pp-text) 55%, transparent); }
 .ccx__summary-chip {
     padding: 3px 9px; border-radius: 999px; font-size: 12px; font-weight: 700;
@@ -310,6 +314,21 @@
 }
 .ccx.is-live .ccx__foot, .ccx.is-static .ccx__foot { opacity: 1; transform: none; }
 .ccx__done { flex: 0 0 auto; }
+
+/* ---- Short screens (a laptop at 150% scaling is about 1280x630; short phones too, e.g. 375x667) ----
+ * Tightens the card's spacing and trims the award number, never the tiles, so a full page of 5 jobs plus
+ * the pager fits under the height cap. Without it such a screen fell back to 4 jobs a page (fitPage),
+ * lengthening every claim of 5 or more by a page turn. Placed after the rules it overrides so it wins the
+ * same-specificity tie. */
+@media (max-height: 700px) {
+    .ccx__stage { padding: 18px 20px 14px; }
+    .ccx__award { margin: 4px 0 2px; }
+    .ccx__xp { font-size: 3rem; }
+    .ccx__jobs { margin: 6px 0 2px; }
+    .ccx__pager { margin-top: 4px; }
+    .ccx__rankbar { margin-top: 8px; padding-top: 8px; }
+    .ccx__foot { margin-top: 6px; }
+}
 
 /* ---- Rank finale: a takeover played after the pages when the Pursuer rank moves. Two intensities:
  * a division step is lighter; a full rank-up (.is-heavy) adds the scan-beam + a bigger label. ---- */
