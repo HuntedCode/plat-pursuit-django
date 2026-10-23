@@ -56,29 +56,30 @@ def active_editions():
 # One rule, in two shapes: `existing_badge` answers it for one subject (build_badge refuses on it) and
 # `_subjects_with_badges` for the whole catalogue (badge_candidates hides on it). Keep the two in step; the
 # parallel tests in test_badge_candidates and test_build_badge pin both.
-# A SERIES is taken by any badge naming it; a FRANCHISE only by a franchise badge (one naming no series); a
-# DEVELOPER by any badge naming it. A series badge that also names its franchise covers the series, and
-# leaves the franchise free for its own sister badge (the God of War franchise vs the God of War series).
+# A franchise, series or developer is taken by ANY badge naming it. A badge naming a franchise covers every
+# game in it (`series_candidates` unions the subjects), so a series badge that also names its franchise (The
+# Last of Us, where series and franchise are one subject) has the franchise too: a second badge would repeat
+# it. Sister badges still work because they name different subjects (a God of War franchise badge beside a
+# series badge that names only its series).
 
 
 def existing_badge(franchise=None, collection=None, developer=None):
-    """The BadgeSeries that already covers this subject, or None."""
-    if franchise is None and collection is None and developer is None:
+    """The BadgeSeries that already names any of these subjects, or None."""
+    subjects = {'franchise': franchise, 'collection': collection, 'developer': developer}
+    named = Q()
+    for field, subject in subjects.items():
+        if subject is not None:
+            named |= Q(**{field: subject})
+    if not named:
         raise ValueError("existing_badge needs a franchise, collection or developer.")
-    if developer is not None:
-        found = BadgeSeries.objects.filter(developer=developer)
-    elif collection is not None:
-        found = BadgeSeries.objects.filter(collection=collection)
-    else:
-        found = BadgeSeries.objects.filter(franchise=franchise, collection__isnull=True)
-    return found.order_by('pk').first()
+    return BadgeSeries.objects.filter(named).order_by('pk').first()
 
 
 def _subjects_with_badges():
-    """Ids of every franchise/series `existing_badge` would find a badge for."""
+    """Ids of every franchise/series some badge names (Franchise holds both, so one id set serves both)."""
     rows = BadgeSeries.objects.filter(Q(franchise__isnull=False) | Q(collection__isnull=False))
-    return {collection_id or franchise_id for franchise_id, collection_id in
-            rows.values_list('franchise_id', 'collection_id')}
+    return {subject_id for pair in rows.values_list('franchise_id', 'collection_id') for subject_id in pair
+            if subject_id is not None}
 
 
 # --- candidates ----------------------------------------------------------------------

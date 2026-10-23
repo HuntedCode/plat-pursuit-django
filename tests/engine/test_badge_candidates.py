@@ -259,15 +259,19 @@ def test_a_sister_badge_does_not_hide_the_other_subject():
     assert [c.subject.source_type for c in badge_candidates()] == ['collection']
 
 
-def test_a_series_badge_naming_its_franchise_hides_the_series_only():
-    """Same rule build_badge refuses by: the franchise is still free for its own franchise badge."""
-    franchise, series = _subject("Halo"), _subject("Halo Saga", source_type='collection')
+def test_a_badge_naming_both_hides_both():
+    """The Last of Us: series and franchise are one subject, so one badge names both and covers both."""
+    franchise = _subject("The Last of Us")
+    series = _subject("The Last of Us", source_type='collection')
     for subject in (franchise, series):
         _game(subject)
         _game(subject)
-    BadgeSeriesFactory(series_slug="halo-saga", franchise=franchise, collection=series)
+    BadgeSeriesFactory(series_slug="the-last-of-us", franchise=franchise, collection=series)
 
-    assert [c.subject.name for c in badge_candidates()] == ["Halo"]
+    assert badge_candidates() == []
+    assert {c.subject.source_type for c in badge_candidates(include_existing=True) if c.has_badge} == {
+        'franchise', 'collection',
+    }
 
 
 def test_a_developer_badge_hides_no_franchise():

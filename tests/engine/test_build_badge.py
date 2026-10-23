@@ -197,30 +197,22 @@ def test_a_developer_with_a_badge_is_refused():
 
 
 @pytest.mark.parametrize('existing, args', [
-    # A series badge that also names its franchise still covers the series.
+    # A badge naming both covers both: The Last of Us, asked for as either subject.
     ({'franchise': True, 'collection': True}, ('--series', 'ico')),
+    ({'franchise': True, 'collection': True}, ('--franchise', 'team-ico')),
     # A series-only badge covers the series however it is asked for again.
     ({'collection': True}, ('--series', 'ico', '--franchise', 'team-ico')),
+    # A franchise badge covers every franchise game, so a series badge that also names the franchise repeats it.
+    ({'franchise': True}, ('--series', 'ico', '--franchise', 'team-ico')),
 ])
-def test_a_series_with_a_badge_is_refused_whatever_else_it_names(existing, args):
+def test_a_subject_any_badge_names_is_refused(existing, args):
     franchise = _subject("Team Ico", "team-ico")
     series_subject = _subject("Ico", "ico", 'collection')
     BadgeSeriesFactory(series_slug='old-ico', franchise=franchise if existing.get('franchise') else None,
-                       collection=series_subject)
+                       collection=series_subject if existing.get('collection') else None)
 
     with pytest.raises(CommandError, match='"old-ico" is already the badge for this subject.'):
         _run(*args, '--slug', 'new-ico')
-
-
-def test_a_franchise_named_by_a_series_badge_can_still_get_its_own():
-    franchise = _subject("Souls", "souls")
-    series_subject = _subject("Dark Souls", "dark-souls", 'collection')
-    _game("Demon's Souls", ['PS3'], [franchise])
-    BadgeSeriesFactory(series_slug='dark-souls', franchise=franchise, collection=series_subject)
-
-    _run('--franchise', 'souls')
-
-    assert BadgeSeries.objects.get(series_slug='souls').badge_type == 'franchise'
 
 
 def test_leftover_stages_on_the_slug_are_refused_up_front():
