@@ -60,10 +60,9 @@ The primary constants file (~235 lines). Contains:
 |----------|-------|---------|
 | `MODERN_PLATFORMS` | `['PS5', 'PS4']` | Platforms with title stats support |
 | `ALL_PLATFORMS` | `['PS5', 'PS4', 'PS3', 'PSVITA', 'PSVR', 'PSVR2']` | Full platform list (PSVR2 added with the IGDB integration's VR-platform detection) |
-| `NA_REGION_CODES` | `['IP', 'UB', 'UP', 'US', 'UT']` | North American title ID prefixes |
-| `EU_REGION_CODES` | `['EB', 'EP']` | European prefixes |
-| `JP_REGION_CODES` | `['JA', 'JB', 'JP', 'KP']` | Japanese prefixes |
-| `AS_REGION_CODES` | `['HA', 'HB', 'HP', 'HT']` | Asian prefixes |
+| `REGIONS` | `['NA', 'EU', 'JP', 'AS', 'KR', 'CN']` | Region codes, in the display order `Game.region` is stored in |
+| `PREFIX_REGIONS` | `{'UP': 'NA', 'EP': 'EU', 'JP': 'JP', 'HP': 'AS', 'KP': 'KR', 'CN': 'CN', ...}` | Content-id prefix to region. Only the fallback for a title ID no store sells: a prefix names the publishing account, not where it is sold. `KP` is Korea; `IP` names no region |
+| `STOREFRONTS` | `[('US', 'en-US', 'NA'), ('GB', 'en-GB', 'EU'), ('JP', ...), ('HK', ...), ('KR', ...), ('CN', ...)]` | The stores the region walk asks, and the region each stands for |
 
 **Badge XP**
 

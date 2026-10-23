@@ -33,56 +33,6 @@ def match_names(name1, name2, threshold=0.9):
     return ratio >= threshold
 
 
-def count_unique_game_groups(games_qs) -> int:
-    """
-    Count unique game groups using union-find algorithm.
-
-    Groups games that share any title IDs together. This is useful for
-    identifying regional variants of the same game.
-
-    Args:
-        games_qs: QuerySet or list of Game objects with title_ids attribute
-
-    Returns:
-        int: Number of unique game groups
-    """
-    from typing import List, Set
-
-    games = list(games_qs)
-    n = len(games)
-    if n == 0:
-        return 0
-
-    parent = list(range(n))
-    rank = [0] * n
-
-    def find(x: int) -> int:
-        if parent[x] != x:
-            parent[x] = find(parent[x])
-        return parent[x]
-
-    def union(x: int, y: int):
-        px, py = find(x), find(y)
-        if px == py:
-            return
-        if rank[px] < rank[py]:
-            parent[px] = py
-        elif rank[py] < rank[px]:
-            parent[py] = px
-        else:
-            parent[py] = px
-            rank[px] += 1
-
-    title_id_sets: List[Set[str]] = [set(game.title_ids) for game in games]
-    for i in range(n):
-        for j in range(i + 1, n):
-            if title_id_sets[i] & title_id_sets[j]:
-                union(i, j)
-
-    unique_groups = len(set(find(i) for i in range(n)))
-    return unique_groups
-
-
 def calculate_trimmed_mean(data, trim_percent=0.1):
     """
     Calculate trimmed mean to handle outliers.

@@ -1,4 +1,4 @@
-{% comment %} Region markers, shown ONLY for region-locked games. Worldwide is the silent default (no tag). badge_size kept for caller compatibility (sizing is fixed). {% endcomment %}
+{% comment %} Region markers, shown ONLY for region-locked games. Worldwide is the silent default (no tag). badge_size kept for caller compatibility (sizing is fixed). AS, KR and CN share a tone; each prints its own code (KR and CN used to fall through to "AS"). {% endcomment %}
 {% if game.is_regional %}
     {% for region in game.region %}
         {% if region == "NA" %}
@@ -8,7 +8,7 @@
         {% elif region == "JP" %}
             <span class="bd-meta-tag bd-meta-tag--italic bd-meta-tag--accent">JP</span>
         {% else %}
-            <span class="bd-meta-tag bd-meta-tag--italic bd-meta-tag--warning">AS</span>
+            <span class="bd-meta-tag bd-meta-tag--italic bd-meta-tag--warning">{{ region }}</span>
         {% endif %}
     {% endfor %}
 {% endif %}

@@ -92,6 +92,14 @@ STEPS = [
     ('contract detection', 'process_contracts', {'all_profiles': True, 'incremental': True}),
     ('challenge detection', 'process_challenges', {}),
     ('milestone recompute', 'recompute_milestones', {}),
+    # The region drift net. Sync and the store walk rebuild only the regional units they touch; concept
+    # merges, re-anchors and IGDB match changes move lists between units without either. Independent of
+    # every step above (it reads TitleID and the catalogue, nothing they write).
+    ('region rebuild', 'rebuild_regions', {}),
+    # Resumes the store walk: retries title IDs whose walk failed (their cooldown has lapsed by now) and
+    # walks ones sync never queued. A no-op once everything is walked, and refuses while a chain runs.
+    # Only queues bulk jobs, so it costs the nightly nothing.
+    ('region walk', 'resolve_title_regions', {}),
     ('badge coverage audit', 'audit_badge_coverage', {}),
 ]
 
