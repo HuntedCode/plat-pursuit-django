@@ -327,7 +327,7 @@ def _badge_lines(profile, concept, game):
             'attribution_rank': badge_attribution_rank(
                 series.collection_id, series.franchise_id, series.developer_id,
             ),
-            'series_name': series.display_series or series.name,
+            'series_name': series.name,
             'series_slug': series.series_slug,
             'title': series.title.name if series.title_id else '',
             'title_held': series.title_id in held_titles,

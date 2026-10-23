@@ -3423,7 +3423,6 @@ class BadgeSeries(models.Model):
     completion_policy = models.CharField(max_length=12, choices=COMPLETION_POLICIES, default='all', help_text="How a group badge is earned: 'all' gating stages, or 'min_count' (megamix).")
     min_required = models.PositiveIntegerField(default=0, help_text="For completion_policy='min_count' (megamix): stages needed. Interpretation under the per-group split is resolved by the evaluator.")
     description = models.TextField(blank=True)
-    display_series = models.CharField(max_length=100, blank=True)
 
     # Subject attribution (which of these is relevant depends on badge_type).
     # `Franchise` holds BOTH IGDB franchises and IGDB collections, so an unscoped picker offers each
