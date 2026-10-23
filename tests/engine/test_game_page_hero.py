@@ -2,12 +2,16 @@
 
 - The signed-in hunter's status, from their BEST list (owner, 2026-10-22): plat on any list wins, else the
   highest percentage. Signed out, no card.
-- The platinum's rarity: that list's platinum, else the most-played list's (owner, 2026-10-22). Left out with
-  no platinum, or before PSN has reported a rate.
+- The platinum stat: that list's platinum, else the most-played list's (owner, 2026-10-22). With no platinum
+  on any list, a hollow gem and the trophy count instead, so the corner always answers "is there a platinum?".
+  Left out before PSN has reported a rate, or while the list's trophies are unknown.
 - One line of facts; Share (once finished), Add to list and Report on the first screen.
+- The badge series and the Jobs live in About ("Counts toward"); the hero keeps only a claimable contract, as
+  the status card's last line.
 - The list picker tells identical-looking lists apart; the About tab takes the screenshots and the family.
 """
 import datetime
+import itertools
 
 import pytest
 from django.template.loader import render_to_string
@@ -15,10 +19,11 @@ from django.utils import timezone
 
 from core.services import completion_card_service as cards
 from tests.factories import (
-    CompanyFactory, ConceptCompanyFactory, ConceptFactory, EarnedTrophyFactory, GameFactory, ProfileFactory,
-    ProfileGameFactory, ProfileTrophyGroupFactory, TrophyFactory, TrophyGroupFactory,
+    BadgeSeriesFactory, CompanyFactory, ConceptCompanyFactory, ConceptFactory, EarnedTrophyFactory, GameFactory,
+    GroupBadgeFactory, PlatformGroupFactory, ProfileFactory, ProfileGameFactory, ProfileTrophyGroupFactory,
+    StageFactory, TrophyFactory, TrophyGroupFactory,
 )
-from trophies.models import IGDBMatch
+from trophies.models import Contract, EarnedContract, IGDBMatch, Job
 from trophies.views.game_page_views import disambiguate_entries
 
 pytestmark = pytest.mark.django_db
@@ -171,7 +176,7 @@ def test_rarity_reads_the_hunters_own_list(client):
     hero = _hero(client, url)
 
     assert 'data-rarity="mythic"' in hero and '4.2%' in hero
-    assert 'Ultra Rare PS4 platinum' in hero
+    assert '<b>Ultra Rare</b> PS4 platinum' in hero
 
 
 def test_rarity_falls_back_to_the_most_played_list(client):
@@ -181,13 +186,10 @@ def test_rarity_falls_back_to_the_most_played_list(client):
 
     hero = _hero(client, url)
 
-    assert 'Very Rare PS4 platinum' in hero and '9.1%' in hero and 'data-rarity="rare"' in hero
+    assert '<b>Very Rare</b> PS4 platinum' in hero and '9.1%' in hero and 'data-rarity="rare"' in hero
 
 
-def test_rarity_is_left_out_without_a_platinum_or_a_rate(client):
-    url, _ = _page(940011, ['PS5'], defined=NO_PLAT)
-    assert 'gp-rarity' not in _hero(client, url)
-
+def test_rarity_is_left_out_before_psn_reports_a_rate(client):
     url, (game,) = _page(940012, ['PS5'])
     _plat_trophy(game, 0.0, 2)          # a tier but no rate yet: 0.0 is the unsynced default, not a real 0%
     assert 'gp-rarity' not in _hero(client, url)
@@ -203,7 +205,73 @@ def test_one_list_names_no_platform_in_the_rarity(client):
 
     hero = _hero(client, url)
 
-    assert 'Common platinum' in hero and 'data-rarity="common"' in hero
+    assert '<b>Common</b> platinum' in hero and 'data-rarity="common"' in hero
+
+
+def test_no_platinum_says_so_with_the_trophy_count(client):
+    """The corner always answers "is there a platinum?" (owner, 2026-10-22): a percentage means yes, a hollow
+    gem and the trophy count means no."""
+    url, _ = _page(940027, ['PS5'], defined=NO_PLAT)
+
+    hero = _hero(client, url)
+    stat = hero[hero.index('class="gp-rarity'):hero.index('class="gp-actions') if 'gp-actions' in hero else None]
+
+    assert 'gp-rarity--none' in stat and '16 trophies' in stat and '<b>No platinum</b>' in stat
+    assert '%' not in stat and 'data-rarity' not in stat, 'no grade, no percentage: those mean a platinum'
+    assert 'gp-hero__grid--noside' not in hero
+
+
+def test_no_platinum_counts_the_hunters_list_else_the_most_played(client):
+    url, (ps5, ps4) = _page(940028, ['PS5'], ['PS4'], defined=NO_PLAT, played=[10, 500])
+    ps4.defined_trophies = {'bronze': 40, 'silver': 0, 'gold': 0, 'platinum': 0}
+    ps4.save(update_fields=['defined_trophies'])
+
+    assert '40 trophies' in _hero(client, url) and '<b>No platinum</b> PS4' in _hero(client, url)
+
+    hunter = _hunter(client)
+    ProfileGameFactory(profile=hunter, game=ps5, progress=10)
+    hero = _hero(client, url)
+
+    assert '16 trophies' in hero and '<b>No platinum</b> PS5' in hero
+
+
+def test_an_unsynced_list_is_not_a_list_without_a_platinum(client):
+    """No defined trophies yet means PSN has not told us; "No platinum" would be a guess."""
+    url, _ = _page(940029, ['PS5'], defined={})
+
+    hero = _hero(client, url)
+
+    assert 'gp-rarity' not in hero and 'gp-hero__grid--noside' in hero
+
+
+def test_an_unsynced_list_of_the_hunters_falls_back_to_a_known_one(client):
+    """The hunter's own list has no trophies on record yet; its synced sibling does, with no platinum. The stat
+    reads the sibling rather than vanishing."""
+    url, (ps5, ps4) = _page(940032, ['PS5'], ['PS4'], defined=NO_PLAT, played=[900, 5])
+    ps5.defined_trophies = {}
+    ps5.save(update_fields=['defined_trophies'])
+    hunter = _hunter(client)
+    ProfileGameFactory(profile=hunter, game=ps5, progress=0)
+
+    hero = _hero(client, url)
+
+    assert '16 trophies' in hero and '<b>No platinum</b> PS4' in hero
+
+
+def test_the_gem_lights_from_rare_up(client):
+    """The house rule: light climbs with the grade. Common sits flat; the rest take the gem's halo, and the gem
+    carries its own grade so Ultra Rare's pulse (rarity.css keys it on the gem) can find it."""
+    url, (game,) = _page(940030, ['PS5'])
+    _plat_trophy(game, 61.0, 3)
+    hero = _hero(client, url)
+    assert 'pp-rarity-gem' in hero and 'pp-rarity-gem--lit' not in hero
+
+    url, (game,) = _page(940031, ['PS5'])
+    _plat_trophy(game, 1.2, 0)
+    hero = _hero(client, url)
+    gem = hero[hero.index('gp-rarity__gem'):]
+    gem = gem[:gem.index('>')]
+    assert 'pp-rarity-gem--lit' in gem and 'data-rarity="mythic"' in gem
 
 
 # ── Facts and actions ─────────────────────────────────────────────────────────────────────────────
@@ -243,11 +311,11 @@ def test_add_to_list_left_the_tabs_row(client):
     assert 'data-quick-add' not in tabs
 
 
-def test_a_game_with_no_side_panels_drops_the_side_column(client):
-    """Rule 3: no "Not in a badge series" / "Not on the Job Board" placeholders. With no platinum, badge or
-    contract there is nothing for the side column, so the grid drops it (the noside modifier) rather than
-    leaving an empty third column."""
-    url, _ = _page(940017, ['PS5'], defined=NO_PLAT)
+def test_with_nothing_to_say_the_side_column_drops(client):
+    """A platinum whose rate PSN has not reported yet has no stat to show, so the grid drops the side column
+    (the noside modifier) rather than leaving an empty third column."""
+    url, (game,) = _page(940017, ['PS5'])
+    _plat_trophy(game, 0.0, 2)
 
     hero = _hero(client, url)
 
@@ -255,7 +323,7 @@ def test_a_game_with_no_side_panels_drops_the_side_column(client):
     assert 'gp-hero__side' not in hero and 'gd-spine__row' not in hero
 
 
-def test_one_side_panel_keeps_the_column(client):
+def test_a_platinum_stat_keeps_the_side_column(client):
     url, (game,) = _page(940019, ['PS5'])
     _plat_trophy(game, 12.0, 2)
 
@@ -308,7 +376,7 @@ def test_rarity_falls_back_when_the_hunters_list_has_no_platinum(client):
 
     hero = _hero(client, url)
 
-    assert 'Very Rare PS3 platinum' in hero and '6.0%' in hero
+    assert '<b>Very Rare</b> PS3 platinum' in hero and '6.0%' in hero
 
 
 def test_the_facts_line_without_a_developer(client):
@@ -379,3 +447,135 @@ def test_about_takes_the_screenshots():
     assert 'id="gd-shots"' in html
     assert html.count('data-shot=') == 6 and '+2' in html
     assert 'No extended info yet' not in html, 'screenshots are something to show'
+
+
+# ── Badges and Jobs: About's "Counts toward"; the hero keeps a claimable contract ──────────────────
+
+_contract_igdb = itertools.count(940100)
+
+
+def _contract_page(job_slugs=('gunslinger', 'gamer')):
+    """A game page whose concept is a live contract's home (keyed on its raw igdb id, the concept anchored and
+    trusted-matched, as contract_by_concept_map requires)."""
+    igdb_id = next(_contract_igdb)
+    contract = Contract.objects.create(name=f'c{igdb_id}', slug=f'c-{igdb_id}', is_live=True, igdb_id=igdb_id)
+    contract.jobs.set(Job.objects.filter(slug__in=job_slugs))
+    concept = ConceptFactory(unified_title='Contract Game', anchor_migration_completed_at=timezone.now())
+    IGDBMatch.objects.create(concept=concept, igdb_id=igdb_id, status='accepted')
+    game = GameFactory(concept=concept, title_name='Contract Game', title_platform=['PS5'], defined_trophies=dict(PLAT))
+    return f'/games/{igdb_id}/', contract, game
+
+
+def _about(client, url):
+    html = client.get(url).content.decode()
+    start = html.index('id="gp-view-about"')
+    return html[start:]
+
+
+def test_a_claimable_contract_is_the_status_cards_last_line(client):
+    url, contract, game = _contract_page()
+    hunter = _hunter(client)
+    ProfileGameFactory(profile=hunter, game=game, progress=100)
+    EarnedContract.objects.create(profile=hunter, contract=contract, full_reached_at=timezone.now())
+
+    hero = _hero(client, url)
+    status = hero[hero.index('class="gp-status '):hero.index('class="gp-actions')]
+
+    assert 'gp-status__claim' in status and 'Contract ready to claim' in status
+    assert '?view=contracts#career-panel-contracts' in status
+    assert status.count('class="gd-jobmini"') == 2, 'one icon per job'
+
+
+def test_no_claim_line_unless_there_is_xp_waiting(client):
+    url, contract, game = _contract_page()
+    assert 'gp-status__claim' not in _hero(client, url)            # signed out
+
+    hunter = _hunter(client)
+    ProfileGameFactory(profile=hunter, game=game, progress=40)
+    EarnedContract.objects.create(profile=hunter, contract=contract)   # pursuing: nothing reached
+    assert 'gp-status__claim' not in _hero(client, url)
+
+
+def test_the_hero_carries_no_badge_or_jobs_panel(client):
+    url, _contract, game = _contract_page()
+    pg = PlatformGroupFactory(key='hero-ps5', platforms=['PS5'])
+    GroupBadgeFactory(series=BadgeSeriesFactory(series_slug='hero-series'), platform_group=pg)
+    StageFactory(series_slug='hero-series').concepts.add(game.concept)
+
+    hero = _hero(client, url)
+
+    assert 'gd-spine__row' not in hero and 'gp-panel' not in hero and 'hero-series' not in hero
+
+
+def test_about_counts_toward_the_badges_and_jobs(client):
+    url, _contract, game = _contract_page()
+    pg = PlatformGroupFactory(key='hero-ps5b', platforms=['PS5'])
+    GroupBadgeFactory(series=BadgeSeriesFactory(series_slug='counts-series'), platform_group=pg)
+    StageFactory(series_slug='counts-series').concepts.add(game.concept)
+    _hunter(client)
+
+    about = _about(client, url)
+    counts = about[about.index('gp-counts'):]
+
+    assert '/counts-series/?group=hero-ps5b' in counts, 'each badge links its own edition'
+    assert 'Gunslinger' in counts and 'Gamer' in counts
+    assert '<small>Combat</small>' in counts and '<small>Finesse</small>' in counts, 'each job names its discipline'
+    assert 'XP each' in counts and 'Not Started' in counts
+    assert 'Open the Contracts board' in counts
+
+
+def test_about_leaves_out_the_signed_out_available_tag(client):
+    url, _contract, _game = _contract_page()
+
+    counts = _about(client, url)
+    counts = counts[counts.index('gp-counts'):]
+
+    assert 'Gunslinger' in counts and 'Available' not in counts
+
+
+def test_about_with_a_badge_and_no_jobs(client):
+    url, (game,) = _page(940033, ['PS5'])
+    pg = PlatformGroupFactory(key='hero-ps5c', platforms=['PS5'])
+    GroupBadgeFactory(series=BadgeSeriesFactory(series_slug='solo-series'), platform_group=pg)
+    StageFactory(series_slug='solo-series').concepts.add(game.concept)
+
+    about = _about(client, url)
+    counts = about[about.index('gp-counts'):]
+
+    assert '/solo-series/?group=hero-ps5c' in counts and '>Badge</p>' in counts
+    assert 'gp-counts__jobs' not in counts and 'Contracts board' not in counts
+    assert 'No extended info yet' not in about
+
+
+@pytest.mark.parametrize('status, label', [
+    ('claimable', 'Claimable'), ('pursuing', 'In Progress'), ('banked', 'Banked'), ('not_started', 'Not Started'),
+])
+def test_the_jobs_heading_carries_the_contracts_state(status, label):
+    from trophies.views.concept_context import ConceptContextMixin
+
+    variant = ConceptContextMixin._CONTRACT_STATE_TAG[status][1]
+    html = render_to_string('trophies/partials/game_detail/game_about_card.html', {
+        'game': GameFactory(), 'about_hide_other_platforms': True,
+        'pursuit_jobs': [{'name': 'Wanderer', 'icon': 'compass', 'disc_slug': 'exploration', 'disc_label': ''}],
+        'pursuit_contract_state': {'status': status, 'label': label, 'variant': variant},
+    })
+    heading = html[html.index('gp-counts__k'):]
+    heading = heading[:heading.index('</p>')]
+
+    assert f'gd-spine__state--{variant}">{label}</span>' in heading
+    assert '<small></small>' not in html, 'a job with no discipline name shows no empty line'
+
+
+def test_counts_toward_is_something_to_show():
+    """The empty state is for an About with nothing in it; a game with Jobs has something."""
+    html = render_to_string('trophies/partials/game_detail/game_about_card.html', {
+        'game': GameFactory(), 'about_hide_other_platforms': True,
+        'pursuit_jobs': [{'name': 'Gunslinger', 'icon': 'crosshair', 'disc_slug': 'combat', 'disc_label': 'Combat'}],
+    })
+
+    assert 'gp-counts' in html and 'No extended info yet' not in html
+
+    html = render_to_string('trophies/partials/game_detail/game_about_card.html', {
+        'game': GameFactory(), 'about_hide_other_platforms': True,
+    })
+    assert 'gp-counts' not in html and 'No extended info yet' in html

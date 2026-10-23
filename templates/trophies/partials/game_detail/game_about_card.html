@@ -1,6 +1,7 @@
 {% comment %} Rebuilt About panel: where the Game page's depth lives (Page Principles rule 4). The hero keeps a
-one-line facts row; the full summary, credits and release date, time to beat, screenshots and the family are
-here. No read-more, and no JS of its own (the screenshots open the shared lightbox).
+one-line facts row; the full summary, what the game counts toward (badge series, Jobs), credits and release
+date, time to beat, screenshots and the family are here. No read-more, and no JS of its own (the screenshots
+open the shared lightbox).
 
 Layout: STACKED full-width bands, not a grid. The sections have mismatched natural shapes (time-to-beat and
 links are wide+short, quick facts is tall), so pairing them side by side always left one card stretched or a
@@ -11,6 +12,7 @@ missing at least one. Each section adapts internally instead (facts flow into co
 `about_has_info` / `about_has_facts` / `about_facts` are computed in GameDetailView._build_concept_context
 so the gating stays out of the template.
 {% endcomment %}
+{% load humanize job_icons %}
 {% with igdb=game.concept.igdb_match genres=game.concept.concept_genres.all themes=game.concept.concept_themes.all %}
 <div class="gd-about">
 
@@ -27,6 +29,45 @@ so the gating stays out of the template.
             {% endif %}
         </section>
         {% endif %}
+    {% endif %}
+
+    {% if badges or pursuit_jobs %}
+    {% comment %}Counts toward: the badge series and the Jobs, moved out of the hero (owner, 2026-10-22). They are
+    true for every viewer and describe the game, so they are depth; the hunter's own claimable contract stays in
+    the hero's status card. No inner boxes: the medallion and the job icons carry the colour. The contract's
+    state rides the Jobs heading ("Available" signed out says nothing, so it is left off).{% endcomment %}
+    <section class="gd-acard gp-counts">
+        <h3 class="gd-acard__h">Counts toward</h3>
+        <div class="gp-counts__grid">
+            {% if badges %}
+            <div class="gp-counts__group">
+                <p class="gp-counts__k">Badge{{ badges|length|pluralize }}</p>
+                <div class="gp-counts__badges">
+                    {% for badge in badges %}
+                    <a class="gp-counts__badge" href="{% url 'badge_detail' series_slug=badge.series_slug %}?group={{ badge.group_key }}">
+                        <span class="gp-counts__medal">{% include 'components/badge_medallion.html' with frame=badge.frame no_id=True %}</span>
+                        <span class="gp-counts__txt"><b>{{ badge.name }}</b><small>{{ badge.type_display }} badge &middot; {{ badge.group_name }}</small></span>
+                    </a>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+            {% if pursuit_jobs %}
+            <div class="gp-counts__group">
+                <p class="gp-counts__k">{{ pursuit_jobs|length }} Job{{ pursuit_jobs|length|pluralize }}{% if pursuit_xp_per_job %} <span class="gp-counts__xp">&middot; {{ pursuit_xp_per_job|intcomma }} XP each</span>{% endif %}{% if pursuit_contract_state and pursuit_contract_state.status != 'available' %} <span class="gd-spine__state gd-spine__state--{{ pursuit_contract_state.variant }}">{{ pursuit_contract_state.label }}</span>{% endif %}</p>
+                <ul class="gp-counts__jobs">
+                    {% for job in pursuit_jobs %}
+                    <li>
+                        <span class="gd-jobmini" style="--disc: var(--disc-{{ job.disc_slug }}, var(--pp-primary));" aria-hidden="true">{% job_icon job.icon '' %}</span>
+                        <span class="gp-counts__txt"><b>{{ job.name }}</b>{% if job.disc_label %}<small>{{ job.disc_label }}</small>{% endif %}</span>
+                    </li>
+                    {% endfor %}
+                </ul>
+                <a class="gp-counts__more" href="{% url 'career' %}?view=contracts#career-panel-contracts">Open the Contracts board</a>
+            </div>
+            {% endif %}
+        </div>
+    </section>
     {% endif %}
 
     {% if image_urls.screenshot_urls %}
@@ -137,9 +178,10 @@ so the gating stays out of the template.
     </section>
     {% endif %}
 
-    {% comment %}The empty state only when nothing above rendered: no IGDB info, no screenshots, and no
-    versions card (on an IGDB page that means no family; elsewhere, no versions of either kind).{% endcomment %}
-    {% if not about_has_info and not image_urls.screenshot_urls and not family_versions %}{% if about_hide_other_platforms or not other_versions %}
+    {% comment %}The empty state only when nothing above rendered: no IGDB info, nothing it counts toward, no
+    screenshots, and no versions card (on an IGDB page that means no family; elsewhere, no versions of either
+    kind).{% endcomment %}
+    {% if not about_has_info and not badges and not pursuit_jobs and not image_urls.screenshot_urls and not family_versions %}{% if about_hide_other_platforms or not other_versions %}
     <div class="gd-empty">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
         <p class="gd-empty__title">No extended info yet</p>

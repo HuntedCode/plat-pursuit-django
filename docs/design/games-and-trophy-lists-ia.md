@@ -67,17 +67,28 @@ model) around ONE list viewport tab:
   List detail page living IN the chip -- identity and escape hatch are one object.
 - **Lazy**: default list renders server-side; other lists fetch on switch.
 - **The hero leads with the hunter** (rebuilt 2026-10-22 under the Page Principles, DS-07; the owner
-  approved mock-ups first). Five parts: the cover (a thumbnail beside the title on a phone); the head
-  (platform UNION chips, title, ONE facts line: developer, year, the page's distinct players); the
-  signed-in hunter's **status card** from their BEST list (a platinum on any list wins, else the highest
-  percentage; it does not follow the switcher); **side panels** of one width and one height, each only when
-  it exists: the platinum's **rarity** (PSN's rate and tier, in the house rarity grade; the hunter's list,
-  else the most-played list), the badge series, the contract; and the **actions**, Share (once finished,
-  the share card), Add to list, Report an issue, at equal weight on the first screen. Desktop is three
-  columns (cover | story | side). Everything else the hero carried (publisher, the full release date,
-  time to beat, the description and tags, screenshots, the family) moved to the About tab. The screenshot
-  LIGHTBOX is shared with List detail (`shot-lightbox.js` + `shot_lightbox.html`); its thumbs now open
-  from About. Released is `concept.release_date` (the work's date, not the host list's platform date).
+  approved mock-ups first, in four rounds). Five parts: the cover; the head (platform UNION chips, title,
+  ONE facts line: developer, year, the page's distinct players); the signed-in hunter's **status card**
+  from their BEST list (a platinum on any list wins, else the highest percentage; it does not follow the
+  switcher); the **platinum stat**; and the **actions**, Share (once finished, the share card), Add to list,
+  Report an issue, at equal weight on the first screen.
+  - **The platinum stat** has no box: a cut gem in the house rarity grade beside the rate and its PSN tier
+    (the hunter's list, else the most-played list). The light climbs with the grade (Common flat, a halo
+    from Rare, a glint from Very Rare, a sweeping gleam only on Ultra Rare). With no platinum on any list
+    the same gem is drawn hollow beside the trophy count and "No platinum", so the corner always answers
+    "is there a platinum?": a percentage means yes.
+  - **The cover's edges are the hero's edges.** What starts the story sits level with the cover's top, what
+    ends it level with the cover's bottom. On a phone and a tablet the title runs full width above the
+    cover so a long name cannot push the row beside it past the art; desktop is three columns (cover |
+    story | the stat top right).
+  - **Badges and Jobs live in About** ("Counts toward": the series medallions, each linking its edition,
+    and each job with its discipline, the contract's state on the heading). They describe the game for
+    every viewer, so they are depth. The one personal part, a contract ready to claim, is the status
+    card's last line, linking the Contracts board.
+  Everything else the hero carried (publisher, the full release date, time to beat, the description and
+  tags, screenshots, the family) moved to the About tab. The screenshot LIGHTBOX is shared with List detail
+  (`shot-lightbox.js` + `shot_lightbox.html`); its thumbs now open from About. Released is
+  `concept.release_date` (the work's date, not the host list's platform date).
 - **Flags come back for the WHOLE game only** (owner, 2026-10-10). The hero shows a game flag (Shovelware,
   Delisted, Unobtainable, Online Trophies, Buggy Trophies) only when EVERY list in the set carries it
   (`game_page_views.shared_list_flags`; Unobtainable means no list is obtainable). It reuses List detail's

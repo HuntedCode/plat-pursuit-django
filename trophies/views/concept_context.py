@@ -479,13 +479,16 @@ class ConceptContextMixin:
             return empty
 
         from trophies.services import contract_service
-        from trophies.services.job_render import job_atom
+        from trophies.services.job_render import DISCIPLINE_LABELS, job_atom
 
         contract = contract_service.contract_by_concept_map([game.concept_id]).get(game.concept_id)
         if not contract:
             return empty
 
-        jobs = [job_atom(j) for j in sorted(contract.jobs.all(), key=lambda j: j.display_order)]
+        # The discipline's name rides along for the Game page's About tab ("Counts toward"), which names each
+        # job's family under it.
+        jobs = [{**job_atom(j), 'disc_label': DISCIPLINE_LABELS.get(j.discipline, '')}
+                for j in sorted(contract.jobs.all(), key=lambda j: j.display_order)]
         # Ordered-unique disciplines this contract spans, prebuilt into the row's discipline-colour
         # style (a gradient of the disciplines + a primary tint). Built here rather than looping
         # var()s inside a template style attribute.

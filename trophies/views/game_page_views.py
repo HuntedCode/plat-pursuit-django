@@ -41,7 +41,7 @@ _EMPTY_EARNED_STATE = {
 }
 
 # PSN's four rarity tiers (`Trophy.trophy_rarity`) onto the site's four rarity grades (rarity.css
-# `data-rarity`), so the rarity panel takes the house tint and material instead of one-off colours.
+# `data-rarity`), so the hero's platinum gem takes the house grade colours instead of one-off ones.
 # The tier NAMES come from the `psn_rarity_label` filter the trophy rows use.
 PSN_RARITY_GRADES = {0: 'mythic', 1: 'rare', 2: 'uncommon', 3: 'common'}
 
@@ -312,15 +312,24 @@ class GamePageView(ConceptContextMixin, TemplateView):
         }
 
     def _plat_rarity(self, status):
-        """How rare this game's platinum is, for the hero's rarity panel: the platinum of the list the
-        status card describes, else of the list most hunters own (owner, 2026-10-22). PSN's own rate and
-        tier, as the trophy rows show them. None when no list has a platinum, or PSN has not reported a
-        rate yet (0.0 is the unsynced default, not a real 0%): the panel is left out, not shown empty.
-        One indexed query."""
+        """The hero's platinum stat, so the corner always answers "is there a platinum?" (owner, 2026-10-22):
+        a percentage means yes, a hollow gem and a trophy count means no.
+
+        With a platinum: how rare it is, on the list the status card describes, else on the list most hunters
+        own. PSN's own rate and tier, as the trophy rows show them. None when PSN has not reported a rate yet
+        (0.0 is the unsynced default, not a real 0%): the slot is left out, not shown empty.
+        With no platinum on any list: {'none': True, 'total': ...} for the same list choice among the lists
+        whose trophies are known, None when none are (an unsynced list is not a list without a platinum).
+        At most one indexed query."""
+        mine = status.get('game') if status else None
         candidates = [g for g in self.list_set if has_platinum(g)]
         if not candidates:
-            return None
-        mine = status.get('game') if status else None
+            known = [g for g in self.list_set if defined_total(g)]
+            if not known:
+                return None
+            chosen = mine if mine in known else max(known, key=lambda g: g.played_count or 0)
+            return {'none': True, 'total': defined_total(chosen),
+                    'list_label': list_label(chosen) if len(self.list_set) > 1 else ''}
         chosen = mine if mine in candidates else max(candidates, key=lambda g: g.played_count or 0)
         row = (
             Trophy.objects.filter(game=chosen, trophy_type='platinum')
