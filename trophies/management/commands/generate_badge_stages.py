@@ -43,6 +43,8 @@ def format_plan(plan):
 
 
 class Command(BaseCommand):
+    # build_badge runs this then convert_series_to_groups itself, so the "Next:" it would print is done already.
+    stealth_options = ('skip_next_steps',)
     help = (
         "Build a badge series' stages from its franchise/collection/developer: one stage per origin game. "
         "Refuses a series that has stages unless --append."
@@ -101,7 +103,8 @@ class Command(BaseCommand):
                 f'written; run it again.'
             ) from exc
         self.stdout.write(self.style.SUCCESS(f'Wrote {summary} for "{slug}".'))
-        self._print_next_steps(series)
+        if not options.get('skip_next_steps'):
+            self._print_next_steps(series)
 
     def _print_next_steps(self, series):
         slug = series.series_slug
