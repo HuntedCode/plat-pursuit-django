@@ -71,6 +71,10 @@ class Command(BaseCommand):
         self._summary(by_bucket, judged)
         self._verdicts(stats, judged)
         self._coverage(stats['coverage'])
+        w(self.style.MIGRATE_HEADING('Store walk size'))
+        w(f"  {stats['title_ids_on_lists']:,} distinct title IDs sit on trophy lists (whole catalogue, "
+          f"ignores --platform); {stats['title_ids_with_region']:,} have a region by content-ID prefix "
+          f"(a guess for worldwide products).\n")
         self._sections(by_bucket, only, opts['sample'])
         w(self.style.MIGRATE_HEADING('Blind spot'))
         w("  Sync overwrites any title ID stored as 'IP' (unknown, including dataset rows with no region) "
@@ -133,6 +137,8 @@ class Command(BaseCommand):
             for row in shown:
                 w(f'  {self._line(row)}')
                 w(f'      {self._detail(row)}')
+                if row['siblings']:
+                    w(f'      {self._siblings(row)}')
             if len(bucket_rows) > len(shown):
                 w(f'    ... and {len(bucket_rows) - len(shown):,} more (--bucket {bucket} to list them all).')
             w('')
@@ -149,3 +155,16 @@ class Command(BaseCommand):
         return (f"stored {_codes(row['stored'])}, title IDs say {_codes(row['expected'])} [{tids}]; "
                 f"rule says {row['verdict']} ({row['reason']}); "
                 f"concept {row['concept_id'] or '-'}, unit {row['unit'] or '-'}")
+
+    @staticmethod
+    def _siblings(row):
+        """The lists the verdict compared this one against, so a hand check needs no second query.
+        `*` marks a disjoint sibling (they sort first, so the cap never hides the deciding one);
+        `[admin]` marks a region-locked sibling judged by its admin-set label. Capped, since a
+        launcher-style unit (Call of Duty HQ) can hold a dozen."""
+        cap = 4
+        shown = [f"{'*' if s['disjoint'] else ''}{s['name']} ({s['np_id']}, {'/'.join(s['platforms']) or '?'}) "
+                 f"{_codes(s['regions'])}{' [admin]' if s['locked'] else ''}"
+                 for s in row['siblings'][:cap]]
+        more = len(row['siblings']) - cap
+        return 'siblings: ' + '; '.join(shown) + (f'; +{more} more' if more > 0 else '')

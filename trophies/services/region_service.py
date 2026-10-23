@@ -148,8 +148,18 @@ NO_REGION_DATA = 'no_region_data'
 SIBLING_WITHOUT_REGION_DATA = 'sibling_without_region_data'
 
 
+def _disjoint(own, theirs):
+    """Two products are regional versions of each other when both name regions and share none."""
+    return bool(own and theirs and not (own & theirs))
+
+
 def regional_verdicts(groups, tids_by_pk, regions_by_pk):
-    """`{pk: (verdict, reason)}` for every list, by THE REGIONAL RULE (module docstring).
+    """`(verdicts, compared)` for every list, by THE REGIONAL RULE (module docstring).
+
+    `verdicts` is `{pk: (verdict, reason)}`. `compared` is `{pk: {sibling pk: (regions, disjoint)}}`:
+    exactly the lists each verdict was weighed against, with the PRODUCT regions the rule used and
+    whether that sibling was disjoint. Returned from here rather than rebuilt by a caller, so what the
+    report prints as a verdict's evidence cannot drift from what decided it.
 
     `groups` maps `(unit, platform)` to the list pks in it; a list on several platforms sits in
     several groups and is regional if ANY of them gives it a disjoint sibling. `regions_by_pk` holds
@@ -160,6 +170,7 @@ def regional_verdicts(groups, tids_by_pk, regions_by_pk):
     """
     disjoint, unknown_sibling, overlap = set(), set(), set()
     product_regions = {pk: set(regions) for pk, regions in regions_by_pk.items()}
+    compared = defaultdict(dict)
     for pks in groups.values():
         if len(pks) < 2:
             continue
@@ -174,7 +185,13 @@ def regional_verdicts(groups, tids_by_pk, regions_by_pk):
             others = [r for root, r in regions.items() if root != product[pk]]
             if not others:
                 continue
-            if own and any(r and not (r & own) for r in others):
+            for other in pks:
+                if product[other] != product[pk]:
+                    theirs = regions[product[other]]
+                    seen, was_disjoint = compared[pk].get(other, (frozenset(), False))
+                    compared[pk][other] = (seen | theirs,
+                                           was_disjoint or _disjoint(own, theirs))
+            if any(_disjoint(own, r) for r in others):
                 disjoint.add(pk)
             elif any(not r for r in others):
                 unknown_sibling.add(pk)
@@ -197,7 +214,7 @@ def regional_verdicts(groups, tids_by_pk, regions_by_pk):
             verdicts[pk] = (NOT_REGIONAL, OVERLAPPING_SIBLINGS)
         else:
             verdicts[pk] = (NOT_REGIONAL, GLOBAL)
-    return verdicts
+    return verdicts, compared
 
 
 # --- buckets ----------------------------------------------------------------
@@ -227,6 +244,22 @@ BUCKET_LABELS = {
 }
 
 
+def _sibling_rows(compared, label_by_pk, locked_pks):
+    """A row's siblings for the read-out: disjoint ones first (they decide a `disjoint_sibling`
+    verdict, so a capped list must not hide them), then those with no region data, then overlapping.
+    `regions` are the PRODUCT regions the rule compared; `locked` marks an admin-set label standing in
+    for title IDs."""
+    def order(item):
+        sibling, (regions, disjoint) = item
+        return (0 if disjoint else 1 if not regions else 2, label_by_pk[sibling][1] or '')
+
+    return [
+        {'name': label_by_pk[s][0], 'np_id': label_by_pk[s][1], 'platforms': label_by_pk[s][2],
+         'regions': sorted(regions), 'disjoint': disjoint, 'locked': s in locked_pks}
+        for s, (regions, disjoint) in sorted(compared.items(), key=order)
+    ]
+
+
 def scan(platform=None):
     """Classify every trophy list. Returns `(rows, stats)`.
 
@@ -250,9 +283,13 @@ def scan(platform=None):
     )
 
     groups = defaultdict(list)
-    stored_by_pk, tids_by_pk, regions_by_pk = {}, {}, {}
-    for (pk, _name, _np, plats, region, tids, _reg, locked, _played, concept_pk, _cid,
+    stored_by_pk, tids_by_pk, regions_by_pk, label_by_pk = {}, {}, {}, {}
+    locked_pks = set()
+    for (pk, name, np_id, plats, region, tids, _reg, locked, _played, concept_pk, _cid,
          igdb_id, status) in lists:
+        label_by_pk[pk] = (name, np_id, _as_list(plats))
+        if locked:
+            locked_pks.add(pk)
         stored_by_pk[pk] = frozenset(_as_list(region))
         tids_by_pk[pk] = _as_list(tids)
         # A locked list's region was set by an admin, so it is the truth its siblings are judged
@@ -264,11 +301,16 @@ def scan(platform=None):
             continue
         for plat in sibling_platforms(_as_list(plats)):
             groups[(unit, plat)].append(pk)
-    verdicts = regional_verdicts(groups, tids_by_pk, regions_by_pk)
+    verdicts, compared = regional_verdicts(groups, tids_by_pk, regions_by_pk)
 
+    # Sizes the store walk: every distinct title ID that sits on a list, and how many the TitleID
+    # table has a region for. Catalogue-wide on purpose, the walk does not follow --platform.
+    on_lists = {tid for tids in tids_by_pk.values() for tid in tids}
     stats = {
         'scanned': 0, 'locked': 0, 'coverage': defaultdict(lambda: [0, 0]),
         'verdicts': defaultdict(int), 'unjudged_flagged': 0,
+        'title_ids_on_lists': len(on_lists),
+        'title_ids_with_region': sum(1 for tid in on_lists if normalize_region(tid_map.get(tid))),
     }
     rows = []
     for (pk, name, np_id, plats, _region, _tids, is_regional, locked, played, concept_pk, concept_id,
@@ -321,6 +363,7 @@ def scan(platform=None):
                 'is_regional': is_regional, 'played': played or 0, 'concept_id': concept_id,
                 'unit': unit_key(concept_pk, igdb_id, status), 'buckets': buckets,
                 'verdict': verdict, 'reason': reason,
+                'siblings': _sibling_rows(compared.get(pk, {}), label_by_pk, locked_pks),
                 # Chips render only for a regional list with a stored region, so this is the
                 # difference between a wrong label hunters SEE and one sitting unread in the column.
                 'shown': bool(is_regional and stored),

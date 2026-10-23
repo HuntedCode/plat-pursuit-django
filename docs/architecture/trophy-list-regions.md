@@ -48,9 +48,11 @@ Checked top to bottom. "Its regions" are its product's: every list sharing a tit
 
 ## Region sources, by trust
 
-1. The dataset region for that title ID (`TitleID.region`).
-2. An exact match: a product ID embeds its title ID (`EP9000-PPSA03208_00-...`), and the exact title ID only appears in its home storefront's product list. The storefront that carries it names the region.
+1. **Which storefronts sell the exact title ID.** A product ID embeds its title ID (`EP9000-PPSA03208_00-...`), so each store (US, GB, JP, HK, KR) can be asked whether it sells THAT title ID. The set of stores that do is the title ID's regions: US=NA, GB=EU, JP=JP, HK=AS, KR=KR. Not built yet; the rebuild adds it.
+2. **The content-ID prefix** (`TitleID.region`, from the andshrew dataset), only when no store sells the title ID (delisted or relisted IDs). It is a guess: the prefix names the account the product is published under, not where it is sold.
 3. Unknown. Never NA by default.
+
+Probed 2026-10-23: worldwide products keep ONE prefix in every store (Black Myth: Wukong is `HP` in all five, The Exit 8 and Death Stranding 2 `JP`, LEGO Horizon Adventures `EP`), while region-split products appear only in their own stores (Ghost of Tsushima's EU ID only in GB; FFXV's EU ID only in GB; Hollow Knight's EU ID in GB, JP, HK and KR but not the US). So one title ID can mean several regions, and the prefix alone mislabels worldwide products from Asian and European publishers. Until the store walk runs, the audit judges by prefix, so its `asia_only` count is inflated by those worldwide products.
 
 Prefix table: `UP/UB/US/UT` NA, `EP/EB` EU, `JP/JA/JB` JP, `HP/HA/HB/HT` AS, `KP` KR, `CN` CN. `IP` and empty name no region. The corrected table lives in `trophies/services/region_service.py` (`PREFIX_REGIONS`); sync still uses the old lists in `util_modules/constants.py` until the fix lands.
 
@@ -73,13 +75,14 @@ Prefix table: `UP/UB/US/UT` NA, `EP/EB` EU, `JP/JA/JB` JP, `HP/HA/HB/HT` AS, `KP
 | `audit_regions` | Read-only. Buckets every list by what is wrong with its region or flag, with most-played samples, a per-platform coverage table, and a `region_lock` count. Run before and after any region fix. | `python manage.py audit_regions`, `--bucket korea_as_jp`, `--platform PS5`, `--sample N` |
 | `populate_title_ids` | Refresh `TitleID` from the andshrew dataset | `python manage.py populate_title_ids` |
 
-**Audit buckets:** `wrong_region` (stored has a code its title IDs do not support), `missing_region` (stored only lacks one), `korea_as_jp`, `na_from_unknown` (NA, with title IDs that name no known region), `regional_missed` / `regional_stale` (the flag disagrees with the regional rule, tallied by reason code), `regional_no_region`. A list can be in several. The `shown` column counts lists whose chips actually render (flagged regional, with a stored region); a wrong label on an unflagged list is never seen. A "Regional verdicts" table shows how the rule splits the catalogue. Region-locked lists are skipped and left out of the percentages, but still count as another list of their game when judging siblings (unlike `check_and_mark_regional`, which ignores them).
+**Audit buckets:** `wrong_region` (stored has a code its title IDs do not support), `missing_region` (stored only lacks one), `korea_as_jp`, `na_from_unknown` (NA, with title IDs that name no known region), `regional_missed` / `regional_stale` (the flag disagrees with the regional rule, tallied by reason code), `regional_no_region`. A list can be in several. The `shown` column counts lists whose chips actually render (flagged regional, with a stored region); a wrong label on an unflagged list is never seen. A "Regional verdicts" table shows how the rule splits the catalogue. Each sample also names the siblings its verdict compared against (up to four, disjoint ones first and marked `*`, with the product regions the rule used; `[admin]` marks a region-locked sibling standing on its admin-set label). A "Store walk size" line counts the distinct title IDs on lists across the whole catalogue (it ignores `--platform`), which sizes the store walk (about five catalog calls each). Region-locked lists are skipped and left out of the percentages, but still count as another list of their game when judging siblings (unlike `check_and_mark_regional`, which ignores them).
 
 **Run order on prod:** `populate_title_ids` first (it resets the dataset's TitleID rows that sync overwrote), then `audit_regions`.
 
 ## Gotchas and Pitfalls
 
-- **A product prefix names the storefront, not the title ID.** Never read a region from `defaultProduct.id` without checking that the product ID contains the exact title ID you asked about.
+- **The concept response describes the storefront you asked.** `defaultProduct.id` is the asked store's product for the whole concept, usually not the title ID you asked about. Only a product ID containing the exact title ID says anything about that title ID.
+- **Even an exact match's prefix is not a region.** It names the publishing account (a worldwide `HP` product is sold in the US store too). The region is WHICH stores carry the exact title ID, never the prefix of what they return.
 - **`IP` is not NA.** It is Sony's worldwide/system prefix and our own "unknown" placeholder. Treat both as no region.
 - **Old relisted title IDs match no storefront** (Watch Dogs CUSA00015/29): the store now sells newer IDs. Those stay unknown.
 - **Not `GameFamily`, not the `X`/`X-N` family.** Both group other versions (The Last of Us original, Remastered and Part I share canonical 1009), so either would flag a remaster as a regional version.

@@ -362,7 +362,8 @@ def test_a_lone_list_without_region_data_is_unjudged():
     rows, stats = rs.scan()
     assert game.pk not in {r['pk'] for r in rows}
     assert stats['verdicts'] == {rs.UNJUDGED: 1}
-    assert rs.regional_verdicts({}, {game.pk: []}, {game.pk: set()})[game.pk] == (rs.UNJUDGED, rs.NO_REGION_DATA)
+    verdicts, _compared = rs.regional_verdicts({}, {game.pk: []}, {game.pk: set()})
+    assert verdicts[game.pk] == (rs.UNJUDGED, rs.NO_REGION_DATA)
 
 
 def test_an_asia_only_list_is_regional_beside_an_unknown_sibling():
@@ -553,3 +554,107 @@ def test_command_shown_column_counts_rendered_chips():
     _list(codes=['EP'], region=['NA', 'EU'], is_regional=False)
     line = next(line for line in _run().splitlines() if line.strip().startswith('wrong_region'))
     assert line.split()[1:4] == ['2', '100.0%', '1']
+
+
+# --- sibling detail and walk size --------------------------------------------------------
+
+def test_a_row_names_the_siblings_its_verdict_compared_against():
+    concept = _anchored(60)
+    shared = [_tid('PPSA88880_00', 'UP')]
+    target = _list(concept, ['UP'], title_ids=shared, is_regional=True)
+    same_product = _list(concept, ['UP'], title_ids=shared, is_regional=True)
+    other = _list(concept, ['UP', 'EP'], is_regional=True)
+    row = _rows()[target.pk]
+    assert [s['np_id'] for s in row['siblings']] == [other.np_communication_id]
+    assert row['siblings'][0]['regions'] == ['EU', 'NA']
+    assert same_product.np_communication_id not in {s['np_id'] for s in row['siblings']}
+
+
+def test_a_listed_sibling_shows_its_product_regions():
+    """B alone names no region (IP), but B and C share a title ID: one product worth EU. That union is
+    what the rule compared, so it is what the read-out shows, for both lists."""
+    concept = _anchored(62)
+    t1 = _tid('PPSA88883_00', 'IP')
+    target = _list(concept, ['UP'])
+    b = _list(concept, title_ids=[t1], region=[])
+    c = _list(concept, title_ids=[t1, _tid('PPSA88884_00', 'EP')], region=['EU'])
+    row = _rows()[target.pk]
+    assert row['reason'] == rs.DISJOINT_SIBLING
+    by_np = {s['np_id']: s for s in row['siblings']}
+    assert by_np[b.np_communication_id]['regions'] == ['EU']
+    assert by_np[c.np_communication_id]['regions'] == ['EU']
+
+
+def test_disjoint_siblings_sort_first_so_the_cap_cannot_hide_them():
+    concept = _anchored(63)
+    target = _list(concept, ['UP'])
+    for _ in range(4):
+        _list(concept, ['UP'])
+    eu = _list(concept, ['EP'])
+    row = _rows()[target.pk]
+    assert row['siblings'][0]['np_id'] == eu.np_communication_id
+    assert row['siblings'][0]['disjoint'] is True
+    assert not any(s['disjoint'] for s in row['siblings'][1:])
+
+
+def test_siblings_on_another_console_are_not_listed():
+    concept = _anchored(64)
+    target = _list(concept, ['UP'], title_platform=['PS4'], is_regional=True)
+    _list(concept, ['EP'], title_platform=['PS5'])
+    assert _rows()[target.pk]['siblings'] == []
+
+
+def test_a_locked_sibling_is_marked_and_shows_its_admin_label():
+    concept = _anchored(65)
+    target = _list(concept, ['UP'])
+    locked = _list(concept, ['IP'], region=['JP'], region_lock=True)
+    sibling = _rows()[target.pk]['siblings'][0]
+    assert sibling['np_id'] == locked.np_communication_id
+    assert sibling['locked'] is True and sibling['regions'] == ['JP']
+
+
+def test_a_list_with_a_concept_but_no_sibling_lists_none():
+    game = _list(_anchored(66), ['UP', 'EP'], is_regional=True)
+    assert _rows()[game.pk]['siblings'] == []
+
+
+def test_walk_size_counts_distinct_title_ids_on_lists():
+    shared = _tid('PPSA88881_00', 'EP')
+    GameFactory(title_ids=[shared, _tid('PPSA88882_00', 'IP')])
+    GameFactory(title_ids=[shared, 'NOT_IN_TABLE_00'])
+    _, stats = rs.scan()
+    assert stats['title_ids_on_lists'] == 3
+    assert stats['title_ids_with_region'] == 1
+
+
+def test_walk_size_ignores_the_platform_filter():
+    GameFactory(title_platform=['PS4'], title_ids=[_tid('CUSA88885_00', 'UP', 'PS4')])
+    GameFactory(title_platform=['PS5'], title_ids=[_tid('PPSA88886_00', 'EP')])
+    _, stats = rs.scan(platform='PS5')
+    assert stats['scanned'] == 1
+    assert stats['title_ids_on_lists'] == 2
+
+
+def test_command_prints_siblings_capped_and_the_walk_size():
+    concept = _anchored(61)
+    _list(concept, ['UP'], title_name='Split Part', is_regional=True)
+    for _ in range(5):
+        _list(concept, ['UP'], is_regional=True)
+    out = _run('--bucket', 'regional_stale')
+    lines = out.splitlines()
+    # A sample is three lines: the list, its detail, then its siblings.
+    line = lines[next(i for i, text in enumerate(lines) if text.strip().startswith('Split Part')) + 2]
+    assert line.strip().startswith('siblings:')
+    assert line.count('(NPWR') == 4
+    assert line.endswith('; +1 more')
+    assert 'distinct title IDs sit on trophy lists (whole catalogue, ignores --platform)' in out
+
+
+def test_command_marks_disjoint_and_admin_siblings():
+    concept = _anchored(67)
+    _list(concept, ['UP'], title_name='Marked Target')
+    _list(concept, ['IP'], title_name='Locked Sib', region=['JP'], region_lock=True)
+    out = _run('--bucket', 'regional_missed')
+    lines = out.splitlines()
+    line = lines[next(i for i, text in enumerate(lines) if text.strip().startswith('Marked Target')) + 2]
+    assert '*Locked Sib (' in line and line.endswith('JP [admin]')
