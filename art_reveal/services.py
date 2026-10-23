@@ -168,7 +168,7 @@ def get_active_banner():
     payload = {'name': event.name, 'slug': event.slug, 'progress': event.progress(), 'latest': None}
     if latest:
         payload['latest'] = {
-            'series_title': latest.series.display_series or latest.series.name,
+            'series_title': latest.series.name,
             'series_slug': latest.series.series_slug,
             'artwork_url': latest.artwork.url,
         }

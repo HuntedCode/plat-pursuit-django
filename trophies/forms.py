@@ -182,13 +182,8 @@ class CompanySearchForm(forms.Form):
             )
             # Series with a LIVE edition (the grouping-badge system), the same set the badge pages serve.
             # This read the retired legacy `Badge` model, so it offered nothing once that table emptied.
-            live_series = (
-                BadgeSeries.objects.live()
-                .order_by('display_series', 'name').values_list('series_slug', 'display_series', 'name')
-            )
-            self.fields['badge_series'].choices = [('', 'Any Badge')] + [
-                (slug, display or name) for slug, display, name in live_series
-            ]
+            live_series = BadgeSeries.objects.live().order_by('name').values_list('series_slug', 'name')
+            self.fields['badge_series'].choices = [('', 'Any Badge')] + list(live_series)
 
             # Country choices: only countries that actually have a company,
             # rendered as "🇺🇸 United States" via the ISO numeric→name util.
@@ -555,11 +550,6 @@ class BadgeSeriesCreationForm(forms.Form):
     description = forms.CharField(
         required=False, label='Description',
         widget=forms.Textarea(attrs={'class': 'textarea textarea-bordered w-full', 'rows': 3}),
-    )
-    display_series = forms.CharField(
-        max_length=100, required=False, label='Display Series',
-        help_text='Overrides the name where the series is labelled on a medallion.',
-        widget=forms.TextInput(attrs={'class': 'input input-bordered w-full'}),
     )
     submitted_by = forms.CharField(
         max_length=100, required=False, label='Submitted By (PSN Username)',

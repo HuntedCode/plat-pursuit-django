@@ -196,16 +196,16 @@ def build_game_card_context(page_games, request, condensed=False):
         if cid in concept_id_set:
             concept_series[cid].add(slug)
 
-    # series_slug -> {label, attribution ids} for each SERIES that ships a live group badge (1 query).
+    # series_slug -> {name, attribution ids} for each SERIES that ships a live group badge (1 query).
     # The three FK ids ride along so the sort below can rank by attribution without materialising the
     # related Franchise/Company rows -- they are already columns on the row being read.
     all_slugs = {s for slugs in concept_series.values() for s in slugs}
     series_badge = {}
     if all_slugs:
         series_badge = {
-            b['series_slug']: {**b, 'label': b['display_series'] or b['name']}
+            b['series_slug']: b
             for b in BadgeSeries.objects.live().filter(series_slug__in=all_slugs)
-            .values('series_slug', 'name', 'display_series', 'badge_type',
+            .values('series_slug', 'name', 'badge_type',
                     'collection_id', 'franchise_id', 'developer_id')
         }
 
@@ -216,11 +216,11 @@ def build_game_card_context(page_games, request, condensed=False):
             continue
         items.sort(key=lambda b: (
             badge_attribution_rank(b['collection_id'], b['franchise_id'], b['developer_id']),
-            b['label'].lower(),
+            b['name'].lower(),
         ))
         badge_map[cid] = {
             'total': len(items),
-            'names': [b['label'] for b in items[:badge_cap]],
+            'names': [b['name'] for b in items[:badge_cap]],
             'more': max(0, len(items) - badge_cap),
         }
     ctx['badge_map'] = badge_map

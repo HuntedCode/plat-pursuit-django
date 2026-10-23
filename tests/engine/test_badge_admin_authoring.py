@@ -87,7 +87,7 @@ def test_scope_survives_the_admin_form_not_just_the_autocomplete_view(client):
 
     resp = client.post('/admin/trophies/badgeseries/add/', {
         'name': 'Resident Evil', 'series_slug': 'resident-evil', 'badge_type': 'franchise',
-        'completion_policy': 'all', 'min_required': '0', 'description': '', 'display_series': '',
+        'completion_policy': 'all', 'min_required': '0', 'description': '',
         'franchise': str(collection.pk),   # the wrong TYPE, not a bogus id
         'group_badges-TOTAL_FORMS': '0', 'group_badges-INITIAL_FORMS': '0',
         'group_badges-MIN_NUM_FORMS': '0', 'group_badges-MAX_NUM_FORMS': '1000',

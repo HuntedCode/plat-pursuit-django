@@ -135,7 +135,6 @@ class BadgeSeriesCreationView(StaffRequiredMixin, FormView):
                     completion_policy=data['completion_policy'],
                     min_required=data.get('min_required') or 0,
                     description=data.get('description') or '',
-                    display_series=data.get('display_series') or '',
                     submitted_by=data.get('submitted_by'),
                 )
                 for group in editions:

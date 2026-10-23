@@ -262,7 +262,7 @@
   "checkbox": 15
  },
  "trophies/forms.py": {
-  "input": 12,
+  "input": 10,
   "select": 4,
   "textarea": 3
  },
