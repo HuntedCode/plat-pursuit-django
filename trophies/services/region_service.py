@@ -1,17 +1,17 @@
-"""Trophy-list regions: the corrected region rules, and the read-only audit that measures how far
-the stored regions have drifted from them.
+"""Trophy-list regions: where a title ID is sold, what a list's region label and regional flag should be,
+and the read-only audit that measures the catalogue against those rules.
 
-How regions get stored today (`sync_title_id`): each PS4/PS5 title ID a hunter has played is linked to
-its trophy list, PSN is asked for that title's store details, and the 2-letter prefix of the product
-id it returns is appended to `Game.region`. A live probe (2026-10-23) showed that the answer names the
-storefront we ASKED, not the title ID: asking the US store about the EU, JP and HK Ghost of Tsushima
-title IDs returns a `UP` product every time. So every list the US store carries picks up NA, which
-then outranks the andshrew dataset's correct per-title-ID region. Two table errors compound it: `KP`
-(Korea) is filed under JP, and `IP` (our "unknown" placeholder, and Sony's own worldwide prefix) is
-filed under NA. Regions and `is_regional` are also append-only, so none of this ever clears.
+WHERE THE TRUTH IS (store probes, 2026-10-23). A title ID is a product SKU, and its regions are the
+storefronts that sell that exact title ID. PSN's concept details answer for the storefront ASKED and
+describe the whole concept, so the old sync read (the prefix of the US store's `defaultProduct.id`)
+mostly just said "NA". Even an exact match's content-id prefix is not a region: it names the account
+the product is published under, and worldwide products keep one prefix everywhere (Black Myth: Wukong
+is `HP` in all five stores). So:
 
-READ-ONLY. This module only measures. The rules live here, not in the command, so the rebuild that
-follows classifies exactly the way the report that sized it did (the `job_drift` precedent).
+- `store_regions` (filled by the store walk) is the truth whenever a store sells the title ID.
+- The content-id prefix (`TitleID.region`, trusted only from the andshrew dataset) is the fallback for
+  a title ID no store sells any more, and the provisional LABEL until the walk reaches it.
+- A list's region LABEL is the union of its title IDs' regions.
 
 THE REGIONAL UNIT. Candidate siblings are lists of the same IGDB VERSION (raw `IGDBMatch.igdb_id`,
 trusted matches only) on the same HARDWARE platform. Not the Concept: a Concept also requires a
@@ -19,46 +19,39 @@ matching trophy fingerprint, so a regional list with any trophy difference (Chin
 an `X-N` sibling Concept. Not the `X`/`X-N` canonical family either: it holds other versions (canonical
 1009 holds The Last of Us, Remastered and Part I). Lists without a trusted match fall back to their
 Concept, then to themselves. VR and PC tags are not platforms here: a PS4 list and a PS5 list of No
-Man's Sky both carry `PSVR`, and grouping on it made them each other's siblings (2026-10-23 baseline).
+Man's Sky both carry `PSVR`, and grouping on it made them each other's siblings.
 
-THE REGIONAL RULE (`regional_verdicts`), settled against the prod baseline (2026-10-23). Being a
-candidate sibling is NOT enough: Dead by Daylight splits one game's trophies across several lists,
-Fall Guys got a new list at its free-to-play relaunch, and Call of Duty HQ carries several PS5 lists,
-all from the same regions. What separates a regional split is the REGIONS: a list is regional when
-another product in its unit covers regions that do not overlap with its own (Astro Bot's AS/EU/JP/NA
-list beside its CN list). Owner decisions: a list from Asian regions only is regional even with no
-sibling (it is regional to that region), and a list that cannot be judged because it or a sibling has
-no region data keeps whatever flag it has today.
+THE REGIONAL RULE (`regional_verdicts`), settled against the prod baseline. Being a candidate sibling
+is NOT enough: Dead by Daylight splits one game's trophies across several lists, Fall Guys got a new
+list at its free-to-play relaunch, Call of Duty HQ carries several PS5 lists, all from the same
+regions. A list is regional when another product in its unit covers regions that do not overlap with
+its own. Owner decisions: a list from Asian regions only is regional even with no sibling, and a list
+that cannot be judged (it or a sibling has no region data) keeps whatever flag it has.
 
-KNOWN BLIND SPOT. "What the title IDs say" reads `TitleID.region`, and sync overwrites every row it
-finds holding `IP` with whatever the US store answered. That covers title IDs missing from the dataset
-(auto-created as `IP`) AND the ~9.7k dataset rows that have no region (`populate_title_ids` stores
-those as `IP` too). Those rows are wrong in the same way the lists are, so lists built only from them
-agree with their title IDs here and are not flagged. A `populate_title_ids` run resets the dataset
-rows (not the others), so the blind spot's size depends on when it last ran. Fixing it needs
-provenance on TitleID, which the rebuild adds.
+The verdict reads only VERIFIED regions: a title ID's store set once walked (or, for one no store
+sells, its dataset prefix). An unwalked title ID's prefix is a guess the flag must not act on: by
+prefix alone Wukong would read as an Asia-only list. So a list's flag only changes once the walk has
+reached its title IDs, while its label improves straight away.
+
+Everything that writes regions goes through `rebuild` (catalogue or a scoped set), so the nightly
+rebuild, sync, the store walk and the audit cannot classify differently. The one exception is
+`apply_script_region`, sync's fallback for a list PSN gave no details for.
 """
-from collections import defaultdict
+import json
+import logging
+from collections import defaultdict, namedtuple
 
-from trophies.models import Game, IGDBMatch, TitleID
-from trophies.util_modules.constants import PLATFORM_PRIORITY_ORDER
+from django.db.models import Q
+from django.utils import timezone
 
-# --- the corrected region table ---------------------------------------------
+from trophies.models import Concept, Game, IGDBMatch, TitleID
+from trophies.util_modules.cache import redis_client
+from trophies.util_modules.constants import (
+    PLATFORM_PRIORITY_ORDER, PREFIX_REGIONS, REGIONS, STOREFRONTS,
+)
+from trophies.util_modules.language import detect_asian_language
 
-#: 2-letter PSN content-id prefix -> the region code `Game.region` stores. Differs from the
-#: `*_REGION_CODES` lists in constants.py in exactly two places, both verified against the andshrew
-#: dataset: `KP` is Korea (its rows carry Hangul names), and `IP` names no region at all (Sony's
-#: worldwide/system titles, and our own placeholder for "not known yet"). The report has to describe
-#: what SHOULD be stored, so it cannot reuse the table that produced the errors; the rebuild moves
-#: this into constants.py and points sync at it.
-PREFIX_REGIONS = {
-    'UP': 'NA', 'UB': 'NA', 'US': 'NA', 'UT': 'NA',
-    'EP': 'EU', 'EB': 'EU',
-    'JP': 'JP', 'JA': 'JP', 'JB': 'JP',
-    'HP': 'AS', 'HA': 'AS', 'HB': 'AS', 'HT': 'AS',
-    'KP': 'KR', 'KR': 'KR',
-    'CN': 'CN',
-}
+logger = logging.getLogger('psn_api')
 
 #: Regions served by the Asian storefronts. A list from these alone is regional by itself.
 ASIAN_REGIONS = frozenset({'JP', 'AS', 'KR', 'CN'})
@@ -66,6 +59,8 @@ ASIAN_REGIONS = frozenset({'JP', 'AS', 'KR', 'CN'})
 #: The hardware platforms siblings are grouped on. `PLATFORM_PRIORITY_ORDER` lists exactly the
 #: consoles, without the PSVR/PSVR2/PSPC tags that ride along on a console list.
 BASE_PLATFORMS = frozenset(PLATFORM_PRIORITY_ORDER)
+
+_REGION_ORDER = {code: i for i, code in enumerate(REGIONS)}
 
 
 def normalize_region(code):
@@ -75,17 +70,58 @@ def normalize_region(code):
     return PREFIX_REGIONS.get(str(code).strip().upper())
 
 
-def title_id_region_map():
-    """`{title_id: raw region prefix}` for every TitleID that has one. One flat query of short strings
-    (the dataset is ~71k rows), the same shape `backfill_game_regions` already loads."""
-    return dict(TitleID.objects.exclude(region='').values_list('title_id', 'region'))
+def ordered(regions):
+    """Region codes in display order (`REGIONS`), the order `Game.region` is stored in."""
+    return sorted(set(regions), key=lambda code: (_REGION_ORDER.get(code, len(_REGION_ORDER)), code))
 
 
-def expected_regions(title_ids, tid_map):
-    """The regions a list's title IDs support, by the corrected table."""
-    found = (normalize_region(tid_map.get(tid)) for tid in (title_ids or []))
-    return {r for r in found if r}
+# --- a title ID's regions ---------------------------------------------------
 
+#: What one title ID says. `label` feeds a list's region label; `verdict` feeds the regional flag (see
+#: the module docstring for why they differ); `walked` is whether every store has answered; `stores` is
+#: what they said.
+TitleRegions = namedtuple('TitleRegions', 'prefix label verdict walked stores')
+
+_UNKNOWN = TitleRegions('', frozenset(), frozenset(), False, frozenset())
+
+
+def _title_regions(prefix, source, store_regions, checked_at):
+    trusted_prefix = frozenset(
+        {normalize_region(prefix)} - {None} if source == TitleID.REGION_SOURCE_DATASET else ()
+    )
+    stores = frozenset(r for r in (store_regions or []) if r)
+    walked = checked_at is not None
+    if walked and stores:
+        return TitleRegions(prefix, stores, stores, True, stores)
+    if walked:
+        # Sold nowhere now (delisted, or relisted under a newer ID): the prefix is the best evidence left.
+        return TitleRegions(prefix, trusted_prefix, trusted_prefix, True, stores)
+    return TitleRegions(prefix, trusted_prefix, frozenset(), False, stores)
+
+
+def title_id_info(title_ids=None):
+    """`{title_id: TitleRegions}`, for the given title IDs or every TitleID. One flat `values_list`."""
+    qs = TitleID.objects.all()
+    if title_ids is not None:
+        qs = qs.filter(title_id__in=list(title_ids))
+    return {
+        tid: _title_regions(prefix, source, stores, checked)
+        for tid, prefix, source, stores, checked in qs.values_list(
+            'title_id', 'region', 'region_source', 'store_regions', 'store_checked_at')
+    }
+
+
+def label_regions(title_ids, info):
+    """The region label a list's title IDs support."""
+    return set().union(*(info.get(tid, _UNKNOWN).label for tid in (title_ids or [])))
+
+
+def verdict_regions(title_ids, info):
+    """The VERIFIED regions a list's title IDs support, the only ones the regional flag acts on."""
+    return set().union(*(info.get(tid, _UNKNOWN).verdict for tid in (title_ids or [])))
+
+
+# --- the regional unit ------------------------------------------------------
 
 def unit_key(concept_pk, igdb_id, match_status):
     """The regional unit a list belongs to (see the module docstring)."""
@@ -114,7 +150,7 @@ def _as_list(raw):
 def _products(pks, tids_by_pk):
     """Split one (unit, platform) group into PRODUCTS: `{pk: product root}`. Lists that share a title ID
     are one product carrying two trophy lists, so they come from the same storefront and are not
-    regional versions of each other. (The one thing `count_unique_game_groups` got right.)"""
+    regional versions of each other."""
     parent = {pk: pk for pk in pks}
 
     def find(pk):
@@ -163,7 +199,7 @@ def regional_verdicts(groups, tids_by_pk, regions_by_pk):
 
     `groups` maps `(unit, platform)` to the list pks in it; a list on several platforms sits in
     several groups and is regional if ANY of them gives it a disjoint sibling. `regions_by_pk` holds
-    what each list's title IDs say, not its stored label: the stored label is what is being judged.
+    each list's VERIFIED regions, not its stored label: the stored label is what is being judged.
 
     A list is judged by its PRODUCT's regions (every list sharing a title ID with it), so the lists of
     one storefront product cannot come out with opposite verdicts.
@@ -189,8 +225,7 @@ def regional_verdicts(groups, tids_by_pk, regions_by_pk):
                 if product[other] != product[pk]:
                     theirs = regions[product[other]]
                     seen, was_disjoint = compared[pk].get(other, (frozenset(), False))
-                    compared[pk][other] = (seen | theirs,
-                                           was_disjoint or _disjoint(own, theirs))
+                    compared[pk][other] = (seen | theirs, was_disjoint or _disjoint(own, theirs))
             if any(_disjoint(own, r) for r in others):
                 disjoint.add(pk)
             elif any(not r for r in others):
@@ -217,7 +252,362 @@ def regional_verdicts(groups, tids_by_pk, regions_by_pk):
     return verdicts, compared
 
 
-# --- buckets ----------------------------------------------------------------
+# --- loading lists ----------------------------------------------------------
+
+_LIST_FIELDS = (
+    'pk', 'title_name', 'np_communication_id', 'title_platform', 'region', 'title_ids',
+    'is_regional', 'region_lock', 'played_count', 'concept_id', 'concept__concept_id',
+    'concept__igdb_match__igdb_id', 'concept__igdb_match__status',
+)
+
+#: One trophy list, as the rules read it. Built from a `values_list` tuple: never a model instance.
+#: `stored` keeps the stored order, so an unchanged label is never rewritten just to reorder it.
+#: `raw` is the stored JSON exactly as loaded (a legacy row can hold a bare string, blanks or repeats),
+#: which the conditional write must match. `all_walked` is whether every title ID has a store answer.
+ListRow = namedtuple('ListRow', 'pk name np_id platforms stored raw title_ids is_regional locked played '
+                                'concept_id unit label verdict all_walked')
+
+
+def _load(qs, info=None):
+    """`(rows, groups, info)` for the lists in `qs`. `info` is loaded for exactly their title IDs when
+    not passed. A locked list's `verdict` is its stored label: an admin set it, so it is the truth its
+    siblings are judged against."""
+    raw = list(qs.values_list(*_LIST_FIELDS))
+    if info is None:
+        info = title_id_info({tid for r in raw for tid in _as_list(r[5])})
+    rows, groups = [], defaultdict(list)
+    for (pk, name, np_id, plats, region, tids, is_regional, locked, played, concept_pk, concept_id,
+         igdb_id, status) in raw:
+        tids, plats, stored = _as_list(tids), _as_list(plats), tuple(_as_list(region))
+        unit = unit_key(concept_pk, igdb_id, status)
+        all_walked = bool(tids) and all(info.get(tid, _UNKNOWN).walked for tid in tids)
+        row = ListRow(pk, name, np_id, plats, stored, region, tids, is_regional, locked, played or 0,
+                      concept_id, unit, label_regions(tids, info),
+                      set(stored) if locked else verdict_regions(tids, info), all_walked)
+        rows.append(row)
+        if unit is not None:
+            for plat in sibling_platforms(plats):
+                groups[(unit, plat)].append(pk)
+    return rows, groups, info
+
+
+def _verdicts_for(rows, groups):
+    return regional_verdicts(groups, {r.pk: r.title_ids for r in rows}, {r.pk: r.verdict for r in rows})
+
+
+# --- writing: the rebuild ---------------------------------------------------
+
+def target_region(row):
+    """The region label a list SHOULD store. Its title IDs' regions; when they name none, the script of
+    its title (the old fallback for Asia-only lists PSN gave no details for).
+
+    A list whose title IDs name no region keeps what it has until EVERY one of them is walked: with no
+    title IDs, or with any still unwalked, "names no region" only means "not known yet". That is the
+    label's version of "unjudged keeps its flag", and it is load-bearing: right after the migration no
+    prefix is trusted until `populate_title_ids` re-runs, and without this every rebuild in that window
+    would wipe the catalogue's labels. A stored NA that came from an `IP` title ID therefore stays until
+    the walk answers for it."""
+    if row.label:
+        return ordered(row.label)
+    if not row.all_walked:
+        return list(row.stored)
+    script = detect_asian_language(row.name or '')
+    return [script] if script in REGIONS else []
+
+
+def target_flag(row, verdict):
+    """The `is_regional` a list SHOULD store: the verdict, except an unjudged list keeps its flag."""
+    if verdict == REGIONAL:
+        return True
+    if verdict == NOT_REGIONAL:
+        return False
+    return row.is_regional
+
+
+def rebuild(qs=None, dry_run=False):
+    """Rewrite region labels and regional flags for the lists in `qs` (default: every list) from the
+    rules above. Region-locked lists are never written. Returns change counts.
+
+    Pass a whole unit at a time (`refresh_units` does): a verdict depends on every sibling, so a partial
+    unit would judge a list against only some of them.
+    """
+    # The catalogue-wide load reads TitleID unfiltered rather than through a ~70k-id IN list.
+    rows, groups, _info = (_load(Game.objects.all(), title_id_info()) if qs is None else _load(qs))
+    verdicts, _compared = _verdicts_for(rows, groups)
+    # {(raw stored JSON, new label): [pk, ...]}. Grouped so every write is CONDITIONAL on the exact value
+    # this rebuild loaded and on the list still being unlocked: an admin lock, or a walk that rebuilt the
+    # list since, wins over this rebuild's now-stale answer. Matched on the RAW value, because jsonb
+    # equality is exact and a legacy row (a bare string, blanks, repeats) never equals its normalised
+    # form; such a row is rewritten to a clean list once even when its regions did not change.
+    region_changes, flag_on, flag_off = defaultdict(list), [], []
+    for row in rows:
+        if row.locked:
+            continue
+        region = target_region(row)
+        if set(region) != set(row.stored) or row.raw != list(row.stored):
+            new = region if set(region) != set(row.stored) else list(row.stored)
+            region_changes[(json.dumps(row.raw), tuple(new))].append(row.pk)
+        flag = target_flag(row, verdicts[row.pk][0])
+        if flag != row.is_regional:
+            (flag_on if flag else flag_off).append(row.pk)
+    if dry_run:
+        return {'lists': len(rows), 'regions': sum(len(pks) for pks in region_changes.values()),
+                'flagged': len(flag_on), 'unflagged': len(flag_off)}
+    # Counts are what the UPDATEs actually wrote, so a run that lost every row to a newer value or a lock
+    # reports 0 rather than re-announcing the same planned changes every night.
+    written = sum(
+        Game.objects.filter(pk__in=pks, region_lock=False, region=json.loads(raw)).update(region=list(new))
+        for (raw, new), pks in region_changes.items()
+    )
+    flagged = (Game.objects.filter(pk__in=flag_on, region_lock=False, is_regional=False)
+               .update(is_regional=True) if flag_on else 0)
+    unflagged = (Game.objects.filter(pk__in=flag_off, region_lock=False, is_regional=True)
+                 .update(is_regional=False) if flag_off else 0)
+    return {'lists': len(rows), 'regions': written, 'flagged': flagged, 'unflagged': unflagged}
+
+
+def unit_queryset(game_pks):
+    """Every list in the units the given lists belong to (plus the lists themselves), so `rebuild` can
+    judge each against all of its siblings."""
+    seeds = list(Game.objects.filter(pk__in=list(game_pks)).values_list(
+        'pk', 'concept_id', 'concept__igdb_match__igdb_id', 'concept__igdb_match__status'))
+    igdb_ids, concept_pks = set(), set()
+    for _pk, concept_pk, igdb_id, status in seeds:
+        unit = unit_key(concept_pk, igdb_id, status)
+        if unit and unit.startswith('igdb:'):
+            igdb_ids.add(igdb_id)
+        elif unit:
+            concept_pks.add(concept_pk)
+    # Resolved to concept pks first: one ORed filter across the concept and IGDB-match joins would
+    # scan Game, and this runs on every sync_title_id. Both lookups below are indexed.
+    if igdb_ids:
+        concept_pks |= set(Concept.objects.filter(
+            igdb_match__igdb_id__in=igdb_ids, igdb_match__status__in=IGDBMatch.TRUSTED_STATUSES,
+        ).values_list('pk', flat=True))
+    q = Q(pk__in=[pk for pk, *_ in seeds])
+    if concept_pks:
+        q |= Q(concept_id__in=concept_pks)
+    return Game.objects.filter(q)
+
+
+def refresh_units(game_pks):
+    """Rebuild the given lists and every list sharing a unit with them. The scoped write path for sync
+    and the store walk; the nightly rebuild covers everything that moves lists between units."""
+    if not game_pks:
+        return None
+    return rebuild(unit_queryset(game_pks))
+
+
+def apply_script_region(game, code):
+    """The concept-less fallback in `sync_title_id`: PSN gave no details and the title's script names an
+    Asian region. Adds the region and flags the list, unless an admin locked it."""
+    if game.region_lock or code not in REGIONS:
+        return
+    game.region = ordered(set(_as_list(game.region)) | {code})
+    game.is_regional = True
+    game.save(update_fields=['region', 'is_regional'])
+
+
+# --- the store walk ---------------------------------------------------------
+
+WALK_JOB = 'resolve_title_id_region'
+REFILL_JOB = 'region_walk_refill'
+
+#: Set while a title ID's lookup is queued, so a refill or a second sync does not queue it twice, and
+#: kept after a FAILED lookup as a cooldown (the walk deletes it on success). A full day, because a
+#: lookup can wait on the bulk queue for hours (a 500-ID batch is ~3,000 calls at the token rate) and a
+#: lapsed key mid-wait gets it queued again. The nightly retries a failed one once its day is up.
+QUEUED_KEY = 'region_walk:queued:{title_id}'
+QUEUED_TTL_SECONDS = 24 * 3600
+
+#: Held while a bulk walk chain is alive, so a second `resolve_title_regions` cannot start a second
+#: chain. Refreshed by every refill AND by every walk job the chain queued, so a batch that takes hours
+#: to drain keeps it; a sync-queued walk never touches it, so a chain that died (a worker crash, a DB
+#: blip during its refill) frees it within the TTL and the nightly restarts it.
+CHAIN_KEY = 'region_walk:chain'
+CHAIN_TTL_SECONDS = 2 * 3600
+
+
+def sells_title_id(details, title_id):
+    """Whether one storefront's concept response sells THIS title ID: a product ID embeds the title ID
+    (`EP9000-PPSA03208_00-...`), and only the stores selling it list a product carrying it. A store that
+    does not know the title answers normally with no products, so absence is an answer, not an error."""
+    details = details or {}
+    ids = [(details.get('defaultProduct') or {}).get('id') or '']
+    for category in details.get('categorizedProducts') or []:
+        ids.extend(category.get('ids') or [])
+    return any(title_id in (pid or '') for pid in ids)
+
+
+def record_store_answers(title_id, answers):
+    """Save what every storefront said about a title ID and rebuild the lists carrying it. `answers` is
+    `{region: details}` and must hold EVERY storefront: a partial walk would record "not sold" for the
+    stores it never asked. Returns the regions found."""
+    missing = [region for _c, _l, region in STOREFRONTS if region not in answers]
+    if missing:
+        raise ValueError(f'store walk for {title_id} is missing {missing}')
+    regions = ordered(region for _c, _l, region in STOREFRONTS if sells_title_id(answers[region], title_id))
+    # update_or_create, not update: a row deleted between queue and answer would drop six calls' worth.
+    answer = {'store_regions': regions, 'store_checked_at': timezone.now()}
+    TitleID.objects.update_or_create(title_id=title_id, defaults=answer,
+                                     create_defaults={**answer, 'platform': platform_for(title_id)})
+    redis_client.delete(QUEUED_KEY.format(title_id=title_id))
+    refresh_units(Game.objects.filter(title_ids__contains=[title_id]).values_list('pk', flat=True))
+    return regions
+
+
+def walk_title_id(title_id, fetch, chain=False):
+    """The store walk for one title ID: `fetch(country, language)` returns that storefront's concept
+    details, and every storefront in STOREFRONTS is asked before anything is recorded. All or nothing:
+    if any call raises, it raises out of here and nothing is written, so a title ID is never recorded as
+    "sold nowhere" because a store was not asked. Returns the regions found.
+
+    `chain` marks a lookup the bulk chain queued: it keeps the chain lock alive while its batch drains
+    (`expire` only, so it never re-creates a lock that was released)."""
+    if chain:
+        redis_client.expire(CHAIN_KEY, CHAIN_TTL_SECONDS)
+    answers = {region: fetch(country, language) for country, language, region in STOREFRONTS}
+    return record_store_answers(title_id, answers)
+
+
+def platform_for(title_id, known=None):
+    """The platform to ask the catalog about: the TitleID's when it is a console the catalog takes,
+    else the ID's own prefix (CUSA is PS4). An auto-created TitleID copies the list's first platform,
+    which can be a tag like PSVR."""
+    if known in ('PS4', 'PS5'):
+        return known
+    return 'PS5' if title_id.upper().startswith('PPSA') else 'PS4'
+
+
+def walk_candidates(limit=None):
+    """Title IDs on lists that no store walk has answered for, most-played list first:
+    `[(title_id, platform, np_communication_id), ...]`. Skips IDs whose lookup is already queued."""
+    best = {}
+    for tids, np_id, played in (Game.objects.exclude(title_ids=[])
+                                .values_list('title_ids', 'np_communication_id', 'played_count')):
+        for tid in _as_list(tids):
+            if tid not in best or (played or 0) > best[tid][0]:
+                best[tid] = (played or 0, np_id)
+    known = dict(TitleID.objects.filter(store_checked_at__isnull=True)
+                 .values_list('title_id', 'platform'))
+    walked = set(TitleID.objects.filter(store_checked_at__isnull=False).values_list('title_id', flat=True))
+    order = sorted((tid for tid in best if tid not in walked), key=lambda tid: (-best[tid][0], tid))
+    picked = []
+    for tid in order:
+        if limit is not None and len(picked) >= limit:
+            break
+        if redis_client.exists(QUEUED_KEY.format(title_id=tid)):
+            continue
+        picked.append((tid, platform_for(tid, known.get(tid)), best[tid][1]))
+    return picked
+
+
+def walked_count():
+    """How many title IDs any store walk has answered for. The refill chain's progress measure: unlike
+    the unwalked count, sync adding new title IDs cannot make it look like the walk went backwards."""
+    return TitleID.objects.filter(store_checked_at__isnull=False).count()
+
+
+def unwalked_count():
+    """How many title IDs on lists the walk has not answered for yet."""
+    on_lists = {tid for tids in Game.objects.exclude(title_ids=[]).values_list('title_ids', flat=True)
+                for tid in _as_list(tids)}
+    walked = set(TitleID.objects.filter(store_checked_at__isnull=False).values_list('title_id', flat=True))
+    return len(on_lists - walked)
+
+
+def queue_lookup(title_id, platform, np_communication_id, queue='bulk_priority', chain=False):
+    """Queue one title ID's store walk. Profile-less and UNCOUNTED on purpose: a counted job would make
+    a hunter's `sync_complete` wait on store lookups. Ensures the TitleID row exists, since the walk
+    writes onto it. Returns False when the lookup is already queued."""
+    from trophies.psn_manager import PSNManager
+
+    TitleID.objects.get_or_create(title_id=title_id, defaults={'platform': platform})
+    key = QUEUED_KEY.format(title_id=title_id)
+    if not redis_client.set(key, 1, nx=True, ex=QUEUED_TTL_SECONDS):
+        return False
+    try:
+        PSNManager.assign_job(WALK_JOB, [title_id, platform, np_communication_id, chain], profile_id=None,
+                              priority_override=queue, skip_counter=True)
+    except Exception:
+        # Nothing was queued, so nothing may hold the key: it would block this title ID for an hour.
+        redis_client.delete(key)
+        raise
+    return True
+
+
+def refill_walk(batch, last_walked=None):
+    """One step of the bulk walk: queue the next `batch` unwalked title IDs, then a refill job BEHIND
+    them (`lpush`, so it runs after they drain). Returns `(queued, remaining)`.
+
+    The chain ends when:
+    - the previous batch walked NOTHING (`walked_count` did not move): a PSN outage short-circuits every
+      lookup, and the chain would otherwise spin. Logged as a warning;
+    - no candidate is free to queue. Either the walk is done, or every one left is cooling down after a
+      failed lookup (QUEUED_KEY); the second is logged as a warning, since re-running the command after
+      the cooldown resumes it.
+    A refill that dies itself (a DB blip) is not re-queued by the worker (profile-less), so the chain
+    stops there too; CHAIN_KEY lapses and `resolve_title_regions` restarts it."""
+    from trophies.psn_manager import PSNManager
+
+    walked = walked_count()
+    remaining = unwalked_count()
+    if last_walked is not None and walked <= last_walked:
+        redis_client.delete(CHAIN_KEY)
+        logger.warning(f'region walk stopped: the last batch walked nothing ({remaining} unwalked); '
+                       f're-run resolve_title_regions once PSN is healthy')
+        return 0, remaining
+    queued = sum(queue_lookup(tid, plat, np_id, queue='bulk_priority', chain=True)
+                 for tid, plat, np_id in walk_candidates(batch))
+    if not queued:
+        redis_client.delete(CHAIN_KEY)
+        if remaining:
+            logger.warning(f'region walk paused: {remaining} unwalked, all cooling down after a failed '
+                           f'lookup; the nightly resolve_title_regions retries them once their cooldown lapses')
+        else:
+            logger.info('region walk finished: every title ID on a list has been walked')
+        return 0, remaining
+    redis_client.set(CHAIN_KEY, 1, ex=CHAIN_TTL_SECONDS)
+    PSNManager.assign_job(REFILL_JOB, [batch, walked], profile_id=None,
+                          priority_override='bulk_priority', skip_counter=True)
+    logger.info(f'region walk: queued {queued}, {remaining} unwalked')
+    return queued, remaining
+
+
+def walk_is_running():
+    """Whether a bulk walk chain holds the chain lock."""
+    return bool(redis_client.exists(CHAIN_KEY))
+
+
+def start_walk(batch):
+    """Start the bulk walk chain unless one is running. The lock is taken atomically (`nx`), so two
+    starts at once cannot both win, and released if queueing the first refill fails. Returns whether
+    this call started it."""
+    from trophies.psn_manager import PSNManager
+
+    if not redis_client.set(CHAIN_KEY, 1, nx=True, ex=CHAIN_TTL_SECONDS):
+        return False
+    try:
+        PSNManager.assign_job(REFILL_JOB, [max(batch, 1), None], profile_id=None,
+                              priority_override='bulk_priority', skip_counter=True)
+    except Exception:
+        redis_client.delete(CHAIN_KEY)
+        raise
+    return True
+
+
+def after_title_id_synced(game, title_id):
+    """Sync's region step for one title ID now on `game`: rebuild the list and its unit with what is
+    known, and queue the store walk for a title ID it has not reached yet. On the BULK queue: six calls
+    per title ID must never sit ahead of a hunter's own sync jobs (sync_title_id itself can run on bulk
+    when `backfill_psn_concept_data` drains it). The chip fills in once the bulk queue reaches it."""
+    refresh_units([game.pk])
+    if title_id.store_checked_at is None:
+        queue_lookup(title_id.title_id, platform_for(title_id.title_id, title_id.platform),
+                     game.np_communication_id, queue='bulk_priority')
+
+
+# --- the audit (read-only) --------------------------------------------------
 
 WRONG_REGION = 'wrong_region'
 MISSING_REGION = 'missing_region'
@@ -244,129 +634,101 @@ BUCKET_LABELS = {
 }
 
 
-def _sibling_rows(compared, label_by_pk, locked_pks):
+def _sibling_rows(compared, by_pk):
     """A row's siblings for the read-out: disjoint ones first (they decide a `disjoint_sibling`
     verdict, so a capped list must not hide them), then those with no region data, then overlapping.
     `regions` are the PRODUCT regions the rule compared; `locked` marks an admin-set label standing in
     for title IDs."""
     def order(item):
         sibling, (regions, disjoint) = item
-        return (0 if disjoint else 1 if not regions else 2, label_by_pk[sibling][1] or '')
+        return (0 if disjoint else 1 if not regions else 2, by_pk[sibling].np_id or '')
 
     return [
-        {'name': label_by_pk[s][0], 'np_id': label_by_pk[s][1], 'platforms': label_by_pk[s][2],
-         'regions': sorted(regions), 'disjoint': disjoint, 'locked': s in locked_pks}
+        {'name': by_pk[s].name, 'np_id': by_pk[s].np_id, 'platforms': by_pk[s].platforms,
+         'regions': sorted(regions), 'disjoint': disjoint, 'locked': by_pk[s].locked}
         for s, (regions, disjoint) in sorted(compared.items(), key=order)
     ]
 
 
 def scan(platform=None):
-    """Classify every trophy list. Returns `(rows, stats)`.
+    """Classify every trophy list. Returns `(rows, stats)`. Read-only.
 
     `rows` holds ONLY the lists in at least one bucket, one dict each. `stats` holds the denominators:
-    lists scanned, lists skipped for `region_lock`, per-platform region coverage, and how many lists
-    got each verdict.
+    lists scanned, lists skipped for `region_lock`, per-platform region coverage, how many lists got
+    each verdict, and the store walk's progress.
 
     Catalogue-wide rather than per-user, but it never builds a model instance: one `values_list` over
-    Game read as tuples (held for two passes, so the whole catalogue is in memory at once as plain
-    tuples), and dicts only for the flagged lists. Siblings are grouped across the WHOLE catalogue
-    before `platform` narrows the output, because a cross-buy list's sibling may sit on the platform
-    that was filtered out.
+    Game read as tuples, and dicts only for the flagged lists. Siblings are grouped across the WHOLE
+    catalogue before `platform` narrows the output, because a cross-buy list's sibling may sit on the
+    platform that was filtered out.
     """
-    tid_map = title_id_region_map()
-    lists = list(
-        Game.objects.values_list(
-            'pk', 'title_name', 'np_communication_id', 'title_platform', 'region', 'title_ids',
-            'is_regional', 'region_lock', 'played_count', 'concept_id', 'concept__concept_id',
-            'concept__igdb_match__igdb_id', 'concept__igdb_match__status',
-        )
-    )
+    info = title_id_info()
+    lists, groups, _info = _load(Game.objects.all(), info)
+    verdicts, compared = _verdicts_for(lists, groups)
+    by_pk = {r.pk: r for r in lists}
 
-    groups = defaultdict(list)
-    stored_by_pk, tids_by_pk, regions_by_pk, label_by_pk = {}, {}, {}, {}
-    locked_pks = set()
-    for (pk, name, np_id, plats, region, tids, _reg, locked, _played, concept_pk, _cid,
-         igdb_id, status) in lists:
-        label_by_pk[pk] = (name, np_id, _as_list(plats))
-        if locked:
-            locked_pks.add(pk)
-        stored_by_pk[pk] = frozenset(_as_list(region))
-        tids_by_pk[pk] = _as_list(tids)
-        # A locked list's region was set by an admin, so it is the truth its siblings are judged
-        # against. Everyone else is judged by what their title IDs say.
-        regions_by_pk[pk] = (set(stored_by_pk[pk]) if locked
-                             else expected_regions(tids_by_pk[pk], tid_map))
-        unit = unit_key(concept_pk, igdb_id, status)
-        if unit is None:
-            continue
-        for plat in sibling_platforms(_as_list(plats)):
-            groups[(unit, plat)].append(pk)
-    verdicts, compared = regional_verdicts(groups, tids_by_pk, regions_by_pk)
-
-    # Sizes the store walk: every distinct title ID that sits on a list, and how many the TitleID
-    # table has a region for. Catalogue-wide on purpose, the walk does not follow --platform.
-    on_lists = {tid for tids in tids_by_pk.values() for tid in tids}
+    # Sizes the store walk. Catalogue-wide on purpose, the walk does not follow --platform.
+    on_lists = {tid for r in lists for tid in r.title_ids}
     stats = {
         'scanned': 0, 'locked': 0, 'coverage': defaultdict(lambda: [0, 0]),
         'verdicts': defaultdict(int), 'unjudged_flagged': 0,
         'title_ids_on_lists': len(on_lists),
-        'title_ids_with_region': sum(1 for tid in on_lists if normalize_region(tid_map.get(tid))),
+        'title_ids_walked': sum(1 for tid in on_lists if info.get(tid, _UNKNOWN).walked),
+        'title_ids_with_region': sum(1 for tid in on_lists if info.get(tid, _UNKNOWN).label),
     }
     rows = []
-    for (pk, name, np_id, plats, _region, _tids, is_regional, locked, played, concept_pk, concept_id,
-         igdb_id, status) in lists:
-        plats = _as_list(plats)
-        if platform and platform not in plats:
+    for r in lists:
+        if platform and platform not in r.platforms:
             continue
         stats['scanned'] += 1
-        stored = set(stored_by_pk[pk])
-        for plat in ([platform] if platform else plats):
+        stored = set(r.stored)
+        for plat in ([platform] if platform else r.platforms):
             stats['coverage'][plat][0] += 1
             stats['coverage'][plat][1] += bool(stored)
-        if locked:
+        if r.locked:
             # An admin set this list's region by hand: that is the truth the rules are measured
             # against, not something to report.
             stats['locked'] += 1
             continue
 
-        verdict, reason = verdicts[pk]
+        verdict, reason = verdicts[r.pk]
         stats['verdicts'][verdict] += 1
-        if verdict == UNJUDGED and is_regional:
+        if verdict == UNJUDGED and r.is_regional:
             stats['unjudged_flagged'] += 1
 
-        tids = tids_by_pk[pk]
-        expected = regions_by_pk[pk]
-        raw = [(tid, tid_map.get(tid)) for tid in tids]
+        expected = r.label
+        raw = [(tid, info.get(tid, _UNKNOWN)) for tid in r.title_ids]
         buckets = []
         if expected and stored - expected:
             buckets.append(WRONG_REGION)
         elif expected - stored:
             buckets.append(MISSING_REGION)
         if 'JP' in stored and 'JP' not in expected and any(
-                (code or '').strip().upper() == 'KP' for _tid, code in raw):
+                (t.prefix or '').strip().upper() == 'KP' for _tid, t in raw):
             buckets.append(KOREA_AS_JP)
-        # Problem 3 only: NA with title IDs that name no region at all (`IP` or missing). A list with
-        # no title IDs gives no evidence either way, and NA beside a KNOWN non-NA title ID is the
-        # storefront bug, which wrong_region already counts.
-        if 'NA' in stored and tids and not expected:
+        # NA with title IDs that name no region at all (`IP` or missing). A list with no title IDs
+        # gives no evidence either way, and NA beside a KNOWN non-NA title ID is the storefront bug,
+        # which wrong_region already counts.
+        if 'NA' in stored and r.title_ids and not expected:
             buckets.append(NA_FROM_UNKNOWN)
-        if verdict == REGIONAL and not is_regional:
+        if verdict == REGIONAL and not r.is_regional:
             buckets.append(REGIONAL_MISSED)
-        if verdict == NOT_REGIONAL and is_regional:
+        if verdict == NOT_REGIONAL and r.is_regional:
             buckets.append(REGIONAL_STALE)
-        if is_regional and not stored:
+        if r.is_regional and not stored:
             buckets.append(REGIONAL_NO_REGION)
         if buckets:
             rows.append({
-                'pk': pk, 'name': name, 'np_id': np_id, 'platforms': plats,
-                'stored': sorted(stored), 'expected': sorted(expected), 'title_ids': raw,
-                'is_regional': is_regional, 'played': played or 0, 'concept_id': concept_id,
-                'unit': unit_key(concept_pk, igdb_id, status), 'buckets': buckets,
-                'verdict': verdict, 'reason': reason,
-                'siblings': _sibling_rows(compared.get(pk, {}), label_by_pk, locked_pks),
+                'pk': r.pk, 'name': r.name, 'np_id': r.np_id, 'platforms': r.platforms,
+                'stored': sorted(stored), 'expected': sorted(expected),
+                'title_ids': [(tid, t.prefix or None, sorted(t.stores) if t.walked else None)
+                              for tid, t in raw],
+                'is_regional': r.is_regional, 'played': r.played, 'concept_id': r.concept_id,
+                'unit': r.unit, 'buckets': buckets, 'verdict': verdict, 'reason': reason,
+                'siblings': _sibling_rows(compared.get(r.pk, {}), by_pk),
                 # Chips render only for a regional list with a stored region, so this is the
                 # difference between a wrong label hunters SEE and one sitting unread in the column.
-                'shown': bool(is_regional and stored),
+                'shown': bool(r.is_regional and stored),
             })
 
     stats['coverage'] = dict(stats['coverage'])

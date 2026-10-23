@@ -13,6 +13,7 @@ import itertools
 
 import pytest
 from django.core.management import call_command
+from django.utils import timezone
 
 from tests.factories import ConceptFactory, GameFactory, IGDBMatchFactory
 from trophies.models import TitleID
@@ -23,8 +24,16 @@ pytestmark = pytest.mark.django_db
 _TIDS = itertools.count(10000)
 
 
-def _tid(title_id, region, platform='PS5'):
-    TitleID.objects.create(title_id=title_id, platform=platform, region=region)
+def _tid(title_id, region, platform='PS5', *, walked=True, stores=None, source=TitleID.REGION_SOURCE_DATASET):
+    """A TitleID with dataset prefix `region`. By default WALKED, with the stores agreeing with the
+    prefix (`stores` overrides, `[]` = sold nowhere), because the regional rule only acts on walked
+    title IDs; pass `walked=False` for one the store walk has not reached."""
+    if stores is None:
+        stores = [r for r in [rs.normalize_region(region)] if r]
+    TitleID.objects.create(
+        title_id=title_id, platform=platform, region=region, region_source=source,
+        store_regions=stores if walked else [], store_checked_at=timezone.now() if walked else None,
+    )
     return title_id
 
 
@@ -74,11 +83,45 @@ def test_normalize_region_fixes_and_edges(code, region):
     assert rs.normalize_region(code) == region
 
 
-def test_expected_regions_skips_unknown_and_missing_title_ids():
-    tid_map = {'A': 'EP', 'B': 'IP', 'C': 'UP'}
-    assert rs.expected_regions(['A', 'B', 'C', 'MISSING'], tid_map) == {'EU', 'NA'}
-    assert rs.expected_regions([], tid_map) == set()
-    assert rs.expected_regions(None, tid_map) == set()
+# --- a title ID's regions ------------------------------------------------------------------
+
+_NOW = '2026-10-23T00:00:00Z'
+
+
+@pytest.mark.parametrize('prefix,source,stores,checked,label,verdict', [
+    # Walked and sold somewhere: the stores are the truth for both, whatever the prefix says.
+    ('HP', 'dataset', ['NA', 'EU', 'JP', 'AS', 'KR'], _NOW, {'NA', 'EU', 'JP', 'AS', 'KR'},
+     {'NA', 'EU', 'JP', 'AS', 'KR'}),
+    # Walked, sold nowhere (delisted / relisted): the trusted prefix is the best evidence left.
+    ('EP', 'dataset', [], _NOW, {'EU'}, {'EU'}),
+    ('UP', '', [], _NOW, set(), set()),
+    # Unwalked: the trusted prefix labels it, but the flag must not act on a guess.
+    ('EP', 'dataset', [], None, {'EU'}, set()),
+    # Unwalked and untrusted (sync used to write the US store's answer here): nothing at all.
+    ('UP', '', [], None, set(), set()),
+    ('IP', 'dataset', [], None, set(), set()),
+])
+def test_title_regions_by_source(prefix, source, stores, checked, label, verdict):
+    t = rs._title_regions(prefix, source, stores, checked)
+    assert set(t.label) == label
+    assert set(t.verdict) == verdict
+    assert t.walked is (checked is not None)
+
+
+def test_label_and_verdict_regions_union_a_lists_title_ids():
+    _tid('A_00', 'EP')
+    _tid('B_00', 'IP')
+    _tid('C_00', 'JP', walked=False)
+    info = rs.title_id_info()
+    assert rs.label_regions(['A_00', 'B_00', 'C_00', 'MISSING_00'], info) == {'EU', 'JP'}
+    assert rs.verdict_regions(['A_00', 'B_00', 'C_00', 'MISSING_00'], info) == {'EU'}
+    assert rs.label_regions([], info) == set() and rs.verdict_regions(None, info) == set()
+
+
+def test_title_id_info_can_be_scoped():
+    _tid('A_00', 'EP')
+    _tid('B_00', 'UP')
+    assert set(rs.title_id_info(['A_00'])) == {'A_00'}
 
 
 # --- the regional unit ---------------------------------------------------------------------
@@ -456,7 +499,7 @@ def test_legacy_scalar_shapes_are_read_as_one_value():
     _tid('CUSA02834_00', 'KP', 'PS4')
     row = _rows()[game.pk]
     assert row['stored'] == ['JP']
-    assert row['title_ids'] == [('CUSA02834_00', 'KP')]
+    assert row['title_ids'] == [('CUSA02834_00', 'KP', ['KR'])]
     assert rs.KOREA_AS_JP in row['buckets']
 
 
@@ -467,9 +510,11 @@ def test_platform_filter_scopes_coverage_to_that_platform():
 
 
 def test_row_carries_raw_title_id_codes_for_the_read_out():
-    game = GameFactory(title_ids=[_tid('CUSA02834_00', 'KP', 'PS4'), 'UNKNOWN_00'], region=['JP'])
+    game = GameFactory(title_ids=[_tid('CUSA02834_00', 'KP', 'PS4'), _tid('CUSA02835_00', 'KP', 'PS4', walked=False),
+                                  'UNKNOWN_00'], region=['JP'])
     row = _rows()[game.pk]
-    assert row['title_ids'] == [('CUSA02834_00', 'KP'), ('UNKNOWN_00', None)]
+    # (title ID, dataset prefix, stores that sell it); None stores = not walked yet.
+    assert row['title_ids'] == [('CUSA02834_00', 'KP', ['KR']), ('CUSA02835_00', 'KP', None), ('UNKNOWN_00', None, None)]
     assert row['expected'] == ['KR'] and row['stored'] == ['JP']
 
 

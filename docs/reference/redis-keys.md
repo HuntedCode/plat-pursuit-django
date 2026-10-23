@@ -51,6 +51,8 @@ Workers consume from all 5 queues via priority-ordered `brpop`.
 | `pending_sync_complete:{profile_id}` | String (JSON) | 21600s (6h) | `{touched_profilegame_ids, queue_name}` waiting for jobs to drain |
 | `sync_complete_in_progress:{profile_id}` | String (NX lock) | 1800s (30m) | Prevents duplicate concurrent `_job_sync_complete` runs. Also read by `ProfileSyncStatusView` to expose `is_finalizing` so the hotbar can show "Finalizing..." once the bar hits 100% |
 | `finalize_phase:{profile_id}` | String | 1800s (30m) | Sub-phase string (`igdb_enrich`, `health_check`, `stats_badges`, `milestones`, `challenges`, `finishing`) written by `_job_sync_complete()` at each boundary. Read by `ProfileSyncStatusView` and surfaced as `finalize_phase` so the UI can show "Finalizing... (Badges)" instead of just "Finalizing..." |
+| `region_walk:queued:{title_id}` | String (flag) | 86400s (24h) | A title ID's store walk is queued; kept after a FAILED lookup as a cooldown until the nightly retries it, deleted on success. A day because a lookup can wait hours on the bulk queue. Stops a refill or a second sync queueing it twice. See [trophy-list-regions.md](../architecture/trophy-list-regions.md) |
+| `region_walk:chain` | String (flag) | 7200s (2h) | A `resolve_title_regions` refill chain is alive (taken with `nx`, refreshed by every refill and every walk job the chain queued), so a second run cannot start a second chain |
 | `profile:{profile_id}:pending_igdb_enrich` | Set (concept IDs) | 21600s (6h) | Concepts created during a profile's sync that are queued for IGDB enrichment. Populated by `_job_sync_title_id` each time a new Concept is created; drained at the top of `_job_sync_complete` so matching runs after every sibling Game has been attached. 6h TTL is a safety net for crashed/interrupted syncs — the default `enrich_from_igdb` cron picks up any remaining un-enriched concepts. |
 | `stuck_sync_check_lock` | String (NX lock) | 90s | Ensures only one TK instance runs stuck-sync detection per cycle |
 
@@ -403,7 +405,7 @@ The `redis_admin.py` management command provides targeted flush operations for o
 |------|-------------|
 | `--flush-index` | All homepage keys: `featured_games_*`, `playing_now_*`, `featured_badges_*`, `featured_checklists_*`, `whats_new_*`, `latest_badges_*` |
 | `--flush-game-page {np_id}` | `game:imageurls:{np_id}` |
-| `--flush-token-keeper` | All 5 job queues + `profile_jobs:*`, `deferred_jobs:*`, `pending_sync_complete:*`, `sync_started_at:*`, `sync_trophies_lock:*`, `shovelware_concept_lock:*`, `sync_orchestrator_pending:*`, `sync_queued_games:*`, `sync_complete_in_progress:*`, `finalize_phase:*`, `active_profiles`, `site:high_sync_volume`, `site:psn_outage`, `psn:5xx_timestamps` |
+| `--flush-token-keeper` | All 5 job queues + `profile_jobs:*`, `deferred_jobs:*`, `pending_sync_complete:*`, `sync_started_at:*`, `sync_trophies_lock:*`, `shovelware_concept_lock:*`, `sync_orchestrator_pending:*`, `sync_queued_games:*`, `sync_complete_in_progress:*`, `finalize_phase:*`, `region_walk:*`, `active_profiles`, `site:high_sync_volume`, `site:psn_outage`, `psn:5xx_timestamps` |
 | `--clear-psn-outage` | `site:psn_outage`, `psn:5xx_timestamps` |
 | `--flush-complete-lock {profile_id}` | `pending_sync_complete:{id}`, `sync_started_at:{id}`, `sync_orchestrator_pending:{id}`, `sync_queued_games:{id}`, `sync_complete_in_progress:{id}`, `finalize_phase:{id}` |
 | `--flush-dashboard {profile_id}` | `dashboard:mod:{slug}:{id}` for each registered module |

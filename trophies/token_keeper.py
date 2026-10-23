@@ -27,7 +27,7 @@ from trophies.services.npsso_age import (
 )
 from trophies.util_modules.constants import TITLE_ID_BLACKLIST, TITLE_STATS_SUPPORTED_PLATFORMS
 from trophies.util_modules.language import detect_asian_language
-from trophies.util_modules.region import detect_region_from_details
+from trophies.services import region_service
 from trophies.services.profile_stats_service import update_profile_games, update_profile_trophy_counts
 from trophies.services.badge_apply import evaluate_for_sync
 from trophies.services.concept_anchor_service import try_anchor_new_game
@@ -536,6 +536,11 @@ class TokenKeeper:
                     self._job_sync_complete(profile_id, args[0], args[1])
                 elif job_type == 'handle_privacy_error':
                     self._job_handle_privacy_error(profile_id)
+                elif job_type == region_service.WALK_JOB:
+                    # args[3] (chain) was added after the first walk jobs were queued; default it.
+                    self._job_resolve_title_id_region(args[0], args[1], args[2], len(args) > 3 and args[3])
+                elif job_type == region_service.REFILL_JOB:
+                    region_service.refill_walk(args[0], args[1])
                 else:
                     raise ValueError(f"Unknown job type: {job_type}")
 
@@ -1040,7 +1045,9 @@ class TokenKeeper:
                 raise ValueError(f"Unknown endpoint: {endpoint}")
             
             log_api_call(endpoint, instance.token, profile.id if profile else None, 200, time.time() - start_time)
-            if endpoint not in ['get_profile_legacy', 'get_region']:
+            # `profile` is None for the store walk, which is about a title, not a hunter. Unguarded, this
+            # raised AFTER PSN had answered, so the answer was lost.
+            if profile and endpoint not in ['get_profile_legacy', 'get_region']:
                 profile.set_history_public_flag(True)
             return data
         except PSNAWPForbiddenError as e:
@@ -1831,6 +1838,30 @@ class TokenKeeper:
         except Exception as e:
             logger.error(f"Failed to create platinum notification for game {game.id}: {e}", exc_info=True)
     
+    def _job_resolve_title_id_region(self, title_id: str, platform: str, np_communication_id: str,
+                                     chain: bool = False):
+        """The store walk for one title ID (`region_service.walk_title_id`, which owns the all-or-nothing
+        rule); this only supplies the PSN call. Profile-less, so the worker neither re-queues it after a
+        DB lock or outage nor counts it: the walk's queued key lapses and the next pass picks it up.
+
+        `np_communication_id` is the real trophy list it sits on. Passing it skips psnawp's "the
+        account must own this game" lookup; `account_id` is unused on that path.
+        """
+        job_type = region_service.WALK_JOB
+        # Resolved before any token is taken: a bad platform raising inside the call would leave the
+        # instance acquired for it busy until the stuck-instance reset.
+        platform_type = PlatformType(region_service.platform_for(title_id, platform))
+
+        def fetch(country, language):
+            return self._execute_api_call(
+                self._get_instance_for_job(job_type), None, 'game_details',
+                title_id=title_id, platform=platform_type, account_id='me',
+                np_communication_id=np_communication_id, country=country, language=language,
+            )
+
+        regions = region_service.walk_title_id(title_id, fetch, chain=chain)
+        logger.info(f"{job_type} {title_id}: sold in {'/'.join(regions) or 'no store'}")
+
     def _job_sync_title_id(self, profile_id: str, title_id_str: str, np_communication_id: str):
         try:
             profile = Profile.objects.get(id=profile_id)
@@ -1849,11 +1880,12 @@ class TokenKeeper:
             title_id=title_id_str,
             defaults={
                 'platform': game.title_platform[0] if game.title_platform else 'PS4',
-                'region': 'IP',
             }
         )
         if created:
-            logger.info(f"Auto-created TitleID {title_id_str} with platform={title_id.platform}, region=IP")
+            # No region: the store walk queued below finds where it is sold. ('IP' used to stand in
+            # here, and read as NA.)
+            logger.info(f"Auto-created TitleID {title_id_str} with platform={title_id.platform}")
 
         job_type='sync_title_id'
 
@@ -1999,16 +2031,12 @@ class TokenKeeper:
                     if concept_created:
                         self._defer_igdb_enrich(profile_id, concept)
 
-                detected_region = detect_region_from_details(details)
-                if detected_region:
-                    if title_id.region == 'IP':
-                        title_id.region = detected_region
-                        title_id.save(update_fields=['region'])
-                    game.add_region(detected_region)
-                else:
-                    game.add_region(title_id.region)
                 concept.add_title_id(title_id.title_id)
-                concept.check_and_mark_regional()
+                # Regions come from WHICH stores sell this title ID, never from `details`: that answer
+                # describes the store asked (US), so its product prefix read as NA for EU and JP lists.
+                # Rebuilds this list and its regional unit now, and queues the store walk if this
+                # title ID has never had one (uncounted, so this hunter's sync never waits on it).
+                region_service.after_title_id_synced(game, title_id)
 
                 profile.increment_sync_progress()
                 logger.info(f"sync_title_id resolved {title_id.title_id} -> \"{concept.unified_title}\"")
@@ -2025,9 +2053,7 @@ class TokenKeeper:
                     try:
                         region_code = detect_asian_language(game.title_name)
                         if region_code != 'Unknown':
-                            game.add_region(region_code)
-                            game.is_regional = True
-                            game.save(update_fields=['is_regional'])
+                            region_service.apply_script_region(game, region_code)
                             logger.info(f"Game {game.title_name} detected as Asian regional.")
                         # PSN returned no usable details; try canonical IGDB
                         # anchor before falling back to a PP_* stub. IGDB often

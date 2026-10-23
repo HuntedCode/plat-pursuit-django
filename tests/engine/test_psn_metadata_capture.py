@@ -46,7 +46,7 @@ def _details(psn_id='12345', **over):
             'media': {'images': [{'type': 'GAMEHUB_COVER_ART', 'url': 'https://psn/hub.png'}]},
         },
         # Keys we do not parse. The whole point of the raw table is that these survive -- and these
-        # are REAL unparsed keys the repo can prove arrive (util_modules/region.py reads
+        # are REAL unparsed keys the repo can prove arrive (region_service.sells_title_id reads
         # categorizedProducts; conceptIconUrl is documented in the PSN API returns notes), not
         # invented ones, so the claim below is about the actual response.
         'categorizedProducts': [{'id': 'UP9000-CUSA00000_00', 'name': 'Standard Edition'}],

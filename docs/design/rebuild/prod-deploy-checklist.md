@@ -1659,3 +1659,29 @@ longer raises everyone's level. Supersedes the definition in the 2026-09-04 entr
 - [ ] Optional: `python manage.py refresh_homepage_hourly` to re-render the landing's showcase Profile
       Card now. It is cached, so `/` can show the old-scale level until the next hourly run.
 - [ ] Not needed: `recompute_job_xp --all`. Job XP and job levels did not change, only how they add up.
+
+## 2026-10-23 - Trophy-list regions from where title IDs are sold (branch `feature/sync/region-rebuild`)
+
+Ships `trophies/0347` (three TitleID fields), the store walk, `rebuild_regions` (also a new `nightly` step)
+and the sync change. Read [trophy-list-regions.md](../../architecture/trophy-list-regions.md) first. Order
+matters for step 2: until it runs, no TitleID prefix is trusted (`region_source` is blank on every row), so
+rebuilds in that window keep labels as they are rather than improving them. That is safe, just not useful.
+
+- [ ] **1. Deploy** (runs the migration). From here, every `sync_title_id` rebuilds its list's unit and queues
+      a bulk-queue store walk, so chips start changing as hunters sync. Until step 2 runs, a list only changes
+      once its title IDs are walked; nothing is wiped. The nightly also starts the full walk on its own
+      (step 6) if it has not been started by hand.
+- [ ] **2. `python manage.py populate_title_ids`** right after. Marks every dataset row `region_source='dataset'`
+      and blanks the old `IP` placeholder. Idempotent. Without it, labels only improve as the walk reaches them.
+- [ ] **3. `python manage.py audit_regions`** and keep the output: the before picture.
+- [ ] **4. `python manage.py rebuild_regions --dry-run`**, then **`rebuild_regions`**. Fixes labels from the
+      dataset prefix now (the bogus NA on EU lists, Korea read as JP). Flags do not move yet: they only act on
+      walked title IDs. Idempotent; the nightly runs it from here on.
+- [ ] **5. `python manage.py resolve_title_regions --limit 50`** as a trial (bulk queue, no chain). Watch the
+      worker logs for `resolve_title_id_region ... sold in ...`, then `audit_regions` to see 50 walked.
+- [ ] **6. `python manage.py resolve_title_regions`** for the whole walk (six catalog calls per title ID, on
+      the bulk queue below every sync). Check with `--status`. If it stops (PSN outage, or everything left
+      cooling down after a failed lookup), the log says so: re-run the command. One chain at a time.
+- [ ] **7. `python manage.py audit_regions`** once `--status` reads 0: the after picture. Expect chips and
+      flags to change a second time per list as the walk reaches it (label from the prefix first, then the stores).
+- [ ] Not needed: re-running `populate_title_ids` later never touches the walk's results.

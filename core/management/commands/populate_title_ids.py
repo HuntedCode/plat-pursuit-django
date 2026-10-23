@@ -20,12 +20,16 @@ class Command(BaseCommand):
             title_id_str = row.get('titleId')
             if not title_id_str:
                 continue
-            region = row.get('region')
-            if not region:
-                region = 'IP'
+            # The dataset's region is the content-id PREFIX, the only thing here we trust a prefix
+            # from (sync used to write the US store's answer instead). Blank when the dataset has
+            # none: 'IP' stood in here once, and read as NA. Store-walk fields are never touched.
             title_id, created = TitleID.objects.update_or_create(
                 title_id=title_id_str,
-                defaults={'platform': platform, 'region': region},
+                defaults={
+                    'platform': platform,
+                    'region': row.get('region') or '',
+                    'region_source': TitleID.REGION_SOURCE_DATASET,
+                },
             )
             if created:
                 created_count += 1
