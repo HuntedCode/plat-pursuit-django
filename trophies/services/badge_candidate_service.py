@@ -57,10 +57,10 @@ def active_editions():
 # `_subjects_with_badges` for the whole catalogue (badge_candidates hides on it). Keep the two in step; the
 # parallel tests in test_badge_candidates and test_build_badge pin both.
 # A franchise, series or developer is taken by ANY badge naming it. A badge naming a franchise covers every
-# game in it (`series_candidates` unions the subjects), so a series badge that also names its franchise (The
-# Last of Us, where series and franchise are one subject) has the franchise too: a second badge would repeat
-# it. Sister badges still work because they name different subjects (a God of War franchise badge beside a
-# series badge that names only its series).
+# game in it (`series_candidates` unions what a badge names), so one badge naming both a series and its
+# franchise (The Last of Us) takes both: a second badge for either would repeat it. Sister badges still work
+# because each names only its own row (a God of War franchise badge beside a series badge naming only the
+# series).
 
 
 def existing_badge(franchise=None, collection=None, developer=None):

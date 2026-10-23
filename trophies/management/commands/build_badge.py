@@ -29,6 +29,26 @@ from trophies.services.badge_candidate_service import existing_badge
 _SLUG_MAX = BadgeSeries._meta.get_field('series_slug').max_length
 
 
+# BadgeSeries field -> the flag (and word) a curator knows it by.
+_FLAG_FOR_FIELD = {'franchise': 'franchise', 'collection': 'series', 'developer': 'developer'}
+
+
+def _taken_message(duplicate, fields):
+    """Name what `duplicate` already covers, and the way out when only the franchise of a series build is taken
+    (the sister case: a series badge beside an existing franchise badge)."""
+    taken = [
+        field for field in _FLAG_FOR_FIELD
+        if fields.get(field) is not None and getattr(duplicate, f'{field}_id') == fields[field].pk
+    ]
+    message = f'"{duplicate.series_slug}" already covers this {" and ".join(_FLAG_FOR_FIELD[f] for f in taken)}.'
+    # Only when the series itself is free: another badge may hold it, and the hint would lead straight to that.
+    if taken == ['franchise'] and fields.get('collection') is not None and not existing_badge(
+        collection=fields['collection'],
+    ):
+        message += ' Drop --franchise to build a series badge beside it.'
+    return message
+
+
 class _DryRunRollback(Exception):
     """Raised inside the transaction to undo a dry run's writes."""
 
@@ -66,7 +86,7 @@ class Command(BaseCommand):
         # The subject check first: when its badge is also on this slug, "pass --slug" would only lead here.
         duplicate = existing_badge(**{key: fields.get(key) for key in ('franchise', 'collection', 'developer')})
         if duplicate is not None:
-            raise CommandError(f'"{duplicate.series_slug}" is already the badge for this subject.')
+            raise CommandError(_taken_message(duplicate, fields))
         if BadgeSeries.objects.filter(series_slug=slug).exists():
             raise CommandError(f'A badge already uses the slug "{slug}". Pass --slug to choose another.')
         if Stage.objects.filter(series_slug=slug).exists():

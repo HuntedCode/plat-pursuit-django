@@ -8,8 +8,8 @@ Rules live in `trophies/services/badge_candidate_service.py`.
     python manage.py badge_candidates
     python manage.py badge_candidates --limit 100 --include-existing
 
-Build the one you pick with `build_badge --franchise <slug>` or `build_badge --series <slug>` (add --franchise to
-a series badge to cover the franchise's games too).
+Build the one you pick with `build_badge --franchise <slug>` or `build_badge --series <slug>`. Add --franchise
+to a series build to cover the franchise's games too, only when that franchise has no badge of its own.
 """
 
 from django.core.management.base import BaseCommand
