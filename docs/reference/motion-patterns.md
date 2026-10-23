@@ -229,6 +229,12 @@ and `pointerenter` covers mouse hover *and* touch tap.
   (a bar-sized strip that only re-blurs on scroll) keep it. And **never *transition* it** (that re-blurs on
   every frame of the transition). (See [career-reference-standard](../design/rebuild/career-reference-standard.md)
   and the memory on mobile GPU jank.)
+- **A media viewer that swaps images on click needs `user-select: none`.** A quick double-click on a
+  carousel arrow lands while the script swaps the image under it, and the browser selects the image, which
+  Chromium paints blue (the screenshot lightbox did this on prod, 2026-10-22). `.gd-shotmodal` turns
+  selection off for the whole dialog (and `-webkit-user-drag: none` on its images); any new lightbox or
+  carousel should too. A source read cannot catch it: `test_shot_lightbox_browser.py` double-clicks the
+  real script in Chromium.
 - **Confetti is off-brand.** `canvas-confetti` / `static/js/celebrations.js` violate anti-reference
   #4 — do **not** reuse them. Draw from the Frame's fabrication vocabulary (weld / scan-beam /
   arcing sparks) instead.

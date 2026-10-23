@@ -729,6 +729,10 @@
 
 /* Screenshot lightbox — image floats on the blurred scrim; filmstrip below. */
 .gd-shotmodal { border: none; padding: 0; background: transparent; width: min(92vw, 1100px); max-width: 1100px; margin: auto; color: #fff; }
+/* Nothing in the lightbox is text worth copying, and a quick double-click on an arrow selected the screenshot
+   beside it: the browser tints selected images blue. No selection, and no image drag-out, anywhere in it. */
+.gd-shotmodal { -webkit-user-select: none; user-select: none; }
+.gd-shotmodal img { -webkit-user-drag: none; }
 .gd-shotmodal:not([open]) { display: none; }
 .gd-shotmodal[open] { display: flex; flex-direction: column; gap: 8px; }
 .gd-shotmodal::backdrop { background: rgba(2, 4, 8, 0.85); }   /* solid dim, no backdrop-blur (see motion-patterns.md) */
