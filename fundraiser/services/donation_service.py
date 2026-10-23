@@ -395,7 +395,7 @@ class DonationService:
                 if hasattr(series, 'artwork_claim'):
                     raise ValueError("This badge series has already been claimed by another donor.")
 
-                series_name = series.display_series or series.name
+                series_name = series.name
 
                 claim = DonationBadgeClaim.objects.create(
                     donation=donation,

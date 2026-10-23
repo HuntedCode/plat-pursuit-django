@@ -269,7 +269,7 @@ class ConceptContextMixin:
                 {
                     'frame': c['frame'],
                     'series_slug': c['series'].series_slug,
-                    'name': c['series'].display_series or c['series'].name,
+                    'name': c['series'].name,
                     'type_display': c['series'].get_badge_type_display(),
                     'group_key': c['platform_group'].key,
                     'group_name': c['platform_group'].name,

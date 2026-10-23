@@ -47,7 +47,6 @@ def _payload(editions, **overrides):
         'completion_policy': 'all',
         'min_required': 0,
         'description': '',
-        'display_series': '',
         'submitted_by': '',
         'editions': [str(e.pk) for e in editions],
     }

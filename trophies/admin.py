@@ -5023,7 +5023,7 @@ class BadgeSeriesAdmin(admin.ModelAdmin):
     readonly_fields = ['created_at']
     inlines = [GroupBadgeInline]
     fieldsets = [
-        ('Identity', {'fields': ['name', 'series_slug', 'badge_type', 'description', 'display_series']}),
+        ('Identity', {'fields': ['name', 'series_slug', 'badge_type', 'description']}),
         ('Completion policy', {
             'fields': ['completion_policy', 'min_required'],
             'description': "min_required applies only to Megamix (completion_policy='min_count'); ignored otherwise.",
