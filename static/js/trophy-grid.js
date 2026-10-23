@@ -1,16 +1,89 @@
 /**
- * Shared trophy-grid behavior: the adaptive "Jump to pack" menu that replaces the group-nav
- * chip cloud on many-DLC lists (partials/trophy_grid/grid.html, both List detail and the
- * concept Game page).
+ * Shared trophy-grid behavior, on both List detail and the concept Game page:
  *
- * The control is a native <details>, so open/close needs no JS at all. Everything here is a
- * document-delegated ENHANCEMENT, bound exactly once: the grid is htmx-swapped on both hosts
- * (filter swaps on List detail, list switches on the Game page), and a swapped-in menu arrives
- * fresh and closed with nothing to rebind. Jumping itself is not owned here either -- rows are
- * plain anchors that game-detail.js upgrades to its smooth-scroll + flash on List detail.
+ *  - the control row's "More filters" panel (partials/trophy_grid/_controls.html, GL-10), on the house
+ *    PlatPursuit.filterPanel, and the chip "pop". Exposed as PlatPursuit.TrophyControls for the pages
+ *    that drive it from elsewhere (the minibar's Filters reach, a list switch's reset).
+ *  - the adaptive "Jump to pack" menu that replaces the group-nav chip cloud on many-DLC lists
+ *    (partials/trophy_grid/grid.html). The control is a native <details>, so open/close needs no JS.
+ *
+ * Everything here is bound exactly once. The control row stands OUTSIDE every swap target on both pages,
+ * so it is wired at load; the grid is htmx-swapped (filter swaps, list switches), so its jump menu is
+ * document-delegated, and a swapped-in menu arrives fresh with nothing to rebind.
+ * Jumping itself is not owned here either -- rows are plain anchors that game-detail.js upgrades to its
+ * smooth-scroll + flash on List detail.
  */
 document.addEventListener('DOMContentLoaded', () => {
     'use strict';
+
+    const PP = window.PlatPursuit = window.PlatPursuit || {};
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    // ── The control row: More filters ────────────────────────────────────────────────────────────
+    // The panel is the house filter drawer (PlatPursuit.filterPanel: toggle + aria, the height tween,
+    // the count badge and its pop, open on load when a filter is already set). What is ours is the
+    // count: only the filters INSIDE the panel (type, rarity, DLC), the ones a closed panel hides. Sort
+    // and All / Unearned stand on the row itself. A hidden DLC field (a list without DLC on the Game
+    // page) is not a filter that applies. No dim target: each page dims its own swap target.
+    const handles = new WeakMap();
+    function activeCount(row) {
+        const panel = row.querySelector('[data-gd-more-panel]');
+        if (!panel) return 0;
+        let n = panel.querySelectorAll('input:checked').length;
+        const dlc = panel.querySelector('[data-gd-dlc]:not([hidden]) select[name="dlc_filter"]');
+        if (dlc && dlc.selectedIndex > 0) n += 1;
+        return n;
+    }
+    document.querySelectorAll('.gd-controls').forEach((row) => {
+        const form = row.closest('form');
+        if (!form || !PP.filterPanel) return;
+        const handle = PP.filterPanel({
+            form, toggle: row.querySelector('[data-gd-more]'), panel: row.querySelector('[data-gd-more-panel]'),
+            countEl: row.querySelector('[data-gd-more-count]'), count: () => activeCount(row), dimTarget: null,
+        });
+        if (handle) handles.set(row, handle);
+    });
+    // The row's count, after a swap: ticks from the number it showed to the new one. The last value is
+    // kept on the element, not read back from its text, which a count-up still running would garble.
+    function setCount(row, n) {
+        const el = row && row.querySelector('[data-gd-count]');
+        if (!el || isNaN(n)) return;
+        const from = el.dataset.shown !== undefined ? parseInt(el.dataset.shown, 10)
+            : parseInt(el.textContent.replace(/[^0-9]/g, ''), 10);
+        el.dataset.shown = String(n);
+        if (PP.countUp && !reduce && !isNaN(from) && from !== n) {
+            el.dataset.countup = n;
+            PP.countUp(el, 600, { from });
+        } else {
+            el.textContent = n.toLocaleString();
+        }
+    }
+    // The row's loading bar, delay-gated: an instant filter never flashes it, only one that takes a beat
+    // (a whale's list, a slow network) surfaces it.
+    const busyTimers = new WeakMap();
+    function setBusy(row, on) {
+        const bar = row && row.querySelector('[data-gd-loadbar]');
+        if (!bar) return;
+        window.clearTimeout(busyTimers.get(row));
+        if (on) busyTimers.set(row, window.setTimeout(() => bar.classList.add('is-active'), 220));
+        else bar.classList.remove('is-active');
+    }
+    // For the pages that drive the row from their own swaps: the minibar's Filters reach, a list switch's
+    // reset, the count and the bar.
+    PP.TrophyControls = {
+        open: (row) => { const h = handles.get(row); if (h) h.setOpen(true, true); },
+        sync: (row) => { const h = handles.get(row); if (h) h.refresh(); },
+        setCount, setBusy,
+    };
+
+    // A small spring on a type/rarity chip as it toggles.
+    document.addEventListener('change', (e) => {
+        if (reduce || !e.target.matches || !e.target.matches('.gd-controls .gd-chip input')) return;
+        const face = e.target.nextElementSibling;
+        if (face) { face.classList.remove('is-pop'); void face.offsetWidth; face.classList.add('is-pop'); }
+    });
+
+    // ── Jump to pack ─────────────────────────────────────────────────────────────────────────────
 
     function closeMenu(menu) {
         if (!menu) return;

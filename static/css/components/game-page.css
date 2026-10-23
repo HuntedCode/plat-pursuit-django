@@ -1,5 +1,5 @@
-/* Game page (concept-level): the list switcher + identity chip.
-   A deliberate control of its own (.gp-lswitch), NOT .pp-switch -- the site-standard chip is a
+/* Game page (concept-level): the list switcher, and the hero both the Game page and the Trophy List page use.
+   The switcher is a deliberate control of its own (.gp-lswitch), NOT .pp-switch -- the site-standard chip is a
    12px icon+label pill and cannot carry payload (name + platforms + viewer %). Playbook's
    secondary-control carve-out; precedent .jlayout__btn. Grid styles come from game-detail.css
    (the shared gd-* component classes). Depth per the ladder: chips sit on --pp-bg-1. */
@@ -39,9 +39,6 @@
     outline: 2px solid var(--pp-accent);
     outline-offset: 2px;
 }
-/* One list is still the same page shape -- the solo chip just reads as an identity strip. */
-.gp-lswitch--solo .gp-lchip { cursor: default; }
-
 /* Two lines, then clamped: the equal-width cells are narrower than the old content-width chips, and long
    list names ("KINGDOM HEARTS FINAL MIX") were cut to their first word. */
 .gp-lchip__name {
@@ -107,41 +104,6 @@
     border-radius: 9999px;
     background: var(--pp-accent);
     box-shadow: 0 0 6px color-mix(in oklab, var(--pp-accent) 65%, transparent);
-}
-
-/* Identity chip: which list the viewport shows + the List-detail escape hatch, one object. */
-.gp-idchip {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.5rem 0.75rem;
-    border: 1px solid var(--pp-border);
-    border-radius: 0.65rem;
-    background: color-mix(in oklab, var(--pp-bg-1) 60%, transparent);
-    margin-bottom: 1rem;
-    font-size: 0.8rem;
-}
-.gp-idchip__label {
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    font-size: 0.62rem;
-    opacity: 0.6;
-}
-.gp-idchip__name { font-weight: 600; }
-.gp-idchip__link {
-    margin-left: auto;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3rem;
-    color: var(--pp-accent);
-    text-decoration: none;
-}
-.gp-idchip__link:hover { text-decoration: underline; }
-.gp-idchip__link:focus-visible {
-    outline: 2px solid var(--pp-accent);
-    outline-offset: 2px;
-    border-radius: 0.25rem;
 }
 
 /* Swap settle: the dim is a STATE (kept under reduced motion); only the transition is decorative. */
@@ -216,6 +178,26 @@
     .gp-actions { grid-column: 2 / -1; grid-row: 7; margin-top: 6px; }
 }
 
+/* The Trophy List page's hero (the trophy list pass, 2026-10-22): the same grid. Its head opens with "Part of
+   <game>" over the list's platform chips; its status card carries the bar and the counts (detail), so on a
+   tablet the card runs full width under the cover, as on a phone, and beside the cover the platinum stat ends
+   level with the cover's bottom. On desktop the cover is a little wider (224px) to meet the taller card. */
+.gp-hero__ident { flex-direction: column; align-items: flex-start; gap: 6px; }
+.gp-hero__ident .gd-partof { margin: 0; }
+.gp-hero__plats { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+@media (min-width: 768px) and (max-width: 1023px) {
+    .gp-hero--list .gp-hero__grid { grid-template-rows: auto auto auto auto 1fr auto auto auto; }
+    .gp-hero--list .gp-hero__cover.gd-cover { grid-row: 2 / 7; }
+    .gp-hero--list .gp-hero__side { grid-row: 6; }
+    .gp-hero--list .gp-hero__grid > .gp-status { grid-column: 1 / -1; grid-row: 7; margin-top: 4px; }
+    .gp-hero--list .gp-hero__grid > .gp-actions { grid-row: 8; }
+}
+@media (min-width: 1024px) {
+    .gp-hero--list .gp-hero__grid { grid-template-columns: 224px minmax(0, 1fr) auto; }
+    .gp-hero--list .gp-hero__grid--noside { grid-template-columns: 224px minmax(0, 1fr); }
+    .gp-hero--list .gp-hero__cover.gd-cover { width: 224px; min-height: 299px; max-height: 352px; }
+}
+
 /* ---- The hunter's status (rule 1). ---- */
 .gp-status { display: flex; flex-wrap: wrap; align-items: center; gap: 0 12px; padding: 10px 14px; border-radius: var(--pp-radius-md);
     border: 1px solid var(--pp-border); background: var(--pp-bg-2); min-width: 0; }
@@ -236,6 +218,59 @@
 /* Finished without a platinum: green, the colour a finished list's bar takes everywhere else. */
 .gp-status--complete { border-color: color-mix(in oklab, var(--pp-success) 40%, transparent); background: color-mix(in oklab, var(--pp-success) 8%, var(--pp-bg-2)); }
 .gp-status--complete .gp-status__icon { color: var(--pp-success); background: color-mix(in oklab, var(--pp-success) 20%, transparent); }
+
+/* The detail (the Trophy List page): the bar by trophy group, then one footer row of the grade counts, the bar's
+   legend and My stats. On a phone and a tablet the card is ROWS (owner, round 2 of the list mock-up): only the
+   head sits beside the trophy, every other row runs the card's full width and lines up on both edges; the
+   legend and My stats share the row under the bar, and the counts get their own row under a hairline, spread
+   across the card on a phone. */
+.gp-status--detail { align-items: flex-start; }
+.gp-status--detail .gp-status__icon { margin-top: 2px; }
+.gp-status__groupbar { margin-top: 8px; width: 100%; }
+.gp-status__foot { display: flex; align-items: center; gap: 6px 16px; margin-top: 8px; }
+.gp-status__foot .gd-groupbar__legend { margin: 0 0 0 auto; }
+.gp-status__counts { margin: 0; padding-left: 0; flex-basis: auto; flex-wrap: nowrap; gap: 14px; }
+.gp-status__counts + .gp-status__stats { margin-left: auto; }
+.gp-status__stats { flex: none; display: inline-flex; align-items: center; gap: 5px; min-height: 32px; padding: 0; border: 0; background: none;
+    color: var(--pp-primary); font: inherit; font-size: 0.8125rem; font-weight: 700; cursor: pointer; }
+.gp-status__stats svg { width: 15px; height: 15px; }
+.gp-status__stats .gp-status__chev { width: 14px; height: 14px; margin-left: -2px; transition: transform var(--pp-dur-fast) var(--pp-ease); }
+.gp-status__stats:hover { text-decoration: underline; text-underline-offset: 3px; }
+.gp-status__stats:hover .gp-status__chev { transform: translateX(2px); }
+.gp-status__stats:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; border-radius: 4px; }
+@media (max-width: 1023px) {
+    .gp-status--detail { display: grid; grid-template-columns: 34px minmax(0, 1fr); column-gap: 12px; align-items: center; padding: 12px 14px; }
+    .gp-status--detail .gp-status__txt { display: contents; }
+    .gp-status--detail .gp-status__icon { grid-column: 1; grid-row: 1 / span 2; margin-top: 0; }
+    .gp-status--detail .gp-status__head { grid-column: 2; grid-row: 1; align-self: end; }
+    .gp-status--detail .gp-status__sub { grid-column: 2; grid-row: 2; align-self: start; }
+    .gp-status--detail .gp-status__groupbar,
+    .gp-status--detail .gp-status__foot,
+    .gp-status--detail .gp-status__claim { grid-column: 1 / -1; }
+    .gp-status--detail .gp-status__groupbar { margin-top: 12px; }
+    .gp-status--detail .gp-status__foot { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 12px; margin-top: 4px; }
+    .gp-status--detail .gp-status__foot .gd-groupbar__legend { grid-row: 1; grid-column: 1; margin: 0; }
+    .gp-status--detail .gp-status__foot .gp-status__stats { grid-row: 1; grid-column: 2; margin: 0; }
+    .gp-status--detail .gp-status__counts { grid-row: 2; grid-column: 1 / -1; margin-top: 6px; padding-top: 10px;
+        border-top: 1px solid var(--pp-border); justify-content: flex-start; gap: 22px; }
+}
+@media (max-width: 767px) {
+    .gp-status--detail .gp-status__counts { justify-content: space-between; gap: 8px; }
+}
+@media (prefers-reduced-motion: reduce) { .gp-status__stats .gp-status__chev { transition: none; } }
+
+/* The invitation (GL-09): the status slot with no hunter to describe. The brand colour, not a grade's. Its call
+   to action takes the card's last row; on desktop it rides the right of the same row, as the claim line does. */
+.gp-status--invite { border-color: color-mix(in oklab, var(--pp-primary) 35%, var(--pp-border)); background: color-mix(in oklab, var(--pp-primary) 7%, var(--pp-bg-2)); }
+.gp-status--invite .gp-status__icon { color: var(--pp-primary); background: color-mix(in oklab, var(--pp-primary) 18%, transparent); }
+.gp-status--invite .gp-status__head b { color: var(--pp-text); }
+.gp-status__cta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; flex: 1 0 100%; margin-top: 10px; }
+.gp-status__alt { color: var(--pp-text-dim); font-size: 0.8125rem; font-weight: 600; text-decoration: none; }
+a.gp-status__alt:hover { color: var(--pp-primary); text-decoration: underline; text-underline-offset: 3px; }
+a.gp-status__alt:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; border-radius: 2px; }
+@media (min-width: 1024px) {
+    .gp-status__cta { flex: none; margin: 0 0 0 auto; }
+}
 
 /* The claim line: the card's last row, full width under a hairline, only while a contract has XP waiting. Accent,
    the colour the Contracts board's own "Claimable" tag uses. */
@@ -323,6 +358,10 @@
 .gp-meta a.gp-meta__dev { color: var(--pp-text-dim); font-weight: 600; }
 .gp-meta a:hover, .gp-meta a.gp-meta__dev:hover { color: var(--pp-primary); text-decoration: underline; }
 .gp-meta a:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; border-radius: 2px; }
+/* The list page's "N versions": a button (it opens a dialog) dressed as the line's other quiet links. */
+.gp-meta__versions { padding: 0; border: 0; background: none; font: inherit; color: inherit; cursor: pointer; }
+.gp-meta__versions:hover { color: var(--pp-primary); text-decoration: underline; }
+.gp-meta__versions:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; border-radius: 2px; }
 
 /* Hero-jump landing guarantee (browser-repro'd): switching away from the tall Lists panel can
    shrink the document below the scroll distance the jump needs, leaving the hero filling the

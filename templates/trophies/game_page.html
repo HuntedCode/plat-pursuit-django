@@ -77,11 +77,22 @@ helper the sitemap and search use, so the three can never disagree.{% endcomment
         {# ── Panels: server-rendered, toggled client-side (SEO-safe), free content per the stacked-chrome rule. ── #}
         <div class="gd-view" id="gp-view-lists" role="tabpanel" aria-labelledby="gp-tab-lists" data-view="lists"{% if initial_view != 'lists' %} hidden{% endif %}>
             {% include 'trophies/partials/game_page/list_switcher.html' %}
+            {% comment %}The control row (GL-10), the Trophy List page's own: count, the list's page, All / Unearned,
+            Sort and More filters. It stands OUTSIDE the viewport, so a swap never resets an open panel or steals
+            focus from a select; it re-renders nothing itself. Its request carries the list in a hidden input, which
+            game-page.js points at the list on screen; a list switch (a chip's own ?list= link) starts that list
+            unfiltered, and game-page.js resets the row to match. No hx-push-url: game-page.js owns the URL
+            (?list= only), so a filter is a view of the list, not an address. Without JS the form submits as a
+            plain GET and the page renders filtered, with the row showing what is set. It shares ONE sync scope
+            with the list picker (#gp-viewport:replace): a filter and a list switch in flight together would
+            otherwise land in either order, leaving one list's trophies under the other's controls.{% endcomment %}
+            <form id="gp-filter-form" method="get" hx-get="{{ request.path }}" hx-target="#gp-viewport" hx-swap="innerHTML"
+                  hx-push-url="false" hx-trigger="change, submit" hx-sync="#gp-viewport:replace">
+                <input type="hidden" name="list" value="{{ selected_game.np_communication_id }}" data-gp-list-input>
+                {% include 'trophies/partials/trophy_grid/_controls.html' with form=vp_form count=vp_shown_count show_earned=viewer_profile show_dlc=selected_game.has_trophy_groups dlc_toggle=True list_url=vp_list_url panel_id='gp-more-filters' %}
+            </form>
             {% comment %} PERSISTENT swap target (hx-swap="innerHTML"): settle classes are added to
-            this node by JS and must survive the swap. The ?list= param is scoped to the switcher
-            chips and can't leak elsewhere -- this page has no filter form in slice 1; when filters
-            arrive, carry the scope on a data attribute (browse-filters.js Lucky-button trick), not
-            a hidden input. {% endcomment %}
+            this node by JS and must survive the swap. {% endcomment %}
             <div id="gp-viewport" role="tabpanel" aria-label="Selected trophy list" data-default-np="{{ default_list_np }}">
                 {% include 'trophies/partials/game_page/list_viewport.html' %}
             </div>

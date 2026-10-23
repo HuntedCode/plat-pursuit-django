@@ -1,0 +1,85 @@
+{% load humanize job_icons %}
+{% comment %}
+The hunter's status card (rule 1): the first thing both heroes say after the title. The Game page describes the
+hunter's best list; the Trophy List page describes its one list and adds the detail (`detail`): the bar by trophy
+group, its legend, the grade counts and My stats (owner, round 2 of the list mock-up, 2026-10-22).
+
+Contract:
+  status    hero_context.list_status (or {'state': 'none'}): state, list_label, progress, earned, total, to_go,
+            plat_date
+  whose     the displayed hunter's name when it is someone else's page, else empty ("You" copy)
+  detail    the Trophy List page's rows: needs group_bars (the composite bar), defined (the list's grade counts),
+            and earned (the hunter's)
+The claim line reads the page's pursuit_contract_state + pursuit_jobs.
+
+Plat beats progress; the list is named only when the page has several. "Not in your library yet" is the one
+absence it states: a signed-in hunter's first question is "have I got this", and the answer is the card.
+
+On a phone and a tablet the card is ROWS (game-page.css): only the head sits beside the trophy, and every other row
+runs the card's full width, lining up on both edges.
+{% endcomment %}
+<div class="gp-status gp-status--{{ status.state }}{% if detail and status.state != 'none' %} gp-status--detail{% endif %}">
+    <span class="gp-status__icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+    </span>
+    <div class="gp-status__txt">
+        {% if status.state == 'plat' %}
+            <p class="gp-status__head">{{ whose|default:"You" }} platinumed this{% if status.list_label %}<span class="gp-status__list">{{ status.list_label }}</span>{% endif %}</p>
+            <p class="gp-status__sub">{% if status.plat_date %}<time datetime="{{ status.plat_date|date:'Y-m-d' }}">{{ status.plat_date|date:'M j, Y' }}</time> &middot; {% endif %}{{ status.progress }}%{% if status.to_go %} &middot; {{ status.to_go|intcomma }} to go{% endif %}</p>
+        {% elif status.state == 'complete' %}
+            <p class="gp-status__head">{{ whose|default:"You" }} finished this{% if status.list_label %}<span class="gp-status__list">{{ status.list_label }}</span>{% endif %}</p>
+            <p class="gp-status__sub">100% complete</p>
+        {% elif status.state == 'started' %}
+            {% comment %}The counts only when the list's total is known and agrees: a stale earned count above the total
+            would read "0 trophies to go" at 37%, and a list with no defined trophies "0 of 0".{% endcomment %}
+            <p class="gp-status__head">{{ status.progress }}%{% if status.to_go %} &middot; {{ status.to_go|intcomma }} troph{{ status.to_go|pluralize:"y,ies" }} to go{% endif %}{% if status.list_label %}<span class="gp-status__list">{{ status.list_label }}</span>{% endif %}</p>
+            {% if status.total and status.earned <= status.total %}<p class="gp-status__sub">{{ status.earned|intcomma }} of {{ status.total|intcomma }} earned</p>{% endif %}
+            {% if not detail %}<span class="gp-status__bar" aria-hidden="true"><span class="gp-status__fill" style="width: {{ status.progress }}%"></span></span>{% endif %}
+        {% elif status.state == 'owned' %}
+            <p class="gp-status__head">In {% if whose %}{{ whose }}'s{% else %}your{% endif %} library{% if status.list_label %}<span class="gp-status__list">{{ status.list_label }}</span>{% endif %}</p>
+            {% if status.total %}<p class="gp-status__sub">{{ status.total|intcomma }} troph{{ status.total|pluralize:"y,ies" }} to earn</p>{% endif %}
+        {% elif whose %}
+            <p class="gp-status__head">Not in {{ whose }}'s library</p>
+        {% else %}
+            <p class="gp-status__head">Not in your library yet</p>
+            <p class="gp-status__sub">Add it to a list to plan the hunt</p>
+        {% endif %}
+
+        {% if detail and status.state != 'none' %}
+            {% comment %}One segment per trophy group, each filled to that group's PSN-weighted percentage (GL-11: the
+            same number its group header shows). game-detail.js grows the fills from 0.{% endcomment %}
+            {% if group_bars %}
+                <div class="gd-groupbar gp-status__groupbar" role="img" aria-label="Completion by trophy group: {{ group_bars.main.name }} {{ group_bars.main.pct }}%{% for dlc in group_bars.dlcs %}, {{ dlc.name }} {{ dlc.pct }}%{% endfor %}">
+                    <div class="gd-groupbar__seg gd-groupbar__seg--main" style="flex: {{ group_bars.dlcs|length|add:1 }} 1 0;" title="{{ group_bars.main.name }} &middot; {{ group_bars.main.pct }}% ({{ group_bars.main.earned }}/{{ group_bars.main.total }})"><span class="gd-groupbar__fill" data-gd-fill="{{ group_bars.main.pct }}"></span></div>
+                    {% for dlc in group_bars.dlcs %}<div class="gd-groupbar__seg gd-groupbar__seg--dlc" style="flex: 1 1 0;" title="{{ dlc.name }} &middot; {{ dlc.pct }}% ({{ dlc.earned }}/{{ dlc.total }})"><span class="gd-groupbar__fill" data-gd-fill="{{ dlc.pct }}"></span></div>{% endfor %}
+                </div>
+            {% else %}
+                <div class="pp-horizon pp-horizon__track gp-status__groupbar" data-gd-fill="{{ status.progress }}" style="--horizon-h: 9px; --horizon-progress: 0%;" role="img" aria-label="Completion: {{ status.progress }}%"><span class="pp-horizon__fill"></span></div>
+            {% endif %}
+            <div class="gp-status__foot">
+                {% include 'trophies/partials/trophy_grid/_grade_counts.html' with defined=defined earned=earned show_earned=True extra_class='gp-status__counts' %}
+                {% if group_bars.dlcs %}
+                    <div class="gd-groupbar__legend">
+                        <span><i class="gd-groupbar__dot gd-groupbar__dot--main"></i>Base game</span>
+                        <span><i class="gd-groupbar__dot gd-groupbar__dot--dlc"></i>{{ group_bars.dlc_total }} DLC{{ group_bars.dlc_total|pluralize }}{% if group_bars.combined_dlc %} (combined){% endif %}</span>
+                    </div>
+                {% endif %}
+                {% comment %}My stats lives here, with the progress it opens, rather than in the action row (owner, round 2):
+                it is this hunter's stats for this list. game-detail.js binds data-stats-open to the modal.{% endcomment %}
+                <button type="button" class="gp-status__stats" data-stats-open aria-haspopup="dialog" aria-controls="gd-stats-modal">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>{% if whose %}{{ whose }}'s stats{% else %}My stats{% endif %}<svg class="gp-status__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+                </button>
+            </div>
+        {% endif %}
+    </div>
+    {% if pursuit_contract_state.status == 'claimable' and not whose %}
+    {% comment %}XP waiting is the one part of the Jobs that is about the hunter and something to do, so it stays in
+    the hero (rule 1); what the game counts toward lives in the Game page's About. Never on another hunter's page:
+    only they can claim it.{% endcomment %}
+    <a class="gp-status__claim" href="{% url 'career' %}?view=contracts#career-panel-contracts">
+        <span class="gp-status__claim-icons" aria-hidden="true">{% for job in pursuit_jobs %}<span class="gd-jobmini" style="--disc: var(--disc-{{ job.disc_slug }}, var(--pp-primary));">{% job_icon job.icon '' %}</span>{% endfor %}</span>
+        <span class="gp-status__claim-txt">Contract ready to claim</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+    </a>
+    {% endif %}
+</div>

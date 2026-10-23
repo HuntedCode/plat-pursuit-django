@@ -3,12 +3,11 @@
 Lifted VERBATIM off GameDetailView (slice 1 of docs/design/games-and-trophy-lists-ia.md): these
 builders render the WORK -- IGDB facts, time-to-beat, images, ratings/community tabs, versions,
 family, the contract panel -- none of it specific to one trophy list. BOTH pages mix this in for
-good: the slim-down (phase 2) did not remove the mixin from GameDetailView, because the List-page
-hero and its modals genuinely need the concept-level subset (images, badges, versions, pursuit).
-Instead GameDetailView's lane is that subset -- _build_images_context, _build_badges_context,
-_build_versions_context, _build_pursuit_context -- while _build_concept_context (which layers the
-About facts and the ratings/community assembly on top of the subset) is the GAME page's entry
-point.
+good: the List page's hero still needs two concept-level pieces, so GameDetailView's lane is
+_build_versions_context (its "N versions" link and modal) and _build_pursuit_context (the status
+card's "Contract ready to claim"), while _build_concept_context (images, badges, the About facts and
+the ratings/community assembly) is the GAME page's entry point. The List page's screenshots and badge
+spine left its hero with the trophy list pass (2026-10-22): they are the Game page's now.
 
 The acceptance bar for this move was zero edits to test_game_detail_hero/test_game_detail_ratings:
 their unit tests call these builders directly on GameDetailView, so passing untouched proves the
@@ -234,9 +233,9 @@ class ConceptContextMixin:
     def _build_badges_context(self, game):
         """Related badges (grouping-badge system) — the specific badge EDITIONS this game is part of.
 
-        Split out of _build_concept_context for the list-detail slim-down: the hero's badge spine
-        (and its modal) is a LIST-page keeper, while the ratings/about assembly above is Game-page
-        territory — List detail calls this directly without paying for community_tabs.
+        Split out of _build_concept_context for the list-detail slim-down, when the List page's hero still
+        had a badge spine. Since the trophy list pass only the Game page reads it (About, Counts toward),
+        through _build_concept_context.
 
         A game only gates for the platform groups its own platforms match (the exact routing the
         engine uses: title_platform overlaps the group's platforms --
@@ -282,8 +281,8 @@ class ConceptContextMixin:
     def _build_versions_context(self, game):
         """"Other platforms" + "In the same family" cross-links (the versions modal / About card).
 
-        Split out alongside _build_badges_context (same slim-down reasoning): List detail's hero
-        versions button + #gd-versions-modal need these three keys without the rest of
+        Split out alongside _build_badges_context (same slim-down reasoning): List detail's facts-line
+        "N versions" link + #gd-versions-modal need these three keys without the rest of
         _build_concept_context.
         """
         if not game.concept:

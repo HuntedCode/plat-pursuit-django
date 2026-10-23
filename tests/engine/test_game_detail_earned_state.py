@@ -49,13 +49,15 @@ def test_earned_state_query_count_does_not_scale_with_earned_trophies():
 
 
 def test_earned_state_shape_matches_the_template_contract():
-    """The three context keys the trophy grid + hero read, in the shapes they read them."""
+    """The context keys the trophy grid + hero read, in the shapes they read them. `plat_date` (when the
+    platinum popped, for the hero's status card) rides the same rows: no extra query."""
     game, profile = _game_with_earned(n_trophies=4, n_earned=3)
     view = GameDetailView()
 
     state, ordered_qs, earned_count = view._build_earned_state(game, profile)
 
-    assert set(state) == {'profile_earned', 'profile_trophy_totals', 'profile_group_totals'}
+    assert set(state) == {'profile_earned', 'profile_trophy_totals', 'profile_group_totals', 'plat_date'}
+    assert state['plat_date'] == state['profile_earned'][0]['earned_date_time']   # trophy_id 0 is the platinum
     assert earned_count == 3
     assert set(state['profile_earned']) == {0, 1, 2}
     assert state['profile_earned'][1]['earned'] is True

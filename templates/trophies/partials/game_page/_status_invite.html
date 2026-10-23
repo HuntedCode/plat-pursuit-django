@@ -1,0 +1,36 @@
+{% load humanize %}
+{% comment %}
+The status slot when there is no hunter to describe (GL-09, owner 2026-10-22): signed out, or signed in without a
+linked PSN. Both heroes fill the slot with the same invitation, so a visitor learns what the site does and the
+cover's bottom edge has something to meet.
+
+Contract:
+  invite_players   the page's player count. Named only from 25 up: a "3 hunters here" headline undersells
+  invite_platinum  whether there is a platinum to chase (the wording)
+  invite_defined   optional {grade: count}: the Trophy List page names what there is to earn; the Game page,
+                   with several lists, says it tracks every one
+{% endcomment %}
+<div class="gp-status gp-status--invite">
+    <span class="gp-status__icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+    </span>
+    <div class="gp-status__txt">
+        <p class="gp-status__head">
+            {% if invite_players >= 25 %}<b>{{ invite_players|intcomma }}</b> hunters here are {% if invite_platinum %}chasing this platinum{% else %}hunting these trophies{% endif %}
+            {% else %}Track your {% if invite_platinum %}platinum{% else %}trophy{% endif %} journey{% endif %}
+        </p>
+        <p class="gp-status__sub">
+            {% if invite_defined %}{% with d=invite_defined %}{% if d.bronze %}{{ d.bronze }} bronze{% endif %}{% if d.silver %}{% if d.bronze %} &middot; {% endif %}{{ d.silver }} silver{% endif %}{% if d.gold %}{% if d.bronze or d.silver %} &middot; {% endif %}{{ d.gold }} gold{% endif %}{% if d.platinum %}{% if d.bronze or d.silver or d.gold %} &middot; {% endif %}{{ d.platinum }} platinum{% endif %} to earn{% endwith %}
+            {% else %}Track your progress on every list.{% endif %}
+        </p>
+    </div>
+    <div class="gp-status__cta">
+        {% if user.is_authenticated %}
+            <a href="{% url 'link_psn' %}" class="gd-btn gd-btn--primary">Link your PSN</a>
+            <span class="gp-status__alt">to track your progress here</span>
+        {% else %}
+            <a href="{% url 'account_signup' %}" class="gd-btn gd-btn--primary">Start tracking free</a>
+            <a href="{% url 'account_login' %}" class="gp-status__alt">Sign in</a>
+        {% endif %}
+    </div>
+</div>

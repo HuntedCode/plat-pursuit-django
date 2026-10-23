@@ -6,18 +6,19 @@ shared by BOTH detail pages since the slim-down. Include contract:
                    platinums and 100%s summed, players DISTINCT across the lists since DS-08);
                    absent, each |default falls through to game's own columns -- which on List
                    detail is exactly right: THIS list's community.
-  snapshot_chrome  optional boolean. TRUE (List detail) renders the strip as page-level CHROME:
-                   a .scard grid with .pp-tally faces -- the house stat-strip vocabulary
-                   (Collection / Rate My Games / Browse headers), per the design audit that found
-                   the plain band reading as a placeholder outside a panel. FALSE/absent (the
-                   Game page's Ratings tab) keeps the framed .gd-acard band that sits among the
-                   tab's sibling sections and participates in revealRatings' cascade + count-up.
-The numbers carry data-gd-countup in both variants: List detail's load-time pass and the Game
-page's revealRatings each animate their own copy.{% endcomment %}
+  snapshot_chrome  optional boolean. TRUE (List detail) renders the strip as a .scard grid with
+                   .pp-tally faces -- the house stat-strip vocabulary (Collection / Rate My Games /
+                   Browse headers), per the design audit that found the plain band reading as a
+                   placeholder outside a panel. It sits at the top of the Ranks view, above the
+                   board (GL-03, the trophy list pass). FALSE/absent (the Game page's Ratings tab)
+                   keeps the framed .gd-acard band that sits among the tab's sibling sections and
+                   participates in revealRatings' cascade + count-up.
+The numbers carry data-gd-countup in both variants: List detail counts them up on the Ranks view's
+first showing, the Game page's revealRatings on the Ratings tab's.{% endcomment %}
 {% if snapshot_chrome %}
     {% comment %}scard__sub lines auto-hide below md (the primitive's own rule). The grid is
     2-up at base, one row at md+ -- 4 cells, or 3 when the list defines no platinum.{% endcomment %}
-    <div id="gd-snapshot" class="grid grid-cols-2 {% if game.defined_trophies.platinum %}md:grid-cols-4{% else %}md:grid-cols-3{% endif %} gap-2 md:gap-3 mt-4">
+    <div id="gd-snapshot" class="grid grid-cols-2 {% if game.defined_trophies.platinum %}md:grid-cols-4{% else %}md:grid-cols-3{% endif %} gap-2 md:gap-3 mb-4">
         <div class="scard">
             <div class="scard__label">Players</div>
             <div class="scard__value pp-tally" data-gd-countup="{{ community_stats.played_count|default:game.played_count|default:0 }}">{{ community_stats.played_count|default:game.played_count|default:0|intcomma }}</div>

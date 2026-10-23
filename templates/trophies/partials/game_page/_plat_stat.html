@@ -1,0 +1,42 @@
+{% load humanize %}
+{% comment %}The platinum stat (owner, 2026-10-22), shared by the Game page and the Trophy List page heroes.
+Contract: plat_rarity, hero_context.plat_rarity's dict; the caller gates on it.
+
+No box: the gem carries the grade's colour (rarity.css `data-rarity` + the house `.pp-rarity-gem`), and its light
+climbs with the grade: Common flat, a halo from Rare, a glint from Very Rare, a gleam that sweeps only Ultra Rare.
+With no platinum the same gem is drawn hollow and unlit beside the trophy count. Names the list when the page has
+several.{% endcomment %}
+<div class="gp-hero__side">
+    {% if plat_rarity.none %}
+    <div class="gp-rarity gp-rarity--none">
+        <span class="gp-rarity__gem" aria-hidden="true">
+            <svg viewBox="0 0 48 48"><path class="gp-gem__hollow" d="M14 8H34L42 18L24 42L6 18Z"/><path class="gp-gem__cuts" d="M6 18H42M16 18L24 8L32 18M16 18L24 42L32 18M14 8L16 18M34 8L32 18"/></svg>
+        </span>
+        <span class="gp-rarity__txt">
+            <span class="gp-rarity__n">{{ plat_rarity.total|intcomma }} troph{{ plat_rarity.total|pluralize:"y,ies" }}</span>
+            <span class="gp-rarity__lbl"><b>No platinum</b>{% if plat_rarity.list_label %} {{ plat_rarity.list_label }}{% endif %}</span>
+        </span>
+    </div>
+    {% else %}
+    <div class="gp-rarity" data-rarity="{{ plat_rarity.grade }}">
+        {% comment %}data-rarity again on the gem itself: the house gem's Ultra Rare halo pulse keys on it.{% endcomment %}
+        <span class="gp-rarity__gem pp-rarity-gem{% if plat_rarity.grade != 'common' %} pp-rarity-gem--lit{% endif %}" data-rarity="{{ plat_rarity.grade }}" aria-hidden="true">
+            <svg viewBox="0 0 48 48"><defs><clipPath id="gp-gem-clip"><path d="M14 8H34L42 18L24 42L6 18Z"/></clipPath></defs>
+                <path class="gp-gem__core" d="M14 8H34L42 18L24 42L6 18Z"/>
+                <path class="gp-gem__f" fill-opacity="1" d="M14 8L6 18H16Z"/><path class="gp-gem__f" fill-opacity=".7" d="M14 8L16 18L24 8Z"/>
+                <path class="gp-gem__f" fill-opacity=".9" d="M24 8L16 18H32Z"/><path class="gp-gem__f" fill-opacity=".6" d="M24 8L32 18L34 8Z"/>
+                <path class="gp-gem__f" fill-opacity=".48" d="M34 8L32 18H42Z"/><path class="gp-gem__f" fill-opacity=".86" d="M6 18H16L24 42Z"/>
+                <path class="gp-gem__f" fill-opacity=".66" d="M16 18H32L24 42Z"/><path class="gp-gem__f" fill-opacity=".4" d="M32 18H42L24 42Z"/>
+                <path class="gp-gem__catch" d="M14 8L6 18H16Z"/>
+                <g clip-path="url(#gp-gem-clip)"><g class="gp-gem__sweep"><rect x="-6" y="-14" width="7" height="76" opacity=".7" transform="rotate(24 24 24)"/><rect x="4" y="-14" width="2.5" height="76" opacity=".45" transform="rotate(24 24 24)"/></g></g>
+                <path class="gp-gem__edge" d="M14 8H34L42 18L24 42L6 18Z"/>
+                <path class="gp-gem__spark" d="M38 1.5Q39.21 5.79 43.5 7Q39.21 8.21 38 12.5Q36.79 8.21 32.5 7Q36.79 5.79 38 1.5Z"/>
+            </svg>
+        </span>
+        <span class="gp-rarity__txt">
+            <span class="gp-rarity__n">{{ plat_rarity.rate|floatformat:1 }}%</span>
+            <span class="gp-rarity__lbl"><b>{{ plat_rarity.label }}</b>{% if plat_rarity.list_label %} {{ plat_rarity.list_label }}{% endif %} platinum</span>
+        </span>
+    </div>
+    {% endif %}
+</div>

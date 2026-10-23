@@ -21,31 +21,6 @@ viewer counts), profile.
         {% endif %}
     </div>
     {# Flat tier dots (the glowing colored dot from the Collection header): color carries the tier, empty tiers (e.g. DLC platinum) omitted. #}
-    <div class="gd-group__counts">
-        {% if group.defined_trophies.bronze %}
-            <span class="gd-gcount gd-gcount--bronze" title="Bronze: {% if profile %}{{ group_total.bronze|default:0 }} of {% endif %}{{ group.defined_trophies.bronze }}">
-                <span class="gd-gcount__dot" aria-hidden="true"></span>
-                <span class="gd-gcount__n pp-tally">{% if profile %}<b>{{ group_total.bronze|default:0 }}</b>/{{ group.defined_trophies.bronze }}{% else %}{{ group.defined_trophies.bronze }}{% endif %}</span>
-            </span>
-        {% endif %}
-        {% if group.defined_trophies.silver %}
-            <span class="gd-gcount gd-gcount--silver" title="Silver: {% if profile %}{{ group_total.silver|default:0 }} of {% endif %}{{ group.defined_trophies.silver }}">
-                <span class="gd-gcount__dot" aria-hidden="true"></span>
-                <span class="gd-gcount__n pp-tally">{% if profile %}<b>{{ group_total.silver|default:0 }}</b>/{{ group.defined_trophies.silver }}{% else %}{{ group.defined_trophies.silver }}{% endif %}</span>
-            </span>
-        {% endif %}
-        {% if group.defined_trophies.gold %}
-            <span class="gd-gcount gd-gcount--gold" title="Gold: {% if profile %}{{ group_total.gold|default:0 }} of {% endif %}{{ group.defined_trophies.gold }}">
-                <span class="gd-gcount__dot" aria-hidden="true"></span>
-                <span class="gd-gcount__n pp-tally">{% if profile %}<b>{{ group_total.gold|default:0 }}</b>/{{ group.defined_trophies.gold }}{% else %}{{ group.defined_trophies.gold }}{% endif %}</span>
-            </span>
-        {% endif %}
-        {% if group.defined_trophies.platinum %}
-            <span class="gd-gcount gd-gcount--platinum" title="Platinum: {% if profile %}{{ group_total.platinum|default:0 }} of {% endif %}{{ group.defined_trophies.platinum }}">
-                <span class="gd-gcount__dot" aria-hidden="true"></span>
-                <span class="gd-gcount__n pp-tally">{% if profile %}<b>{{ group_total.platinum|default:0 }}</b>/{{ group.defined_trophies.platinum }}{% else %}{{ group.defined_trophies.platinum }}{% endif %}</span>
-            </span>
-        {% endif %}
-    </div>
+    {% include 'trophies/partials/trophy_grid/_grade_counts.html' with defined=group.defined_trophies earned=group_total show_earned=profile %}
 </header>
 {% endwith %}

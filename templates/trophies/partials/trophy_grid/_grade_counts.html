@@ -1,0 +1,21 @@
+{% load custom_filters %}
+{% comment %}
+The grade counts: one coloured dot and count per grade, empty grades (a DLC's platinum) left out. Shared by the
+group header (one group) and the Trophy List hero's status card (the whole list), so the two always read alike.
+Contract: defined ({grade: count} the list or group defines), earned ({grade: count} the hunter has, or omitted),
+show_earned (draw "earned/defined" rather than the bare defined count), extra_class (optional, on the row).
+{% endcomment %}
+<div class="gd-group__counts{% if extra_class %} {{ extra_class }}{% endif %}">
+    {% with n=defined.bronze got=earned|dict_get:'bronze'|default:0 %}{% if n %}
+        <span class="gd-gcount gd-gcount--bronze" title="Bronze: {% if show_earned %}{{ got }} of {% endif %}{{ n }}"><span class="gd-gcount__dot" aria-hidden="true"></span><span class="gd-gcount__n pp-tally">{% if show_earned %}<b>{{ got }}</b>/{{ n }}{% else %}{{ n }}{% endif %}</span></span>
+    {% endif %}{% endwith %}
+    {% with n=defined.silver got=earned|dict_get:'silver'|default:0 %}{% if n %}
+        <span class="gd-gcount gd-gcount--silver" title="Silver: {% if show_earned %}{{ got }} of {% endif %}{{ n }}"><span class="gd-gcount__dot" aria-hidden="true"></span><span class="gd-gcount__n pp-tally">{% if show_earned %}<b>{{ got }}</b>/{{ n }}{% else %}{{ n }}{% endif %}</span></span>
+    {% endif %}{% endwith %}
+    {% with n=defined.gold got=earned|dict_get:'gold'|default:0 %}{% if n %}
+        <span class="gd-gcount gd-gcount--gold" title="Gold: {% if show_earned %}{{ got }} of {% endif %}{{ n }}"><span class="gd-gcount__dot" aria-hidden="true"></span><span class="gd-gcount__n pp-tally">{% if show_earned %}<b>{{ got }}</b>/{{ n }}{% else %}{{ n }}{% endif %}</span></span>
+    {% endif %}{% endwith %}
+    {% with n=defined.platinum got=earned|dict_get:'platinum'|default:0 %}{% if n %}
+        <span class="gd-gcount gd-gcount--platinum" title="Platinum: {% if show_earned %}{{ got }} of {% endif %}{{ n }}"><span class="gd-gcount__dot" aria-hidden="true"></span><span class="gd-gcount__n pp-tally">{% if show_earned %}<b>{{ got }}</b>/{{ n }}{% else %}{{ n }}{% endif %}</span></span>
+    {% endif %}{% endwith %}
+</div>
