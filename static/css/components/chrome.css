@@ -732,8 +732,8 @@ html.pp-bar-pinned .pp-sub { transform: translateY(-100%); visibility: hidden;
 /* The open sheet would stay visible (it sets its own visibility) and float over the bar; subnav.js closes it
    on the way out, and this is the backstop. */
 html.pp-bar-pinned .pp-sub__sheet.is-open { visibility: hidden; }
-/* The art reveal banner pins below the sub-nav and moves up with the bar (its top subtracts --rail-shift). */
-#art-reveal-banner { transition: top 0.28s var(--pp-ease); }
+/* The art reveal banner pins below the sub-nav and moves up with the bar, by `translate` as the bar does. */
+#art-reveal-banner { translate: 0 calc(-1 * var(--rail-shift, 0px)); transition: translate 0.28s var(--pp-ease); }
 @media (prefers-reduced-motion: reduce) { .pp-sub, html.pp-bar-pinned .pp-sub, #art-reveal-banner { transition: none; } }
 /* StickyReveal adopting a state un-animated (a page restored mid-scroll) takes the chrome with it. */
 html.pp-chrome-instant .pp-sub, html.pp-chrome-instant .pp-minibar, html.pp-chrome-instant #art-reveal-banner { transition: none !important; }

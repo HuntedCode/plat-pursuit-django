@@ -349,12 +349,14 @@ push the navbar 1-2px off 64px and cause a visible shift). The hotbar template b
   by `StickyReveal`) is pinned, `StickyReveal` puts `pp-bar-pinned` on `<html>`; the sub-nav then slides up
   behind the navbar and turns `visibility: hidden` (its links leave the tab order, and its landmark leaves the
   accessibility tree until it returns), and the bar moves up into its place with `translate` (not `top`, which
-  would lay out every frame of the scroll). An open mobile sheet or desktop More menu closes on the way out
+  would lay out every frame of its 0.28s slide); the art reveal banner shifts the same way. An open mobile sheet or desktop More menu closes on the way out
   (`subnav.js`, with a CSS backstop for the sheet, which sets its own visibility). Back above the bar's sentinel, the sub-nav returns. `main.js` publishes the sub-nav's share of the
   stack as `--chrome-rail`; `--rail-shift` (chrome.css) is that while a bar is pinned and 0 otherwise, and
   anything pinned below the sub-nav subtracts it (the mini-bar, the art reveal banner). The stack starts at the
   navbar's BOTTOM, its `top` included, so the PSN outage banner (which pins the navbar lower) moves it all
-  down; measuring the height alone pinned the bar behind the navbar during an outage. `--sticky-top` itself
+  down; measuring the height alone pinned the bar behind the navbar during an outage. The navbar's `top` is
+  the banner's MEASURED height (main.js): the banner wraps to about three lines on a phone, past its CSS's
+  one-line 36px guess. `--sticky-top` itself
   does not change, so StickyReveal's pin threshold stays put and nothing flaps. Why: nav, sub-nav, mini-bar and
   a sticky group header held 215px of a 1366x657 laptop on a trophy list; mid-scroll the rail is the least
   needed of them, and the navbar's hub buttons stay.

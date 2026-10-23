@@ -161,6 +161,7 @@ document.addEventListener('DOMContentLoaded', function () {
     // the bar with its trigger gone, and the More menu would reopen by itself when the sub-nav returns.
     new MutationObserver(function () {
         if (!document.documentElement.classList.contains('pp-bar-pinned')) return;
+        if (root.contains(document.activeElement)) document.activeElement.blur();   // not left on a hidden link
         if (sheet && sheet.classList.contains('is-open')) setSheet(false);
         if (moreWrap && moreWrap.classList.contains('is-open')) closeMore();
     }).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });

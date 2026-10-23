@@ -11,7 +11,7 @@ to a slim strip (state persisted per-event in localStorage).
 {% endcomment %}
 <div id="art-reveal-banner"
      class="sticky z-30 bg-gradient-to-r from-primary/15 via-secondary/15 to-primary/15 border-b-2 border-primary/40 backdrop-blur shadow-lg shadow-primary/5"
-     style="top: calc(var(--chrome-nav-height, 7rem) - var(--rail-shift, 0px))"
+     style="top: var(--chrome-nav-height, 7rem)"
      data-slug="{{ b.slug }}"
      role="region" aria-label="{{ b.name }} progress">
 

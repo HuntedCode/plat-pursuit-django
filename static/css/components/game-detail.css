@@ -62,7 +62,8 @@
 .gd-minibar__gpct { flex-shrink: 0; font-size: 0.8rem; font-weight: 800; color: var(--pp-primary); line-height: 1; }
 .gd-minibar.has-group [data-minibar-page-title] { display: none; }
 /* Phones: beside the jump select, the Game page's list switch left the group name a few letters. While the
-   label shows, the switch steps aside; the real list chips sit just above the grid. */
+   label shows, the switch steps aside; the real list chips sit just above the grid. The name wins over the
+   switch on phones: owner's call, 2026-10-23 (laptop and tablet keep both). */
 @media (max-width: 767px) { .gd-minibar.has-group .pp-minibar__listswitch { display: none; } }
 
 /* ============================================================

@@ -64,8 +64,7 @@ def _page(tmp_path, signed_in=True, outage=False):
     })
     label = render_to_string('trophies/partials/trophy_grid/_minibar_group.html', {'view': 'trophies'})
     subnav = render_to_string('partials/hub_subnav.html', SUBNAV)
-    # The PSN outage banner's own rule: it pins the navbar 36px lower (psn_outage_banner.html).
-    outage_css = '.pp-nav { top: 36px; }' if outage else ''
+    banner = render_to_string('partials/psn_outage_banner.html', {'psn_outage': True}) if outage else ''
     scripts = ''.join(f'<script src="{s.as_uri()}"></script>' for s in SCRIPTS)
     page = tmp_path / 'chrome.html'
     page.write_text(
@@ -73,8 +72,8 @@ def _page(tmp_path, signed_in=True, outage=False):
         '<meta name="viewport" content="width=device-width, initial-scale=1">'
         f'<link rel="stylesheet" href="{CSS.as_uri()}">'
         # Each group stands a few screens tall, as a real list's rows would make it.
-        f'<style>.gd-group {{ min-height: 1600px; }} {outage_css}</style></head><body class="bg-base-100">'
-        '<header class="pp-nav"><div style="height:58px">Platinum Pursuit</div></header>'
+        '<style>.gd-group { min-height: 1600px; }</style></head><body class="bg-base-100">'
+        f'{banner}<header class="pp-nav"><div style="height:58px">Platinum Pursuit</div></header>'
         f'{subnav}'
         '<main class="container mx-auto px-4"><div style="height:400px">hero</div>'
         '<span id="mb-sentinel" class="pp-sentinel"></span>'
@@ -116,10 +115,11 @@ def _scroll_to_group(pg, index, into=300):
 
 
 def _settled(pg, label):
-    """Waits for the bar's transitions (0.28s) and the label to show `label` (None: hidden)."""
+    """Waits for the label to show `label` (None: hidden) and for the bar's and the sub-nav's transitions to end."""
     pg.wait_for_function('(want) => { const l = document.querySelector("[data-minibar-group]");'
                          ' return want === null ? l.hidden : (!l.hidden && l.textContent.startsWith(want)); }', arg=label)
-    pg.wait_for_timeout(450)
+    pg.wait_for_function('() => [...document.querySelectorAll(".pp-minibar, .pp-sub")]'
+                         '.every((e) => e.getAnimations().length === 0)')
     return pg.evaluate(STATE)
 
 
@@ -217,17 +217,48 @@ def test_a_group_jump_names_the_group_it_lands_on(tmp_path):
             b.close()
 
 
-def test_the_bar_clears_a_navbar_pinned_lower_by_the_outage_banner(tmp_path):
+@pytest.mark.parametrize('width,height', [(1366, 657), (390, 844)])
+def test_the_stack_clears_the_outage_banner(tmp_path, width, height):
+    """The real banner, which wraps to about three lines on a phone (its CSS guesses one): the navbar pins under
+    it, and the bar under the navbar."""
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as p:
+        b = p.chromium.launch()
+        try:
+            pg = b.new_page(viewport={'width': width, 'height': height})
+            pg.goto(_page(tmp_path, outage=True))
+            _scroll_to_group(pg, 0)
+            state = _settled(pg, 'Golf With Your Friends')
+            banner = pg.evaluate("Math.round(document.getElementById('site-banner-psn-outage').getBoundingClientRect().bottom)")
+            nav_top = pg.evaluate("Math.round(document.querySelector('.pp-nav').getBoundingClientRect().top)")
+            assert nav_top == banner, f'the banner covers the navbar (banner bottom {banner}, navbar top {nav_top})'
+            assert state['barTop'] == state['navBottom'] - 1, f'the bar sits behind the navbar: {state}'
+        finally:
+            b.close()
+
+
+def test_scrolling_names_a_group_only_once_it_reaches_the_bar(tmp_path):
+    """The next group's header still showing just under the bar: the label keeps the group being read."""
     from playwright.sync_api import sync_playwright
     with sync_playwright() as p:
         b = p.chromium.launch()
         try:
             pg = b.new_page(viewport={'width': 1366, 'height': 657})
-            pg.goto(_page(tmp_path, outage=True))
+            pg.goto(_page(tmp_path))
             _scroll_to_group(pg, 0)
+            _settled(pg, 'Golf With Your Friends')
+            # Put group 1's top 10px under the bar's bottom (and clear of the scroll padding's landing line).
+            pg.evaluate("""() => {
+                const bar = document.querySelector('.pp-minibar').getBoundingClientRect().bottom;
+                const sec = document.querySelectorAll('.gd-group')[1];
+                window.scrollBy({top: sec.getBoundingClientRect().top - (bar + 10), behavior: 'instant'});   // the page scrolls smoothly
+            }""")
+            pg.wait_for_timeout(300)
             state = _settled(pg, 'Golf With Your Friends')
-            assert state['navBottom'] > 90, f'the banner rule did not apply: {state}'
-            assert state['barTop'] == state['navBottom'] - 1, f'the bar sits behind the navbar: {state}'
+            assert state['pct'] == '45%', state
+            gap = pg.evaluate("document.querySelectorAll('.gd-group')[1].getBoundingClientRect().top"
+                              " - document.querySelector('.pp-minibar').getBoundingClientRect().bottom")
+            assert 5 <= gap <= 15, f'the setup did not hold: group 1 sits {gap}px under the bar'
         finally:
             b.close()
 

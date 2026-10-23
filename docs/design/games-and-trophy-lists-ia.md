@@ -163,7 +163,9 @@ Group headers do NOT pin (2026-10-23). The pinned bar names the group under it i
 hunter's percentage in it when the header shows one (`partials/trophy_grid/_minibar_group.html`, filled
 by `trophy-grid.js` from the headers on each scroll, so swaps need no wiring; a group jump parks its section at the
 scroll padding, just under the bar, so that line counts too), in place of the page title. With the sub-nav giving way to the bar, the pinned stack on a trophy list is the navbar plus that
-one bar: 111px, down from 215px.
+one bar: 111px, down from 215px. On phones the Game page's bar has room for the list switch OR the group
+name: the name wins while the trophies scroll past (owner, 2026-10-23), and the list chips sit just
+above the grid. Laptop and tablet keep both.
 
 **One control row above it, on both pages** (GL-10): the count (and on the Game page the list's own page),
 "All / Unearned" (only with a hunter displayed), Sort, and "More filters" with Type, Rarity and DLC

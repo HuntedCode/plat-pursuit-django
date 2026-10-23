@@ -20,7 +20,11 @@ document.addEventListener('DOMContentLoaded', function() {
         // bar has the higher z-index, so it paints over the lapped pixel). Desktop and emulated-mobile snap
         // to integer device pixels and never gap, which is why it only showed on a physical phone.
         const LAP = 1;
-        // The navbar's bottom, not just its height: the PSN outage banner pins it lower (its `top`), and
+        // The PSN outage banner pins above the navbar. Its CSS guesses one line (36px, 40px at lg) for the
+        // pre-JS paint; on a phone it wraps to about three, so pin the navbar at its measured height.
+        const outage = document.getElementById('site-banner-psn-outage');
+        if (outage) navbar.style.top = Math.round(outage.getBoundingClientRect().height) + 'px';
+        // The navbar's bottom, not just its height: the outage banner pins it lower (its `top`), and
         // everything stacked below must clear that too.
         const navH = Math.round(navbar.getBoundingClientRect().height + (parseFloat(getComputedStyle(navbar).top) || 0));
         let bottom = navH;   // running bottom edge of the pinned chrome stack
