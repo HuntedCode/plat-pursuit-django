@@ -12,6 +12,7 @@ substance of the redesign, and each was mutation-dead.
   - Every "N new contracts" assertion was against the LEAD embed, so the per-job counts -- the whole
     content of every discipline block -- were asserted nowhere.
 """
+import itertools
 import math
 
 import pytest
@@ -23,9 +24,14 @@ from trophies.models import Contract, Job
 pytestmark = pytest.mark.django_db
 
 
+# A counter, never hash(name): str hashes are salted per process, so names can collide on Contract.igdb_id's
+# unique constraint at random (the sibling test_announce_contracts did on CI, 2026-10-23).
+_igdb_ids = itertools.count(1_000_000)
+
+
 def _contract(name, *, jobs=None, days_ago=0):
     c = Contract.objects.create(name=name, slug=name.lower().replace(' ', '-'),
-                                igdb_id=abs(hash(name)) % 9_000_000 + 1_000_000, is_live=True)
+                                igdb_id=next(_igdb_ids), is_live=True)
     c.jobs.set(jobs or list(Job.objects.exclude(is_fallback=True)[:1]))
     Contract.objects.filter(pk=c.pk).update(
         went_live_at=timezone.now() - timezone.timedelta(days=days_ago))

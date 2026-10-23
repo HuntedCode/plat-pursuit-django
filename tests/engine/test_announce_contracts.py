@@ -6,6 +6,7 @@ answer is structural rather than a special case: a staged or review-queued candi
 the only act that makes a contract announceable.
 """
 import io
+import itertools
 
 import pytest
 from django.conf import settings
@@ -49,9 +50,14 @@ def posted(monkeypatch, settings):
     return calls
 
 
+# A counter, never hash(name): str hashes are salted per process, so 45 names in 9M buckets collided on
+# Contract.igdb_id's unique constraint about once in 10,000 runs (CI, 2026-10-23).
+_igdb_ids = itertools.count(1_000_000)
+
+
 def _contract(name, *, live=True, jobs=None, days_ago=0, announced=False):
     c = Contract.objects.create(name=name, slug=name.lower().replace(' ', '-'),
-                                igdb_id=abs(hash(name)) % 9_000_000 + 1_000_000, is_live=live)
+                                igdb_id=next(_igdb_ids), is_live=live)
     c.jobs.set(jobs or list(Job.objects.exclude(is_fallback=True)[:1]))
     stamp = timezone.now() - timezone.timedelta(days=days_ago) if live else None
     Contract.objects.filter(pk=c.pk).update(
