@@ -147,6 +147,37 @@ def resolve_variant(game):
         return FULL
 
 
+def share_link(profile, game, game_progress):
+    """The share-card link for ONE of the profile's games, or None when it has not earned a card.
+
+    {'url': '/shareables/?c=<default group id>', 'variant': 'platinum' | 'full'}. Used by the trophy list
+    page and the game page, which both offer "Share" once a game is finished.
+
+    NOT `eligible_completions()`: that is built for the browse page and carries an OR'd
+    `game_id IN (profile's 100% ProfileGames)` subquery, four select_related joins and a JSON cast. Postgres
+    short-circuits the OR left-to-right, so on an UNFINISHED game -- the common case on a game page -- the
+    left arm is false and the subplan runs, hashing every one of the profile's ProfileGames to answer "no".
+    A whale-scaled cost on the site's highest-traffic pages, for a boolean.
+
+    Same predicate, narrowly: this game's default group at 100%, or `game_progress` (the caller's
+    ProfileGame.progress for this game) at 100. Whole-game 100% implies every trophy including DLC, so it
+    implies the base list -- the staleness guard the OR arm exists for. One unique-index seek, no subplan.
+
+    The CALLER owns the who-may-see-it gate: a card is personal, so pass only the viewer's own linked
+    profile. The destination re-checks ownership with `eligible_completions`, so a link this offers is a
+    card that page will open.
+    """
+    row = (
+        ProfileTrophyGroup.objects
+        .filter(profile=profile, trophy_group__game=game, trophy_group__trophy_group_id='default')
+        .values_list('trophy_group_id', 'progress')
+        .first()
+    )
+    if not row or not (row[1] == 100 or game_progress == 100):
+        return None
+    return {'url': f"{reverse('my_shareables')}?c={row[0]}", 'variant': resolve_variant(game)}
+
+
 def variant_filter(qs, variant):
     """Narrow an `eligible_completions` queryset to one variant, in the DB.
 

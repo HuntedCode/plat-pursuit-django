@@ -26,6 +26,9 @@ replaces the grid, not the switcher; active-chip state is synced client-side.
                 alone (same platform), and without these the chips read as duplicates. Secondary
                 tint = list META, the Trophy Lists browse card's vocabulary.{% endcomment %}
                 {% if entry.game.is_regional and entry.game.region %}{% for r in entry.game.region %}<span class="gp-lchip__region">{{ r }}</span>{% endfor %}{% endif %}
+                {% comment %}Only on a chip that would otherwise match a sibling's (DS-09): its trophy count, then its
+                PSN list id if the counts match too (disambiguate_entries).{% endcomment %}
+                {% if entry.detail %}<span class="gp-lchip__detail">{{ entry.detail }}</span>{% endif %}
                 {% if entry.progress is not None %}
                     <span class="gp-lchip__pct pp-tally{% if entry.has_plat %} gp-lchip__pct--plat{% endif %}"
                           title="{% if entry.has_plat %}Platinum earned &middot; {% endif %}Your progress">

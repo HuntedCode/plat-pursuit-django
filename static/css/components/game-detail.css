@@ -528,12 +528,6 @@
    least one version"), and the design system reserves sub-12px for decorative/supplementary text. */
 .gd-report__vcount { align-self: flex-end; font-size: 0.75rem; color: var(--pp-text-dim); font-variant-numeric: tabular-nums; }
 
-/* The Game page hero's Report button goes full-width under the screenshots rather than floating at
-   its intrinsic size -- matching .gd-shots, which is also 100%. At `lg:` the extras column is a
-   narrow rail (a minmax(180px, 250px) track); below that the hero grid is a single 1fr column and
-   the button spans it. Full-width is right in both cases, which is why this is not scoped to a
-   breakpoint. */
-.gp-report { width: 100%; justify-content: center; }
 
 /* ============================================================
    Premium polish: tactile press + keyboard focus (Google/Apple lens)

@@ -26,10 +26,10 @@ def _page(*lists, igdb_id=777_001):
 
 
 def _header(client, url):
-    """The hero's main column, from its start to the badge/contract band that always follows the flags."""
+    """The hero's head (platforms, title, facts, flags), from its start to the end of the hero."""
     html = client.get(url, **CF).content.decode()
-    start = html.index('gd-hero__main')
-    return html[start:html.index('gd-spine gd-spine--band', start)]
+    start = html.index('gp-hero__head')
+    return html[start:html.index('</section>', start)]
 
 
 # ── the rule ─────────────────────────────────────────────────────────────────────────────────────

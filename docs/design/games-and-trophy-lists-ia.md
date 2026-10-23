@@ -66,18 +66,29 @@ model) around ONE list viewport tab:
 - **Identity chip** on the viewport: list name + platform badges + region, with the link to the
   List detail page living IN the chip -- identity and escape hatch are one object.
 - **Lazy**: default list renders server-side; other lists fetch on switch.
-- **The hero is List detail's hero, concept-half only** (owner's call, first browser pass):
-  same `gd-hero` anatomy -- cover / facts / IGDB teaser / screenshots -- minus every per-list
-  piece (progress readout, My Stats, plat-card CTA, Outlook, per-list flags) and minus the modal-bound
-  buttons, whose JS lives only on List detail. One exception: the screenshot LIGHTBOX came along
-  (owner's call) -- extracted into `shot-lightbox.js` + the `shot_lightbox.html` partial, one
-  implementation driven by both pages, so the hero thumbs open the full FLIP/carousel viewer
-  here too instead of raw image tabs. Platform chips show the UNION across the list
-  set; the players headline is the page's distinct players (`Concept.page_player_count`, each
-  hunter once however many versions they own, since 2026-10-22); Released is
-  `concept.release_date` (the work's date, not the host list's platform date). The badge/contract
-  spine sits IN the hero as one split band (badges left, contract right; each badge medallion
-  links its own series page), using the vertical room the dropped progress readout freed.
+- **The hero leads with the hunter** (rebuilt 2026-10-22 under the Page Principles, DS-07; the owner
+  approved mock-ups first, in four rounds). Five parts: the cover; the head (platform UNION chips, title,
+  ONE facts line: developer, year, the page's distinct players); the signed-in hunter's **status card**
+  from their BEST list (a platinum on any list wins, else the highest percentage; it does not follow the
+  switcher); the **platinum stat**; and the **actions**, Share (once finished, the share card), Add to list,
+  Report an issue, at equal weight on the first screen.
+  - **The platinum stat** has no box: a cut gem in the house rarity grade beside the rate and its PSN tier
+    (the hunter's list, else the most-played list). The light climbs with the grade (Common flat, a halo
+    from Rare, a glint from Very Rare, a sweeping gleam only on Ultra Rare). With no platinum on any list
+    the same gem is drawn hollow beside the trophy count and "No platinum", so the corner always answers
+    "is there a platinum?": a percentage means yes.
+  - **The cover's edges are the hero's edges.** What starts the story sits level with the cover's top, what
+    ends it level with the cover's bottom. On a phone and a tablet the title runs full width above the
+    cover so a long name cannot push the row beside it past the art; desktop is three columns (cover |
+    story | the stat top right).
+  - **Badges and Jobs live in About** ("Counts toward": the series medallions, each linking its edition,
+    and each job with its discipline, the contract's state on the heading). They describe the game for
+    every viewer, so they are depth. The one personal part, a contract ready to claim, is the status
+    card's last line, linking the Contracts board.
+  Everything else the hero carried (publisher, the full release date, time to beat, the description and
+  tags, screenshots, the family) moved to the About tab. The screenshot LIGHTBOX is shared with List detail
+  (`shot-lightbox.js` + `shot_lightbox.html`); its thumbs now open from About. Released is
+  `concept.release_date` (the work's date, not the host list's platform date).
 - **Flags come back for the WHOLE game only** (owner, 2026-10-10). The hero shows a game flag (Shovelware,
   Delisted, Unobtainable, Online Trophies, Buggy Trophies) only when EVERY list in the set carries it
   (`game_page_views.shared_list_flags`; Unobtainable means no list is obtainable). It reuses List detail's
@@ -86,15 +97,13 @@ model) around ONE list viewport tab:
   game would tell a hunter on the good list that their game is broken. For the same reason there is no "No
   Known Issues" chip here: the flags row renders only when a real flag is shared (`has_chips`), so the partial's
   clean state never shows, and an empty shared set does not mean no list has an issue.
-- **Family band** (owner's call, same pass): below the spine band, the concept's different-igdb
-  siblings -- remasters, remakes, collections -- as one-hop links to THEIR Game pages, capped at
-  six with a "+N more" tally. Same-igdb concepts are the switcher's territory, never family.
-  Wording rule: family is a hero BAND on Game detail and a SECTION on List detail; it is never a
-  nav layer.
-- **No versions card in About here** (owner's call: "doesn't make sense for the page as a
-  whole") -- "Other platforms" restates the switcher's own set and "In the same family" is the
-  hero band, so `about_hide_versions` gates the card off on igdb pages ONLY. `/games/c/` pages
-  KEEP it: there the card is the sole surface linking untrusted same-igdb sibling concepts.
+- **Family** (the concept's different-igdb siblings: remasters, remakes, collections): a section of the
+  About tab's "Versions & editions" card, each row a one-hop link to THEIR Game page with its platform
+  chips (so "Jak II" on PS3 reads apart from this PS4 page, DS-13). It was a hero band capped at six until
+  2026-10-22. Same-igdb concepts are the switcher's territory, never family. It is never a nav layer.
+- **No "Other platforms" in About on igdb pages** (owner's call: it restates the switcher's own set):
+  `about_hide_other_platforms` leaves it out there; the family stays. `/games/c/` pages KEEP both: there
+  "Other platforms" is the sole surface linking untrusted same-igdb sibling concepts.
 
 ## The trophy grid is ONE COMPONENT, rendered on both pages
 

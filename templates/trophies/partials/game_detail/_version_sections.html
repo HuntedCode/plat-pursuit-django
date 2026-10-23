@@ -1,5 +1,7 @@
 {% comment %} Versions & editions sections, shared by the hero's versions modal and the About panel so both
 render identical rows. Expects other_versions / family_versions / url_psn_username from the view.
+  - family_game_pages: set by the Game page's About tab, where a sibling links its GAME page (the work),
+    not one of its trophy lists.
   - Other platforms: Games whose Concept shares this game's exact IGDB id (spans Concepts).
   - In the same family: other Concepts in the GameFamily (different IGDB id) -- remasters/remakes/collections.
 {% endcomment %}
@@ -25,10 +27,10 @@ render identical rows. Expects other_versions / family_versions / url_psn_userna
 {% if family_versions %}
     <section class="gd-vsec">
         <h4 class="gd-vsec__h">In the same family</h4>
-        <p class="gd-vsec__sub">Remasters, remakes, and collections &mdash; each has its own trophy list.</p>
+        <p class="gd-vsec__sub">Remasters, remakes, and collections, each with its own trophy list.</p>
         <div class="gd-vlist">
             {% for fv in family_versions %}
-                <a class="gd-vrow" href="{% if url_psn_username %}{% url 'game_detail_with_profile' fv.game.np_communication_id url_psn_username %}{% else %}{% url 'game_detail' fv.game.np_communication_id %}{% endif %}">
+                <a class="gd-vrow" href="{% if family_game_pages %}{{ fv.game.concept.game_page_url }}{% elif url_psn_username %}{% url 'game_detail_with_profile' fv.game.np_communication_id url_psn_username %}{% else %}{% url 'game_detail' fv.game.np_communication_id %}{% endif %}">
                     <span class="gd-vrow__cover"><img src="{{ fv.game.display_image_url }}" alt="" loading="lazy" decoding="async" class="w-full h-full {% if fv.game.has_cover_art %}object-cover object-top{% else %}object-contain p-2{% endif %}" /></span>
                     <span class="gd-vrow__body">
                         <span class="gd-vrow__name">{{ fv.concept.unified_title }}</span>

@@ -51,6 +51,10 @@ Absence is silence. No "No badges", no "Not on the Job Board", no tile of zeros.
 something to say. The one exception is an empty state that offers an action ("No games match. Clear filters",
 "Be the first to rate this").
 
+A property is not an absence. "No platinum" on a game page is a fact hunters choose games by, stated beside
+a real number (the trophy count), in a slot every game fills (owner, 2026-10-22). The test: would a hunter
+pick or skip a game on it? "Not in a badge series" fails it; "No platinum" passes.
+
 ### 4. Depth on demand
 
 Hunters love the extras: the stats, the rarity maths, the breakdowns. They stay, all of them. They just stop

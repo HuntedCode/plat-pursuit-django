@@ -4,9 +4,11 @@
    secondary-control carve-out; precedent .jlayout__btn. Grid styles come from game-detail.css
    (the shared gd-* component classes). Depth per the ladder: chips sit on --pp-bg-1. */
 
+/* Equal cells, not content-width chips: chips sized to their text left a ragged right edge (the gap on a
+   phone, DS-09) and a row that did not line up on desktop. */
 .gp-lswitch {
-    display: flex;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 10rem), 1fr));
     gap: 0.5rem;
     margin-bottom: 1rem;
 }
@@ -40,19 +42,25 @@
 /* One list is still the same page shape -- the solo chip just reads as an identity strip. */
 .gp-lswitch--solo .gp-lchip { cursor: default; }
 
+/* Two lines, then clamped: the equal-width cells are narrower than the old content-width chips, and long
+   list names ("KINGDOM HEARTS FINAL MIX") were cut to their first word. */
 .gp-lchip__name {
     font-size: 0.8rem;
     font-weight: 600;
     line-height: 1.2;
-    max-width: 16rem;
     overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow-wrap: anywhere;
 }
 .gp-lchip__meta {
-    display: inline-flex;
+    display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 0.35rem;
+    gap: 0.25rem 0.35rem;
+    min-width: 0;
 }
 .gp-lchip__plat {
     font-size: 0.6rem;
@@ -74,6 +82,15 @@
     color: var(--pp-secondary);
     border: 1px solid color-mix(in oklab, var(--pp-secondary) 40%, var(--pp-border));
     opacity: 0.85;
+}
+.gp-lchip__detail {
+    font-size: 0.65rem;
+    color: var(--pp-text-mute);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
 }
 .gp-lchip__pct {
     font-size: 0.7rem;
@@ -132,39 +149,180 @@
 @media (prefers-reduced-motion: reduce) {
     #gp-viewport.is-swapping { transition: none; }
     .gp-lchip { transition: none; }
-    .gp-family__item { transition: none; }
 }
 
-/* The hero's badge/contract spine as one split band in the main column (Jeffrey's call): the two
-   rows share a line at md+ instead of stacking under the screenshots; base width stacks as the
-   original spine did. Pinned to the column bottom so it sits where the old hero anchored its
-   substance block. */
-.gd-spine--band { margin-top: auto; padding-top: 0.75rem; }
+/* ============================================================
+   The hero (Page Principles, DS-07; the owner's approved mock-ups, 2026-10-22). Five parts: cover, head
+   (platforms, title, facts), the hunter's status, the platinum stat, actions. The markup is in that order;
+   the grid places it. `.gp-hero__head` is `display: contents`, so its children are grid items too.
+
+   THE COVER'S EDGES ARE THE HERO'S EDGES. What starts the story sits level with the cover's top, what ends it
+   level with the cover's bottom, and a `1fr` spacer row between them takes up the difference. The cover's
+   natural 3:4 is a MIN-height: when the content beside it runs taller, the cover stretches to match
+   (object-fit crops its sides), up to a MAX-height about 18% over natural. Past that the art would crop
+   badly, so the cover stops and the story runs on below it: only a long title on a game whose every list
+   shares a flag, in progress, gets there (measured real pages stretch 0 to 9%). Whatever varies most in
+   height (a long title, the status card's claim line) sits OUTSIDE the row beside the cover wherever that
+   column is narrow, or a long title would crop the art on most games:
+
+   Phone:   the title runs full width on top. Beside a 112px cover: platforms and facts level with its top,
+            the platinum stat level with its bottom. Status and actions follow, full width.
+   Tablet:  the phone's structure with room. Beside a 176px cover: platforms, facts and the stat at the top,
+            the status card ending level with its bottom. The actions run full width underneath.
+   Desktop: three columns. Cover (192px) | the story (platforms, title, facts on top; status and actions
+            ending level with the cover's bottom) | the stat, top right, beside the platforms and title.
+            Status and actions run the width of both columns under it.
+   ============================================================ */
+.gp-hero__grid { display: grid; grid-template-columns: 112px minmax(0, 1fr); grid-template-rows: auto auto auto auto 1fr auto;
+    column-gap: 14px; row-gap: 8px; }
+.gp-hero__cover.gd-cover { grid-column: 1; grid-row: 2 / 7; width: 112px; min-height: 149px; max-height: 176px; max-width: none; margin: 0;
+    aspect-ratio: auto; align-self: stretch; border-radius: var(--pp-radius-sm); }
+.gp-hero__cover.gd-cover img { position: absolute; inset: 0; }
+.gp-hero__head { display: contents; }
+.gp-hero__head > .gd-hero__title { grid-column: 1 / -1; grid-row: 1; margin-bottom: 6px; font-size: clamp(1.5rem, 6.4vw, 2rem); }
+.gp-hero__head > .gd-hero__chips { grid-column: 2; grid-row: 2; }
+.gp-hero__head > .gp-meta { grid-column: 2; grid-row: 3; }
+.gp-hero__head > :not(.gd-hero__title):not(.gd-hero__chips):not(.gp-meta) { grid-column: 2; grid-row: 4; }   /* the shared flags */
+.gp-hero__side { grid-column: 2; grid-row: 6; min-width: 0; }
+.gp-status { grid-column: 1 / -1; grid-row: 7; margin-top: 6px; }
+.gp-actions { grid-column: 1 / -1; grid-row: 8; }
+/* The entrance cascade (motion.css) staggers in source order, chips first; below desktop the title sits above
+   the chips, so it goes first there. */
+@media (max-width: 1023px) {
+    .gp-hero__head.pp-head-cascade > .gd-hero__title { animation-delay: 0s; }
+    .gp-hero__head.pp-head-cascade > .gd-hero__chips { animation-delay: 0.07s; }
+}
+
 @media (min-width: 768px) {
-    .gd-spine--band {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 10px;
-        align-items: stretch;
-    }
-    .gd-spine--band .gd-spine__row { height: 100%; }
+    .gp-hero__grid { grid-template-columns: 176px minmax(0, 1fr); grid-template-rows: auto auto auto auto auto 1fr auto;
+        column-gap: 24px; row-gap: 10px; }
+    .gp-hero__cover.gd-cover { grid-row: 2 / 8; width: 176px; min-height: 235px; max-height: 277px; border-radius: var(--pp-radius-md); }
+    .gp-hero__head > .gd-hero__title { margin-bottom: 8px; font-size: clamp(1.5rem, 4vw, 2.4rem); }
+    .gp-hero__side { grid-row: 5; padding-top: 6px; }
+    .gp-status { grid-column: 2; margin-top: 0; }
+    .gp-actions { grid-row: 8; margin-top: 4px; }
+}
+@media (min-width: 1024px) {
+    .gp-hero__grid { grid-template-columns: 192px minmax(0, 1fr) auto; grid-template-rows: auto auto auto auto 1fr auto auto;
+        column-gap: 28px; row-gap: 8px; }
+    .gp-hero__grid--noside { grid-template-columns: 192px minmax(0, 1fr); }
+    .gp-hero__cover.gd-cover { grid-row: 1 / 8; width: 192px; min-height: 256px; max-height: 302px; }
+    .gp-hero__head > .gd-hero__title { grid-column: 2; grid-row: 2; margin-bottom: 0; }
+    .gp-hero__head > .gd-hero__chips { grid-row: 1; }
+    .gp-hero__head > .gp-meta { grid-row: 3; }
+    /* Capped, so a long regional list label ("PS5 / PS4 EU/NA/JP") wraps instead of squeezing the title. */
+    .gp-hero__side { grid-column: 3; grid-row: 1 / 4; align-self: start; padding-top: 0; max-width: 17rem; }
+    .gp-status { grid-column: 2 / -1; grid-row: 6; margin-top: 6px; }
+    .gp-actions { grid-column: 2 / -1; grid-row: 7; margin-top: 6px; }
 }
 
-/* The band's badge row is a DIV holding per-medallion series links (audit M3), not List detail's
-   clickable row -- the inherited row affordances would advertise a click the row no longer
-   answers. Cursor, hover lift AND the :active press (game-detail.css .gd-spine__row rules) are
-   all neutralized; hover/active repeat the row's RESTING border/background from
-   .gd-spine__row--badges. The medallion links carry their own affordance instead (glow, not
-   scale). */
-.gd-spine--band div.gd-spine__row--badges { cursor: default; }
-.gd-spine--band div.gd-spine__row--badges:hover {
-    border-color: color-mix(in oklab, var(--pp-primary) 28%, var(--pp-border));
-    background: color-mix(in oklab, var(--pp-primary) 9%, color-mix(in oklab, var(--pp-bg-2) 45%, transparent));
+/* ---- The hunter's status (rule 1). ---- */
+.gp-status { display: flex; flex-wrap: wrap; align-items: center; gap: 0 12px; padding: 10px 14px; border-radius: var(--pp-radius-md);
+    border: 1px solid var(--pp-border); background: var(--pp-bg-2); min-width: 0; }
+.gp-status__icon { width: 34px; height: 34px; flex: none; display: grid; place-items: center; border-radius: 999px;
+    color: var(--pp-text-mute); background: color-mix(in oklab, var(--pp-text-mute) 16%, transparent); }
+.gp-status__icon svg { width: 18px; height: 18px; }
+.gp-status__txt { flex: 1; min-width: 0; }
+.gp-status__head { font-weight: 700; color: var(--pp-text); font-size: 1rem; line-height: 1.25; }
+.gp-status__list { margin-left: 8px; padding: 1px 6px; border-radius: 4px; vertical-align: 2px; font-size: 0.625rem; font-weight: 700;
+    letter-spacing: 0.04em; text-transform: uppercase; color: var(--pp-text-dim); border: 1px solid var(--pp-border); }
+.gp-status__sub { color: var(--pp-text-mute); font-size: 0.8125rem; margin-top: 2px; }
+.gp-status__bar { display: block; height: 6px; margin-top: 8px; border-radius: 999px; background: var(--pp-bg-0); overflow: hidden; }
+.gp-status__fill { display: block; height: 100%; border-radius: inherit; background: var(--pp-accent); }
+.gp-status--plat { border-color: color-mix(in oklab, var(--color-trophy-platinum) 45%, transparent);
+    background: color-mix(in oklab, var(--color-trophy-platinum) 9%, var(--pp-bg-2)); }
+.gp-status--plat .gp-status__icon { color: var(--color-trophy-platinum); background: color-mix(in oklab, var(--color-trophy-platinum) 22%, transparent); }
+.gp-status--started .gp-status__icon, .gp-status--owned .gp-status__icon { color: var(--pp-accent); background: color-mix(in oklab, var(--pp-accent) 20%, transparent); }
+/* Finished without a platinum: green, the colour a finished list's bar takes everywhere else. */
+.gp-status--complete { border-color: color-mix(in oklab, var(--pp-success) 40%, transparent); background: color-mix(in oklab, var(--pp-success) 8%, var(--pp-bg-2)); }
+.gp-status--complete .gp-status__icon { color: var(--pp-success); background: color-mix(in oklab, var(--pp-success) 20%, transparent); }
+
+/* The claim line: the card's last row, full width under a hairline, only while a contract has XP waiting. Accent,
+   the colour the Contracts board's own "Claimable" tag uses. */
+.gp-status__claim { flex: 1 0 100%; display: flex; align-items: center; gap: 10px; margin-top: 10px; padding-top: 10px;
+    border-top: 1px solid color-mix(in oklab, var(--pp-accent) 22%, var(--pp-border));
+    color: var(--pp-accent); font-weight: 700; font-size: 0.875rem; text-decoration: none; }
+.gp-status__claim:hover .gp-status__claim-txt { text-decoration: underline; text-underline-offset: 3px; }
+.gp-status__claim:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 3px; border-radius: 4px; }
+.gp-status__claim-icons { display: flex; gap: 4px; }
+.gp-status__claim .gd-jobmini { width: 22px; height: 22px; border-radius: 6px; box-shadow: none; }
+.gp-status__claim .gd-jobmini svg { width: 12px; height: 12px; }
+.gp-status__claim-txt { flex: 1; min-width: 0; }
+.gp-status__claim > svg { width: 16px; height: 16px; flex: none; }
+/* Desktop: the card runs the width of two columns, so the claim rides the right of the same row behind a hairline
+   instead of adding one. A second row would push the story past the cover's bottom and stretch the art. */
+@media (min-width: 1024px) {
+    .gp-status { flex-wrap: nowrap; }
+    .gp-status__claim { flex: none; align-self: stretch; margin: -10px -14px -10px 0; padding: 0 14px 0 16px; border-top: 0;
+        border-left: 1px solid color-mix(in oklab, var(--pp-accent) 22%, var(--pp-border)); }
+    .gp-status__claim-txt { flex: none; }
 }
-.gd-spine--band div.gd-spine__row--badges:active { transform: none; }
-.gd-spine--band a.gd-spine__obj--badge { border-radius: 9999px; transition: filter var(--pp-dur-fast) var(--pp-ease); }
-.gd-spine--band a.gd-spine__obj--badge:hover { filter: brightness(1.18); }
-.gd-spine--band a.gd-spine__obj--badge:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+
+/* ---- The platinum stat: no box. The gem carries the grade (rarity.css `data-rarity`, the house `.pp-rarity-gem`
+   and its halo); the number reads in the page's ink so Common never looks disabled. ---- */
+.gp-rarity { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.gp-rarity__gem { flex: none; width: 30px; height: 30px; }
+.gp-rarity__gem svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.gp-rarity__txt { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.gp-rarity__n { font-family: var(--pp-font-display); font-weight: 800; font-size: 1.3rem; line-height: 1; letter-spacing: -0.01em;
+    color: var(--pp-text); font-variant-numeric: tabular-nums; }
+.gp-rarity__lbl { font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--pp-text-mute); }
+.gp-rarity__lbl b { font-weight: 800; color: var(--rar-c); text-shadow: 0 0 6px var(--rar-glow); }
+@media (min-width: 768px) {
+    .gp-rarity { gap: 12px; }
+    .gp-rarity__gem { width: 42px; height: 42px; }
+    .gp-rarity__n { font-size: 1.9rem; }
+}
+/* One line on a tablet, where the stat has the story column's width; it wraps on desktop, where the side column is capped. */
+@media (min-width: 768px) and (max-width: 1023px) { .gp-rarity__lbl { white-space: nowrap; } }
+
+/* The gem, a brilliant cut side on. Shading is opacity over a dark core, so a facet reads the same on any ground;
+   the light is white, as rarity.css's specular band is. Its light climbs with the grade, the house rule: Common
+   flat, a halo from Rare (`--lit`), a glint from Very Rare, and only Ultra Rare moves. */
+.gp-gem__core { fill: var(--pp-bg-0); }
+.gp-gem__f { fill: currentColor; stroke: var(--pp-bg-0); stroke-opacity: 0.55; stroke-width: 0.7; stroke-linejoin: round; }
+.gp-gem__catch { fill: #fff; opacity: 0.28; }
+.gp-gem__sweep { transform: translateX(-40px); }
+.gp-gem__sweep rect { fill: #fff; }
+.gp-gem__edge { fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linejoin: round; }
+.gp-gem__spark { fill: #fff; opacity: 0; transform-box: fill-box; transform-origin: center; }
+.gp-rarity[data-rarity="rare"] .gp-gem__spark { opacity: 0.9; }
+.gp-rarity[data-rarity="mythic"] .gp-gem__spark { opacity: 1; }
+@media (prefers-reduced-motion: no-preference) {
+    .gp-rarity[data-rarity="mythic"] .gp-gem__sweep { animation: gpGemSweep 3.6s cubic-bezier(0.45, 0, 0.2, 1) infinite; }
+    .gp-rarity[data-rarity="mythic"] .gp-gem__spark { animation: gpGemTwinkle 3.6s ease-in-out infinite; }
+}
+@keyframes gpGemSweep { 0%, 45% { transform: translateX(-40px); } 75%, 100% { transform: translateX(48px); } }
+@keyframes gpGemTwinkle {
+    0%, 62% { opacity: 0; transform: scale(0.2) rotate(0deg); }
+    74%     { opacity: 1; transform: scale(1.15) rotate(45deg); }
+    90%, 100% { opacity: 0; transform: scale(0.4) rotate(90deg); }
+}
+
+/* No platinum: the same gem, hollow and unlit, beside the trophy count. A percentage means a platinum; this means none. */
+.gp-rarity--none .gp-rarity__gem { color: var(--pp-text-mute); }
+.gp-rarity--none .gp-rarity__lbl b { color: var(--pp-text-dim); text-shadow: none; }
+.gp-rarity--none .gp-rarity__n { font-size: 1.15rem; }
+@media (min-width: 768px) { .gp-rarity--none .gp-rarity__n { font-size: 1.6rem; } }
+.gp-gem__hollow { fill: currentColor; fill-opacity: 0.06; stroke: currentColor; stroke-width: 1.6; stroke-linejoin: round; }
+.gp-gem__cuts { fill: none; stroke: currentColor; stroke-opacity: 0.45; stroke-width: 1.1; stroke-linejoin: round; }
+
+/* ---- Actions: equal weight; one row of equal cells on a phone. ---- */
+.gp-actions { display: flex; gap: 8px; }
+.gp-actions__btn { flex: 1 1 0; justify-content: center; min-height: 44px; white-space: nowrap; }
+.gp-actions__long { display: none; }
+@media (min-width: 768px) {
+    .gp-actions { flex-wrap: wrap; }
+    .gp-actions__btn { flex: 0 0 auto; }
+    .gp-actions__long { display: inline; }
+}
+
+/* ---- The facts line: the shared `.pp-factline`, its links quiet until hovered. ---- */
+.gp-meta { margin-top: 0; }
+.gp-meta a { color: inherit; text-decoration: none; }
+.gp-meta a.gp-meta__dev { color: var(--pp-text-dim); font-weight: 600; }
+.gp-meta a:hover, .gp-meta a.gp-meta__dev:hover { color: var(--pp-primary); text-decoration: underline; }
+.gp-meta a:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; border-radius: 2px; }
 
 /* Hero-jump landing guarantee (browser-repro'd): switching away from the tall Lists panel can
    shrink the document below the scroll distance the jump needs, leaving the hero filling the
@@ -175,59 +333,31 @@
    footer ~500px past a stub game's content (audit M4). */
 #gp-view-ratings, #gp-view-about { min-height: calc(100vh - 9rem); }
 
-/* Family band: sibling concepts (remasters/remakes, different igdb id) one hop away, below the
-   badge/contract band. Same quiet-row idiom as the spine; covers are tiny 3:4 plates so the row
-   reads as objects, not a gallery. */
-.gp-family {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.5rem 0.75rem;
-    padding: 9px 11px;
-    border-radius: var(--pp-radius-md);
-    border: 1px solid var(--pp-border);
-    background: color-mix(in oklab, var(--pp-bg-2) 45%, transparent);
-    margin-top: 8px;
-}
-.gp-family__label {
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    font-size: 0.62rem;
-    opacity: 0.6;
-    white-space: nowrap;
-}
-.gp-family__row { display: flex; flex-wrap: wrap; gap: 0.5rem; min-width: 0; }
-.gp-family__item {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.45rem;
-    padding: 0.25rem 0.55rem 0.25rem 0.25rem;
-    border: 1px solid transparent;
-    border-radius: 0.55rem;
-    text-decoration: none;
-    color: inherit;
-    transition: border-color var(--pp-dur-fast) var(--pp-ease), background var(--pp-dur-fast) var(--pp-ease);
-    min-width: 0;
-}
-.gp-family__item:hover {
-    border-color: color-mix(in oklab, var(--pp-accent) 45%, var(--pp-border));
-    background: var(--pp-bg-2);
-}
-/* --pp-primary, not accent: the band lives inside the hero, whose cohesive keyboard ring is primary. */
-.gp-family__item:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
-.gp-family__cover {
-    width: 1.6rem;
-    aspect-ratio: 3 / 4;
-    border-radius: 0.3rem;
-    overflow: hidden;
-    background: var(--pp-bg-1);
-    flex-shrink: 0;
-}
-.gp-family__name {
-    font-size: 0.78rem;
-    font-weight: 600;
-    max-width: 13rem;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
+/* ---- About: Counts toward (the badge series and Jobs, from the hero). No inner boxes: the medallion and the job
+   icons carry the colour. Side by side from tablet up, stacked on a phone. ---- */
+.gp-counts__grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 22px; }
+@media (min-width: 768px) { .gp-counts__grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr)); gap: 28px; } }
+.gp-counts__k { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; margin: 0 0 12px;
+    font-size: 0.6875rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--pp-text-dim); }
+.gp-counts__xp { color: var(--pp-text-mute); font-weight: 700; }
+.gp-counts__badges { display: flex; flex-direction: column; gap: 12px; }
+.gp-counts__badge { display: flex; align-items: center; gap: 14px; min-width: 0; color: inherit; text-decoration: none; border-radius: var(--pp-radius-md); }
+.gp-counts__badge:hover b { text-decoration: underline; text-underline-offset: 3px; }
+.gp-counts__badge:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 3px; }
+.gp-counts__medal { flex: none; }
+.gp-counts__medal .pp-med { --sz: 64px; }
+.gp-counts__medal .pp-med__count { display: none; }
+.gp-counts__txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.gp-counts__txt b { color: var(--pp-text); font-weight: 700; font-size: 0.95rem; line-height: 1.25; }
+.gp-counts__txt small { color: var(--pp-text-mute); font-size: 0.8125rem; }
+.gp-counts__jobs { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; }
+.gp-counts__jobs li { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.gp-counts__jobs .gd-jobmini { width: 36px; height: 36px; border-radius: 9px; flex: none; }
+.gp-counts__jobs .gd-jobmini svg { width: 18px; height: 18px; }
+.gp-counts__more { display: inline-block; margin-top: 14px; color: var(--pp-primary); font-size: 0.875rem; font-weight: 600; text-decoration: none; }
+.gp-counts__more::after { content: ' \2192'; }
+.gp-counts__more:hover { text-decoration: underline; text-underline-offset: 3px; }
+.gp-counts__more:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; border-radius: 2px; }
+
+/* The About tab's screenshots (from the hero, DS-07): three across on a phone, six from tablet up. */
+@media (min-width: 768px) { .gd-shots--about { grid-template-columns: repeat(6, minmax(0, 1fr)); } }

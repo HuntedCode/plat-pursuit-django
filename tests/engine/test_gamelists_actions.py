@@ -1637,16 +1637,19 @@ def test_the_concept_page_offers_the_add_action():
     notice. Worth fixing when somebody works out what that redirect is.
     """
     page = _read('templates/trophies/game_page.html')
+    # The button lives in the hero's action row since the game page pass (DS-07), with Share and Report;
+    # test_game_page_hero.test_actions_need_a_linked_hunter renders it on an igdb page.
+    hero = _read('templates/trophies/partials/game_page/header.html')
 
-    assert 'data-quick-add' in page, 'the concept page offers no way onto a list'
-    assert 'data-concept-id="{{ concept.id }}"' in page
-    assert 'Add to list' in page
+    assert 'data-quick-add' in hero, 'the concept page offers no way onto a list'
+    assert 'data-concept-id="{{ concept.id }}"' in hero
+    assert 'Add to list' in hero
     # The controller is loaded here too; a trigger with nothing listening is a dead button.
     assert "js/quick-add.js" in page
 
     # Same gate as everywhere else: the endpoints behind it are login- and link-gated, so the page
     # and the endpoint have to agree about who can act.
-    assert 'concept and user.is_authenticated and user.profile.is_linked' in page
+    assert 'linked=user.profile.is_linked' in hero and '{% if concept and linked %}' in hero
 
 
 def test_the_trophy_list_page_offers_the_add_action(client):
@@ -1673,16 +1676,15 @@ def test_neither_detail_page_offers_it_to_a_visitor(client):
         assert 'data-quick-add' not in client.get(url).content.decode(), url
 
 
-def test_the_concept_pages_switcher_stays_put_without_the_button(client):
-    """The tabs row became `justify-between` to seat the action on the left. With one child that
-    renders identically to the `justify-end` it replaced -- the empty span is what holds that true
-    for a viewer who gets no button, rather than letting the switcher drift to the centre."""
+def test_the_concept_pages_switcher_stays_right_aligned(client):
+    """The add action left the tabs row for the hero (DS-07), so the row holds the switcher alone, right-aligned
+    (the Tab Group standard). `justify-end` is what keeps it there for every reader."""
     page = _read('templates/trophies/game_page.html')
 
-    row = page[page.index('id="gp-tabs-row"'):]
+    row = page[page.index('id="gp-tabs-row"') - 120:]
     row = row[:row.index('</div>', row.index('pp-switch'))]
-    assert '{% else %}<span></span>{% endif %}' in row, \
-        'the switcher centres itself for a signed-out reader'
+    assert 'justify-end' in row, 'the switcher drifts off the right edge'
+    assert 'data-quick-add' not in row
 
 
 # ── the audit round ──────────────────────────────────────────────────────────────────────────────

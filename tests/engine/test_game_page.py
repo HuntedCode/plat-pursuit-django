@@ -130,7 +130,7 @@ def test_default_list_is_the_viewers_single_started_stack():
 
     view = _view_for('/')
     view.list_set = _resolve({'igdb_id': 888})
-    progress, _plats, _hours = view._viewer_maps(viewer)
+    progress, _plats, _hours, _earned = view._viewer_maps(viewer)
 
     assert view._default_list(progress).pk == ps4.pk, 'their one started stack wins over PS5-first'
 
@@ -151,7 +151,7 @@ def test_default_list_with_two_started_stacks_is_platform_priority():
 
     view = _view_for('/')
     view.list_set = _resolve({'igdb_id': 889})
-    progress, _plats, _hours = view._viewer_maps(viewer)
+    progress, _plats, _hours, _earned = view._viewer_maps(viewer)
 
     assert view._default_list(progress).pk == ps5.pk
 
@@ -164,9 +164,9 @@ def test_anonymous_default_is_platform_priority_with_zero_viewer_queries():
     view.list_set = [None]  # unused by the anon branch
 
     with CaptureQueriesContext(connection) as ctx:
-        progress, plats, hours = view._viewer_maps(None)
+        progress, plats, hours, earned = view._viewer_maps(None)
 
-    assert (progress, plats, hours) == ({}, set(), None)
+    assert (progress, plats, hours, earned) == ({}, {}, None, {})
     assert len(ctx) == 0, 'anonymous must pay zero per-user queries'
 
 
@@ -667,8 +667,9 @@ def test_the_hero_is_concept_level_with_no_list_furniture(client):
 
 def test_hero_facts_and_jumps_are_concept_true(client):
     """Audit pins for the un-guarded hero fixes: Released is the WORK's earliest date
-    (concept.release_date), never the host list's platform date; and with a non-default ?list=
-    selected, both hero jump anchors carry it so the no-JS path lands on the right stack."""
+    (concept.release_date), never the host list's platform date -- in the hero's facts line (the year)
+    AND the About tab's facts (the full date, moved there by DS-07); and with a non-default ?list=
+    selected, the hero's players jump carries it so the no-JS path lands on the right stack."""
     from django.utils import timezone as djtz
     import datetime
 
@@ -698,15 +699,14 @@ def test_hero_facts_and_jumps_are_concept_true(client):
 
     content = client.get('/games/1010/').content.decode()
 
-    assert 'datetime="2018-04-20"' in content
-    assert '2020-11-12' not in content
-    # Default list selected -> bare jump hrefs (no redundant list param).
-    assert 'href="?view=about"' in content
+    assert 'datetime="2018-04-20">2018</time>' in content
+    assert 'Apr 20, 2018' in content              # About's Released fact
+    assert '2020-11-12' not in content and 'Nov 12, 2020' not in content
+    # Default list selected -> a bare jump href (no redundant list param).
     assert 'href="?view=ratings"' in content
 
-    # Non-default list selected -> both jumps preserve it (audit L8).
+    # Non-default list selected -> the jump preserves it (audit L8).
     sel = client.get(f'/games/1010/?list={a.np_communication_id}').content.decode()
-    assert f'href="?list={a.np_communication_id}&amp;view=about"' in sel
     assert f'href="?list={a.np_communication_id}&amp;view=ratings"' in sel
 
 
@@ -854,10 +854,10 @@ def test_view_param_is_honored_server_side(client):
         assert 'aria-selected="true"' in tab_tag(content, 'lists')
 
 
-def test_the_family_band_links_siblings_to_their_own_game_pages(client):
-    """Family band (hero): siblings -- same GameFamily, DIFFERENT igdb id -- link to THEIR Game
-    pages via game_page_url, so family hopping stays at the concept level. Progressive: a game
-    with no family renders no band."""
+def test_the_family_links_siblings_to_their_own_game_pages(client):
+    """Family (the About tab since DS-07): siblings -- same GameFamily, DIFFERENT igdb id -- link to
+    THEIR Game pages via game_page_url, so family hopping stays at the concept level. Progressive: a
+    game with no family renders no family section."""
     from trophies.models import GameFamily
 
     family = GameFamily.objects.create(igdb_id=424242, canonical_name='Crash Family')
@@ -886,28 +886,25 @@ def test_the_family_band_links_siblings_to_their_own_game_pages(client):
 
     content = client.get('/games/997/').content.decode()
 
-    assert 'gp-family' in content
     assert content.count('In the same family') == 1, (
-        'the family label must appear exactly once: the hero band. A second occurrence means the '
-        'About versions card is rendering its family section again (the about_hide_versions gate)'
+        'the family appears once, in the About tab (DS-07 moved it out of the hero)'
     )
     assert 'href="/games/998/"' in content, 'a matched sibling must link its igdb page'
     assert 'href="/games/c/PP_FAMSTUB/"' in content, 'an unmatched sibling links its c/ page'
     assert 'Crash Remade' in content and 'Crash Stub' in content
-    # Scoped to the band's own name spans: the sibling's game is legitimately elsewhere on the
+    # Scoped to the family rows' own name spans: the sibling's game is legitimately elsewhere on the
     # page (it IS a member of the list set), it just must not appear as family.
-    assert 'gp-family__name">Crash Same-IGDB' not in content
+    assert 'gd-vrow__name">Crash Same-IGDB' not in content
 
-    # No family -> no band.
+    # No family -> no family section.
     lone = _game(igdb_id=999)
     TrophyFactory(game=lone, trophy_id=1)
-    assert 'gp-family' not in client.get('/games/999/').content.decode()
+    assert 'In the same family' not in client.get('/games/999/').content.decode()
 
 
-def test_the_family_band_is_bounded_at_six_with_an_overflow_tally(client):
-    """The band is a hero PEEK, not a directory (audit M5): a mega-family (LEGO, Ratalaika shovel
-    stacks) must not stretch the header into a wall of covers. Six render; the rest collapse to
-    the same '+N more' idiom the badge peek uses."""
+def test_the_about_tab_lists_every_family_sibling(client):
+    """The hero's band capped at six because it was a PEEK (audit M5). About is the directory, so a big
+    family lists in full there, each sibling still distinguishable by its platform chips (DS-13)."""
     from trophies.models import GameFamily
 
     family = GameFamily.objects.create(igdb_id=525252, canonical_name='Mega Family')
@@ -922,13 +919,15 @@ def test_the_family_band_is_bounded_at_six_with_an_overflow_tally(client):
 
     content = client.get('/games/1005/').content.decode()
 
-    assert content.count('gp-family__item') == 6, 'the band must cap at six siblings'
-    assert '+2 more' in content
+    for i in range(8):
+        assert f'gd-vrow__name">Mega Sibling {i}<' in content
+        assert f'href="/games/{2000 + i}/"' in content
+    assert 'gp-family' not in content, 'the hero band is gone'
 
 
 def test_the_about_tab_hides_the_versions_card_here_but_not_on_list_detail(client):
     """Jeffrey's call: on THIS page "Other platforms" is the switcher's own set restated relative
-    to the host, and "In the same family" is the hero's family band -- redundant twice over. On
+    to the host, so it is left out; with no family either, the card does not render at all. On
     List detail the card stays: that page IS one version, so its relatives belong there. The gate
     covers the whole card, heading included (an empty "Versions & editions" shell is the classic
     half-gate bug)."""
