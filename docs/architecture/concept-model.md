@@ -66,7 +66,7 @@ The most critical operation in the system is `Concept.absorb(other)`. When a con
 |-------|------|-------|
 | `title_id` | CharField(50), unique | PSN title ID string (e.g., `"PPSA01501_00"`) |
 | `platform` | CharField(10) | Platform code (`"PS4"`, `"PS5"`, etc.). Can be corrected during sync if it mismatches the Game's platform |
-| `region` | CharField(10) | Region code. Initialized as `"IP"` (indeterminate) and updated from PSN API response |
+| `region` | CharField(10) | Region code. Initialized as `"IP"` (indeterminate) and updated from PSN API response. Known to be unreliable: see [trophy-list-regions.md](trophy-list-regions.md) |
 
 **Indexes**: `title_id`, `region`
 
