@@ -101,6 +101,14 @@ almost always a specific detail that question surfaces:
   pages earn their polish through coherent tokens + reveals + interaction states, not a takeover.
 - **The bar is holistic.** A page isn't "done" because it looks right at desktop width -- the mobile
   fit pass, reduced-motion paths, and performance checks are part of the same bar.
+- **Wide is not tall.** The ceremony restored its roomy tiles and the "Tiers earned" summary at
+  `md:` width alone, on the theory that tablet and desktop have the vertical room. A laptop does not
+  (1366x657 is common, and about 1280x630 at 150% scaling): the job list, which never scrolls and is the
+  one block that shrinks, overflowed, and its last tiles painted under the Pursuer ladder and the pager
+  (found 2026-10-23). The roomy look now also needs `min-height: 820px`, a `max-height: 700px` block
+  tightens the card's spacing, and as a last resort `fitPage()` in `claim-ceremony.js` shows fewer
+  jobs a page rather than spill. `test_claim_ceremony_fit_browser.py` plays it at laptop sizes. Any
+  dense overlay with a height cap needs its fit pass at a short desktop window, not only a phone.
 - **Career is the bar, not a component library.** Reuse the *patterns*
   ([design-system](../../reference/design-system.md), [motion-patterns](../../reference/motion-patterns.md)),
   not copy-pasted Career markup.
