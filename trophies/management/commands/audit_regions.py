@@ -10,12 +10,16 @@ hunters already see. Run this before the rebuild for the baseline and again afte
 is a number rather than a feeling.
 
 Read the samples by the `played` figure: they are ordered most-played first, so the top of each
-section is the mistakes the most hunters are looking at.
+section is the mistakes the most hunters are looking at. The `shown` column counts the lists whose
+chips actually render today (flagged regional, with a stored region): a wrong label on a list that
+is not flagged regional sits in the column unseen.
 """
+from collections import Counter
+
 from django.core.management.base import BaseCommand
 
 from trophies.services import region_service
-from trophies.util_modules.constants import ALL_PLATFORMS, MODERN_PLATFORMS
+from trophies.util_modules.constants import ALL_PLATFORMS
 
 
 def _codes(codes):
@@ -65,6 +69,7 @@ class Command(BaseCommand):
                 by_bucket.setdefault(bucket, []).append(row)
 
         self._summary(by_bucket, judged)
+        self._verdicts(stats, judged)
         self._coverage(stats['coverage'])
         self._sections(by_bucket, only, opts['sample'])
         w(self.style.MIGRATE_HEADING('Blind spot'))
@@ -77,25 +82,30 @@ class Command(BaseCommand):
     def _summary(self, by_bucket, total):
         w = self.stdout.write
         w(self.style.MIGRATE_HEADING('Summary'))
-        w(f'  {"bucket":<24}{"lists":>9}{"%":>7}{"plays":>12}')
+        w(f'  {"bucket":<22}{"lists":>9}{"%":>7}{"shown":>9}{"plays":>12}')
         for bucket in region_service.BUCKETS:
             bucket_rows = by_bucket.get(bucket, [])
+            shown = sum(1 for r in bucket_rows if r['shown'])
             plays = sum(r['played'] for r in bucket_rows)
-            w(f'  {bucket:<24}{len(bucket_rows):>9,}{100 * len(bucket_rows) / total:>6.1f}%{plays:>12,}')
-        missed = by_bucket.get(region_service.REGIONAL_MISSED, [])
-        legacy = sum(1 for r in missed if not set(r['platforms']) & set(MODERN_PLATFORMS))
-        if legacy:
-            # Sync only ever checks PS4/PS5, so these were never going to be flagged. They are real
-            # (the corrected rule covers every platform), but they are a coverage gap, not a mistake.
-            w(f'  ({legacy:,} of the {region_service.REGIONAL_MISSED} lists are PS3/Vita/other, which '
-              f'sync never checks.)')
-        stale = by_bucket.get(region_service.REGIONAL_STALE, [])
-        asian = sum(1 for r in stale if r['asian_only'])
-        if asian:
-            # The one bucket where some rows may be intended: a lone list labeled only JP/AS/KR/CN is
-            # probably an Asia-only release, which a hunter may want flagged even with no sibling.
-            w(f'  ({asian:,} of the {region_service.REGIONAL_STALE} lists are labeled only with Asian '
-              f'regions, likely Asia-only releases.)')
+            w(f'  {bucket:<22}{len(bucket_rows):>9,}{100 * len(bucket_rows) / total:>6.1f}%'
+              f'{shown:>9,}{plays:>12,}')
+        for bucket in (region_service.REGIONAL_MISSED, region_service.REGIONAL_STALE):
+            reasons = Counter(r['reason'] for r in by_bucket.get(bucket, []))
+            if reasons:
+                parts = ', '.join(f'{n:,} {reason}' for reason, n in reasons.most_common())
+                w(f'  ({bucket}: {parts})')
+        w('')
+
+    def _verdicts(self, stats, total):
+        """How the regional rule splits the catalogue. `unjudged` lists keep their flag as it is
+        (owner, 2026-10-23), so they are context here, not a bucket."""
+        w = self.stdout.write
+        w(self.style.MIGRATE_HEADING('Regional verdicts by the rule'))
+        for verdict in (region_service.REGIONAL, region_service.NOT_REGIONAL, region_service.UNJUDGED):
+            n = stats['verdicts'].get(verdict, 0)
+            w(f'  {verdict:<14}{n:>9,}{100 * n / total:>6.1f}%')
+        w(f"  ({stats['unjudged_flagged']:,} unjudged lists are flagged regional today and keep it: "
+          f"they or a sibling have no region data.)")
         w('')
 
     def _coverage(self, coverage):
@@ -137,4 +147,5 @@ class Command(BaseCommand):
     def _detail(row):
         tids = ', '.join(f'{tid}={code or "?"}' for tid, code in row['title_ids']) or 'no title IDs'
         return (f"stored {_codes(row['stored'])}, title IDs say {_codes(row['expected'])} [{tids}]; "
+                f"rule says {row['verdict']} ({row['reason']}); "
                 f"concept {row['concept_id'] or '-'}, unit {row['unit'] or '-'}")
