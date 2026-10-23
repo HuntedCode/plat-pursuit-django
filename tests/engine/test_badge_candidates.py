@@ -4,7 +4,7 @@ A franchise or series is a candidate when one platform edition would GATE 2+ gam
 is an origin game (a cross-gen pair, port or remaster folds into its original, as in a stage), it counts on an
 edition only where the engine would let it gate, membership matches what `generate_badge_stages` would build,
 and candidates rank by the average game-page players of their contracted games. Subjects that already have a
-badge are hidden unless asked for (a series by any badge naming it, a franchise only by a franchise badge).
+badge are hidden unless asked for (a franchise or series by any badge naming it).
 """
 
 from io import StringIO
@@ -259,8 +259,28 @@ def test_a_sister_badge_does_not_hide_the_other_subject():
     assert [c.subject.source_type for c in badge_candidates()] == ['collection']
 
 
+def test_a_series_badge_leaves_its_franchise_listed():
+    """The other sister direction: a badge naming only the series does not take the franchise."""
+    franchise, series = _subject("Uncharted"), _subject("Uncharted", source_type='collection')
+    for subject in (franchise, series):
+        _game(subject)
+        _game(subject)
+    BadgeSeriesFactory(series_slug="uncharted", collection=series)
+
+    assert [c.subject.source_type for c in badge_candidates()] == ['franchise']
+
+
+def test_a_developer_badge_naming_a_franchise_hides_it():
+    franchise = _subject("Studio Franchise")
+    _game(franchise)
+    _game(franchise)
+    BadgeSeriesFactory(series_slug="studio", badge_type='developer', developer=CompanyFactory(), franchise=franchise)
+
+    assert "Studio Franchise" not in _by_name()
+
+
 def test_a_badge_naming_both_hides_both():
-    """The Last of Us: series and franchise are one subject, so one badge names both and covers both."""
+    """The Last of Us: one badge names both the series and the franchise, so it covers both."""
     franchise = _subject("The Last of Us")
     series = _subject("The Last of Us", source_type='collection')
     for subject in (franchise, series):
@@ -284,7 +304,7 @@ def test_a_developer_badge_hides_no_franchise():
 
 
 def test_existing_badge_needs_a_subject():
-    """With nothing to match, the franchise branch would return any user/event badge (no franchise, no series)."""
+    """With nothing to match, filter(Q()) would return ANY badge, here a user badge."""
     BadgeSeriesFactory(series_slug="user-badge", badge_type='user')
 
     with pytest.raises(ValueError):
