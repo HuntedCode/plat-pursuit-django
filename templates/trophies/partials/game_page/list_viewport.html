@@ -1,9 +1,12 @@
 {% comment %}
-The list viewport: everything for ONE selected trophy list. This is the whole htmx swap payload
-(target #gp-viewport) AND the server-rendered default -- one template, both paths. Context comes
-from GamePageView._build_viewport_context (vp_* keys are the shared grid's contract params).
+The list viewport: everything for ONE selected trophy list, filtered by the control row. This is the
+whole htmx swap payload (target #gp-viewport, from a list chip or the filter form) AND the server-rendered
+default -- one template, both paths. Context comes from GamePageView._build_viewport_context (vp_* keys
+are the shared grid's contract params).
 {% endcomment %}
-{% include 'trophies/partials/game_page/identity_chip.html' %}
+{% comment %}What the control row above (outside this swap target) reads after each swap: the count it shows, the
+list's own page for its link, and whether this list has DLC for its DLC field (game-page.js).{% endcomment %}
+<span hidden data-gp-vpmeta data-count="{{ vp_shown_count }}" data-list-url="{{ vp_list_url }}" data-has-dlc="{% if vp_show_group_nav %}1{% endif %}"></span>
 
 {% if trophies_syncing %}
     <div class="gd-empty">

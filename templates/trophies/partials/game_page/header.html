@@ -1,4 +1,4 @@
-{% load humanize job_icons %}
+{% load humanize %}
 {% comment %}
 The Game page hero, rebuilt under the Page Principles (the Discovery fix plan's branch 4, DS-07; mock-ups the
 owner approved 2026-10-22). It answers, in order: what game is this, where do I stand on it, is there a
@@ -7,13 +7,17 @@ platinum and how rare is it, and what can I do here.
   cover      the art. Its top and bottom ARE the hero's edges (game-page.css): what starts the story sits
              level with its top, what ends it level with its bottom
   head       platforms, title, ONE line of facts (developer, year, players), the flags every list shares
-  status     the signed-in hunter's card (`hunter_status`): platinumed, in progress, in the library, or not
-             owned. It describes their BEST list and stays put when the switcher below changes list. Its
-             last line says when a contract is ready to claim: the only place the hero mentions Jobs
-  side       the platinum stat (`plat_rarity`): the gem, the rate and its grade; or, with no platinum, a
-             hollow gem and the trophy count. A percentage in the corner means a platinum
+  status     the signed-in hunter's card (`hunter_status`, _status_card.html): platinumed, in progress, in
+             the library, or not owned. It describes their BEST list and stays put when the switcher below
+             changes list. Its last line says when a contract is ready to claim: the only place the hero
+             mentions Jobs. Signed out (or unlinked) the slot invites instead (_status_invite.html, GL-09)
+  side       the platinum stat (`plat_rarity`, _plat_stat.html): the gem, the rate and its grade; or, with no
+             platinum, a hollow gem and the trophy count. A percentage in the corner means a platinum
   actions    Share (once finished), Add to list, Report an issue: equal weight, on the first screen, never
              in a tab ("Actions are not depth", rule 4)
+
+The status card and the platinum stat are shared with the Trophy List page's hero, which asks the same
+questions of one list.
 
 Everything else the hero used to carry (publisher, release date, time to beat, the description and tags,
 screenshots, the family band, the badge series and the Jobs) lives in the About tab, which is where depth
@@ -67,87 +71,14 @@ Platform chips are the UNION across the list set; the players count is the page'
                 {% endif %}
             </div>
 
+            {% comment %}The hunter's status (rule 1); with no hunter to describe, the invitation (GL-09).{% endcomment %}
             {% if status %}
-            {% comment %}The hunter's status (rule 1). Plat beats progress; the list it describes is named only
-            when the page has several. "Not in your library yet" is the one absence it states: on a game page a
-            signed-in hunter's first question is "have I got this", and the answer is the card.{% endcomment %}
-            <div class="gp-status gp-status--{{ status.state }}">
-                <span class="gp-status__icon" aria-hidden="true">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
-                </span>
-                <div class="gp-status__txt">
-                    {% if status.state == 'plat' %}
-                        <p class="gp-status__head">You platinumed this{% if status.list_label %}<span class="gp-status__list">{{ status.list_label }}</span>{% endif %}</p>
-                        <p class="gp-status__sub">{% if status.plat_date %}Earned <time datetime="{{ status.plat_date|date:'Y-m-d' }}">{{ status.plat_date|date:'M j, Y' }}</time> &middot; {% endif %}{{ status.progress }}% complete</p>
-                    {% elif status.state == 'complete' %}
-                        <p class="gp-status__head">You finished this{% if status.list_label %}<span class="gp-status__list">{{ status.list_label }}</span>{% endif %}</p>
-                        <p class="gp-status__sub">100% complete</p>
-                    {% elif status.state == 'started' %}
-                        {% comment %}The counts only when the list's total is known and agrees: a stale earned count above
-                        the total would read "0 trophies to go" at 37%, and a list with no defined trophies "0 of 0".{% endcomment %}
-                        <p class="gp-status__head">{{ status.progress }}%{% if status.to_go %} &middot; {{ status.to_go|intcomma }} troph{{ status.to_go|pluralize:"y,ies" }} to go{% endif %}{% if status.list_label %}<span class="gp-status__list">{{ status.list_label }}</span>{% endif %}</p>
-                        {% if status.total and status.earned <= status.total %}<p class="gp-status__sub">{{ status.earned|intcomma }} of {{ status.total|intcomma }} earned</p>{% endif %}
-                        <span class="gp-status__bar" aria-hidden="true"><span class="gp-status__fill" style="width: {{ status.progress }}%"></span></span>
-                    {% elif status.state == 'owned' %}
-                        <p class="gp-status__head">In your library{% if status.list_label %}<span class="gp-status__list">{{ status.list_label }}</span>{% endif %}</p>
-                        {% if status.total %}<p class="gp-status__sub">{{ status.total|intcomma }} troph{{ status.total|pluralize:"y,ies" }} to earn</p>{% endif %}
-                    {% else %}
-                        <p class="gp-status__head">Not in your library yet</p>
-                        <p class="gp-status__sub">Add it to a list to plan the hunt</p>
-                    {% endif %}
-                </div>
-                {% if pursuit_contract_state.status == 'claimable' %}
-                {% comment %}XP waiting is the one part of the Jobs that is about the hunter and something to do,
-                so it stays in the hero (rule 1); what the game counts toward lives in About.{% endcomment %}
-                <a class="gp-status__claim" href="{% url 'career' %}?view=contracts#career-panel-contracts">
-                    <span class="gp-status__claim-icons" aria-hidden="true">{% for job in pursuit_jobs %}<span class="gd-jobmini" style="--disc: var(--disc-{{ job.disc_slug }}, var(--pp-primary));">{% job_icon job.icon '' %}</span>{% endfor %}</span>
-                    <span class="gp-status__claim-txt">Contract ready to claim</span>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
-                </a>
-                {% endif %}
-            </div>
+                {% include 'trophies/partials/game_page/_status_card.html' with status=status whose='' detail=False %}
+            {% else %}
+                {% include 'trophies/partials/game_page/_status_invite.html' with invite_players=community_stats.played_count invite_platinum=invite_platinum invite_defined=invite_defined %}
             {% endif %}
 
-            {% if plat_rarity %}
-            {% comment %}The platinum stat (owner, 2026-10-22). No box: the gem carries the grade's colour (rarity.css
-            `data-rarity` + the house `.pp-rarity-gem`), and its light climbs with the grade: Common flat, a halo
-            from Rare, a glint from Very Rare, a gleam that sweeps only Ultra Rare. With no platinum the same gem is
-            drawn hollow and unlit beside the trophy count. Names the list when the page has several.{% endcomment %}
-            <div class="gp-hero__side">
-                {% if plat_rarity.none %}
-                <div class="gp-rarity gp-rarity--none">
-                    <span class="gp-rarity__gem" aria-hidden="true">
-                        <svg viewBox="0 0 48 48"><path class="gp-gem__hollow" d="M14 8H34L42 18L24 42L6 18Z"/><path class="gp-gem__cuts" d="M6 18H42M16 18L24 8L32 18M16 18L24 42L32 18M14 8L16 18M34 8L32 18"/></svg>
-                    </span>
-                    <span class="gp-rarity__txt">
-                        <span class="gp-rarity__n">{{ plat_rarity.total|intcomma }} troph{{ plat_rarity.total|pluralize:"y,ies" }}</span>
-                        <span class="gp-rarity__lbl"><b>No platinum</b>{% if plat_rarity.list_label %} {{ plat_rarity.list_label }}{% endif %}</span>
-                    </span>
-                </div>
-                {% else %}
-                <div class="gp-rarity" data-rarity="{{ plat_rarity.grade }}">
-                    {% comment %}data-rarity again on the gem itself: the house gem's Ultra Rare halo pulse keys on it.{% endcomment %}
-                    <span class="gp-rarity__gem pp-rarity-gem{% if plat_rarity.grade != 'common' %} pp-rarity-gem--lit{% endif %}" data-rarity="{{ plat_rarity.grade }}" aria-hidden="true">
-                        <svg viewBox="0 0 48 48"><defs><clipPath id="gp-gem-clip"><path d="M14 8H34L42 18L24 42L6 18Z"/></clipPath></defs>
-                            <path class="gp-gem__core" d="M14 8H34L42 18L24 42L6 18Z"/>
-                            <path class="gp-gem__f" fill-opacity="1" d="M14 8L6 18H16Z"/><path class="gp-gem__f" fill-opacity=".7" d="M14 8L16 18L24 8Z"/>
-                            <path class="gp-gem__f" fill-opacity=".9" d="M24 8L16 18H32Z"/><path class="gp-gem__f" fill-opacity=".6" d="M24 8L32 18L34 8Z"/>
-                            <path class="gp-gem__f" fill-opacity=".48" d="M34 8L32 18H42Z"/><path class="gp-gem__f" fill-opacity=".86" d="M6 18H16L24 42Z"/>
-                            <path class="gp-gem__f" fill-opacity=".66" d="M16 18H32L24 42Z"/><path class="gp-gem__f" fill-opacity=".4" d="M32 18H42L24 42Z"/>
-                            <path class="gp-gem__catch" d="M14 8L6 18H16Z"/>
-                            <g clip-path="url(#gp-gem-clip)"><g class="gp-gem__sweep"><rect x="-6" y="-14" width="7" height="76" opacity=".7" transform="rotate(24 24 24)"/><rect x="4" y="-14" width="2.5" height="76" opacity=".45" transform="rotate(24 24 24)"/></g></g>
-                            <path class="gp-gem__edge" d="M14 8H34L42 18L24 42L6 18Z"/>
-                            <path class="gp-gem__spark" d="M38 1.5Q39.21 5.79 43.5 7Q39.21 8.21 38 12.5Q36.79 8.21 32.5 7Q36.79 5.79 38 1.5Z"/>
-                        </svg>
-                    </span>
-                    <span class="gp-rarity__txt">
-                        <span class="gp-rarity__n">{{ plat_rarity.rate|floatformat:1 }}%</span>
-                        <span class="gp-rarity__lbl"><b>{{ plat_rarity.label }}</b>{% if plat_rarity.list_label %} {{ plat_rarity.list_label }}{% endif %} platinum</span>
-                    </span>
-                </div>
-                {% endif %}
-            </div>
-            {% endif %}
+            {% if plat_rarity %}{% include 'trophies/partials/game_page/_plat_stat.html' %}{% endif %}
 
             {% if status.share or linked %}
             {% comment %}The three actions, equal weight, on the first screen (owner: hiding a button kills its use).

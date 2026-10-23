@@ -22,8 +22,8 @@ from django.urls import reverse
 from django.views.generic import TemplateView
 
 from core.services import completion_card_service as cards
-from core.templatetags.custom_filters import psn_rarity_label
-from trophies.models import Concept, ConceptFranchise, EarnedTrophy, Game, ProfileGame, Trophy
+from trophies.forms import GameDetailForm
+from trophies.models import Concept, ConceptFranchise, EarnedTrophy, Game, ProfileGame
 from trophies.util_modules.constants import PLATFORM_PRIORITY_ORDER, ordered_platform_union
 from trophies.views.concept_context import ConceptContextMixin
 from trophies.views.game_views import (
@@ -31,40 +31,22 @@ from trophies.views.game_views import (
     build_trophy_groups,
     build_trophy_rows,
     compute_group_pct,
+    filter_and_sort_rows,
     group_trophy_rows,
+)
+from trophies.views.hero_context import (
+    defined_total,
+    has_platinum,
+    list_label,
+    list_status,
+    plat_rarity,
 )
 
 logger = logging.getLogger("psn_api")
 
 _EMPTY_EARNED_STATE = {
-    'profile_earned': {}, 'profile_trophy_totals': {}, 'profile_group_totals': {},
+    'profile_earned': {}, 'profile_trophy_totals': {}, 'profile_group_totals': {}, 'plat_date': None,
 }
-
-# PSN's four rarity tiers (`Trophy.trophy_rarity`) onto the site's four rarity grades (rarity.css
-# `data-rarity`), so the hero's platinum gem takes the house grade colours instead of one-off ones.
-# The tier NAMES come from the `psn_rarity_label` filter the trophy rows use.
-PSN_RARITY_GRADES = {0: 'mythic', 1: 'rare', 2: 'uncommon', 3: 'common'}
-
-
-def list_label(game):
-    """A trophy list told apart from its siblings by what the hunter sees on its chip: platforms, then
-    regions when the list is regional ("PS4", "PS5 / PS4", "PSVITA EU")."""
-    label = ' / '.join(game.title_platform or [])
-    if game.is_regional and game.region:
-        label = f"{label} {'/'.join(game.region)}".strip()
-    return label
-
-
-def defined_total(game):
-    """Every trophy the list defines, all grades summed (DLC included, as `progress` counts it)."""
-    defined = game.defined_trophies if isinstance(game.defined_trophies, dict) else {}
-    total = 0
-    for key in ('bronze', 'silver', 'gold', 'platinum'):
-        try:
-            total += int(defined.get(key) or 0)
-        except (TypeError, ValueError):
-            pass
-    return total
 
 
 def disambiguate_entries(entries):
@@ -87,14 +69,6 @@ def disambiguate_entries(entries):
                 detail = f"{detail} \u00b7 {e['game'].np_communication_id}"
             e['detail'] = detail
     return entries
-
-
-def has_platinum(game):
-    defined = game.defined_trophies if isinstance(game.defined_trophies, dict) else {}
-    try:
-        return int(defined.get('platinum') or 0) > 0
-    except (TypeError, ValueError):
-        return False
 
 
 def _platform_priority_case():
@@ -279,6 +253,7 @@ class GamePageView(ConceptContextMixin, TemplateView):
           list_label its platforms, only when the page has more than one list
           progress, earned, total, to_go, plat_date
           share      the share-card link once that list is finished (completion_card_service.share_link)
+        The per-list part is hero_context.list_status, which the Trophy List page's card reads too.
         Zero queries beyond `_viewer_maps`, except the one share-link seek on a finished list."""
         if viewer is None:
             return None
@@ -289,60 +264,25 @@ class GamePageView(ConceptContextMixin, TemplateView):
         pool = platted or owned
         best = max(pool, key=lambda g: progress.get(g.pk) or 0)   # max() keeps the first of a tie
         pct = progress.get(best.pk) or 0
-        total = defined_total(best)
-        earned = earned_counts.get(best.pk) or 0
-        if platted:
-            state = 'plat'
-        elif pct == 100:
-            state = 'complete'
-        elif pct > 0 or earned > 0:   # PSN can floor a sliver of progress to 0% while trophies are earned
-            state = 'started'
-        else:
-            state = 'owned'
-        return {
-            'state': state,
-            'game': best,
-            'list_label': list_label(best) if len(self.list_set) > 1 else '',
-            'progress': pct,
-            'earned': earned,
-            'total': total,
-            'to_go': max(total - earned, 0),
-            'plat_date': plats.get(best.pk),
-            'share': cards.share_link(viewer, best, pct) if (platted or pct == 100) else None,
-        }
+        return list_status(
+            best, pct, earned_counts.get(best.pk),
+            platted=bool(platted), plat_date=plats.get(best.pk),
+            share=cards.share_link(viewer, best, pct) if (platted or pct == 100) else None,
+            label=list_label(best) if len(self.list_set) > 1 else '',
+        )
 
     def _plat_rarity(self, status):
-        """The hero's platinum stat, so the corner always answers "is there a platinum?" (owner, 2026-10-22):
-        a percentage means yes, a hollow gem and a trophy count means no.
-
-        With a platinum: how rare it is, on the list the status card describes, else on the list most hunters
-        own. PSN's own rate and tier, as the trophy rows show them. None when PSN has not reported a rate yet
-        (0.0 is the unsynced default, not a real 0%): the slot is left out, not shown empty.
-        With no platinum on any list: {'none': True, 'total': ...} for the same list choice among the lists
-        whose trophies are known, None when none are (an unsynced list is not a list without a platinum).
-        At most one indexed query."""
+        """The hero's platinum stat (hero_context.plat_rarity) for the list it should describe: the one the
+        status card describes, else the one most hunters own. Lists with a platinum come first; with none on
+        any list, the choice is among the lists whose trophies are known, and None when none are (an unsynced
+        list is not a list without a platinum). At most one indexed query."""
         mine = status.get('game') if status else None
-        candidates = [g for g in self.list_set if has_platinum(g)]
-        if not candidates:
-            known = [g for g in self.list_set if defined_total(g)]
-            if not known:
-                return None
-            chosen = mine if mine in known else max(known, key=lambda g: g.played_count or 0)
-            return {'none': True, 'total': defined_total(chosen),
-                    'list_label': list_label(chosen) if len(self.list_set) > 1 else ''}
-        chosen = mine if mine in candidates else max(candidates, key=lambda g: g.played_count or 0)
-        row = (
-            Trophy.objects.filter(game=chosen, trophy_type='platinum')
-            .values('trophy_earn_rate', 'trophy_rarity').first()
-        )
-        if not row or not row['trophy_earn_rate'] or row['trophy_rarity'] not in PSN_RARITY_GRADES:
+        pool = ([g for g in self.list_set if has_platinum(g)]
+                or [g for g in self.list_set if defined_total(g)])
+        if not pool:
             return None
-        return {
-            'rate': row['trophy_earn_rate'],
-            'label': psn_rarity_label(row['trophy_rarity']),
-            'grade': PSN_RARITY_GRADES[row['trophy_rarity']],
-            'list_label': list_label(chosen) if len(self.list_set) > 1 else '',
-        }
+        chosen = mine if mine in pool else max(pool, key=lambda g: g.played_count or 0)
+        return plat_rarity(chosen, list_label(chosen) if len(self.list_set) > 1 else '')
 
     def _default_list(self, progress):
         """The decided rule: the viewer's list when they have progress on EXACTLY one stack
@@ -373,16 +313,22 @@ class GamePageView(ConceptContextMixin, TemplateView):
             return ['trophies/partials/game_page/list_viewport.html']
         return [self.template_name]
 
-    def _build_viewport_context(self, selected, viewer, names):
-        """Everything the viewport partial renders for ONE list: the shared grid's contract params
-        plus the identity chip. This is the ENTIRE htmx branch -- a list switch prices at exactly
-        this, none of the concept furniture."""
+    def _build_viewport_context(self, selected, viewer):
+        """Everything the viewport partial renders for ONE list: the shared grid's contract params, filtered
+        and sorted by the control row (GL-10, the Trophy List page's own filter). This is the ENTIRE htmx
+        branch -- a list switch or a filter change prices at exactly this, none of the concept furniture."""
         rows, has_trophies = build_trophy_rows(selected)
         groups = build_trophy_groups(selected)
         state = build_earned_state(selected, viewer)[0] if viewer else _EMPTY_EARNED_STATE
+        form = GameDetailForm(self.request.GET)
+        rows = filter_and_sort_rows(rows, form, state['profile_earned'])
         return {
             'selected_game': selected,
-            'selected_list_name': names[selected.np_communication_id],
+            'vp_form': form,
+            'selected_trophy_types': self.request.GET.getlist('trophy_type'),
+            'selected_rarity_brackets': self.request.GET.getlist('rarity_bracket'),
+            'vp_shown_count': len(rows),
+            'vp_list_url': reverse('game_detail', kwargs={'np_communication_id': selected.np_communication_id}),
             'vp_trophies': group_trophy_rows(rows),
             'vp_groups': groups,
             'vp_earned': state['profile_earned'],
@@ -400,9 +346,8 @@ class GamePageView(ConceptContextMixin, TemplateView):
         selected = self._selected_list(progress)
 
         if self._is_viewport_swap():
-            # The swap branch renders the viewport partial alone; names for one list only.
-            names = Game.display_list_names([selected])
-            context.update(self._build_viewport_context(selected, viewer, names))
+            # The swap branch renders the viewport partial alone.
+            context.update(self._build_viewport_context(selected, viewer))
             return context
 
         host = self._host_game()
@@ -462,6 +407,11 @@ class GamePageView(ConceptContextMixin, TemplateView):
             (cc.company for cc in host.concept.concept_companies.all() if cc.is_developer), None,
         ) if host.concept_id else None
         context['plat_rarity'] = self._plat_rarity(context['hunter_status'])
+        # The signed-out invitation's wording (GL-09): "chasing this platinum" only when a list has one.
+        context['invite_platinum'] = any(has_platinum(g) for g in self.list_set)
+        # With one list the invitation names what there is to earn, as that list's own page does; with several,
+        # it says the site tracks every one.
+        context['invite_defined'] = self.list_set[0].defined_trophies if len(self.list_set) == 1 else None
 
         # The Community band must describe the GAME, not the host list, on a page whose header
         # just said "N trophy lists": per-list denorms summed (platinums and 100%s ARE separate
@@ -491,7 +441,7 @@ class GamePageView(ConceptContextMixin, TemplateView):
         # neither switcher lists there nor family, by the exclusion rule).
         context['about_hide_other_platforms'] = self.kwargs.get('igdb_id') is not None
 
-        context.update(self._build_viewport_context(selected, viewer, names))
+        context.update(self._build_viewport_context(selected, viewer))
 
         # One absolute canonical, computed once: the template's rel=canonical, og:url and the
         # jsonld VideoGame node all read this single value, so they cannot disagree.

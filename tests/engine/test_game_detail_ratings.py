@@ -441,23 +441,27 @@ def test_roadmap_tab_removed_and_players_link_goes_to_ranks(client):
     assert 'data-gd-goto="ratings"' not in content     # the Players jump no longer points at Ratings
 
 
-def test_stats_strip_is_page_chrome_above_the_switcher(client):
-    """The community snapshot is page CHROME (owner's placement call after the design audit):
-    a .scard strip with .pp-tally faces -- the house stat-strip vocabulary -- sitting between
-    the hero and the Trophies|Ranks switcher, NOT inside any panel. This list's own four
-    denorms, whale-safe zero-query reads."""
+def test_the_community_numbers_sit_behind_ranks(client):
+    """GL-03 (owner, 2026-10-22): the four community numbers moved from between the hero and the trophies
+    into the Ranks view, above the board: they are the list's community, which is what Ranks is about, and
+    they no longer stand between a hunter and the trophies. Still the house stat strip (.scard + .pp-tally),
+    still this list's own four denorms (zero-query reads), and server-rendered with the page: only the board
+    below them is fetched on demand."""
     content = _detail(client, GameFactory(
         defined_trophies=_DEFINED, played_count=1234, plats_earned_count=56,
         full_completion_count=78, avg_completion=63.4,
     ))
     assert 'id="gd-snapshot"' in content
-    # ABOVE the switcher, and therefore above every panel -- bounded on the switcher's own id.
-    assert content.index('id="gd-snapshot"') < content.index('id="gd-switch"'), (
-        'the snapshot must sit above the tab switcher, as chrome'
+    ranks = content.split('id="gd-view-leaderboard"')[1]
+    assert ranks.index('id="gd-snapshot"') < ranks.index('id="gd-lb-host"'), (
+        'the numbers sit inside Ranks, above the board host'
     )
+    assert content.index('id="gd-snapshot"') > content.index('id="gd-view-trophies"'), (
+        'and no longer above the switcher and the trophies'
+    )
+    snapshot = content.split('id="gd-snapshot"')[1].split('id="gd-lb-host"')[0]
     # The house primitives, not the one-off band the audit called a placeholder. Scoped between
-    # the snapshot hook and the switcher so a stray scard elsewhere can't satisfy the pin.
-    snapshot = content.split('id="gd-snapshot"')[1].split('id="gd-switch"')[0]
+    # the snapshot hook and the board host so a stray scard elsewhere can't satisfy the pin.
     assert 'scard__label' in snapshot and 'pp-tally' in snapshot
     assert 'gd-rate__snapshot' not in content, (
         'the panel-band variant belongs to the Game page ratings tab, not here'

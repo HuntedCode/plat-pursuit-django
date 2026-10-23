@@ -8,10 +8,15 @@ Chips are REAL LINKS (?list=...) so the page degrades to full reloads with no JS
 htmx swap into the persistent #gp-viewport. hx-push-url=false: game-page.js owns the URL via
 syncViewParam so the default list keeps a bare URL. Lives OUTSIDE the viewport target -- a swap
 replaces the grid, not the switcher; active-chip state is synced client-side.
+
+The chips share one sync scope with the filter form (#gp-viewport:replace): the newer request wins.
+
+Only with two lists or more (GL-05): a picker with one card has nothing to pick, and the control row below
+already links to the list's own page.
 {% endcomment %}
-{% if switcher_entries|length > 0 %}
-<nav class="gp-lswitch{% if switcher_entries|length == 1 %} gp-lswitch--solo{% endif %}" role="tablist" aria-label="Trophy lists"
-     hx-sync="this:replace">
+{% if switcher_entries|length > 1 %}
+<nav class="gp-lswitch" role="tablist" aria-label="Trophy lists"
+     hx-sync="#gp-viewport:replace">
     {% for entry in switcher_entries %}
         <a href="?list={{ entry.game.np_communication_id }}"
            hx-get="?list={{ entry.game.np_communication_id }}"

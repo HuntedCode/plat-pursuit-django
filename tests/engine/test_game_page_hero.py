@@ -1,7 +1,7 @@
 """The Game page hero, rebuilt under the Page Principles (DS-07, DS-09, DS-13 in docs/design/reviews/discovery.md).
 
 - The signed-in hunter's status, from their BEST list (owner, 2026-10-22): plat on any list wins, else the
-  highest percentage. Signed out, no card.
+  highest percentage. Signed out (or signed in without a linked PSN), the slot invites instead (GL-09).
 - The platinum stat: that list's platinum, else the most-played list's (owner, 2026-10-22). With no platinum
   on any list, a hollow gem and the trophy count instead, so the corner always answers "is there a platinum?".
   Left out before PSN has reported a rate, or while the list's trophies are unknown.
@@ -61,9 +61,45 @@ def _hero(client, url):
 
 # ── The hunter's status ───────────────────────────────────────────────────────────────────────────
 
-def test_signed_out_there_is_no_status_card(client):
-    url, _ = _page(940001, ['PS5'])
-    assert 'gp-status' not in _hero(client, url)
+def test_signed_out_the_status_slot_invites(client):
+    """GL-09: no hunter to describe, so the slot says what the site does. Under 25 players the count is not
+    named (a "3 hunters here" headline undersells); the sub line speaks for every list."""
+    url, _ = _page(940001, ['PS5'], ['PS4'], played=[3, 0])
+    hero = _hero(client, url)
+    assert 'gp-status--invite' in hero
+    assert 'Track your platinum journey' in hero and 'hunters here' not in hero
+    assert 'Track your progress on every list.' in hero
+    assert 'Start tracking free' in hero and 'Sign in' in hero
+    assert 'gp-status--none' not in hero and 'You platinumed' not in hero
+
+
+def test_a_one_list_invitation_names_what_there_is_to_earn(client):
+    """With one list the invitation reads as that list's own page does ("every list" would jar on a page that
+    shows no picker)."""
+    url, _ = _page(940024, ['PS5'])
+    hero = _hero(client, url)
+    assert '30 bronze &middot; 10 silver &middot; 6 gold &middot; 1 platinum to earn' in hero
+    assert 'every list' not in hero
+
+
+def test_the_invitation_names_the_players_from_25(client):
+    url, _ = _page(940021, ['PS5'], played=[327])
+    hero = _hero(client, url)
+    assert '<b>327</b> hunters here are chasing this platinum' in hero
+
+
+def test_the_invitation_without_a_platinum_does_not_promise_one(client):
+    url, _ = _page(940022, ['PS5'], defined=NO_PLAT, played=[40])
+    hero = _hero(client, url)
+    assert 'hunting these trophies' in hero and 'platinum' not in hero.split('gp-status--invite')[1].split('gp-status__cta')[0]
+
+
+def test_signed_in_without_a_linked_psn_the_invitation_asks_to_link(client):
+    """The status card needs a linked profile; without one the slot invites to link, not to sign up."""
+    url, _ = _page(940023, ['PS5'])
+    client.force_login(ProfileFactory(is_linked=False).user)
+    hero = _hero(client, url)
+    assert 'gp-status--invite' in hero and 'Link your PSN' in hero and 'Start tracking free' not in hero
 
 
 def test_a_game_the_hunter_does_not_own(client):
@@ -111,7 +147,8 @@ def test_a_platinum_on_any_list_beats_a_higher_percentage_elsewhere(client):
 
     assert 'gp-status--plat' in hero and 'You platinumed this' in hero
     assert 'gp-status__list">PS4<' in hero
-    assert 'Mar 9, 2026' in hero and '92% complete' in hero
+    # The date, the percentage and what is left, one line (the list page's card says it the same way).
+    assert '<time datetime="2026-03-09">Mar 9, 2026</time> &middot; 92% &middot; 47 to go' in hero
 
 
 def test_without_a_platinum_the_highest_percentage_wins(client):

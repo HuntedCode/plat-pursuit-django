@@ -1,12 +1,12 @@
-"""Tests for the rebuilt game-detail hero backend logic.
+"""Tests for the game-detail (Trophy List page) view's backend logic.
 
 Pins:
-  - `_build_outlook_context` (the anonymous "Platinum Outlook"): PSN-GLOBAL platinum rarity ->
-    difficulty (4 - trophy_rarity), guarded when there's no platinum or the rarity tier isn't synced,
-    and never per-user work.
   - `_build_timeline_events`: the platinum floats to WHERE it was earned in the sequence (with DLC a
     base-game plat precedes the 75%/100% overall milestones); "Started Playing" is pinned first and
     "100%" is pinned last.
+  - the group headers' percentages (PSN's weighting, GL-11), the pursuit/badge/versions builders, About.
+  - the share card's gate on the hero's Share action.
+The hero's own render (status card, platinum stat, invitation, control row) is test_trophy_list_hero.py.
 """
 import itertools
 from datetime import timedelta
@@ -27,51 +27,6 @@ from tests.factories import (
 _pursuit_igdb_seq = itertools.count(70001)   # distinct raw igdb ids per test contract
 
 pytestmark = pytest.mark.django_db
-
-
-# ── _build_outlook_context ────────────────────────────────────────────────
-
-def _outlook(game):
-    return GameDetailView()._build_outlook_context(game)['outlook']
-
-
-def test_outlook_ultra_rare_platinum():
-    game = GameFactory()
-    TrophyFactory(game=game, trophy_type='platinum', trophy_earn_rate=2.1, trophy_rarity=0)  # Ultra Rare
-    out = _outlook(game)
-    assert out['has_platinum'] is True
-    assert out['plat_rate'] == pytest.approx(2.1)
-    assert out['plat_rarity_label'] == 'Ultra Rare'
-    assert out['difficulty_level'] == 4          # 4 - 0
-
-
-def test_outlook_common_platinum():
-    game = GameFactory()
-    TrophyFactory(game=game, trophy_type='platinum', trophy_earn_rate=48.0, trophy_rarity=3)  # Common
-    out = _outlook(game)
-    assert out['plat_rarity_label'] == 'Common'
-    assert out['difficulty_level'] == 1          # 4 - 3
-
-
-def test_outlook_no_platinum_degrades():
-    game = GameFactory()
-    TrophyFactory(game=game, trophy_type='gold', trophy_earn_rate=10.0, trophy_rarity=2)
-    out = _outlook(game)
-    assert out['has_platinum'] is False
-    assert out['plat_rate'] is None
-    assert out['plat_rarity_label'] is None
-    assert out['difficulty_level'] is None
-
-
-def test_outlook_platinum_missing_rarity_is_guarded():
-    # PSN rate present but the tier isn't synced -> no label/difficulty, but still a platinum + rate.
-    game = GameFactory()
-    TrophyFactory(game=game, trophy_type='platinum', trophy_earn_rate=5.0, trophy_rarity=None)
-    out = _outlook(game)
-    assert out['has_platinum'] is True
-    assert out['plat_rate'] == pytest.approx(5.0)
-    assert out['plat_rarity_label'] is None
-    assert out['difficulty_level'] is None
 
 
 # ── _build_timeline_events (dynamic platinum ordering) ─────────────────────
@@ -128,19 +83,21 @@ def test_timeline_platinum_stays_late_without_dlc():
 
 # ── _build_group_pct (per-group completion for the trophy-panel group headers) ──
 
-def test_group_pct_computes_earned_over_defined():
-    """Each group's % is its own earned/defined, keyed by group_id (base + DLC keyed independently)."""
+def test_group_pct_weighs_trophies_as_psn_does():
+    """GL-11: each group's % is PSN's own (bronze 15, silver 30, gold 90 points, the platinum left out),
+    keyed by group_id, so a group header agrees with the hero's percentage. Counting trophies put Jak 3's base
+    game at 49% under a hero that said 45%."""
     pct = GameDetailView()._build_group_pct(
         {
-            'default': {'defined_trophies': {'bronze': 6, 'silver': 2, 'gold': 1, 'platinum': 1}},  # 10 defined
-            '001': {'defined_trophies': {'bronze': 4, 'silver': 0, 'gold': 1, 'platinum': 0}},        # 5 defined
+            'default': {'defined_trophies': {'bronze': 6, 'silver': 2, 'gold': 1, 'platinum': 1}},  # 240 points
+            '001': {'defined_trophies': {'bronze': 4, 'silver': 0, 'gold': 1, 'platinum': 0}},        # 150 points
         },
         {
-            'default': {'bronze': 3, 'silver': 1, 'gold': 1, 'platinum': 0},  # 5 earned -> 50%
-            '001': {'bronze': 4, 'silver': 0, 'gold': 1, 'platinum': 0},      # 5 earned -> 100%
+            'default': {'bronze': 3, 'silver': 1, 'gold': 1, 'platinum': 0},  # 165 points -> 68% (a count says 50%)
+            '001': {'bronze': 4, 'silver': 0, 'gold': 1, 'platinum': 0},      # everything -> 100%
         },
     )
-    assert pct == {'default': 50, '001': 100}
+    assert pct == {'default': 68, '001': 100}
 
 
 def test_group_pct_missing_totals_is_zero():
@@ -154,10 +111,10 @@ def test_group_pct_zero_defined_does_not_divide_by_zero():
     assert pct['default'] == 0
 
 
-def test_group_pct_rounds_to_nearest_int():
-    # 1 of 3 -> 33.33 -> 33
-    pct = GameDetailView()._build_group_pct({'g': {'defined_trophies': {'bronze': 3}}}, {'g': {'bronze': 1}})
-    assert pct['g'] == 33
+def test_group_pct_floors_as_psn_does():
+    # 2 of 3 bronze -> 66.67 -> 66: PSN floors, so 100 only ever means done.
+    pct = GameDetailView()._build_group_pct({'g': {'defined_trophies': {'bronze': 3}}}, {'g': {'bronze': 2}})
+    assert pct['g'] == 66
 
 
 # ── _build_pursuit_context (contract row always carries a status tag) ───────
@@ -608,22 +565,28 @@ def _detail_for(client, game, profile):
     return resp.content.decode()
 
 
-def test_game_detail_renders_related_badge_editions(client):
-    # The badges spine + modal render the specific EDITIONS this game is part of, each linking to its edition
-    # tab (?group=<key>). Guards the template's dict fields (name / type_display / group_key / group_name).
+def test_the_list_page_leaves_badge_editions_to_the_game_page(client):
+    """The badge series a game is in left the Trophy List page's hero (the trophy list pass, 2026-10-22): the
+    Game page's About lists each edition, linked to its edition tab (?group=<key>), one tap up through "Part
+    of". The list page renders none of it, and builds none of it."""
     concept = ConceptFactory()
-    game = GameFactory(concept=concept, title_platform=['PS5'])
+    game = GameFactory(concept=concept, title_platform=['PS5'], defined_trophies=_DEFINED)
     from tests.factories import StageFactory, BadgeSeriesFactory, GroupBadgeFactory, PlatformGroupFactory
     series = BadgeSeriesFactory(series_slug='gow', name='God of War', badge_type='franchise')
     pg = PlatformGroupFactory(key='ultra-hd', name='Ultra HD', platforms=['PS4', 'PS5'])
     GroupBadgeFactory(series=series, platform_group=pg, is_live=True)
     StageFactory(series_slug='gow', stage_number=1).concepts.add(concept)
 
-    content = _detail(client, game)
-    assert 'gd-spine__row--badges' in content                        # the badge spine row (game is in a badge)
-    assert '/badges/gow/?group=ultra-hd' in content                  # the card links to the SPECIFIC edition tab
-    assert 'gd-badgecard' in content and 'Ultra HD' in content       # modal card + the edition label
-    assert 'Franchise' in content                                    # the badge type
+    from unittest import mock
+    from trophies.views.concept_context import ConceptContextMixin
+    with mock.patch.object(ConceptContextMixin, '_build_badges_context') as built:
+        content = _detail(client, game)
+    built.assert_not_called()
+    assert 'gp-hero--list' in content, 'the page rendered its hero'
+    assert '/badges/gow/' not in content and 'gd-spine' not in content and 'gd-badgecard' not in content
+
+    game_page = client.get(f'/games/c/{concept.concept_id}/', HTTP_CF_RAY='test').content.decode()
+    assert '/badges/gow/?group=ultra-hd' in game_page and 'Ultra HD' in game_page
 
 
 def test_game_detail_renders_about_panel(client):
@@ -676,34 +639,39 @@ def _finished(profile, *, with_platinum=True):
     return game, group
 
 
+#: The hero's Share action: the share card, the reward for finishing (labelled "Share", as on the Game page).
+SHARE = 'Make a share card for this list'
+
+
 def test_a_finished_game_offers_its_plat_card(client):
     """The reward for finishing: a LINK to the share surface, deep-linked to this completion. Not a
     modal here -- the share flow is a whole page (preview, theme picker, rating), and a second copy of
-    it on game detail is the drift the rebuild removed."""
+    it on game detail is the drift the rebuild removed. Since the trophy list pass it is the hero's
+    "Share" action, as on the Game page."""
     profile = ProfileFactory(is_linked=True)
     game, group = _finished(profile, with_platinum=True)
     client.force_login(profile.user)
 
     content = _detail(client, game)
 
-    assert 'gd-btn--card' in content
+    assert SHARE in content
     assert f'?c={group.id}' in content, 'must deep-link this completion, not the bare page'
-    assert 'Plat Card' in content
-    assert 'gd-btn--card-full' not in content
-    # It rides the EXISTING action row, so a finished game costs the hero no extra height -- and it
-    # must NOT come back as a block of its own under the trophy haul, where it first shipped.
-    assert 'gd-btn--card' in content.split('gd-hero__actions')[1][:1200], 'must sit in the action row'
-    assert 'gd-platcard' not in content, 'the standalone block is gone'
+    # It rides the action row with Add to list and Report, equal weight -- never a block of its own.
+    actions = content.split('class="gp-actions"')[1][:1500]
+    assert f'?c={group.id}' in actions and '>Share' in actions, 'must sit in the action row'
+    assert 'gd-platcard' not in content and 'gd-btn--card' not in content
 
 
-def test_a_100_percent_clear_offers_the_full_variant(client):
+def test_a_100_percent_clear_offers_the_share_card_too(client):
+    """A list with no platinum, finished: the card is earned, and the status card says "You finished this"."""
     profile = ProfileFactory(is_linked=True)
-    game, _ = _finished(profile, with_platinum=False)
+    game, group = _finished(profile, with_platinum=False)
     client.force_login(profile.user)
 
     content = _detail(client, game)
 
-    assert 'gd-btn--card-full' in content and '100% Card' in content
+    assert SHARE in content and f'?c={group.id}' in content
+    assert 'gp-status--complete' in content and 'You finished this' in content
 
 
 def test_an_unfinished_game_offers_no_card(client):
@@ -717,7 +685,7 @@ def test_an_unfinished_game_offers_no_card(client):
     ProfileTrophyGroupFactory(profile=profile, trophy_group=group, progress=61)
     client.force_login(profile.user)
 
-    assert 'gd-btn--card' not in _detail(client, game)
+    assert SHARE not in _detail(client, game)
 
 
 def test_another_hunters_completion_is_never_offered_as_your_card(client):
@@ -730,14 +698,14 @@ def test_another_hunters_completion_is_never_offered_as_your_card(client):
 
     content = _detail_for(client, game, them)
 
-    assert 'gd-btn--card' not in content
+    assert SHARE not in content
 
 
 def test_an_anonymous_visitor_sees_no_card_cta(client):
     profile = ProfileFactory(is_linked=True)
     game, _ = _finished(profile, with_platinum=True)
 
-    assert 'gd-btn--card' not in _detail(client, game)
+    assert SHARE not in _detail(client, game)
 
 
 def test_a_dlc_incomplete_game_still_offers_its_card(client):
@@ -754,7 +722,7 @@ def test_a_dlc_incomplete_game_still_offers_its_card(client):
     ProfileTrophyGroupFactory(profile=profile, trophy_group=group, progress=100)  # base list done
     client.force_login(profile.user)
 
-    assert 'gd-btn--card' in _detail(client, game)
+    assert SHARE in _detail(client, game)
 
 
 def test_a_stale_group_row_does_not_hide_the_card(client):
@@ -770,7 +738,7 @@ def test_a_stale_group_row_does_not_hide_the_card(client):
     ProfileTrophyGroupFactory(profile=profile, trophy_group=group, progress=0)    # stale denorm
     client.force_login(profile.user)
 
-    assert 'gd-btn--card' in _detail(client, game)
+    assert SHARE in _detail(client, game)
 
 
 def test_your_own_profile_route_still_offers_the_card(client):
@@ -782,7 +750,7 @@ def test_your_own_profile_route_still_offers_the_card(client):
 
     content = _detail_for(client, game, profile)
 
-    assert 'gd-btn--card' in content and f'?c={group.id}' in content
+    assert SHARE in content and f'?c={group.id}' in content
 
 
 def test_an_unlinked_profile_is_not_offered_a_card(client):
@@ -794,7 +762,7 @@ def test_an_unlinked_profile_is_not_offered_a_card(client):
     game, _ = _finished(profile, with_platinum=True)
     client.force_login(profile.user)
 
-    assert 'gd-btn--card' not in _detail_for(client, game, profile)
+    assert SHARE not in _detail_for(client, game, profile)
 
 
 def test_the_cta_costs_one_bounded_query(client):

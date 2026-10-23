@@ -10,10 +10,6 @@
 #browse-results { transition: opacity var(--pp-dur) var(--pp-ease); }
 #browse-results.is-swapping { opacity: 0.8; pointer-events: none; }
 
-/* Result count + in-flight indeterminate bar (a real loading affordance instead of just dimming). */
-.gd-listmeta { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
-.gd-listmeta__count { flex-shrink: 0; font-size: 0.82rem; font-weight: 600; color: var(--pp-text-mute); }
-.gd-listmeta__count .pp-tally { color: var(--pp-text); font-size: 0.95rem; font-weight: 800; margin-right: 1px; }
 .gd-loadbar { position: relative; flex: 1; height: 2px; border-radius: 999px; overflow: hidden; opacity: 0; transition: opacity 0.2s var(--pp-ease); }
 .gd-loadbar.is-active { opacity: 1; background: color-mix(in oklab, var(--pp-primary) 12%, transparent); }
 .gd-loadbar > span { position: absolute; top: 0; bottom: 0; left: -40%; width: 40%; border-radius: 999px; background: linear-gradient(90deg, transparent, var(--pp-primary), transparent); }
@@ -58,29 +54,9 @@
 .gd-minibar .pp-minibar__listswitch { height: 30px; font-size: 0.75rem; max-width: 170px; min-width: 4.5rem; flex-shrink: 1; }
 
 /* ============================================================
-   Hero
+   Hero parts. Both heroes (the Game page's and the Trophy List page's) are laid out by game-page.css
+   (`gp-hero`); these are the parts they share: the cover, platform chips, title, bars, buttons.
    ============================================================ */
-/* Clean substrate hero — no art backdrop (deliberate: cleaner, more premium). */
-/* Mobile: cover -> main (identity + progress) -> extras (screenshots + spine), in source order so the
-   title/progress follow the cover immediately. Desktop: cover + extras stack in the left column; main
-   spans the right. */
-.gd-hero__grid { display: grid; grid-template-columns: 1fr; gap: 1rem; }
-@media (min-width: 1024px) {
-    .gd-hero__grid {
-        grid-template-columns: minmax(180px, 250px) 1fr;
-        grid-template-areas: "cover main" "extras main";
-        grid-template-rows: auto auto;
-        column-gap: 1.5rem; row-gap: 1rem;
-        align-items: stretch;
-    }
-    .gd-cover { grid-area: cover; align-self: start; }   /* don't stretch the aspect-ratio cover */
-    .gd-hero__main { grid-area: main; }
-    .gd-hero__extras { grid-area: extras; align-self: start; }
-}
-
-
-/* Cover + screenshots */
-.gd-hero__extras { display: flex; flex-direction: column; gap: 10px; }
 .gd-cover {
     position: relative; aspect-ratio: 3 / 4; width: 58%; max-width: 220px; margin: 0 auto;
     border-radius: var(--pp-radius-md); border: 2px solid var(--pp-border); overflow: hidden;
@@ -89,45 +65,6 @@
 }
 @media (min-width: 1024px) { .gd-cover { width: 100%; max-width: none; } }
 
-/* Headline "X Players". Mobile: in flow, a left-aligned row that sits below the issue flags and above the
-   progress section (its entrance rides the .pp-head-cascade, so reduced-motion is handled for free). md+:
-   pinned absolute to the hero card's top-right corner so it never reflows the content. */
-.gd-hero__players {
-    display: inline-flex; flex-direction: row; align-items: baseline; gap: 6px;
-    align-self: flex-start; line-height: 1; text-decoration: none;
-}
-.gd-hero__players-n { color: var(--pp-primary); line-height: 1; }
-.gd-hero__players-lbl { font-size: 0.6rem; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--pp-text-mute); transition: color var(--pp-dur-fast) var(--pp-ease); }
-.gd-hero__players:hover .gd-hero__players-lbl { color: var(--pp-primary); }
-.gd-hero__players:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 3px; border-radius: var(--pp-radius-sm); }
-@media (min-width: 768px) {
-    .gd-hero__players {
-        position: absolute; top: 18px; right: 20px; z-index: 2;
-        flex-direction: column; align-items: flex-end; text-align: right; gap: 0;
-    }
-    .gd-hero__players-lbl { margin-top: 3px; }
-}
-/* The corner is pinned against the CARD (the .card sets position: relative), so it measures from the card's
-   top edge -- above the ownership banner entirely, landing inside the banner's tinted box on top of its
-   "View mine" link.
-
-   Fixed by re-anchoring rather than by offsetting: when the banner is present the corner measures from the
-   content ROW instead, which begins below the banner. So the banner stays full-width -- reading as a
-   statement about the whole page, the way badge detail's does -- and the stat sits under it at whatever
-   height it ends up, with no magic number to drift if a long username wraps it to two lines.
-
-   Reserving horizontal space instead was the wrong shape: it left the stat BESIDE the banner, which reads
-   as though the two belong together. */
-@media (min-width: 768px) {
-    .gd-hero__body:has(.pp-viewing) .gd-hero__grid { position: relative; }
-    .gd-hero__body:has(.pp-viewing) .gd-hero__players { top: 0; right: 0; }
-}
-@media (min-width: 1024px) {
-    .gd-hero__players { top: 22px; right: 24px; }
-    /* Reserve the corner's footprint on the title so a long name wraps before it (only on desktop,
-       where main sits beside the cover; below 1024px the corner is up beside the stacked cover). */
-    .gd-hero__body:has(.gd-hero__players) .gd-hero__title { padding-right: 96px; }
-}
 @media (hover: hover) {
     .gd-cover:hover {
         transform: translateY(-3px);
@@ -148,9 +85,6 @@
 .gd-shots__thumb:hover { border-color: color-mix(in oklab, var(--pp-primary) 50%, var(--pp-border)); }
 .gd-shots__more { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(0,0,0,0.55); color: #fff; font-weight: 700; font-size: 0.8rem; }
 
-/* Identity column — a tight cluster (chips → title → facts → flags). The .pp-head-cascade
-   lives on the card-body, so the hero row / substance / actions / band are the real beats. */
-.gd-hero__main { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .gd-hero__chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .gd-plat {
     display: inline-flex; align-items: center; gap: 3px; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.02em;
@@ -163,56 +97,14 @@
 
 .gd-hero__title { font-family: var(--pp-font-display); font-weight: 800; line-height: 1.05; font-size: clamp(1.5rem, 4vw, 2.4rem); color: var(--pp-text); }
 
-.gd-hero__facts { display: flex; flex-wrap: wrap; gap: 6px 18px; }
 .gd-fact { display: flex; flex-direction: column; gap: 1px; }
 .gd-fact__k { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pp-text-mute); }
 .gd-fact__v { font-size: 0.82rem; color: var(--pp-text-dim); }
-.gd-fact__v--link { color: var(--pp-text); text-decoration: none; transition: color var(--pp-dur-fast) var(--pp-ease); }
-.gd-fact__v--link:hover { color: var(--pp-primary); }
 
-/* "Versions & editions" cross-link (opens the versions modal). Quiet pill so it doesn't rival the actions. */
-.gd-versions-link { display: inline-flex; align-items: center; gap: 7px; align-self: flex-start; padding: 5px 8px 5px 10px; border-radius: 999px; background: color-mix(in oklab, var(--pp-bg-2) 55%, transparent); border: 1px solid var(--pp-border); color: var(--pp-text-dim); font-size: 0.78rem; font-weight: 600; cursor: pointer; transition: color var(--pp-dur-fast) var(--pp-ease), background var(--pp-dur-fast) var(--pp-ease), border-color var(--pp-dur-fast) var(--pp-ease); }
-.gd-versions-link > svg:first-child { width: 15px; height: 15px; color: var(--pp-text-mute); flex-shrink: 0; }
-.gd-versions-link:hover { color: var(--pp-text); border-color: color-mix(in oklab, var(--pp-primary) 40%, var(--pp-border)); background: color-mix(in oklab, var(--pp-primary) 8%, var(--pp-bg-2)); }
-.gd-versions-link__n { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: color-mix(in oklab, var(--pp-primary) 22%, transparent); color: var(--pp-primary); font-size: 0.68rem; font-weight: 800; }
-.gd-versions-link__chev { width: 14px; height: 14px; color: var(--pp-text-mute); transition: transform var(--pp-dur-fast) var(--pp-ease); }
-.gd-versions-link:hover .gd-versions-link__chev { transform: translateX(2px); color: var(--pp-primary); }
-.gd-versions-link:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
-@media (prefers-reduced-motion: reduce) { .gd-versions-link__chev, .gd-vrow__chev { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .gd-vrow__chev { transition: none; } }
 
-/* Condensed About — fills the space beside the tall cover; jumps to the full About tab. */
-/* Hidden on mobile to save vertical space (the full About lives in the About tab); shown from md up. */
-.gd-hero__about { display: none; flex-direction: column; gap: 8px; margin-top: 2px; }
-@media (min-width: 768px) { .gd-hero__about { display: flex; } }
-.gd-about-blurb { font-size: 0.82rem; line-height: 1.5; color: var(--pp-text-dim); display: -webkit-box; -webkit-line-clamp: 4; line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
-/* When JS clamps the blurb to fit the header boundary, fade the cut edge instead of a hard clip. */
-.gd-hero__about.is-clamped .gd-about-blurb { -webkit-mask-image: linear-gradient(180deg, #000 58%, transparent 100%); mask-image: linear-gradient(180deg, #000 58%, transparent 100%); }
-.gd-about-tags { display: flex; flex-wrap: wrap; gap: 5px; }
 .gd-tag { font-size: 0.68rem; font-weight: 600; padding: 2px 9px; border-radius: 999px; color: var(--pp-text-dim); background: color-mix(in oklab, var(--pp-bg-2) 65%, transparent); border: 1px solid var(--pp-border); }
 .gd-tag--theme { color: var(--pp-text-mute); }
-.gd-about-more { align-self: flex-start; display: inline-flex; align-items: center; gap: 4px; padding: 2px 0; font-size: 0.75rem; font-weight: 600; color: var(--pp-primary); background: none; border: none; cursor: pointer; }
-.gd-about-more svg { width: 14px; height: 14px; transition: transform var(--pp-dur-fast) var(--pp-ease); }
-.gd-about-more:hover svg { transform: translateX(2px); }
-/* Desktop: a few more summary lines; the genre/theme tags + "More about this game" sit directly beneath it. */
-@media (min-width: 1024px) { .gd-about-blurb { -webkit-line-clamp: 6; line-clamp: 6; } }
-
-/* Substance: the lean, ownership-aware progress readout (the game is the star). */
-/* Flex column so the anon stack (Outlook verdict, trophy grid, CTA) is spaced; 6px gap + the blocks'
-   2px margins == 8px, matching the badge/contract spine. Harmless for the authed single .gd-prog child;
-   margin-top:auto still floats it down. */
-.gd-substance { display: flex; flex-direction: column; gap: 6px; margin-top: auto; padding-top: 14px; border-top: 1px solid var(--pp-divider); }
-.gd-prog { display: flex; flex-direction: column; gap: 0.6rem; }
-.gd-prog__top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.gd-prog__state { display: inline-flex; align-items: center; gap: 5px; font-size: 0.8rem; font-weight: 600; color: var(--pp-text-dim); }
-.gd-prog__state svg { width: 15px; height: 15px; color: var(--pp-primary); }
-.gd-prog__avenue { font-size: 0.75rem; font-weight: 600; color: var(--pp-primary); text-decoration: none; white-space: nowrap; transition: color var(--pp-dur-fast) var(--pp-ease); }
-.gd-prog__avenue:hover { text-decoration: underline; }
-.gd-prog__meter { display: flex; align-items: center; gap: 0; }
-/* Neutral by default so the game title wins the hero; the % earns the cyan accent only at 100%. */
-.gd-prog__pct { color: var(--pp-text); line-height: 1; flex: none; }
-.gd-prog__pct.is-complete { color: var(--pp-primary); }
-.gd-prog__pctsign { font-family: var(--pp-font-display); font-weight: 800; font-size: 1rem; color: var(--pp-text-mute); flex: none; margin: 0 12px 0 1px; }
-.gd-prog__bar { flex: 1; }
 
 /* Composite per-trophy-group progress bar: one segment per group. Base = cyan (wide), DLC = violet. */
 .gd-groupbar { display: flex; align-items: stretch; gap: 3px; height: 11px; }
@@ -230,9 +122,7 @@
 .gd-groupbar__dot--dlc { background: var(--pp-secondary); }
 
 /* Actions */
-/* Centred on mobile (wrapped, left-aligned buttons read as accidental); left-aligned from md up. */
-.gd-hero__actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
-@media (min-width: 768px) { .gd-hero__actions { justify-content: flex-start; } }
+
 .gd-btn {
     display: inline-flex; align-items: center; gap: 6px; font-size: 0.8rem; font-weight: 600; cursor: pointer;
     padding: 7px 14px; border-radius: var(--pp-radius-sm); color: var(--pp-text);
@@ -242,91 +132,23 @@
 }
 .gd-btn svg { width: 15px; height: 15px; }
 .gd-btn:hover { background: color-mix(in oklab, var(--pp-primary) 22%, transparent); box-shadow: 0 0 14px -3px color-mix(in oklab, var(--pp-primary) 60%, transparent); }
-/* Plat card: the reward for finishing, and the only action in this row that is EARNED -- so it carries
-   the variant accent of the artifact it leads to (primary for a platinum card, accent for 100%, the same
-   rule .pcard uses on the browse grid) rather than the row's default cyan. It shows at most once, and
-   never on a game still in progress, so it can afford to be the loudest thing here. */
-.gd-btn--card {
-    --gdpc: var(--pp-primary);
-    text-decoration: none;
-    color: var(--pp-text);
-    background: color-mix(in oklab, var(--gdpc) 18%, transparent);
-    border-color: color-mix(in oklab, var(--gdpc) 52%, var(--pp-border));
-}
-.gd-btn--card svg { color: var(--gdpc); }
-.gd-btn--card:hover {
-    background: color-mix(in oklab, var(--gdpc) 28%, transparent);
-    box-shadow: 0 0 16px -3px color-mix(in oklab, var(--gdpc) 65%, transparent);
-}
-/* Doubled class for specificity: the generic `.gd-btn:focus-visible` is declared LATER in this file, so
-   at equal specificity it would win and a 100% card would take the primary cyan ring instead of its own
-   accent. */
-.gd-btn.gd-btn--card:focus-visible { outline: 2px solid var(--gdpc); outline-offset: 2px; }
-.gd-btn--card-full { --gdpc: var(--pp-accent); }
+
 .gd-btn--ghost { background: transparent; border-color: var(--pp-border); color: var(--pp-text-dim); }
 .gd-btn--ghost:hover { background: color-mix(in oklab, var(--pp-bg-2) 60%, transparent); box-shadow: none; color: var(--pp-text); }
 #quick-add-container { position: relative; display: inline-flex; }
 
-/* ---- Left-column spine rows: the Badge series + Job Board contract this game belongs to.
-   Clickable rows (not boxes); the medallions / job icons are the focal point, with a caption
-   beneath and a chevron. Each opens a detail modal. ---- */
-.gd-spine { display: flex; flex-direction: column; gap: 8px; width: 100%; }
-.gd-spine__row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 11px; border-radius: var(--pp-radius-md); text-align: left; cursor: pointer; color: inherit; text-decoration: none; background: color-mix(in oklab, var(--pp-bg-2) 45%, transparent); border: 1px solid transparent; transition: background var(--pp-dur-fast) var(--pp-ease), border-color var(--pp-dur-fast) var(--pp-ease); }
-.gd-spine__row:hover { background: var(--pp-bg-2); border-color: var(--pp-border); }
-.gd-spine__row:hover .gd-spine__chev { transform: translateX(2px); color: var(--pp-text-dim); }
-/* Badge row — cyan (brand) accent bar + wash. Contract row — coloured by the discipline(s) it spans. */
-.gd-spine__row--badges { position: relative; border-color: color-mix(in oklab, var(--pp-primary) 28%, var(--pp-border)); background: color-mix(in oklab, var(--pp-primary) 9%, color-mix(in oklab, var(--pp-bg-2) 45%, transparent)); }
-.gd-spine__row--badges:hover { border-color: color-mix(in oklab, var(--pp-primary) 48%, var(--pp-border)); background: color-mix(in oklab, var(--pp-primary) 14%, var(--pp-bg-2)); }
-.gd-spine__row--contract { position: relative; border-color: color-mix(in oklab, var(--disc-1, var(--pp-primary)) 28%, var(--pp-border)); background: color-mix(in oklab, var(--disc-1, var(--pp-primary)) 9%, color-mix(in oklab, var(--pp-bg-2) 45%, transparent)); }
-.gd-spine__row--contract:hover { border-color: color-mix(in oklab, var(--disc-1, var(--pp-primary)) 48%, var(--pp-border)); background: color-mix(in oklab, var(--disc-1, var(--pp-primary)) 14%, var(--pp-bg-2)); }
-.gd-spine__disc { position: absolute; left: 0; top: 4px; bottom: 4px; width: 3px; border-radius: 0 3px 3px 0; background: var(--disc-grad, var(--pp-primary)); }
-.gd-spine__main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 7px; }
-.gd-spine__peek { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
-.gd-spine__peek:has(.gd-spine__obj--badge) { gap: 7px; }   /* badges get more room; the 6-job row stays tight */
-.gd-spine__obj { width: 40px; height: 40px; display: grid; place-items: center; }
-.gd-spine__obj--badge { width: auto; height: auto; }               /* the Medallion carries its own cast/rim depth */
-.gd-spine__obj--badge .pp-med { --sz: 44px; }                       /* override .pp-med's own --sz default */
-.gd-spine__obj--badge .pp-med__count { display: none; }            /* declutter the small peek */
-/* Empty badge socket: a dashed medallion-sized well, not a faded floating icon. */
-.gd-spine__obj--ph {
-    width: 44px; height: 44px; border-radius: 999px; color: var(--pp-text-mute);
-    background: radial-gradient(circle at 50% 36%, color-mix(in oklab, var(--pp-bg-3) 75%, transparent), var(--pp-bg-1));
-    border: 1.5px dashed color-mix(in oklab, var(--pp-border) 78%, var(--pp-text-mute));
-    box-shadow: inset 0 1px 3px rgba(0,0,0,0.28);
-}
-.gd-spine__obj--ph svg { width: 19px; height: 19px; opacity: 0.5; }
-.gd-spine__more { align-self: center; font-size: 0.68rem; font-weight: 700; color: var(--pp-text-mute); }
-.gd-spine__cap { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 0.72rem; color: var(--pp-text-dim); }
-.gd-spine__chev { width: 16px; height: 16px; flex: none; color: var(--pp-text-mute); transition: transform var(--pp-dur-fast) var(--pp-ease), color var(--pp-dur-fast) var(--pp-ease); }
-.gd-spine__row--empty { cursor: default; background: transparent; border-style: dashed; border-color: var(--pp-border); }
-.gd-spine__row--empty:hover { background: transparent; border-style: dashed; border-color: var(--pp-border); }
-.gd-spine__row--empty .gd-spine__cap { color: var(--pp-text-mute); }
+/* A contract's state tag (the Game page's About, Counts toward). The variant comes from the data. */
 .gd-spine__state { font-size: 0.55rem; font-weight: 700; padding: 1px 6px; border-radius: 4px; }
 .gd-spine__state--todo { background: color-mix(in oklab, var(--pp-text-mute) 16%, transparent); color: var(--pp-text-dim); }
 .gd-spine__state--active { background: color-mix(in oklab, var(--pp-primary) 20%, transparent); color: var(--pp-primary); }
 .gd-spine__state--done { background: color-mix(in oklab, var(--pp-success) 20%, transparent); color: var(--pp-success); }
 .gd-spine__state--claim { background: color-mix(in oklab, var(--pp-accent) 20%, transparent); color: var(--pp-accent); }
 
-/* Disc-tinted job icon tile (contract peek + placeholder) — sized so all 6 possible jobs fit one line. */
+/* Disc-tinted job icon tile (the claim line, About's Jobs), sized so all 6 possible jobs fit one line. */
 .gd-jobmini { --disc: var(--pp-primary); display: grid; place-items: center; width: 28px; height: 28px; border-radius: 7px; color: var(--disc); background: color-mix(in oklab, var(--disc) 20%, var(--pp-bg-1)); border: 1px solid color-mix(in oklab, var(--disc) 42%, var(--pp-border)); box-shadow: 0 2px 5px rgba(0,0,0,0.4); transition: transform 0.18s var(--pp-ease), box-shadow 0.18s var(--pp-ease); }
 .gd-jobmini svg { width: 15px; height: 15px; }
-/* Hovering the contract row lifts its job icons in a soft left-to-right wave; drop-out is uniform (no delay off :hover). */
-.gd-spine__row--contract:hover .gd-jobmini { transform: translateY(-3px); box-shadow: 0 5px 11px rgba(0,0,0,0.45); }
-.gd-spine__row--contract:hover .gd-jobmini:nth-child(2) { transition-delay: 0.03s; }
-.gd-spine__row--contract:hover .gd-jobmini:nth-child(3) { transition-delay: 0.06s; }
-.gd-spine__row--contract:hover .gd-jobmini:nth-child(4) { transition-delay: 0.09s; }
-.gd-spine__row--contract:hover .gd-jobmini:nth-child(5) { transition-delay: 0.12s; }
-.gd-spine__row--contract:hover .gd-jobmini:nth-child(6) { transition-delay: 0.15s; }
-/* Empty job socket: same dashed-well language at the 28px job-tile footprint. */
-.gd-jobmini--ph {
-    --disc: var(--pp-text-mute); color: var(--pp-text-mute);
-    background: radial-gradient(circle at 50% 34%, color-mix(in oklab, var(--pp-bg-3) 75%, transparent), var(--pp-bg-1));
-    border: 1.5px dashed color-mix(in oklab, var(--pp-border) 78%, var(--pp-text-mute));
-    box-shadow: inset 0 1px 3px rgba(0,0,0,0.28);
-}
-.gd-jobmini--ph svg { opacity: 0.5; }
 
-/* Spine detail modals (badges list / contract summary). */
+/* The pages' native dialogs: My stats, Report, and the Game page's quick-rate, guidelines and blurb report. */
 /* position: fixed + inset:0 + margin:auto == viewport-centred. Without this the native <dialog> falls
    back to position:absolute anchored at the document top, so mobile scrolls to y=0 to reveal it. */
 .gd-modal { position: fixed; inset: 0; border: none; padding: 0; width: min(92vw, 440px); max-width: 440px; margin: auto; border-radius: var(--pp-radius-lg); background: var(--pp-bg-1); color: var(--pp-text); box-shadow: 0 30px 90px rgba(0,0,0,0.55); overflow: hidden; }
@@ -358,11 +180,7 @@
 .gd-modal__close { background: none; border: none; cursor: pointer; color: var(--pp-text-mute); font-size: 1.4rem; line-height: 1; padding: 0 4px; }
 .gd-modal__close:hover { color: var(--pp-text); }
 .gd-modal__body { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; max-height: 70vh; overflow-y: auto; }
-/* Badges-this-game-is-in: a showcase grid of medallion objects (as-designed look). */
-.gd-modal--badges { width: min(94vw, 520px); max-width: 520px; }
 
-/* Versions & editions modal: two sections (other platforms / same family), each a list of cover + name + platforms. */
-.gd-modal--versions { width: min(94vw, 460px); max-width: 460px; }
 .gd-vsec + .gd-vsec { margin-top: 14px; }
 .gd-vsec__h { font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pp-text-dim); }
 .gd-vsec__sub { font-size: 0.72rem; color: var(--pp-text-mute); margin: 1px 0 8px; }
@@ -381,28 +199,6 @@
 .gd-vrow__plat--region { color: var(--pp-secondary); border-color: color-mix(in oklab, var(--pp-secondary) 40%, var(--pp-border)); }
 .gd-vrow__chev { width: 16px; height: 16px; flex-shrink: 0; color: var(--pp-text-mute); transition: transform var(--pp-dur-fast) var(--pp-ease); }
 .gd-vrow:hover .gd-vrow__chev { transform: translateX(2px); color: var(--pp-primary); }
-.gd-badgegrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
-.gd-badgecard {
-    display: flex; flex-direction: column; align-items: center; gap: 7px; padding: 14px 8px 11px; text-align: center; text-decoration: none;
-    border-radius: var(--pp-radius-md); background: var(--pp-bg-2); border: 1px solid var(--pp-border);
-    transition: transform var(--pp-dur-fast) var(--pp-ease), border-color var(--pp-dur-fast) var(--pp-ease), box-shadow var(--pp-dur-fast) var(--pp-ease);
-}
-.gd-badgecard:hover { transform: translateY(-3px); border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border)); box-shadow: 0 8px 22px -8px rgba(0,0,0,0.5); }
-.gd-badgecard__art { flex: none; }
-.gd-badgecard__art .pp-med { --sz: 70px; }        /* the medallion is the object; give it room */
-.gd-badgecard__art .pp-med__count { display: none; }
-.gd-badgecard__name { font-size: 0.8rem; font-weight: 700; line-height: 1.2; color: var(--pp-text); display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.gd-badgecard__type { font-size: 0.58rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--pp-text-mute); }
-
-/* Staggered rise on open (JS re-arms .is-revealing). */
-@keyframes gdBadgeRise { from { opacity: 0; transform: translateY(9px); } to { opacity: 1; transform: none; } }
-.gd-badgegrid.is-revealing .gd-badgecard { animation: gdBadgeRise 0.38s var(--pp-ease) both; }
-.gd-badgegrid.is-revealing .gd-badgecard:nth-child(2) { animation-delay: 0.045s; }
-.gd-badgegrid.is-revealing .gd-badgecard:nth-child(3) { animation-delay: 0.09s; }
-.gd-badgegrid.is-revealing .gd-badgecard:nth-child(4) { animation-delay: 0.135s; }
-.gd-badgegrid.is-revealing .gd-badgecard:nth-child(5) { animation-delay: 0.18s; }
-.gd-badgegrid.is-revealing .gd-badgecard:nth-child(n+6) { animation-delay: 0.225s; }
-@media (prefers-reduced-motion: reduce) { .gd-badgegrid.is-revealing .gd-badgecard { animation: none; } }
 
 /* ============================================================
    Report-an-issue modal form (rebuilt from the old DaisyUI one)
@@ -528,114 +324,43 @@
    least one version"), and the design system reserves sub-12px for decorative/supplementary text. */
 .gd-report__vcount { align-self: flex-end; font-size: 0.75rem; color: var(--pp-text-dim); font-variant-numeric: tabular-nums; }
 
-
 /* ============================================================
    Premium polish: tactile press + keyboard focus (Google/Apple lens)
    ============================================================ */
 /* Press: a subtle compress that reads as "physical", preserving any resting transform. */
-.gd-btn, .gd-shots__thumb, .gd-about-more, .gd-shotmodal__close, .gd-shotmodal__thumb { transition: transform 0.12s var(--pp-ease), background var(--pp-dur-fast) var(--pp-ease), box-shadow var(--pp-dur-fast) var(--pp-ease), color var(--pp-dur-fast) var(--pp-ease), border-color var(--pp-dur-fast) var(--pp-ease); }
+.gd-btn,
+.gd-shots__thumb,
+.gd-shotmodal__close,
+.gd-shotmodal__thumb { transition: transform 0.12s var(--pp-ease), background var(--pp-dur-fast) var(--pp-ease), box-shadow var(--pp-dur-fast) var(--pp-ease), color var(--pp-dur-fast) var(--pp-ease), border-color var(--pp-dur-fast) var(--pp-ease); }
 .gd-btn:active { transform: scale(0.96); }
 .gd-shots__thumb:active { transform: scale(0.96); }
-.gd-about-more:active { transform: scale(0.96); }
-.gd-spine__row:active { transform: scale(0.985); }
-.gd-badgecard:active { transform: translateY(-1px) scale(0.98); }
+
 .gd-shotmodal__close:active, .gd-shotmodal__thumb:active { transform: scale(0.9); }
 .gd-shotmodal__nav:active { transform: translateY(-50%) scale(0.9); }   /* keep the vertical centering */
 
 /* Focus-visible: one cohesive keyboard ring across the hero's interactive elements. */
-.gd-btn:focus-visible, .gd-spine__row:focus-visible, .gd-badgecard:focus-visible, .gd-shots__thumb:focus-visible,
-.gd-about-more:focus-visible, .gd-prog__avenue:focus-visible, .gd-shotmodal__thumb:focus-visible,
-.gd-shotmodal__nav:focus-visible, .gd-shotmodal__close:focus-visible {
+.gd-btn:focus-visible,
+.gd-shots__thumb:focus-visible,
+.gd-shotmodal__thumb:focus-visible,
+.gd-shotmodal__nav:focus-visible,
+.gd-shotmodal__close:focus-visible {
     outline: 2px solid var(--pp-primary); outline-offset: 2px;
 }
 @media (prefers-reduced-motion: reduce) {
-    .gd-btn:active, .gd-shots__thumb:active, .gd-about-more:active, .gd-spine__row:active, .gd-badgecard:active,
-    .gd-shotmodal__close:active, .gd-shotmodal__thumb:active { transform: none; }
+    .gd-btn:active, .gd-shots__thumb:active, .gd-shotmodal__close:active, .gd-shotmodal__thumb:active { transform: none; }
     .gd-shotmodal__nav:active { transform: translateY(-50%); }
 }
 
 /* ============================================================
-   Trophy haul cards (hero) + My Stats modal
+   Primary button + My Stats modal
    ============================================================ */
 
-/* Lead action button — a hair more presence than a peer .gd-btn, not a solid fill. */
+/* The primary button (a sign-up's "Start tracking free"): a hair more presence than a peer .gd-btn, not a solid fill. */
 .gd-btn--primary { background: color-mix(in oklab, var(--pp-primary) 24%, transparent); border-color: color-mix(in oklab, var(--pp-primary) 65%, transparent); font-weight: 700; }
 .gd-btn--primary:hover { background: color-mix(in oklab, var(--pp-primary) 34%, transparent); box-shadow: 0 0 16px -3px color-mix(in oklab, var(--pp-primary) 65%, transparent); }
 
-/* 4-across trophy tier cards, reusing the shared .scard. Mobile keeps all four in ONE compact row
-   (the tier colour already identifies each, so the label can shrink); md+ restores the fuller card. */
-.gd-tro { margin-top: 2px; }
-.scard--tro { padding: 8px 4px; }
-.scard--tro .scard__label { font-size: 9px; letter-spacing: 0.02em; margin-bottom: 5px; }
-.scard--tro .scard__value { font-size: 15px; }
-.scard--tro .scard__sub { font-size: 9.5px; margin-top: 3px; }
-.scard--tro-none { opacity: 0.5; }
-/* Per-tier progress topper: pp-horizon recoloured to the tier (--horizon-accent), the tier's ratio. */
-.gd-tro__bar { display: block; width: 100%; margin-bottom: 6px; }
-
-/* ============================================================
-   Anonymous Platinum Outlook + join CTA (logged-out hero substance)
-   ============================================================ */
-.gd-outlook { display: flex; flex-direction: column; gap: 9px; }
-
-/* Verdict: PSN-global platinum rarity as the difficulty headline. */
-.gd-outlook__verdict {
-    display: flex; align-items: center; gap: 12px; padding: 11px 13px;
-    border-radius: var(--pp-radius-md); border: 1px solid var(--pp-border);
-    background: linear-gradient(105deg, color-mix(in oklab, var(--pp-accent) 8%, var(--pp-bg-2)), var(--pp-bg-2) 62%);
-}
-/* Est. 100% time, tucked into the verdict card's right edge. */
-.gd-outlook__time { flex: none; align-self: flex-start; display: inline-flex; align-items: center; gap: 4px; font-size: 0.8rem; font-weight: 700; color: var(--pp-text-dim); white-space: nowrap; }
-.gd-outlook__time svg { width: 13px; height: 13px; color: var(--pp-text-mute); flex: none; }
-.gd-outlook__verdict--noplat { background: var(--pp-bg-2); }
-.gd-outlook__ico { flex: none; width: 38px; height: 38px; display: grid; place-items: center; }
-.gd-outlook__ico img { width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 2px 6px rgba(0,0,0,0.45)); }
-.gd-outlook__ico--noplat { color: var(--pp-text-mute); }
-.gd-outlook__ico--noplat svg { width: 26px; height: 26px; opacity: 0.6; }
-.gd-outlook__vmain { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
-.gd-outlook__tier { font-family: var(--pp-font-display); font-size: 1rem; font-weight: 800; line-height: 1.1; }
-.gd-outlook__rate { font-size: 0.77rem; color: var(--pp-text-dim); }
-.gd-outlook__rate b { color: var(--pp-text); font-weight: 800; font-size: 0.9rem; }
-.gd-outlook__meter { display: flex; align-items: center; gap: 3px; margin-top: 6px; }
-.gd-outlook__seg { width: 16px; height: 4px; border-radius: 999px; background: var(--pp-bg-3); }
-.gd-outlook__seg.is-on { background: var(--pp-accent); box-shadow: 0 0 6px -1px color-mix(in oklab, var(--pp-accent) 60%, transparent); }
-/* The difficulty gauge "charges" -- lit segments fill left-to-right in sequence on load. */
-.gd-outlook__seg.is-on { transform-origin: left; animation: gdSegCharge 0.3s var(--pp-ease) both; }
-@keyframes gdSegCharge { from { transform: scaleX(0); } to { transform: scaleX(1); } }
-.gd-outlook__seg.is-on:nth-child(2) { animation-delay: 0.08s; }
-.gd-outlook__seg.is-on:nth-child(3) { animation-delay: 0.16s; }
-.gd-outlook__seg.is-on:nth-child(4) { animation-delay: 0.24s; }
-@media (prefers-reduced-motion: reduce) { .gd-outlook__seg.is-on { animation: none; } }
-.gd-outlook__meter-lbl { margin-left: 6px; font-size: 0.6rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--pp-accent); }
-
-/* Contract detail modal (shared .pp-detail-modal) CLOSE fade: bdModalOut (fade the whole dialog) is
-   ID-scoped to the badge modals; a generic collection rule disables the dialog animation for every
-   other .pp-detail-modal (it uses a medallion shrink instead). Our contract modal has no medallion, so
-   opt it back in -- the ID selector beats the generic rule, so the content fades WITH the scrim. */
-#gd-contract-modal.is-closing:not([hidden]) .pp-detail-modal__dialog { animation: bdModalOut 0.2s cubic-bezier(0.4, 0, 1, 1) forwards; }
-#gd-contract-modal.is-closing:not([hidden]) .pp-detail-modal__scrim { animation: ppDetailScrimOut 0.22s ease forwards; }
-
-/* Join CTA: social proof + the primary conversion action. */
-.gd-cta {
-    display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; margin-top: 2px;
-    border-radius: var(--pp-radius-md); border: 1px solid color-mix(in oklab, var(--pp-primary) 30%, var(--pp-border));
-    background: linear-gradient(180deg, color-mix(in oklab, var(--pp-primary) 10%, var(--pp-bg-2)), var(--pp-bg-2) 70%);
-}
-.gd-cta__proof { font-size: 0.82rem; color: var(--pp-text-dim); }
-.gd-cta__proof b { color: var(--pp-text); font-weight: 800; }
-.gd-cta__actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.gd-cta__alt { font-size: 0.74rem; color: var(--pp-text-mute); }
-.gd-cta__alt a { color: var(--pp-primary); font-weight: 600; text-decoration: none; }
-.gd-cta__alt a:hover { text-decoration: underline; }
-.scard__value--none { color: var(--pp-text-mute); font-family: var(--pp-font-display); }
-@media (min-width: 768px) {
-    .scard--tro { padding: 13px 10px; }
-    .scard--tro .scard__label { font-size: 11px; letter-spacing: 0.12em; margin-bottom: 12px; }
-    .scard--tro .scard__value { font-size: 24px; }
-    .scard--tro .scard__sub { font-size: 12px; margin-top: 7px; }
-    .gd-tro__bar { margin-bottom: 9px; }
-}
-
+/* Versions & editions (the list page's facts line opens it): two sections, each a list of cover + name + platforms. */
+.gd-modal--versions { width: min(94vw, 460px); max-width: 460px; }
 /* Stats modal is wider than the peek modals. */
 .gd-modal--stats { width: min(94vw, 560px); max-width: 560px; }
 
@@ -723,10 +448,6 @@
     .gd-mystats.is-revealing .gd-mystats__tl::before, .gd-mystats.is-revealing .gd-mystats__tl-dot { animation: none; }
 }
 
-/* Screenshots placeholder — keeps the left column consistent when a game has no shots. */
-.gd-shots--empty { display: flex; align-items: center; justify-content: center; gap: 7px; height: 54px; border-radius: var(--pp-radius-sm); border: 1px dashed var(--pp-border); font-size: 0.75rem; font-style: italic; color: var(--pp-text-mute); background: color-mix(in oklab, var(--pp-bg-2) 40%, transparent); }
-.gd-shots--empty svg { width: 18px; height: 18px; opacity: 0.6; }
-
 /* Screenshot lightbox — image floats on the blurred scrim; filmstrip below. */
 .gd-shotmodal { border: none; padding: 0; background: transparent; width: min(92vw, 1100px); max-width: 1100px; margin: auto; color: #fff; }
 /* Nothing in the lightbox is text worth copying, and a quick double-click on an arrow selected the screenshot
@@ -771,36 +492,52 @@
    ============================================================ */
 .gd-syncing { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-radius: var(--pp-radius-md); font-size: 0.9rem; color: var(--pp-text-dim); background: color-mix(in oklab, var(--pp-info) 12%, transparent); border: 1px solid color-mix(in oklab, var(--pp-info) 30%, var(--pp-border)); }
 
-/* Toolbar (quiet chrome) */
-.gd-toolbar.pp-toolbar-card { display: flex; flex-direction: column; gap: 10px; padding: 10px 12px; margin-bottom: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.22); }
-/* Collapsible filter body: mobile shows a "Filters & Sort" toggle over a collapsed body; md+ hides the toggle
-   and keeps the body open. grid-template-rows 0fr->1fr animates height with no magic max-height number. */
-.gd-toolbar__toggle { display: flex; align-items: center; gap: 8px; width: 100%; padding: 3px 2px; background: none; border: none; color: var(--pp-text); font: inherit; font-weight: 700; cursor: pointer; }
-.gd-toolbar__toggle > svg:first-child { width: 15px; height: 15px; color: var(--pp-text-mute); flex-shrink: 0; }
-.gd-toolbar__toggle-lbl { flex: 1; text-align: left; }
-.gd-toolbar__badge { min-width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; padding: 0 5px; border-radius: 999px; font-size: 0.66rem; font-weight: 800; color: var(--pp-bg-0); background: var(--pp-primary); }
-.gd-toolbar__badge[hidden] { display: none; }
-.gd-toolbar__chev { width: 16px; height: 16px; color: var(--pp-text-mute); flex-shrink: 0; transition: transform var(--pp-dur-fast) var(--pp-ease); }
-.gd-toolbar__toggle[aria-expanded="true"] .gd-toolbar__chev { transform: rotate(180deg); }
-.gd-toolbar__body { display: grid; grid-template-rows: 0fr; transition: grid-template-rows var(--pp-dur) var(--pp-ease); }
-.gd-toolbar__body.is-open { grid-template-rows: 1fr; }
-.gd-toolbar__body-inner { display: flex; flex-direction: column; gap: 10px; overflow: hidden; min-height: 0; }
-@media (min-width: 768px) {
-    .gd-toolbar__toggle { display: none; }
-    .gd-toolbar__body { grid-template-rows: 1fr; }
-    .gd-toolbar__body-inner { overflow: visible; }
-}
-.gd-toolbar__row { display: flex; flex-wrap: wrap; gap: 8px; }
-.gd-field { display: flex; flex-direction: column; gap: 2px; flex: 1 1 100%; }   /* mobile: each select full-width on its own row */
-@media (min-width: 768px) { .gd-field { flex-basis: 0; min-width: 120px; } }   /* tablet+: three across */
-.gd-field__lbl { font-size: 0.55rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pp-text-mute); }
 .gd-select { border: 1px solid var(--pp-border); border-radius: var(--pp-radius-sm); background: color-mix(in oklab, var(--pp-bg-2) 80%, transparent); color: var(--pp-text); font-size: 0.85rem; padding: 7px 10px; cursor: pointer; }
 .gd-select:focus-visible { outline: 2px solid color-mix(in oklab, var(--pp-primary) 60%, transparent); outline-offset: 1px; }
-.gd-toolbar__chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding-top: 8px; border-top: 1px solid var(--pp-divider); }
-.gd-toolbar__lbl { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--pp-text-mute); }
-.gd-toolbar__sep { width: 1px; height: 16px; background: var(--pp-divider); margin: 0 4px; }
-/* Mobile: break the chip row so Type and Rarity get their own rows (the separator becomes a full-width gap). */
-@media (max-width: 767px) { .gd-toolbar__sep { flex-basis: 100%; width: auto; height: 0; margin: 2px 0; background: none; } }
+
+/* The control row above the trophies (GL-10, trophy_grid/_controls.html), the same on both pages: the count
+   (and on the Game page the list's own page), then All / Unearned, Sort and More filters. The three controls
+   share one 40px height so the row reads as one object. On a phone the count takes a line and the controls the
+   next, Sort taking the slack and More filters dropping to its icon. */
+.gd-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin: 0 0 14px; }
+.gd-controls__count { position: relative; margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px;
+    font-size: 0.875rem; color: var(--pp-text-mute); }
+.gd-controls__count b { color: var(--pp-text); font-size: 0.95rem; font-weight: 800; }
+.gd-controls__count .gd-loadbar { position: absolute; left: 0; right: 0; bottom: -6px; }
+.gd-controls__link { display: inline-flex; align-items: center; gap: 4px; color: var(--pp-accent); font-weight: 600; text-decoration: none; }
+.gd-controls__link svg { width: 14px; height: 14px; }
+.gd-controls__link:hover { text-decoration: underline; text-underline-offset: 3px; }
+.gd-controls__link:focus-visible { outline: 2px solid var(--pp-accent); outline-offset: 2px; border-radius: 0.25rem; }
+.gd-controls__ctl { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.gd-controls__show { flex-wrap: nowrap; }
+.gd-controls__show .pp-switch__chip { min-height: 30px; padding-block: 0; }
+.gd-controls__sort .gd-select { height: 40px; padding-block: 0; }
+.gd-controls__more { position: relative; height: 40px; }
+.gd-controls__more svg { width: 16px; height: 16px; }
+.gd-controls__more[aria-expanded="true"] { color: var(--pp-text); border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border)); }
+.gd-controls__badge { min-width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; padding: 0 5px;
+    border-radius: 999px; font-size: 0.66rem; font-weight: 800; color: var(--pp-bg-0); background: var(--pp-primary); }
+/* The panel tweens its height (the house animatePanel, via filterPanel); the inner wrapper carries the padding and
+   border so the panel can collapse to a true 0. */
+.gd-controls__panel { flex-basis: 100%; overflow: hidden; transition: height 0.32s var(--pp-ease), opacity 0.32s var(--pp-ease); }
+.gd-controls__badge.is-pop { animation: ppBadgePop 0.3s var(--pp-ease); }   /* ppBadgePop: browse-gallery.css */
+@media (prefers-reduced-motion: reduce) { .gd-controls__badge.is-pop { animation: none; } }
+.gd-controls__panel-inner { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 22px; padding: 12px 14px;
+    border-radius: var(--pp-radius-md); border: 1px solid var(--pp-border); background: color-mix(in oklab, var(--pp-bg-1) 60%, transparent); }
+@media (prefers-reduced-motion: reduce) { .gd-controls__panel { transition: none; } }
+.gd-controls__group { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.gd-controls__lbl { margin-right: 4px; font-size: 0.66rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--pp-text-mute); }
+@media (max-width: 767px) {
+    .gd-controls__ctl { margin-left: 0; width: 100%; }
+    .gd-controls__sort { flex: 1 1 0; min-width: 0; }
+    .gd-controls__sort .gd-select { width: 100%; }
+    .gd-controls__more { padding-inline: 12px; }
+    /* Icon only, but still its name: visually hidden, not display:none (the button would lose its label). */
+    .gd-controls__morelbl { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+    .gd-controls__badge { position: absolute; top: -6px; right: -6px; }
+    .gd-controls__group { flex-basis: 100%; }
+}
+
 .gd-chip { cursor: pointer; }
 .gd-chip__face { display: inline-block; font-size: 0.72rem; font-weight: 600; padding: 3px 10px; border-radius: 999px; color: var(--pp-text-dim); background: color-mix(in oklab, var(--pp-bg-2) 60%, transparent); border: 1px solid var(--pp-border); transition: color var(--pp-dur-fast) var(--pp-ease), background var(--pp-dur-fast) var(--pp-ease), border-color var(--pp-dur-fast) var(--pp-ease); }
 .gd-chip__face:hover { color: var(--pp-text); }
@@ -811,11 +548,23 @@
 .gd-chip__face.is-pop { animation: gdChipPop 0.32s cubic-bezier(0.34, 1.6, 0.64, 1); }
 @keyframes gdChipPop { 0% { transform: scale(1); } 40% { transform: scale(1.13); } 100% { transform: scale(1); } }
 
-/* Group nav */
-/* Wrap the jump pills (don't horizontally scroll): a scroll container here sits in the page's flex column
-   (#zoom-wrapper) and its intrinsic min-content propagates up, widening the whole page on many-DLC games.
-   Wrapping has no intrinsic-width to leak, and shows every group at once. */
+/* Group nav. From tablet up the pills wrap and show every group at once. On a phone, one row that scrolls
+   sideways (GL-04): one pill per row was 290px of jump links before the first trophy on a five-pack game.
+   A sideways strip in the page's flex column can leak its min-content width upward and make a mobile browser
+   widen the whole layout viewport (the Plat Calendar and browse-drawer cases, fixed there with `contain:
+   layout size`). Measured here under iPhone emulation, with and without that containment, this strip does
+   not leak, so it goes without: size containment would pin the strip to a fixed height its chips already
+   fill exactly, and any larger text would scroll them inside it. test_trophy_controls_browser.py holds the
+   line (innerWidth against clientWidth, on an emulated device). Bleeds to the screen's edges, faded, so a
+   cut-off pill reads as "more this way". */
 .gd-groupnav { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+@media (max-width: 767px) {
+    .gd-groupnav { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none;
+        margin-inline: -16px; padding-inline: 16px; scroll-padding-inline: 16px;
+        -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 16px, #000 calc(100% - 28px), transparent);
+                mask-image: linear-gradient(90deg, transparent 0, #000 16px, #000 calc(100% - 28px), transparent); }
+    .gd-groupnav::-webkit-scrollbar { display: none; }
+}
 .gd-groupnav__chip { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; padding: 5px 10px; border-radius: 999px; text-decoration: none; font-size: 0.78rem; color: var(--pp-text-dim); background: color-mix(in oklab, var(--pp-bg-2) 60%, transparent); border: 1px solid var(--pp-border); transition: color var(--pp-dur-fast) var(--pp-ease), border-color var(--pp-dur-fast) var(--pp-ease); }
 .gd-groupnav__chip:hover { color: var(--pp-text); border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border)); }
 .gd-groupnav__icon { width: 18px; height: 18px; border-radius: 4px; object-fit: cover; flex-shrink: 0; }
@@ -875,7 +624,6 @@
    desktop-compact sizes are too small to reliably tap. Restored to compact at md+ (mouse precision). */
 @media (max-width: 767px) {
     .gd-select { padding: 10px 12px; }
-    .gd-toolbar__chips { gap: 8px; }
     .gd-chip__face { padding: 8px 13px; }
     .gd-groupnav { gap: 8px; }
     .gd-groupnav__chip { padding: 9px 13px; }
@@ -942,23 +690,26 @@
 .gd-trophy__name { font-weight: 600; font-size: 0.92rem; color: var(--pp-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
 .gd-trophy__type { --tc: var(--pp-text-mute); font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; padding: 1px 7px; border-radius: 999px; color: var(--tc); border: 1px solid color-mix(in oklab, var(--tc) 45%, transparent); flex-shrink: 0; }
 .gd-trophy__detail { font-size: 0.76rem; color: var(--pp-text-mute); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
-.gd-trophy__earned { font-size: 0.68rem; font-style: italic; color: color-mix(in oklab, var(--pp-success) 80%, var(--pp-text)); }
+.gd-trophy__earned { font-size: 0.68rem; font-weight: 600; color: color-mix(in oklab, var(--pp-success) 80%, var(--pp-text)); }
 .gd-trophy__prog { display: flex; align-items: center; gap: 8px; margin-top: 3px; max-width: 260px; }
 .gd-trophy__progbar { flex: 1; }   /* shared pp-horizon; amber via --horizon-accent (set inline) */
 .gd-trophy__progval { font-size: 0.62rem; font-weight: 700; color: var(--pp-accent); white-space: nowrap; }
-/* One rates block, reflowed responsively (no duplicate markup): mobile wraps it below the row (inline,
-   labels hidden, indented past the icon); desktop is the right-hand stacked column with labels. */
-.gd-trophy__rates { display: flex; align-items: center; gap: 10px; flex-shrink: 0; flex-basis: 100%; padding-left: 64px; }
-.gd-trophy__got { display: inline-flex; }
+/* One rates block, reflowed responsively (no duplicate markup): mobile puts it on one line below the row,
+   indented past the icon, label beside each value; desktop is two right-hand columns of a FIXED width with the
+   numbers right-aligned, so the rates line up row to row whatever their width (GL-07). Nothing in it wraps:
+   a label breaking in some rows and not others is what made phone rows 112, 119 or 145px tall. */
+.gd-trophy__rates { display: flex; align-items: center; gap: 14px; flex-shrink: 0; flex-basis: 100%; flex-wrap: nowrap; padding-left: 64px; }
+
 .gd-trate { display: inline-flex; align-items: center; gap: 3px; font-weight: 600; color: var(--pp-text-dim); }   /* per-trophy earn-rate readout (renamed from .gd-rate: collided with the ratings-panel block) */
 .gd-trate--stacked { flex-direction: row; align-items: center; gap: 4px; }
-.gd-trate__val { display: inline-flex; align-items: center; gap: 4px; font-size: 0.8rem; font-weight: 700; color: var(--pp-text-dim); }
+.gd-trate__val { display: inline-flex; align-items: center; gap: 4px; font-size: 0.8rem; font-weight: 700; color: var(--pp-text-dim);
+    font-variant-numeric: tabular-nums; white-space: nowrap; }
 /* Labelled at every width (DS-10): on a phone two percentages told apart only by a logo read as noise. */
-.gd-trate__lbl { display: inline; font-size: 0.55rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--pp-text-mute); }
+.gd-trate__lbl { display: inline; font-size: 0.55rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--pp-text-mute); white-space: nowrap; }
 @media (min-width: 768px) {
     .gd-trophy { flex-wrap: nowrap; }
-    .gd-trophy__rates { flex-basis: auto; padding-left: 0; gap: 12px; }
-    .gd-trate--stacked { flex-direction: column; gap: 1px; min-width: 52px; }
+    .gd-trophy__rates { flex-basis: auto; padding-left: 0; gap: 6px; }
+    .gd-trate--stacked { flex-direction: column; align-items: flex-end; gap: 1px; width: 66px; }
     .gd-trate__val { font-size: 0.85rem; }
     .gd-trate__lbl { display: block; }
     .gd-trophy__icon { width: 56px; height: 56px; }
@@ -1059,11 +810,9 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 
 /* ---- Reduced motion ---- */
 @media (prefers-reduced-motion: reduce) {
-    .gd-cover, .gd-spine__row, .gd-spine__chev, .gd-about-more svg, .gd-trophy, .gd-trophy__icon, #browse-results,
-    .gd-groupbar__fill, .gd-jobmini, .gd-shotmodal__close, .gd-shotmodal__nav, .gd-shotmodal__count, .gd-shotmodal__thumb { transition: none; }
-    .gd-spine__row--contract:hover .gd-jobmini { transform: none; }
+    .gd-cover, .gd-trophy, .gd-trophy__icon, #browse-results, .gd-groupbar__fill, .gd-jobmini,
+    .gd-shotmodal__close, .gd-shotmodal__nav, .gd-shotmodal__count, .gd-shotmodal__thumb { transition: none; }
     .gd-loadbar.is-active > span { animation: none; }
-    .gd-toolbar__body, .gd-toolbar__chev { transition: none; }
     .gd-shotmodal__strip { scroll-behavior: auto; }
     .gd-shotmodal[open]::backdrop, .gd-shotmodal.is-closing::backdrop { animation: none; }
     .gd-modal[open] { animation: none; }
@@ -1120,7 +869,6 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 .gd-lb__dropmenu[hidden] { display: none; }
 .gd-lb__dropitem { justify-content: flex-start; width: 100%; text-align: left; border-radius: var(--pp-radius-sm); padding: 7px 11px; }
 .gd-lb__dropitem:hover { background: color-mix(in oklab, var(--pp-primary) 10%, transparent); }
-
 
 /* Rank-or-hunter search: reuses the shared [data-search-wrap] chrome (clear button + spinner) that the
    browse/collection toolbars use, with a leading search glyph like .pp-bgal__search. */
@@ -1207,19 +955,6 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
    mobile -- boards are often minutes apart. To fit the two-line row it goes compact: a numeric date
    (7/24/26) with the time inline after a middot. md+ has room to stack the spelled-out date over the time. */
 
-/* Speed / playtime rows flow the cells in DOM order (no standings grid areas). MOBILE: there's only room
-   for the headline number, so every context column is hidden -- rank | who | metric. md+ restores the
-   context columns (Started/Finished, Progress/Last played) and anchors them (below). */
-@media (min-width: 768px) {
-    /* Anchor the metric area to the SAME left edge as the standings board's trophy section, so all three
-       board types line up. Standings' metric block is 9+3+6.5 = 18.5rem at md (name column = 1fr, 10px
-       gaps); matching the three metric columns to that total, with the same 1fr name column and gap, starts
-       them at the same x. Values run start / center / end across the block. */
-}
-@media (min-width: 1024px) {
-    /* lg adds the bar column to standings, growing its block to 9+7+3+6.5 = 25.5rem; grow the metric
-       columns to match so the left edge stays aligned. */
-}
 /* The metric (elapsed / play time) is the row's headline number. On mobile it sits at the right (its column
    is content-width after the 1fr name). md+ centers speed between the two dates / leads playtime after the
    name. */
@@ -1642,7 +1377,6 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 .gd-qr__rec svg { width: 18px; height: 18px; flex: none; color: var(--rec-c); }
 .gd-qr__rec-lbl { min-width: 0; }
 
-
 @media (hover: hover) {
     .gd-qr__rec:hover { border-color: color-mix(in oklab, var(--rec-c) 40%, var(--pp-border)); color: var(--pp-text); }
 }
@@ -1734,7 +1468,6 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 /* The quick-take cards sit on a bg-2 wash, so the mobile facepile rim (supporter.css) matches
    that ground instead of bg-1. */
 .gd-blurb { --mark-rim: var(--pp-bg-2); }
-
 
 /* Identity affordance up to the concept Game page (Games/Trophy Lists IA): one quiet line. */
 .gd-partof {

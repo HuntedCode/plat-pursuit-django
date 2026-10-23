@@ -5,6 +5,6 @@ pieces live here; the grid itself is the SHARED component at trophies/partials/t
 one component, two hosts (this page + the concept Game page's list viewport). id_prefix='' keeps
 this page's historical trophy-group-<id> anchors byte-identical for game-detail.js's group jump.
 {% endcomment %}
-{# Filtered trophy count, read by game-detail.js on swap to count-up the toolbar/minibar totals. #}
+{# Filtered trophy count, read by game-detail.js on swap to count up the control row's and the minibar's totals. #}
 <span id="gd-count-data" data-trophy-count="{{ trophy_shown_count }}" hidden></span>
 {% include 'trophies/partials/trophy_grid/grid.html' with trophies=grouped_trophies groups=trophy_groups earned=profile_earned group_pct=profile_group_pct group_totals=profile_group_totals profile=profile show_group_nav=game.has_trophy_groups id_prefix='' %}

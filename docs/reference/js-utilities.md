@@ -532,6 +532,20 @@ can't FLIP its disc back from a dragged-off position, so on swipe it instead **r
 the source medallion reappears in the grid with a subtle materialize settle -- while the tap/close button
 keeps the grow/shrink "put-down". Both routes send the object back to its slot.
 
+### PlatPursuit.TrophyControls
+
+The control row above a trophy grid (`partials/trophy_grid/_controls.html`), on both the trophy list page and the
+Game page. Lives in `trophy-grid.js`, not `utils.js`: only the two pages that render a grid load it. Its "More
+filters" panel IS a `filterPanel` (count = the filters inside the panel only; no dim target, each page dims its
+own swap target).
+
+| Method | Parameters | Purpose |
+|--------|-----------|---------|
+| `open(row)` | the `.gd-controls` element | Opens More filters, animated (the minibar's Filters reach) |
+| `sync(row)` | the `.gd-controls` element | Recounts the badge after values change without a `change` event (the Game page's reset on a list switch) |
+| `setCount(row, n)` | element, number | Counts the row's total up to `n` from what it showed (after a swap) |
+| `setBusy(row, on)` | element, boolean | The row's loading bar, delay-gated 220ms so an instant filter never flashes it |
+
 ### PlatPursuit.runScripts
 
 | Method | Parameters | Purpose |

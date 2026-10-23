@@ -3,7 +3,7 @@
 Two bugs, one shared cause. Game detail and the badge header each carried their OWN copy of this banner,
 so they drifted -- and when badge detail was rebuilt (bd2) the copy was left behind, leaving that page with
 nothing but a small meta item. On game detail the surviving copy collided with the hero's pinned "X Players"
-stat. Both pages now render one shared chrome class.
+stat (gone since the trophy list pass). Both pages now render one shared chrome class.
 """
 import re
 from pathlib import Path
@@ -119,8 +119,7 @@ def test_the_banner_is_declared_once_in_shared_chrome():
 
     game = GAME_CSS.read_text(encoding='utf-8')
     assert '.gd-viewing' not in game, 'the game-detail copy of the banner is still declared'
-    # Game detail may still POSITION the shared banner (it pins a stat over that corner) -- what it must
-    # not do is restyle it.
+    # Game detail may still POSITION the shared banner -- what it must not do is restyle it.
     assert not re.search(r'(?m)^\s*\.pp-viewing\s*[,{]', game), 'game-detail.css redefines the shared banner'
 
     # Swept across EVERY component file, not just the two pages in play. Checking only game-detail.css is
@@ -137,40 +136,24 @@ def test_the_banner_is_declared_once_in_shared_chrome():
         )
 
 
-def test_the_hero_corner_stat_does_not_sit_on_top_of_the_banner():
-    """The reported bug. `.gd-hero__players` is absolute against the `.card` (DaisyUI makes it the
-    positioned ancestor), so it measures from the CARD's top edge -- above the banner, landing inside its
-    tinted box on top of "View mine".
+def test_the_banner_sits_above_the_hero_and_nothing_is_pinned_over_it(client):
+    """The reported bug was a corner stat ("X Players") absolutely positioned against the card, landing on
+    the banner. The trophy list pass (2026-10-22) replaced that corner with the Game page's platinum stat, a
+    grid item in the hero's own grid: the banner sits above the grid in flow, so nothing can land on it as
+    long as nothing in the hero is pinned to the card again."""
+    from tests.factories import GameFactory, ProfileGameFactory, TrophyFactory
 
-    The corner is re-anchored to the content ROW when the banner is present, so the banner stays full-width
-    and the stat sits below it. Two earlier shapes were wrong and must not come back: offsetting `top` by a
-    hand-measured banner height (drifts the moment a long username wraps the banner to two lines), and
-    reserving horizontal space so the stat sits BESIDE the banner, which reads as though the two belong
-    together -- badge detail puts its banner above everything, and these pages should agree.
+    game = GameFactory(defined_trophies={'bronze': 5, 'silver': 0, 'gold': 0, 'platinum': 1})
+    TrophyFactory(game=game, trophy_type='platinum', trophy_earn_rate=4.2, trophy_rarity=1)
+    other = ProfileFactory(is_linked=True, psn_username='Rival')
+    ProfileGameFactory(profile=other, game=game, progress=40)
+    client.force_login(ProfileFactory(is_linked=True).user)
 
-    Pinned in the source because this is a layout collision no render assertion can catch.
-    """
-    css = GAME_CSS.read_text(encoding='utf-8')
-    css = re.sub(r'/\*[\s\S]*?\*/', '', css)     # the comment explains the fix and names the rejected shapes
+    body = client.get(reverse('game_detail_with_profile', kwargs={
+        'np_communication_id': game.np_communication_id, 'psn_username': other.psn_username}), **CF).content.decode()
 
-    scoped = re.findall(r'\.gd-hero__body:has\(\.pp-viewing\)\s+([^{]+)\{([^}]*)\}', css)
-    assert scoped, 'nothing moves the pinned corner, so the stat sits on top of the banner again'
-
-    decls = {sel.strip(): body for sel, body in scoped}
-    assert '.gd-hero__grid' in decls and 'position: relative' in decls['.gd-hero__grid'], (
-        'the content row is not a positioning context, so the corner still measures from the card'
-    )
-    assert 'margin-right' not in ' '.join(decls.values()), (
-        'the banner is narrowed to make room -- that puts the stat beside it, not below it'
-    )
-    # Re-anchoring the row is only half of it: without re-zeroing the offsets the stat keeps measuring
-    # `top: 22px` from the row and sits low.
-    assert '.gd-hero__players' in decls and 'top: 0' in decls['.gd-hero__players'], (
-        'the corner keeps its card-relative offsets, so re-anchoring the row just moves the overlap'
-    )
-    # And it must stay behind the md gate: below 768px the stat is in FLOW, where absolute offsets would
-    # tear it out of the layout that already avoids the banner.
-    blocks = re.findall(r'@media \(min-width:\s*768px\)\s*\{((?:[^{}]|\{[^{}]*\})*)\}', css)
-    assert any('.gd-hero__body:has(.pp-viewing)' in b for b in blocks), (
-        'the re-anchor is not scoped to md+, so it applies on mobile where the stat is in flow'
-    )
+    assert 'pp-viewing' in body and 'gp-hero__side' in body
+    assert body.index('class="pp-viewing"') < body.index('gp-hero__grid'), 'the banner must sit above the hero grid'
+    css = re.sub(r'/\*[\s\S]*?\*/', '', (ROOT / 'static' / 'css' / 'components' / 'game-page.css').read_text(encoding='utf-8'))
+    pinned = re.findall(r'(\.gp-(?:hero__side|rarity)[^{]*)\{[^}]*position:\s*absolute', css)
+    assert not pinned, f'a hero stat is pinned to the card again: {pinned}'

@@ -21,8 +21,10 @@ Article ids are namespaced ({{ id_prefix }}trophy-{{ id }}); the predecessor's b
                     </div>
                     <p class="gd-trophy__detail">{{ trophy.trophy_detail }}</p>
 
+                    {% comment %}The status card's date format, the exact time on hover (GL-06); the row's green edge is the
+                    one at-a-glance "earned" mark, so the line needs no check mark of its own.{% endcomment %}
                     {% if e.earned and e.earned_date_time %}
-                        <span class="gd-trophy__earned">Earned {{ e.earned_date_time|format_date:"with_tz" }}</span>
+                        <span class="gd-trophy__earned" title="{{ e.earned_date_time|format_date:'with_tz' }}">Earned <time datetime="{{ e.earned_date_time|date:'c' }}">{{ e.earned_date_time|date:'M j, Y' }}</time></span>
                     {% endif %}
 
                     {% if profile and trophy.progress_target_value and not e.earned %}
@@ -36,9 +38,8 @@ Article ids are namespaced ({{ id_prefix }}trophy-{{ id }}); the predecessor's b
 
                 </div>
 
-                {# Rarity: one block. Desktop = right-hand stacked column with labels; mobile = wraps below the row, inline, label beside each value (CSS-driven, no duplicate markup). #}
+                {# Rarity: one block. Desktop = right-hand stacked columns of a fixed width, so the rates line up row to row (GL-07); mobile = one line below the row, label beside each value (CSS-driven, no duplicate markup). #}
                 <div class="gd-trophy__rates">
-                    {% if e.earned %}<span class="gd-trophy__got" title="Earned">{% include 'partials/icons/checkmark.html' with color='var(--pp-success)' size='w-4 h-4' %}</span>{% endif %}
                     <div class="gd-trate gd-trate--stacked">
                         <span class="gd-trate__val">{% include 'partials/icons/pp_logo.html' with size='w-3.5 h-3.5' %}{{ trophy.earn_rate|multiply:100|floatformat:1 }}%</span>
                         <span class="gd-trate__lbl">PP Rate</span>

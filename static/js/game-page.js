@@ -122,10 +122,62 @@
                 target.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
             });
         }
-        document.body.addEventListener('htmx:afterSwap', (e) => {
-            if (viewport && e.detail.target === viewport) syncGroupJump();
-        });
         if (PP.StickyReveal) PP.StickyReveal.init();
+
+        // ── The control row (GL-10): a standing form OUTSIDE the viewport ─────────────────────────
+        // Two things swap the viewport: a list chip (its own ?list= link, so that list starts
+        // unfiltered) and this form (the list rides in its hidden input). After either, the row is
+        // told what landed: the count, the list's own page for its link, and whether the list has DLC.
+        const filterForm = document.getElementById('gp-filter-form');
+        const listInput = filterForm ? filterForm.querySelector('[data-gp-list-input]') : null;
+        const listLink = filterForm ? filterForm.querySelector('[data-gd-listlink]') : null;
+        const dlcField = filterForm ? filterForm.querySelector('[data-gd-dlc]') : null;
+        const controlRow = filterForm ? filterForm.querySelector('.gd-controls') : null;
+        // The row's count, bar and filter badge are the shared PP.TrophyControls (trophy-grid.js).
+        const controls = () => (controlRow ? PP.TrophyControls : null);
+
+        function syncControls() {
+            const meta = viewport && viewport.querySelector('[data-gp-vpmeta]');
+            if (!meta || !controls()) return;
+            controls().setCount(controlRow, parseInt(meta.dataset.count, 10));
+            if (listLink && meta.dataset.listUrl) listLink.href = meta.dataset.listUrl;
+            if (dlcField) dlcField.hidden = !meta.dataset.hasDlc;
+            controls().sync(controlRow);
+        }
+
+        // A list switch starts the new list unfiltered (its chip's link carries no filters), so the row
+        // goes back to its defaults to say so. Values only: nothing here fires `change`, which would
+        // send the form's own request on top of the chip's.
+        function resetControls() {
+            if (!filterForm) return;
+            filterForm.querySelectorAll('input[type="checkbox"]').forEach((c) => { c.checked = false; });
+            filterForm.querySelectorAll('input[type="radio"][value="default"]').forEach((r) => { r.checked = true; });
+            // The legacy "Earned" chip shows only while an old link applies it; a fresh list does not.
+            filterForm.querySelectorAll('input[name="earned"][value="earned"]').forEach((r) => r.closest('label').remove());
+            filterForm.querySelectorAll('select').forEach((sel) => { sel.selectedIndex = 0; });
+            if (controls()) controls().sync(controlRow);
+        }
+
+        if (viewport) {
+            document.body.addEventListener('htmx:beforeRequest', (e) => {
+                if (e.detail.target !== viewport) return;
+                viewport.classList.add('is-swapping', 'pointer-events-none');
+                if (controls()) controls().setBusy(controlRow, true);
+            });
+            document.body.addEventListener('htmx:afterRequest', (e) => {
+                // Error safety net (game-detail.js pattern): clear the dim and the bar unless this was an
+                // hx-sync abort superseded by a newer request, which owns them now.
+                if (e.detail.target !== viewport || !e.detail.xhr || e.detail.xhr.status === 0) return;
+                viewport.classList.remove('is-swapping', 'pointer-events-none');
+                if (controls()) controls().setBusy(controlRow, false);
+            });
+            document.body.addEventListener('htmx:afterSwap', (e) => {
+                if (e.detail.target !== viewport) return;
+                syncGroupJump();
+                syncControls();
+                fillBars(viewport);
+            });
+        }
 
         if (lswitch && viewport) {
             const chips = Array.from(lswitch.querySelectorAll('[role="tab"]'));
@@ -152,44 +204,40 @@
                 });
             }
 
-            document.body.addEventListener('htmx:beforeRequest', (e) => {
-                if (e.detail.target === viewport) {
-                    viewport.classList.add('is-swapping', 'pointer-events-none');
-                }
-            });
-            let lastNp = viewport.dataset.defaultNp || '';
+            let lastNp = listInput ? listInput.value : (viewport.dataset.defaultNp || '');
             const chipOrder = chips.map((c) => c.dataset.np);
             document.body.addEventListener('htmx:afterSwap', (e) => {
                 if (e.detail.target !== viewport) return;
-                viewport.classList.remove('is-swapping', 'pointer-events-none');
-                // pathInfo.requestPath is an htmx 2.0.4 internal (the only consumer in this
-                // repo); if a bump renames it, np silently falls back to the default and the
-                // chips desync -- the parity source-guard test names this line.
-                const params = new URLSearchParams(e.detail.pathInfo.requestPath.split('?')[1] || '');
+                // finalRequestPath, not requestPath: for the filter form (a GET) requestPath is the bare
+                // hx-get path and the list rides in the query htmx appends, so reading requestPath sent
+                // every filter back to the default list. Both are htmx 2.0.4 internals (the only consumer
+                // in this repo); if a bump renames them, np silently falls back to the default and the
+                // chips desync.
+                const path = e.detail.pathInfo.finalRequestPath || e.detail.pathInfo.requestPath;
+                const params = new URLSearchParams(path.split('?')[1] || '');
                 const np = params.get('list') || defaultNp;
-                // State first (chips + URL), decoration after -- never strand the switcher.
+                if (listInput) listInput.value = np;   // the filter form asks about the list on screen
+                // A filter change keeps the list: nothing to switch, push or ignite.
+                if (np === lastNp) return;
+                // State first (chips, the row, URL), decoration after -- never strand the switcher.
                 syncChips(np);
                 if (listSel) listSel.value = np;
+                resetControls();
                 // push, not replace: the chips are real <a>s whose navigation htmx swallowed --
                 // stopping a navigation without pushing is what strands the Back button
                 // (utils.js's own rule for swallowed-link tabs).
                 PP.syncViewParam(np, { param: 'list', default: defaultNp, push: true });
                 PP.slideViewIn(viewport, lastNp, np, chipOrder);
                 lastNp = np;
-                fillBars(viewport);
                 const chip = chips.find((c) => c.dataset.np === np);
                 if (chip) PP.igniteTab(chip);
             });
             document.body.addEventListener('htmx:afterRequest', (e) => {
-                // Error safety net (game-detail.js pattern): clear the dim unless this was an
-                // hx-sync abort superseded by a newer request.
-                if (e.detail.target === viewport && e.detail.xhr && e.detail.xhr.status !== 0) {
-                    viewport.classList.remove('is-swapping', 'pointer-events-none');
-                    // A FAILED swap never reaches afterSwap, so the minibar's list select would
-                    // keep showing the list the viewer picked while the page still shows the old
-                    // one (final-audit finding) -- walk it back to the list actually on screen.
-                    if (!e.detail.successful && listSel) listSel.value = lastNp;
-                }
+                // A FAILED swap never reaches afterSwap, so the minibar's list select would
+                // keep showing the list the viewer picked while the page still shows the old
+                // one (final-audit finding) -- walk it back to the list actually on screen.
+                if (e.detail.target === viewport && e.detail.xhr && e.detail.xhr.status !== 0
+                    && !e.detail.successful && listSel) listSel.value = lastNp;
             });
         }
 

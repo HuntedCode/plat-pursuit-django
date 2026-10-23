@@ -4,6 +4,8 @@ The resolution rule is the page's soul: identity is the IGDB id, so deliberately
 (lists split when trophy counts diverge) SHARE one page -- the owner's binding call. These tests
 mirror the _build_other_versions semantics tests the rule was lifted from.
 """
+import re
+
 import pytest
 from django.test import RequestFactory
 
@@ -181,8 +183,9 @@ def test_unknown_list_param_falls_back_without_redirecting():
 
 # --- rendering -----------------------------------------------------------------------------------
 
-def test_the_page_renders_anonymously_with_a_switcher_even_for_one_list(client):
-    """NO conditional IA: a one-list game renders the same page shape with a one-entry switcher."""
+def test_a_one_list_game_has_no_picker_but_the_same_viewport(client):
+    """GL-05: a picker with one card has nothing to pick, so a one-list game renders no switcher; the
+    viewport, the control row and its link to the list's own page are the same as on any game."""
     game = _game(igdb_id=901)
     TrophyFactory(game=game, trophy_id=1)
 
@@ -190,9 +193,10 @@ def test_the_page_renders_anonymously_with_a_switcher_even_for_one_list(client):
     content = response.content.decode()
 
     assert response.status_code == 200
-    assert 'gp-lswitch' in content, 'the switcher element must exist even for one list'
-    assert 'gp-lswitch--solo' in content
+    assert 'gp-lswitch' not in content and 'gp-lchip' not in content, 'one list: no picker'
     assert 'id="gp-viewport"' in content
+    assert 'id="gp-filter-form"' in content
+    assert f'data-gd-listlink' in content and f'href="/games/{game.np_communication_id}/"' in content
     assert 'gp-trophy-group-' in content, 'the shared grid must render with the gp- prefix'
     assert 'gd-trophies' in content
 
@@ -219,7 +223,7 @@ def test_htmx_viewport_swap_returns_only_the_partial(client):
     )
     content = response.content.decode()
 
-    assert 'gp-idchip' in content and 'gd-trophies' in content
+    assert 'data-gp-vpmeta' in content and 'gd-trophies' in content
     assert '<html' not in content and 'gp-lswitch' not in content, 'the swap must not return the page'
 
 
@@ -481,15 +485,19 @@ def test_the_host_is_the_first_trusted_list_not_an_untrusted_platform_winner(cli
 
 def test_rows_without_an_np_communication_id_are_excluded(client):
     """The audit's H4: np_communication_id is nullable/blankable; a blank row NoReverseMatch-500s
-    the identity chip and a null one mints an unactivatable ?list=None chip. Same floor as the
-    sitemap."""
+    the list link and a null one mints an unactivatable ?list=None chip. Same floor as the
+    sitemap. Two good lists, so the picker renders and the broken row has a place to leak into."""
     game = _game(igdb_id=992)
-    broken = GameFactory(concept=game.concept, np_communication_id=None)
+    other = _game(igdb_id=None, title_platform=['PS5'])
+    _match(other.concept, 992)
+    GameFactory(concept=game.concept, np_communication_id=None)
     TrophyFactory(game=game, trophy_id=1)
 
-    content = client.get('/games/992/').content.decode()
+    response = client.get('/games/992/')
+    content = response.content.decode()
 
-    assert content.count('gp-lchip') >= 1
+    assert response.status_code == 200
+    assert len(re.findall(r'class="gp-lchip(?: is-active)?"', content)) == 2
     assert '?list=None' not in content
 
 
@@ -637,32 +645,29 @@ def test_the_hero_is_concept_level_with_no_list_furniture(client):
         'id="gd-guidelines-modal"',
     ]:
         assert marker in content, f'active-ratings piece missing: {marker}'
-    # Every one of these WOULD render on List detail for this exact viewer + data; here each is a
-    # dead CTA or an orphaned dialog -- genuinely list-level furniture.
-    for marker in [
-        'id="gd-versions-modal"',   # List detail's versions dialog
-        'data-versions-open',
-        'data-stats-open',          # My Stats modal opener
-        'gd-btn--card',             # plat-card CTA (the viewer's finished list earns one THERE)
-        'gd-prog',                  # per-list progress readout
-        'data-spine-open',          # badge spine modal opener (badges ARE present)
-        'game-flag-btn',            # hero flag/report button (the About CTA's modal ships, this id doesn't)
-    ]:
+    # The list-level pieces of the shared hero (the trophy list pass): each WOULD render on List detail
+    # for this exact viewer + data; here each would be a dead CTA -- its modal and JS do not ship here.
+    list_level = [
+        'data-stats-open',          # My stats, in the status card's detail rows
+        'gp-status--detail',        # the status card's per-list detail (bar by group, grade counts)
+        'game-flag-btn',            # the one-list report button (this page reports per concept, data-flag-open)
+        'data-versions-open',       # the facts line's "N versions" (here the switcher and About cover them)
+        'id="gd-versions-modal"',
+    ]
+    for marker in list_level:
         assert marker not in content, f'list-level hero piece leaked: {marker}'
 
     # And every banned marker DOES render on the HOST concept's List detail for this same viewer
     # + data: proves each ban is reachable, so the list above cannot rot into vacuousness again
-    # (the first rewrite of this test dropped three bans without noticing -- audit finding). The
-    # ratings markers left this proof with List detail's Ratings tab (the slim-down); their
-    # positive pins above ARE their reachability now. The extraction must not have cost List
-    # detail its own lightbox either.
+    # (the first rewrite of this test dropped three bans without noticing -- audit finding).
     list_content = client.get(f'/games/{b.np_communication_id}/').content.decode()
-    for marker in [
-        'id="gd-versions-modal"', 'data-versions-open',
-        'data-stats-open', 'gd-btn--card', 'gd-prog', 'data-spine-open', 'game-flag-btn',
-        'id="gd-shot-modal"', 'js/shot-lightbox.js',
-    ]:
+    for marker in list_level:
         assert marker in list_content, f'ban not proven reachable on List detail: {marker}'
+    # The old List-detail hero's furniture retired with the trophy list pass (2026-10-22): the badge/Jobs
+    # spine, the progress block, the plat-card button and the screenshots are on NEITHER page's hero now
+    # (the Game page's About has the screenshots, badges and Jobs).
+    for marker in ['data-spine-open', 'gd-prog', 'gd-btn--card', 'id="gd-shot-modal"', 'js/shot-lightbox.js']:
+        assert marker not in list_content, f'retired List-detail hero piece came back: {marker}'
 
 
 def test_hero_facts_and_jumps_are_concept_true(client):

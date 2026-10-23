@@ -28,10 +28,10 @@ rich result.{% endcomment %}
 
         {% include 'partials/breadcrumb.html' with items=breadcrumb %}
 
-        {# ── Hero: identity + your progress + the "In your Pursuit" spine band ── #}
+        {# ── Hero: the Game page's hero, asked of this one list (hero.html) ── #}
         {% include 'trophies/partials/game_detail/hero.html' %}
 
-        {% comment %} Sticky minibar: persists across all four views (page-level, outside the panels), pinned by
+        {% comment %} Sticky minibar: persists across both views (page-level, outside the panels), pinned by
         StickyReveal once the real switcher scrolls under the chrome. It always re-surfaces the view switcher +
         game identity; per-view extras (sort / count / Filters reach for Trophies) are gated by data-mb-active,
         so each view can utilize the bar differently as its panel is rebuilt. Controls are proxied to the real
@@ -82,12 +82,6 @@ rich result.{% endcomment %}
             </div>
         </div>
 
-        {% comment %}This list's community snapshot as page CHROME (owner's placement call +
-        design audit): a .scard strip between the hero and the switcher -- the stacked-chrome
-        stat-card position, in the house stat-strip vocabulary. The four numbers are THIS
-        list's own denorms, per-list data the IA assigns to List detail.{% endcomment %}
-        {% include 'trophies/partials/game_detail/_community_snapshot.html' with snapshot_chrome=True %}
-
         {# ── View switcher: Trophies (default) · Ranks -- Ratings/About live on the concept Game page (slim-down) ── #}
         <div class="flex items-center justify-end mt-5 mb-4">
             <div class="pp-switch" id="gd-switch" role="tablist" aria-label="Game detail view">
@@ -107,14 +101,21 @@ rich result.{% endcomment %}
             {% include 'trophies/partials/game_detail/trophies_panel.html' %}
         </div>
 
-        {% comment %} Deliberately EMPTY at render time -- the only panel not server-rendered. It is the
-        one whose cost scales with a game's popularity, and most visitors arrive from search for trophy
-        info and never open it, so it is fetched on first activation (game-detail.js). {% endcomment %}
-        <div class="gd-view" id="gd-view-leaderboard" role="tabpanel" aria-labelledby="gd-tab-leaderboard" data-view="leaderboard"
-             data-lb-src="{% url 'game_leaderboard' game.np_communication_id %}" hidden>
-            <div class="gd-lb__loading" data-lb-loading>
-                <span class="gd-lb__spinner" aria-hidden="true"></span>
-                <span>Counting the hunters&hellip;</span>
+        {% comment %}Ranks: this list's four community numbers, then the board. The numbers moved here from between
+        the hero and the trophies (GL-03, owner 2026-10-22): they are the list's community, which is what this view
+        is about, and they no longer stand between a hunter and the trophies. They are THIS list's own denorms, so
+        they render with the page at no cost; game-detail.js counts them up on the view's first showing.
+
+        The board host is deliberately EMPTY at render time -- the only panel not server-rendered. It is the one
+        whose cost scales with a game's popularity, and most visitors arrive from search for trophy info and
+        never open it, so it is fetched on first activation (game-detail.js).{% endcomment %}
+        <div class="gd-view" id="gd-view-leaderboard" role="tabpanel" aria-labelledby="gd-tab-leaderboard" data-view="leaderboard" hidden>
+            {% include 'trophies/partials/game_detail/_community_snapshot.html' with snapshot_chrome=True %}
+            <div id="gd-lb-host" data-lb-src="{% url 'game_leaderboard' game.np_communication_id %}">
+                <div class="gd-lb__loading" data-lb-loading>
+                    <span class="gd-lb__spinner" aria-hidden="true"></span>
+                    <span>Counting the hunters&hellip;</span>
+                </div>
             </div>
         </div>
     </div>
@@ -122,34 +123,10 @@ rich result.{% endcomment %}
 
 {% endblock %}
 
-{# Screenshot lightbox + spine modals — live in the shared overlay layer, outside the page content wrapper. #}
 {% block fixed_overlays %}
-{% include 'trophies/partials/game_detail/shot_lightbox.html' with shot_title=game.title_name %}
-
-{# Spine cross-link detail modals #}
-{% if badges %}
-<dialog id="gd-badges-modal" class="gd-modal gd-modal--badges" aria-label="Badges this game is in">
-    <div class="gd-modal__head">
-        <h3>{{ badges|length }} Badge{{ badges|length|pluralize }}</h3>
-        <button type="button" class="gd-modal__close" data-gd-modal-close aria-label="Close">&times;</button>
-    </div>
-    <div class="gd-modal__body">
-        {% comment %} Showcase: each EDITION this game is part of, as its medallion object (in that edition's
-        metal) + series name + type . edition. The card links to that edition's tab on the badge detail page
-        (?group=<key>). {% endcomment %}
-        <div class="gd-badgegrid" data-gd-badgegrid>
-            {% for badge in badges %}
-                <a href="{% if profile %}{% url 'badge_detail_with_profile' badge.series_slug profile.psn_username %}{% else %}{% url 'badge_detail' badge.series_slug %}{% endif %}?group={{ badge.group_key }}" class="gd-badgecard" title="{{ badge.name }} &middot; {{ badge.group_name }}">
-                    <span class="gd-badgecard__art">{% include 'components/badge_medallion.html' with frame=badge.frame no_id=True %}</span>
-                    <span class="gd-badgecard__name">{{ badge.name }}</span>
-                    <span class="gd-badgecard__type">{{ badge.type_display }} &middot; {{ badge.group_name }}</span>
-                </a>
-            {% endfor %}
-        </div>
-    </div>
-</dialog>
-{% endif %}
-
+{% comment %}The overlays the hero opens: My stats (from the status card), Versions & editions (the facts line) and
+Report. The screenshot lightbox and the badge and contract modals left with the parts of the old hero that opened
+them (the Game page has them now).{% endcomment %}
 {# Versions & editions: this game on other platforms (same Concept) + related games in the same family (other Concepts). #}
 {% if other_versions or family_versions %}
 <dialog id="gd-versions-modal" class="gd-modal gd-modal--versions pp-dismissable" aria-label="Other versions and editions of {{ game.title_name }}">
@@ -161,34 +138,6 @@ rich result.{% endcomment %}
         {% include 'trophies/partials/game_detail/_version_sections.html' %}
     </div>
 </dialog>
-{% endif %}
-
-{# Contract detail: the SHARED .rpm modal, fetched lazily via data-contract-url. Linked viewers get the real card (contract_modal); everyone else gets the anonymized preview (contract_modal_preview) -- same modal, trophies instead of progress. One shell for both; only the footer differs (Browse vs a sign-up / link-PSN CTA). #}
-{% if pursuit_contract %}
-<div class="pp-detail-modal pp-detail-modal--contract" id="gd-contract-modal" hidden>
-    <div class="pp-detail-modal__scrim" data-contract-close></div>
-    <div class="pp-detail-modal__dialog" role="dialog" aria-modal="true" aria-label="Contract" tabindex="-1">
-        <button type="button" class="pp-detail-modal__close" data-contract-close aria-label="Close contract">&times;</button>
-        <div class="pp-detail-modal__body" data-contract-body></div>
-        {% if user.is_authenticated and user.profile.is_linked %}
-            <a class="bd-ctrmodal__more" href="{% url 'career' %}?view=contracts#career-panel-contracts">Browse all Contracts
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
-            </a>
-        {% else %}
-            {# Sign-up hook: this is the moment the Job Board sells itself, so close with the CTA. #}
-            <div class="bd-ctrmodal__cta">
-                {% if user.is_authenticated %}
-                    <p>Link your PSN to pursue this Contract, level its Jobs, and bank XP as you play.</p>
-                    <a href="{% url 'link_psn' %}" class="gd-btn gd-btn--primary">Link your PSN</a>
-                {% else %}
-                    <p>The Job Board turns trophy hunting into a career. Pursue Contracts, level Jobs, and bank XP.</p>
-                    <a href="{% url 'account_signup' %}" class="gd-btn gd-btn--primary">Start your Job Board</a>
-                    <span class="bd-ctrmodal__alt">Already a member? <a href="{% url 'account_login' %}">Sign in</a></span>
-                {% endif %}
-            </div>
-        {% endif %}
-    </div>
-</div>
 {% endif %}
 
 {# Ownership-aware "My Stats" modal (game-specific personal stats). Gated on target_profile so it renders for anon viewers of a shared /games/<np>/<username>/ link too. #}
@@ -216,7 +165,6 @@ rich result.{% endcomment %}
     rather than from `base.html`: only pages that render a trigger should pay for the controller.{% endcomment %}
     <script src="{% static 'js/quick-add.js' %}"></script>
     <script src="{% static 'js/browse-filters.js' %}"></script>
-    <script src="{% static 'js/shot-lightbox.js' %}"></script>
     <script src="{% static 'js/trophy-grid.js' %}"></script>
     <script src="{% static 'js/game-detail.js' %}"></script>
     {% if user.is_authenticated and user.profile %}

@@ -3,7 +3,6 @@ import math
 
 from core.services import completion_card_service as cards
 from core.services.tracking import track_site_event
-from core.services.site_heartbeat import get_cached_heartbeat
 from datetime import datetime, timedelta
 from django.core.cache import cache
 from django.contrib import messages
@@ -23,6 +22,8 @@ from trophies.views.concept_context import ConceptContextMixin
 from ..models import SHOVELWARE_FLAGGED_STATUSES, Game, Trophy, Profile, EarnedTrophy, ProfileGame, TrophyGroup, Concept, FeaturedGuide, Stage, UserConceptRating
 from ..forms import GameSearchForm, GameDetailForm, GuideSearchForm
 from trophies.util_modules.constants import ALL_PLATFORMS
+from trophies.util_modules.trophy_progress import psn_progress
+from trophies.views.hero_context import has_platinum, list_status, plat_rarity
 from .browse_helpers import (
     annotate_ascii_name, annotate_community_ratings,
     apply_game_browse_filters, apply_game_browse_sort, get_active_filter_chips,
@@ -606,14 +607,13 @@ def build_trophy_groups(game):
 
 
 def compute_group_pct(trophy_groups, group_totals):
-    """Per-group completion % keyed by group_id, for the grid's group headers. Same earned/total
-    math as _build_group_bars, reading the already-aggregated totals + defined counts."""
-    pct = {}
-    for gid, group in trophy_groups.items():
-        total = sum(int(v or 0) for v in (group.get('defined_trophies') or {}).values())
-        earned = sum((group_totals.get(gid) or {}).values())
-        pct[gid] = round(earned / total * 100) if total else 0
-    return pct
+    """Per-group completion % keyed by group_id, for the grid's group headers: PSN's own weighting
+    (psn_progress), so a group header agrees with the hero's percentage (GL-11). Reads the
+    already-aggregated per-grade totals + defined counts; no query."""
+    return {
+        gid: psn_progress(group.get('defined_trophies') or {}, group_totals.get(gid) or {})
+        for gid, group in trophy_groups.items()
+    }
 
 
 def group_trophy_rows(rows):
@@ -622,6 +622,73 @@ def group_trophy_rows(rows):
     for trophy in rows:
         grouped.setdefault(trophy.get('trophy_group_id', 'default'), []).append(trophy)
     return {gid: grouped[gid] for gid in sorted(grouped, key=lambda x: (x != 'default', x))}
+
+
+# The PSN rarity brackets the Rarity filter offers, by PSN earn rate (%): the tier boundaries PSN uses.
+def _rarity_bracket(rate):
+    if rate <= 1:
+        return 'ultra_rare'
+    if rate <= 5:
+        return 'very_rare'
+    if rate <= 25:
+        return 'rare'
+    return 'common'
+
+
+_TYPE_ORDER = {'platinum': 0, 'gold': 1, 'silver': 2, 'bronze': 3}
+
+
+def filter_and_sort_rows(rows, form, profile_earned):
+    """The trophy filter and sort (GameDetailForm) over one list's rows -- the ONE implementation the
+    Trophy List page and the Game page's list viewport both run (GL-10). Returns a new list; an invalid
+    form leaves the rows as they are. Earned/unearned needs `profile_earned`: with none (signed out)
+    there is nothing earned to filter by, so the rows pass through."""
+    if not form.is_valid():
+        return list(rows)
+    data = form.cleaned_data
+
+    def is_earned(t):
+        return profile_earned.get(t['trophy_id'], {}).get('earned', False)
+
+    out = list(rows)
+    earned_key = data.get('earned')
+    if profile_earned and earned_key == 'unearned':
+        out = [t for t in out if not is_earned(t)]
+    elif profile_earned and earned_key == 'earned':
+        out = [t for t in out if is_earned(t)]
+
+    types = data.get('trophy_type')
+    if types:
+        out = [t for t in out if t['trophy_type'] in types]
+
+    brackets = data.get('rarity_bracket')
+    if brackets:
+        out = [t for t in out if _rarity_bracket(t['trophy_earn_rate']) in brackets]
+
+    dlc = data.get('dlc_filter')
+    if dlc == 'base':
+        out = [t for t in out if t['trophy_group_id'] == 'default']
+    elif dlc == 'dlc':
+        out = [t for t in out if t['trophy_group_id'] != 'default']
+
+    sort_key = data.get('sort')
+    if sort_key == 'earned_date':
+        def when(t):
+            return profile_earned.get(t['trophy_id'], {}).get('earned_date_time')
+        out.sort(key=lambda t: (when(t) is None, when(t) or timezone.make_aware(datetime.min)))
+    elif sort_key == 'psn_rarity':
+        out.sort(key=lambda t: t['trophy_earn_rate'])
+    elif sort_key == 'pp_rarity':
+        out.sort(key=lambda t: t['earn_rate'])
+    elif sort_key == 'alpha':
+        out.sort(key=lambda t: t['trophy_name'].lower())
+    elif sort_key == 'earned_count':
+        out.sort(key=lambda t: (-t['earned_count'], t['trophy_name'].lower()))
+    elif sort_key == 'earned_count_inv':
+        out.sort(key=lambda t: (t['earned_count'], t['trophy_name'].lower()))
+    elif sort_key == 'type':
+        out.sort(key=lambda t: (_TYPE_ORDER.get(t['trophy_type'], 4), t['trophy_name'].lower()))
+    return out
 
 
 def build_earned_state(game, profile):
@@ -648,17 +715,19 @@ def build_earned_state(game, profile):
         .select_related('trophy')
         .order_by('trophy__trophy_id')
     )
-    state = {
-        'profile_earned': {
-            e.trophy.trophy_id: {
-                'earned': e.earned,
-                'progress': e.progress,
-                'progress_rate': e.progress_rate,
-                'progressed_date_time': e.progressed_date_time,
-                'earned_date_time': e.earned_date_time
-            } for e in earned_qs
-        },
-    }
+    profile_earned = {}
+    plat_date = None   # when the platinum popped: the hero's status card names it (no extra query)
+    for e in earned_qs:
+        profile_earned[e.trophy.trophy_id] = {
+            'earned': e.earned,
+            'progress': e.progress,
+            'progress_rate': e.progress_rate,
+            'progressed_date_time': e.progressed_date_time,
+            'earned_date_time': e.earned_date_time
+        }
+        if e.earned and e.trophy.trophy_type == 'platinum':
+            plat_date = e.earned_date_time
+    state = {'profile_earned': profile_earned, 'plat_date': plat_date}
 
     ordered_earned_qs = earned_qs.filter(earned=True).order_by(F('earned_date_time').asc(nulls_last=True))
     state['profile_trophy_totals'] = ordered_earned_qs.aggregate(
@@ -744,13 +813,11 @@ class GameDetailView(ConceptContextMixin, DetailView):
             # otherwise; deferring it keeps the per-render payload lean.
             'concept__igdb_match__raw_response',
         ).prefetch_related(
-            # The HERO's concept facts only (dev/publisher, genre/theme tags). The About
-            # panel's engines + franchises prefetches left with the About tab (the slim-down's
-            # final audit caught them still riding every List-detail render); GamePageView
-            # carries its own copies for the panel it now hosts.
+            # The hero's facts line (its developer) and the SEO markup's publishers. The genre and
+            # theme tags left with the old hero's description (the trophy list pass), as the About
+            # panel's engines + franchises left with the About tab; GamePageView carries its own
+            # copies for the panels it hosts.
             'concept__concept_companies__company',
-            'concept__concept_genres__genre',
-            'concept__concept_themes__theme',
         )
 
     def _get_target_profile(self):
@@ -851,6 +918,44 @@ class GameDetailView(ConceptContextMixin, DetailView):
             pass
 
         return context
+
+    def _build_hero_context(self, game, target_profile, context):
+        """The hero (the trophy list pass, 2026-10-22): the Game page's hero, asked of this one list. Badges,
+        Jobs and screenshots left it for the Game page, one tap up through "Part of". Reads the progress the
+        page already built; the queries are the platinum's rate, the Contract and the versions."""
+        hero = {
+            'list_status': self._list_status(game, target_profile, context),
+            'plat_rarity': plat_rarity(game),
+            # The signed-out invitation's wording (GL-09): "chasing this platinum" only when the list has one.
+            'invite_platinum': has_platinum(game),
+            'hero_developer': next(
+                (cc.company for cc in game.concept.concept_companies.all() if cc.is_developer), None,
+            ) if game.concept_id else None,
+        }
+        # The Contract this game levels: only its "ready to claim" line reaches the hero now.
+        hero.update(self._build_pursuit_context(game, target_profile))
+        # Versions & editions stays on this page (an owner call the slim-down recorded: this page IS one
+        # version, so its relatives belong here): the facts line's "N versions" opens the modal.
+        hero.update(self._build_versions_context(game))
+        return hero
+
+    @staticmethod
+    def _list_status(game, target_profile, context):
+        """The hero's status card for this list (hero_context.list_status, the Game page's own), or
+        {'state': 'none'} when the displayed hunter does not own it, or None with no hunter to describe (signed
+        out, or signed in without a linked PSN). Reads the progress
+        and earned totals the page already built; no query."""
+        if not target_profile:
+            return None
+        progress = context.get('profile_progress')
+        if progress is None:
+            return {'state': 'none'}
+        totals = context.get('profile_trophy_totals') or {}
+        return list_status(
+            game, progress['progress'], sum(int(v or 0) for v in totals.values()),
+            platted=bool(totals.get('platinum')), plat_date=context.get('plat_date'),
+            share=context.get('plat_card'),
+        )
 
     def _build_earned_state(self, game, profile):
         """Delegates to the module-level build_earned_state (shared with GamePageView's viewport);
@@ -972,80 +1077,31 @@ class GameDetailView(ConceptContextMixin, DetailView):
         if not has_trophies:
             return [], {}, {}, False
 
-        # Apply filtering and sorting
-        if form.is_valid():
-            earned_key = form.cleaned_data['earned']
-            if profile_earned:
-                if earned_key == 'unearned':
-                    full_trophies = [t for t in full_trophies if not profile_earned.get(t['trophy_id'], {}).get('earned', False)]
-                elif earned_key == 'earned':
-                    full_trophies = [t for t in full_trophies if profile_earned.get(t['trophy_id'], {}).get('earned', False)]
-
-            # Trophy type filter
-            trophy_type_filter = form.cleaned_data.get('trophy_type')
-            if trophy_type_filter:
-                full_trophies = [t for t in full_trophies if t['trophy_type'] in trophy_type_filter]
-
-            # Rarity bracket filter (PSN rarity tiers)
-            rarity_filter = form.cleaned_data.get('rarity_bracket')
-            if rarity_filter:
-                def _matches_rarity(rate, brackets):
-                    if rate <= 1:
-                        return 'ultra_rare' in brackets
-                    elif rate <= 5:
-                        return 'very_rare' in brackets
-                    elif rate <= 25:
-                        return 'rare' in brackets
-                    else:
-                        return 'common' in brackets
-                full_trophies = [t for t in full_trophies if _matches_rarity(t['trophy_earn_rate'], rarity_filter)]
-
-            # DLC / Base game filter
-            dlc_filter = form.cleaned_data.get('dlc_filter')
-            if dlc_filter == 'base':
-                full_trophies = [t for t in full_trophies if t['trophy_group_id'] == 'default']
-            elif dlc_filter == 'dlc':
-                full_trophies = [t for t in full_trophies if t['trophy_group_id'] != 'default']
-
-            sort_key = form.cleaned_data['sort']
-            if sort_key == 'earned_date':
-                full_trophies.sort(
-                    key=lambda t: (
-                        profile_earned.get(t['trophy_id'], {}).get('earned_date_time') is None,
-                        profile_earned.get(t['trophy_id'], {}).get('earned_date_time') or timezone.make_aware(datetime.min)
-                    )
-                )
-            elif sort_key == 'psn_rarity':
-                full_trophies.sort(key=lambda t: t['trophy_earn_rate'], reverse=False)
-            elif sort_key == 'pp_rarity':
-                full_trophies.sort(key=lambda t: t['earn_rate'], reverse=False)
-            elif sort_key == 'alpha':
-                full_trophies.sort(key=lambda t: t['trophy_name'].lower())
-            elif sort_key == 'earned_count':
-                full_trophies.sort(key=lambda t: (-t['earned_count'], t['trophy_name'].lower()))
-            elif sort_key == 'earned_count_inv':
-                full_trophies.sort(key=lambda t: (t['earned_count'], t['trophy_name'].lower()))
-            elif sort_key == 'type':
-                type_order = {'platinum': 0, 'gold': 1, 'silver': 2, 'bronze': 3}
-                full_trophies.sort(key=lambda t: (type_order.get(t['trophy_type'], 4), t['trophy_name'].lower()))
+        full_trophies = filter_and_sort_rows(full_trophies, form, profile_earned)
 
         return full_trophies, build_trophy_groups(game), group_trophy_rows(full_trophies), has_trophies
 
     def _build_group_bars(self, trophy_groups, profile_group_totals):
         """Composite per-group progress: ONE segment per trophy group (base + DLCs), each filled to
-        that group's earned/total %. The base segment always takes >= 50% of the width -- its flex
-        weight is (shown DLC count + 1), so with one DLC it's ~67/33 and it eases toward 50% as DLCs
-        grow. DLC segments are capped. Cheap: reads the already-aggregated group totals + defined
+        that group's PSN-weighted % (psn_progress, as the group headers show it). The base segment
+        always takes >= 50% of the width -- its flex weight is (shown DLC count + 1), so with one DLC
+        it's ~67/33 and it eases toward 50% as DLCs grow. DLC segments are capped. Cheap: reads the already-aggregated group totals + defined
         counts, no new queries. Returns None when there are no trophies to show.
         """
         DLC_CAP = 6
 
         def entry(gid, group):
             defined = group.get('defined_trophies') or {}
-            total = sum(int(v or 0) for v in defined.values())
-            earned = sum((profile_group_totals.get(gid) or {}).values())
-            pct = round(earned / total * 100) if total else 0
-            return {'name': group.get('trophy_group_name') or '', 'pct': pct, 'earned': earned, 'total': total}
+            totals = profile_group_totals.get(gid) or {}
+            return {
+                'name': group.get('trophy_group_name') or '',
+                # PSN's weighting, the same percentage the group header shows (GL-11); the counts stay
+                # counts, for the segment's tooltip.
+                'pct': psn_progress(defined, totals),
+                'earned': sum(totals.values()),
+                'total': sum(int(v or 0) for v in defined.values()),
+                'defined': defined, 'totals': totals,
+            }
 
         main = None
         dlcs = []
@@ -1065,9 +1121,14 @@ class GameDetailView(ConceptContextMixin, DetailView):
         if combined:
             # Too many DLC packs to show individually -> collapse to ONE "All DLC" segment at the
             # aggregate %, so every DLC trophy is still represented (nothing dropped from the bar).
-            t = sum(d['total'] for d in dlcs)
-            e = sum(d['earned'] for d in dlcs)
-            dlcs = [{'name': 'All DLC', 'pct': round(e / t * 100) if t else 0, 'earned': e, 'total': t}]
+            defined, totals = {}, {}
+            for d in dlcs:
+                for grade, n in d['defined'].items():
+                    defined[grade] = defined.get(grade, 0) + int(n or 0)
+                for grade, n in d['totals'].items():
+                    totals[grade] = totals.get(grade, 0) + n
+            dlcs = [{'name': 'All DLC', 'pct': psn_progress(defined, totals),
+                     'earned': sum(d['earned'] for d in dlcs), 'total': sum(d['total'] for d in dlcs)}]
         return {'main': main, 'dlcs': dlcs, 'dlc_total': dlc_total, 'combined_dlc': combined}
 
     def _build_group_pct(self, trophy_groups, profile_group_totals):
@@ -1102,54 +1163,12 @@ class GameDetailView(ConceptContextMixin, DetailView):
         crumbs.append({'text': f"{game.platforms_display} trophy list" if same_name else game.title_name})
         return crumbs
 
-    # PSN-global rarity tiers (Trophy.trophy_rarity): Common=3 .. Ultra_Rare=0.
-    _RARITY_LABELS = {0: 'Ultra Rare', 1: 'Very Rare', 2: 'Rare', 3: 'Common'}
-
-    # Contract-row status tag -> (label, CSS variant). Always shown on the pursuit spine row.
-
-    def _build_outlook_context(self, game):
-        """
-        Anonymous "Platinum Outlook" -- the logged-out counterpart to a member's
-        progress readout (this is the SEO inbound funnel). Leads with the PSN-GLOBAL
-        platinum rarity (a dense, platform-wide difficulty signal that does NOT depend
-        on our userbase size), plus denormed community reach and a cached site-wide
-        hunter count for the CTA.
-
-        Whale-safe: one indexed single-game platinum lookup, denorm reads straight off
-        `game`, and the hourly-cached heartbeat (never a request-path COUNT). Returns {}
-        on any failure so the panel degrades to absent.
-        """
-        try:
-            plat = (
-                Trophy.objects.filter(game=game, trophy_type='platinum')
-                .only('trophy_earn_rate', 'trophy_rarity').first()
-            )
-            plat_rate = plat.trophy_earn_rate if plat and plat.trophy_earn_rate else None
-            plat_rarity = plat.trophy_rarity if plat and plat.trophy_rarity is not None else None
-
-            heartbeat = get_cached_heartbeat()
-            hunters = (heartbeat or {}).get('always', {}).get('profiles_total', {}).get('value')
-
-            return {
-                'outlook': {
-                    'has_platinum': plat is not None,
-                    'plat_rate': plat_rate,
-                    'plat_rarity_label': self._RARITY_LABELS.get(plat_rarity),
-                    # 4 = Ultra Rare (hardest) .. 1 = Common, for a difficulty meter.
-                    'difficulty_level': (4 - plat_rarity) if plat_rarity is not None else None,
-                    'site_hunters': hunters,
-                    'played_count': game.played_count,
-                }
-            }
-        except Exception:
-            logger.exception(
-                "Failed to build outlook context for game %s",
-                getattr(game, 'np_communication_id', '?'),
-            )
-            return {}
+    def _is_results_swap(self):
+        """A filter change: htmx re-renders #browse-results alone, so the hero is not built."""
+        return getattr(self.request, 'htmx', False) and self.request.htmx.target == 'browse-results'
 
     def get_template_names(self):
-        if getattr(self.request, 'htmx', False) and self.request.htmx.target == 'browse-results':
+        if self._is_results_swap():
             return ['trophies/partials/game_detail/trophy_browse_results.html']
         return super().get_template_names()
 
@@ -1184,6 +1203,7 @@ class GameDetailView(ConceptContextMixin, DetailView):
             # NOTE: this merge is key-by-key, not a context.update() -- a new key added inside
             # _build_profile_context does NOT reach the template until it is listed here.
             context['plat_card'] = profile_context.get('plat_card')
+            context['plat_date'] = profile_context.get('plat_date')
         else:
             context['profile'] = None
             context['profile_progress'] = None
@@ -1212,9 +1232,9 @@ class GameDetailView(ConceptContextMixin, DetailView):
             if target_profile and (viewer_profile is None or target_profile.pk != viewer_profile.pk)
             else None
         )
-
-        # Build game images context
-        context['image_urls'] = self._build_images_context(game)
+        # Their name for the hero's copy ("<name> platinumed this"), or '' on the viewer's own page.
+        other = context['viewing_other_profile']
+        context['viewing_other_name'] = (other.display_psn_username or other.psn_username) if other else ''
 
         # `game_stats` is gone: the rebuilt hero and ratings panel read the denormed Game
         # columns (played_count / plats_earned_count / full_completion_count /
@@ -1254,19 +1274,9 @@ class GameDetailView(ConceptContextMixin, DetailView):
             if target_profile and context['trophy_groups'] else {}
         )
 
-        # Concept-level SUBSET only (the slim-down): the hero's badge spine + versions modal.
-        # The rest of _build_concept_context (About facts, community_tabs, the ratings assembly)
-        # left with the Ratings/About tabs -- the concept Game page is their host now.
-        context.update(self._build_badges_context(game))
-        context.update(self._build_versions_context(game))
-
-        # Spine cross-link: this game's Contract + the Jobs it levels (hero band).
-        context.update(self._build_pursuit_context(game, target_profile))
-
-        # Platinum Outlook: PSN-global difficulty + community reach. Only the logged-out hero renders it,
-        # so skip the work (a trophy lookup) for members who'll never see it.
-        if not target_profile:
-            context.update(self._build_outlook_context(game))
+        # The hero. A filter change re-renders the results alone, so it skips the hero's queries.
+        if not self._is_results_swap():
+            context.update(self._build_hero_context(game, target_profile, context))
 
         # Build breadcrumbs
         context['breadcrumb'] = self._build_breadcrumbs(game, target_profile)

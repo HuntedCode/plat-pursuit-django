@@ -3,10 +3,9 @@
  *
  * Owns: the Trophies/Ranks view switcher (shared .pp-switch +
  * PlatPursuit.wireTablist/slideViewIn/igniteTab/syncViewParam), the trophy-filter
- * settle + scroll restore, hero count-ups, and deep-link jumps ([data-gd-goto]).
- * The hero screenshot lightbox lives in shot-lightbox.js and the ratings machinery
- * in ratings-tab.js -- both on the concept Game page since the list-detail
- * slim-down moved Ratings/About there.
+ * settle + scroll restore, the hero's bars and My stats modal, and deep-link jumps
+ * ([data-gd-goto]). The control row's More filters panel is trophy-grid.js's (shared
+ * with the Game page).
  */
 document.addEventListener('DOMContentLoaded', () => {
     const container = document.getElementById('game-detail-container');
@@ -15,7 +14,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const scrollKey = container.dataset.scrollKey;
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-    // Shared "page steps back" recede (used by the contract modal AND the hero's stats/badges modals).
+    // Shared "page steps back" recede (the My stats modal).
     // Pivots the scale on the current viewport centre so it's a gentle scale-in-place at any scroll depth.
     const zoomContainer = document.getElementById('zoom-container');
     function pageRecede(on) {
@@ -376,7 +375,11 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             // Decorative, so it runs LAST: tab state (panels, chips, URL) is fully synced before any
             // entrance animation, and a fault in the flourish can never strand the switcher mid-update.
-            if (shown && name === 'leaderboard') loadLeaderboard(shown);
+            if (shown && name === 'leaderboard') {
+                countUpOnce(shown);
+                const host = document.getElementById('gd-lb-host');
+                if (host) loadLeaderboard(host);
+            }
         }
 
         tablist = PlatPursuit.wireTablist(viewTabs, { onSelect: (t) => showView(t.dataset.view) });
@@ -405,10 +408,14 @@ document.addEventListener('DOMContentLoaded', () => {
     })();
 
     // ============================================================
-    // Hero count-ups (completion %, glance stats) — reduced-motion safe (countUp jumps).
+    // Count-ups (the Ranks view's community numbers), reduced-motion safe (countUp jumps). On the
+    // view's FIRST showing, not at load: the view starts hidden, and a count nobody sees is wasted.
+    // A function declaration, so the switcher above can call it while honoring an initial ?view=.
     // ============================================================
-    if (PlatPursuit.countUp) {
-        document.querySelectorAll('[data-gd-countup]').forEach((el) => {
+    function countUpOnce(scope) {
+        if (!PlatPursuit.countUp || !scope || scope.dataset.counted) return;
+        scope.dataset.counted = '1';
+        scope.querySelectorAll('[data-gd-countup]').forEach((el) => {
             const n = parseInt(el.dataset.gdCountup, 10);
             if (!isNaN(n)) { el.dataset.countup = n; PlatPursuit.countUp(el, 700, { from: 0 }); }
         });
@@ -512,18 +519,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     syncGroupJump();
 
-    // Chip toggle "pop": a small spring on the type/rarity chip face when it changes. The toolbar isn't
-    // re-rendered on filter swaps, so a one-time wire holds.
-    if (!reduce) {
-        document.querySelectorAll('.gd-chip input').forEach((inp) => {
-            inp.addEventListener('change', () => {
-                const face = inp.nextElementSibling;
-                if (!face) return;
-                face.classList.remove('is-pop'); void face.offsetWidth; face.classList.add('is-pop');
-            });
-        });
-    }
-
     // Minibar controls: the Sort proxy mirrors the real (in-form) sort so there's ONE source of truth and no
     // duplicate form field; the Filters reach scrolls the real toolbar back into view. StickyReveal pins the
     // bar once the switcher scrolls under the chrome.
@@ -540,9 +535,14 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             realSort.addEventListener('change', () => { mbSort.value = realSort.value; });
         }
+        // The minibar's Filters reach: back to the control row, with its More filters panel open.
         const mbFilters = document.querySelector('[data-minibar-filters]');
         if (mbFilters && filterForm) {
-            mbFilters.addEventListener('click', () => filterForm.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' }));
+            mbFilters.addEventListener('click', () => {
+                const row = filterForm.querySelector('.gd-controls');
+                if (row && PlatPursuit.TrophyControls) PlatPursuit.TrophyControls.open(row);
+                filterForm.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+            });
         }
         const mbGroupJump = document.querySelector('[data-minibar-groupjump]');
         if (mbGroupJump) {
@@ -553,7 +553,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // but the element and its data-lb-src / current toggles persist). The panel loads lazily, but these
         // controls are hidden until the Ranks tab is active, which loads it -- so by the time they're usable
         // the panel exists and lbOptsUrl reads its live toggle state.
-        const lbPanel = document.getElementById('gd-view-leaderboard');
+        const lbPanel = document.getElementById('gd-lb-host');
         if (lbPanel) {
             lbWireSearch(document.querySelector('[data-lb-mb-find]'), document.querySelector('[data-lb-mb-suggest]'),
                          document.querySelector('[data-lb-mb-findform]'), lbPanel);
@@ -573,110 +573,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (PlatPursuit.StickyReveal) PlatPursuit.StickyReveal.init();
     })();
 
-    // Mobile filter collapse: the toolbar body is collapsed by default on phones (CSS); this wires the toggle
-    // + an active-filter count badge so it's clear when filters are applied while collapsed. At md+ the body is
-    // always open (CSS) and the toggle is hidden, so this is a no-op there.
-    (function () {
-        const form = document.getElementById('gd-filter-form');
-        const toggle = document.querySelector('[data-gd-filters-toggle]');
-        const body = document.getElementById('gd-filter-body');
-        const badge = document.querySelector('[data-gd-filter-count]');
-        if (!form || !toggle || !body) return;
-        function setOpen(open) {
-            body.classList.toggle('is-open', open);
-            toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
-        }
-        // Active filters = checked type/rarity chips + a non-default Show/DLC select (sort is ordering, not a filter).
-        function countActive() {
-            let n = form.querySelectorAll('.gd-chip input:checked').length;
-            form.querySelectorAll('select[name="earned"], select[name="dlc_filter"]').forEach((s) => { if (s.selectedIndex > 0) n++; });
-            return n;
-        }
-        function refreshBadge() {
-            if (!badge) return;
-            const n = countActive();
-            badge.textContent = String(n);
-            badge.hidden = n === 0;
-        }
-        toggle.addEventListener('click', () => setOpen(!body.classList.contains('is-open')));
-        form.addEventListener('change', refreshBadge);
-        refreshBadge();
-        // Pre-applied filters (e.g. a shared link) start expanded -- WITHOUT animating open on load (suppress
-        // the grid-rows transition for this one state change, then restore it for user toggles).
-        if (countActive() > 0) {
-            body.style.transition = 'none';
-            setOpen(true);
-            void body.offsetWidth;
-            body.style.transition = '';
-        }
-        // The minibar's "Filters" reach expands the panel too (its own handler does the scroll-to-toolbar).
-        const mbFilters = document.querySelector('[data-minibar-filters]');
-        if (mbFilters) mbFilters.addEventListener('click', () => setOpen(true));
-    })();
-
     // ============================================================
-    // Hero About fit: on desktop, clamp + fade the IGDB blurb so the main column
-    // never pushes the hero taller than the cover + extras (the "header boundary").
-    // The blurb is the one elastic element; it yields, the rest holds.
+    // The hero's dialogs (native <dialog>): My stats from the status card ([data-stats-open]) and
+    // Versions & editions from the facts line ([data-versions-open]).
     // ============================================================
     (function () {
-        const grid = container.querySelector('.gd-hero__grid');
-        const main = container.querySelector('.gd-hero__main');
-        const cover = container.querySelector('.gd-cover');
-        const extras = container.querySelector('.gd-hero__extras');
-        const about = container.querySelector('.gd-hero__about');
-        const blurb = about ? about.querySelector('.gd-about-blurb') : null;
-        if (!grid || !main || !cover || !about || !blurb) return;
-
-        const ROW_GAP = 16;   // desktop grid row-gap (1rem), between cover and extras
-        function lineHeight() {
-            const lh = parseFloat(getComputedStyle(blurb).lineHeight);
-            return isNaN(lh) ? 20 : lh;
-        }
-        function fit() {
-            // Reset first so measurements reflect the natural (statically-clamped) height.
-            blurb.style.maxHeight = '';
-            about.classList.remove('is-clamped');
-            if (window.innerWidth < 1024) return;   // only when cover + main sit side by side
-
-            const leftH = cover.offsetHeight + (extras ? ROW_GAP + extras.offsetHeight : 0);
-            const gap = parseFloat(getComputedStyle(main).rowGap) || 8;
-            // Only FLOW children count toward the column height -- the "X Players" headline is absolutely
-            // positioned at md+ (it lives in this column but takes no flow space), so including its height
-            // over-counts mainH and falsely clamps the About blurb even when there's room.
-            const kids = Array.from(main.children).filter((c) => getComputedStyle(c).position !== 'absolute');
-            const mainH = kids.reduce((h, c) => h + c.offsetHeight, 0) + gap * Math.max(0, kids.length - 1);
-
-            const overflow = mainH - leftH;
-            if (overflow <= 4) return;               // fits within the boundary; leave the static clamp
-            const target = Math.max(lineHeight() * 2, blurb.offsetHeight - overflow);   // never crush below ~2 lines
-            if (target < blurb.scrollHeight) {
-                blurb.style.maxHeight = Math.round(target) + 'px';
-                about.classList.add('is-clamped');
-            }
-        }
-
-        fit();
-        // Recompute when the OUTER drivers change (never observe main -> the clamp mutates it = loop).
-        if (window.ResizeObserver) {
-            const ro = new ResizeObserver(() => window.requestAnimationFrame(fit));
-            ro.observe(cover);
-            if (extras) ro.observe(extras);
-        }
-        window.addEventListener('resize', () => window.requestAnimationFrame(fit));
-    })();
-
-    // ============================================================
-    // Hero screenshot lightbox: EXTRACTED to shot-lightbox.js (shared with the concept
-    // Game page, which adopted this hero). Loaded as its own script tag beside this file.
-    // ============================================================
-
-    // ============================================================
-    // Spine cross-link modals (badges native <dialog>; stats). The CONTRACT row uses the
-    // SHARED contract modal instead (data-contract-url -> pp-detail-modal, wired below).
-    // ============================================================
-    (function () {
-        const badgesModal = document.getElementById('gd-badges-modal');
         const statsModal = document.getElementById('gd-stats-modal');
         const versionsModal = document.getElementById('gd-versions-modal');
         function wire(m) {
@@ -705,23 +606,13 @@ document.addEventListener('DOMContentLoaded', () => {
             // Swipe-down-to-close on touch (shared sheet gesture) animates the dialog off itself, so just close.
             if (PlatPursuit.dismissableSheet) { PlatPursuit.dismissableSheet(m, { onClose: function () { pageRecede(false); if (m.close && m.open) m.close(); } }); }
         }
-        wire(badgesModal); wire(statsModal); wire(versionsModal);
+        wire(statsModal); wire(versionsModal);
         // Native <dialog>.showModal() scrolls the page to the dialog on mobile; keep the scroll put.
         function openKeepScroll(m) {
             const y = window.scrollY;
             m.showModal();
             if (window.scrollY !== y) window.scrollTo(0, y);
         }
-        document.querySelectorAll('[data-spine-open="badges"]').forEach((op) => {
-            op.addEventListener('click', () => {
-                if (!badgesModal || !badgesModal.showModal || badgesModal.open) return;
-                openKeepScroll(badgesModal);
-                pageRecede(true);
-                const grid = badgesModal.querySelector('[data-gd-badgegrid]');   // re-arm the staggered card reveal
-                if (grid && !reduce) { grid.classList.remove('is-revealing'); void grid.offsetWidth; grid.classList.add('is-revealing'); }
-            });
-        });
-
         document.querySelectorAll('[data-versions-open]').forEach((op) => {
             op.addEventListener('click', () => {
                 if (!versionsModal || !versionsModal.showModal || versionsModal.open) return;
@@ -761,115 +652,18 @@ document.addEventListener('DOMContentLoaded', () => {
     })();
 
     // ============================================================
-    // Shared contract modal: a [data-contract-url] trigger lazily fetches the rich contract card
-    // (contract_modal endpoint) into the .pp-detail-modal shell -- identical to badge-detail / career,
-    // so the game page stays in lockstep. Non-linked / anon fetches 404 -> fall back to the career href.
-    // (Refactor candidate: hoist this + badge-detail's copy into a shared PlatPursuit util.)
-    // ============================================================
-    (function () {
-        const contractModal = document.getElementById('gd-contract-modal');
-        if (!contractModal) return;
-        const contractBody = contractModal.querySelector('[data-contract-body]');
-        const dialogSel = '.pp-detail-modal__dialog';
-
-        // Focus trap + opener restore (matches badge-detail's hand-rolled modalA11y).
-        let opener = null;
-        function focusables() {
-            const dlg = contractModal.querySelector(dialogSel);
-            if (!dlg) return [];
-            return Array.prototype.slice.call(dlg.querySelectorAll(
-                'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
-            )).filter((el) => el.offsetWidth > 0 || el.offsetHeight > 0 || el === document.activeElement);
-        }
-        document.addEventListener('keydown', (e) => {
-            if (e.key !== 'Tab' || contractModal.hidden) return;
-            const dlg = contractModal.querySelector(dialogSel);
-            const f = focusables();
-            if (!f.length) { if (dlg) { e.preventDefault(); dlg.focus(); } return; }
-            const first = f[0], last = f[f.length - 1];
-            if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
-            else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
-        }, true);
-
-        function restoreFocus() { if (opener && opener.focus) { try { opener.focus(); } catch (_) { /* gone */ } } opener = null; }
-        function closeAnimated() {
-            pageRecede(false);
-            const dlg = contractModal.querySelector(dialogSel);
-            const finish = () => {
-                contractModal.hidden = true; contractModal.classList.remove('is-closing');
-                document.body.style.overflow = ''; contractBody.innerHTML = ''; restoreFocus();
-            };
-            if (reduce || !dlg) { finish(); return; }
-            contractModal.classList.add('is-closing');
-            let done = false;
-            const onEnd = (e) => { if (e.target !== dlg) return; done = true; dlg.removeEventListener('animationend', onEnd); finish(); };
-            dlg.addEventListener('animationend', onEnd);
-            window.setTimeout(() => { if (!done) { dlg.removeEventListener('animationend', onEnd); finish(); } }, 320);
-        }
-
-        const dlg0 = contractModal.querySelector(dialogSel);
-        if (dlg0 && PlatPursuit.dismissableSheet) {
-            PlatPursuit.dismissableSheet(dlg0, {
-                scrim: contractModal.querySelector('.pp-detail-modal__scrim'),
-                onClose: () => { pageRecede(false); contractModal.hidden = true; contractModal.classList.remove('is-closing'); document.body.style.overflow = ''; contractBody.innerHTML = ''; restoreFocus(); }
-            });
-        }
-
-        document.addEventListener('click', (e) => {
-            if (!e.target.closest) return;
-            const link = e.target.closest('[data-contract-url]');
-            if (link) {
-                if (e.metaKey || e.ctrlKey || e.shiftKey) return;   // let modified clicks open the href
-                e.preventDefault();
-                opener = link;
-                const loadTimer = window.setTimeout(() => link.classList.add('is-loading'), 150);
-                const clearLoading = () => { window.clearTimeout(loadTimer); link.classList.remove('is-loading'); };
-                fetch(link.getAttribute('data-contract-url'), { headers: { 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'same-origin' })
-                    .then((r) => (r.ok ? r.text() : null))
-                    .then((html) => {
-                        if (html == null) { clearLoading(); window.location.href = link.getAttribute('href'); return; }
-                        contractBody.innerHTML = html;
-                        let i = 0;
-                        contractBody.querySelectorAll('.rpm-job, .rpg').forEach((el) => { el.style.animationDelay = (i++ * 45) + 'ms'; el.classList.add('rpm-in'); });
-                        contractBody.querySelectorAll('.rpg__prog-fill').forEach((f) => { if (f.dataset.fill) f.style.width = f.dataset.fill; });
-                        contractModal.hidden = false;
-                        pageRecede(true);
-                        document.body.style.overflow = 'hidden';
-                        clearLoading();
-                        const d = contractModal.querySelector(dialogSel); if (d) d.focus();
-                    })
-                    .catch(() => { clearLoading(); window.location.href = link.getAttribute('href'); });
-                return;
-            }
-            if (e.target.closest('[data-contract-close]')) closeAnimated();
-        });
-        document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !contractModal.hidden) closeAnimated(); });
-    })();
-
-    // ============================================================
     // Trophy filter: dim-while-swapping settle + scroll restore
     // ============================================================
-    // Result count-up + in-flight loading bar. The count reflects the active filters; on swap we read the
-    // new total off the partial's hidden data element and tick from the last shown value.
-    const gdCountEl = document.querySelector('[data-gd-count]');
-    const gdLoadbar = document.querySelector('[data-gd-loadbar]');
-    let loadbarTimer = null;   // only surface the bar if a filter actually takes a beat (instant ones show nothing)
-    function loadbarStop() { window.clearTimeout(loadbarTimer); if (gdLoadbar) gdLoadbar.classList.remove('is-active'); }
-    let trophyCountLast = gdCountEl ? parseInt(gdCountEl.textContent.replace(/[^0-9]/g, ''), 10) : null;
+    // The control row's count and loading bar are the shared PlatPursuit.TrophyControls (trophy-grid.js);
+    // on swap the new total comes off the partial's hidden data element.
+    const controlRow = document.querySelector('#gd-filter-form .gd-controls');
+    const controls = () => PlatPursuit.TrophyControls;
     function syncTrophyCount(root) {
-        if (!gdCountEl || !root) return;
-        const data = root.querySelector('#gd-count-data');
+        const data = root && root.querySelector('#gd-count-data');
         if (!data) return;
         const n = parseInt(data.dataset.trophyCount, 10);
         if (isNaN(n)) return;
-        if (trophyCountLast === null) trophyCountLast = n;
-        if (PlatPursuit.countUp && !reduce && trophyCountLast !== n) {
-            gdCountEl.dataset.countup = n;
-            PlatPursuit.countUp(gdCountEl, 600, { from: trophyCountLast });
-        } else {
-            gdCountEl.textContent = n.toLocaleString();
-        }
-        trophyCountLast = n;
+        if (controls()) controls().setCount(controlRow, n);
         const mb = document.querySelector('[data-minibar-count]');   // keep the minibar total in sync
         if (mb) mb.textContent = n.toLocaleString();
     }
@@ -878,8 +672,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.target && e.target.id === 'gd-filter-form') {
             const results = document.getElementById('browse-results');
             if (results) results.classList.add('is-swapping');
-            // Delay-gate the bar: an instant filter never flashes it; only a slow one (whale library / slow net) surfaces it.
-            if (gdLoadbar) { window.clearTimeout(loadbarTimer); loadbarTimer = window.setTimeout(() => gdLoadbar.classList.add('is-active'), 220); }
+            if (controls()) controls().setBusy(controlRow, true);
             try { localStorage.setItem(scrollKey, window.scrollY); } catch (_) { /* ignore */ }
         }
     });
@@ -889,7 +682,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // default now, so nothing can strand them -- then stagger them in with the bespoke WAAPI pass and
             // refill the per-group Horizons (they re-render at 0%).
             e.detail.target.classList.remove('is-swapping', 'pp-reveal');
-            loadbarStop();
+            if (controls()) controls().setBusy(controlRow, false);
             syncTrophyCount(e.detail.target);
             syncGroupJump();   // the group-nav re-rendered -> refresh the minibar jump list + its visibility
             staggerSwappedRows(e.detail.target);
@@ -903,7 +696,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const d = e.detail;
         if (!d || !d.elt || d.elt.id !== 'gd-filter-form') return;
         if (d.xhr && d.xhr.status === 0) return;
-        loadbarStop();
+        if (controls()) controls().setBusy(controlRow, false);
     });
 
     // Restore scroll after a full navigation that carried filter params.
