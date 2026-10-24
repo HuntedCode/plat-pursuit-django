@@ -821,9 +821,11 @@ read by somebody else) every row of it inert. A fully-paid run is now one line. 
 toggle, because the panel is re-rendered from the server on every claim and a JS-managed open state would be
 destroyed by each swap.
 
-**The headline measures what has been CLAIMED, for the whole run**, and the foot carries what a full run pays.
-Swapping the headline's meaning part-way through a run was the alternative and was rejected: a hunter reading
-one number that means two things depending on when they look is worse than a zero on a fresh run.
+**The headline is the pay until the first claim, then the claimed total** (owner, 2026-10-24, review CH-05).
+From 2026-09-30 it meant "claimed" for the whole run, so a fresh run led with a large accent "0" and what it pays
+sat in the foot. The caption always names the number ("Job XP per finished square" / "Job XP claimed"), which
+is what makes the swap readable. The pay carries no `data-countup`, so the first claim ticks the claimed total
+up from zero; the foot drops the rate while the headline states it.
 
 **A claim is acknowledged on the receipts drawer**, after the ceremony closes
 (`.pp-cpay__done--just-paid`, reusing the Contract card's own `rpAcceptFlash` / `rpDoneIn` keyframes). This had

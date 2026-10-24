@@ -179,8 +179,11 @@
                 // WAITING, which fell on every claim -- a reward number ticking down to zero -- and was
                 // rendered only while something was owed, so Claim-all (which clears everything by
                 // definition) and the final single claim never animated at all.
+                //
+                // FROM ZERO ON THE FIRST CLAIM. Until then the headline is the pay rate, which carries no
+                // `data-countup` (review CH-05), so a missing figure means nothing was claimed yet.
                 var oldEl = wrap.querySelector('[data-countup]');
-                var before = oldEl ? parseInt(oldEl.dataset.countup || '', 10) : NaN;
+                var before = oldEl ? parseInt(oldEl.dataset.countup || '', 10) : 0;
                 // THE ENTRANCE IS SPENT. `pp-head-cascade` animates the wrapper's direct children, and the
                 // line below replaces them -- so leaving the class on would replay the card's arrival on every
                 // claim, which reads as the panel appearing again rather than updating. It has done its job by

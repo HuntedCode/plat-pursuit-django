@@ -632,31 +632,63 @@ def test_a_fully_claimed_run_collapses_its_whole_ledger(client):
 
 
 def test_the_panel_says_what_a_whole_run_pays(client):
-    """THE FORWARD-LOOKING NUMBER, in the foot rather than the headline (owner, 2026-09-30). The headline
-    measures what has been CLAIMED and keeps that meaning for the whole run -- so on a fresh run it is a zero,
-    and the answer to "what is this worth" goes where somebody asking it will read it instead of swapping what
-    the big number means part-way through.
+    """THE FORWARD-LOOKING NUMBER, in the foot (owner, 2026-09-30). Since 2026-10-24 (review CH-05) the
+    headline is the per-square pay until the first claim, so the foot states the full run in both states and
+    the rate only once something is claimed.
     """
     profile = _hunter(client)
     challenge, _jobs = _jobs_run(profile, count=1)
     full = CHALLENGE_SLOT_JOB_XP * challenge.total_slots
 
     body = client.get(reverse('challenge_detail', args=[challenge.id])).content.decode()
+    assert '{:,} Job XP for a full run'.format(full) in body, 'unclaimed: the rate is the headline'
 
+    rewards.redeem_all(challenge, profile)
+    body = client.get(reverse('challenge_detail', args=[challenge.id])).content.decode()
+    assert '{:,} Job XP per finished square,'.format(CHALLENGE_SLOT_JOB_XP) in body
     assert '{:,} for a full run'.format(full) in body
     assert rewards.summary(challenge)['full_xp'] == full, 'and the service owns the arithmetic'
 
 
-def test_an_untouched_run_offers_the_figure_without_a_claimed_total_to_show(client):
-    """The zero state: the headline is honestly 0 and the foot still answers what the run is worth."""
+def test_an_untouched_run_leads_with_what_a_square_pays(client):
+    """THE ZERO STATE LEADS WITH THE PAY (owner, 2026-10-24, review CH-05), not a large accent "0 Job XP
+    claimed". No `data-countup` on it: the first claim's tick reads a missing figure as zero."""
     profile = _hunter(client)
     challenge = svc.start(profile, CHALLENGE_TYPE_JOBS)
 
     body = client.get(reverse('challenge_detail', args=[challenge.id])).content.decode()
+    head = body[body.index('class="pp-cpay__head"'):body.index('class="pp-cpay__act"')]
 
-    assert '{:,} for a full run'.format(CHALLENGE_SLOT_JOB_XP * challenge.total_slots) in body
-    assert rewards.summary(challenge)['paid_count'] == 0
+    assert '+{:,}</span>'.format(CHALLENGE_SLOT_JOB_XP) in head
+    assert 'Job XP per finished square</span>' in head
+    assert 'claimed' not in head and 'data-countup' not in head
+    foot = body[body.index('class="pp-cpay__foot"'):]
+    foot = foot[:foot.index('</p>')]
+    assert '{:,} Job XP for a full run'.format(CHALLENGE_SLOT_JOB_XP * challenge.total_slots) in foot
+    assert 'per finished square' not in foot, 'the rate is said once'
     assert 'Claimed (' not in body, 'and no empty disclosure'
+
+
+def test_the_first_claim_turns_the_headline_into_the_claimed_total(client):
+    profile = _hunter(client)
+    challenge, _jobs = _finish_jobs_run(profile)
+    rewards.redeem_all(challenge, profile)
+    paid = rewards.summary(challenge)['paid_xp']
+
+    body = client.get(reverse('challenge_detail', args=[challenge.id])).content.decode()
+    head = body[body.index('class="pp-cpay__head"'):body.index('class="pp-cpay__act"')]
+
+    assert 'data-countup="{}"'.format(paid) in head and 'Job XP claimed</span>' in head
+    assert 'per finished square' not in head
+
+
+def test_the_first_claim_ticks_up_from_zero():
+    """Before the first claim the headline has no `data-countup`, so the re-render must start the tick at 0
+    rather than skip it: the first claim is the one most worth seeing."""
+    from pathlib import Path
+    code = (Path(__file__).resolve().parents[2] / 'static' / 'js' / 'challenge-detail.js').read_text(encoding='utf-8')
+
+    assert "var before = oldEl ? parseInt(oldEl.dataset.countup || '', 10) : 0;" in code
 
 
 def test_the_reward_card_joins_the_pages_entrance(client):
