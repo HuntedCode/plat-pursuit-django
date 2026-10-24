@@ -367,8 +367,8 @@ class ChallengeSitemap(Sitemap):
     FINISHED ONLY, though every non-hidden run is publicly readable. An in-flight run's page changes every
     time a square lands, so its `lastmod` would be stale within days, and there is little stable content to
     rank on: the board is mostly empty. A finished run is the opposite -- 25 or 26 named games, permanently --
-    which is a page worth indexing. The browse page itself is in `StaticViewSitemap` and links the live ones,
-    so nothing is unreachable to a crawler that wants them.
+    which is a page worth indexing. The browse page itself is in `StaticViewSitemap` and links the started
+    ones; a run with nothing done yet (off the browse since 2026-10-24) is linked from its owner's profile.
 
     HIDDEN RUNS ARE EXCLUDED, and this is the trap `GameListSitemap` carries a paragraph about, arriving with
     the opposite answer. There, `.visible()` was wrong because it is the `is_deleted=False` floor ALONE and

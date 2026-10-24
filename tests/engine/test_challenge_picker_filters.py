@@ -44,6 +44,14 @@ JS = (ROOT / 'static' / 'js' / 'challenge-detail.js').read_text(encoding='utf-8'
 _SEQ = {'n': 0}
 
 
+def _started(run):
+    """One square done, written directly: the browse lists a run from its first square (review CH-01)."""
+    from challenges.models import Challenge
+
+    Challenge.objects.filter(pk=run.pk).update(filled_count=1, completed_count=1)
+    return run
+
+
 def _hunter(client=None):
     user = UserFactory()
     profile = ProfileFactory(user=user, user_is_premium=True, is_linked=True)
@@ -488,8 +496,8 @@ def test_a_page_lands_only_on_the_panel_that_asked_for_it():
 
 
 def test_with_a_run_in_flight_my_challenges_is_in_the_header_once_and_not_the_toolbar(client):
-    # A RUN, so the toolbar renders too: the button lives in the header (owner, 2026-10-18), exactly once.
-    svc.start(_hunter(client), CHALLENGE_TYPE_AZ)
+    # A STARTED RUN, so the toolbar renders too: the button lives in the header (owner, 2026-10-18), exactly once.
+    _started(svc.start(_hunter(client), CHALLENGE_TYPE_AZ))
     for page in ('challenges', 'challenges_hall_of_fame'):
         body = client.get(reverse(page)).content.decode()
         if page == 'challenges':
@@ -499,7 +507,7 @@ def test_with_a_run_in_flight_my_challenges_is_in_the_header_once_and_not_the_to
 
 
 def test_an_anonymous_browse_page_offers_no_my_challenges_button(client):
-    svc.start(_hunter(), CHALLENGE_TYPE_AZ)
+    _started(svc.start(_hunter(), CHALLENGE_TYPE_AZ))
     body = client.get(reverse('challenges')).content.decode()
     assert 'data-browse-form' in body, 'the toolbar must render'
     assert 'data-my-challenges' not in body
@@ -675,3 +683,23 @@ def test_the_sheet_draws_each_flag_as_an_alert_chip():
     assert "chip(AVAILABILITY_LABELS[flag], 'error')" in tags
     assert "var AVAILABILITY_LABELS = { delisted: 'Delisted', unobtainable: 'Unobtainable' };" in JS
     assert JS.count('rowTags(row)') >= 2, 'both the card rows and the search rows draw the tags'
+
+
+# ── the fresh-eyes review, 2026-10-24 (docs/design/reviews/challenges.md, CH-10) ───────────────────────
+
+def test_the_platform_default_is_a_pressed_all_chip():
+    """No platform pressed meant every platform without saying so (rule 6). "All" is pressed exactly while no
+    platform is, and pressing it clears them."""
+    tpl = (Path(__file__).resolve().parents[2] / 'templates' / 'challenges' / 'challenge_detail.html').read_text(
+        encoding='utf-8')
+    assert 'data-cpick-platform-all aria-pressed="true">All</button>' in tpl
+    sync = JS[JS.index('function syncPlatformAll() {'):]
+    sync = sync[:sync.index('\n        }')]
+    assert "setAttribute('aria-pressed', any ? 'false' : 'true')" in sync
+    # Kept in step on every path that moves a platform: a tick, the All press, and the sheet's reset.
+    assert "box.addEventListener('change', function () { syncPlatformAll(); refilter(); });" in JS
+    reset = JS[JS.index('function reset()'):JS.index('grid.addEventListener')]
+    assert 'syncPlatformAll();' in reset
+    press = JS[JS.index("els.platformAll.addEventListener('click'"):]
+    press = press[:press.index(chr(10) + '                });')]   # the handler's own close, not an inner callback's
+    assert 'box.checked = false;' in press and 'syncPlatformAll();' in press and 'refilter();' in press

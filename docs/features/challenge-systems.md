@@ -355,7 +355,9 @@ concepts has a listed stack. A concept with no games on record yet counts as unk
 The Challenges page and the Hall of Fame link **My Challenges** from their header (owner, 2026-10-18), a solid
 button beside "How Challenges work" (`partials/_browse_header_actions.html`). It used to sit at the end of the
 browse toolbar, icon-only on a phone and gone whenever nothing was in flight. Game Lists' browse moved **My lists**
-into its header the same way.
+into its header the same way. Signed out, the same slot is **Start your own** (2026-10-24, review CH-02): sign-up
+with `next` back to My Challenges, and a run's own page offers "Start your own A-Z Challenge" (or its type) in the
+owner row's place. The empty-state "Start a challenge" link sends a visitor to sign-up too, not to the login gate.
 
 **On a phone, a search result's square buttons are a two-column grid under the cover**, not pills beside it.
 Beside a 56px cover each 44px pill took its own line, so a six-job game stood six tall (hunters' screenshots).
@@ -466,7 +468,8 @@ the draft's tweaks only when it is the same plan. **Apply keeps the draft**, min
 and the square pins on the squares it wrote (they are on the board now; the same game locked elsewhere keeps its
 lock). The autosave runs after the spend and never fails a plan.
 
-**Doors in:** a "Challenge Optimizer" FEATURE card on My Challenges (when an A-Z or Job Coverage run is active:
+**Doors in:** a "Challenge Optimizer" FEATURE card on My Challenges, UNDER the type cards since 2026-10-24 (review
+CH-04: above them it filled a phone's first screen and put the runs' Continue under the tab bar) (when an A-Z or Job Coverage run is active:
 primary edge, the star button `pp-cta--rise`, three ticks, a "New" chip until `views.OPTIMIZER_NEW_UNTIL`, and a
 status line from `optimizer_drafts.door_status`: a saved plan to pick up, or where a free week stands) and a
 "Optimize" button in a run page's owner row (editable A-Z / Job Coverage runs only). The page itself
@@ -918,7 +921,8 @@ Two surfaces, one feature, split on a single question: **is the run finished?**
 
 | | `community/challenges/` | `community/challenges/hall-of-fame/` |
 |---|---|---|
-| Holds | `visible()` + `is_complete=False` | `visible()` + `is_complete=True` |
+| Holds | `runs_in_flight()`: `visible()` + `is_complete=False` + `completed_count > 0` | `visible()` + `is_complete=True` |
+| Before the first finish | n/a | **the race**: the four runs nearest the line from `runs_in_flight()` in "Most progress" order, no tally, no toolbar |
 | Entry | `_run_card.html` in a grid | `_run_hero.html` in a stack |
 | Accent | primary | primary — the Hall of Fame shipped on `accent` and was corrected; `visual-identity.md` allows one brand accent across the kit |
 | Sorts | newest / oldest / most progress / hunter A-Z | newest finish / oldest finish / hunter A-Z |
@@ -929,6 +933,13 @@ Both are `_ChallengeBrowseView` subclasses, which is the third use of the browse
 established. A subclass answers four things: `base_queryset`, `SORTS`, its page furniture (`BROWSE_URL_NAME`,
 `EMPTY_COPY`) and its entry (`ENTRY_TEMPLATE`, `GRID_CLASS`). Hidden runs appear on **neither** — hiding means
 off the owner's profile and out of the hub, and that is the one thing the public read path honours everywhere.
+
+**A run joins the Challenges page with its first done square** (owner, 2026-10-24, review CH-01). Six days after
+launch 91 of 213 runs on prod had nothing done and filled the page's second half with "0/26 LETTERS"; the headline
+"in flight" counted them. `runs_in_flight()` is the one spelling of the rule, shared with the Hall of Fame's race so
+the two pages agree about who leads. `completed_count`, not `filled_count`: a picked game is a plan. A run with
+nothing done keeps its page (by link, and on its owner's profile). Neither page prints a zero tally: the header
+number hides at 0 and the empty state says it instead.
 
 `browse_results.html` is shared: the grid wrapper, the count attributes and the three empty states (searched
 nothing / filtered nothing / genuinely nothing) are common, and only the entry differs. **"Most progress" is

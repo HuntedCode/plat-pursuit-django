@@ -531,14 +531,21 @@ def test_a_refusal_does_not_look_like_progress():
     """Every failure wrote into the status line in the same dim grey as "Loading..." and "Saving...", so a
     refusal was visually identical to progress. The donor dialog has a toned error box for exactly this."""
     assert "els.status.classList.add('pp-cpick__status--error');" in JS
-    assert "els.status.classList.remove('pp-cpick__status--error');" in JS
+    assert "els.status.classList.remove('pp-cpick__status--error', 'pp-cpick__status--quiet');" in JS
     assert '.pp-cpick__status--error' in CSS
 
 
 def test_the_result_count_reaches_the_live_region():
     """It went only to `els.sub`, which is not one -- so "12 games fit" was never announced and a
     screen-reader user got silence on every successful load."""
-    assert 'say(els.sub.textContent);' in JS
+    assert 'echo(els.sub.textContent);' in JS
+    # `echo` IS the live region: it says, then leaves the text unpainted (review CH-10). Quiet, not `sr-only`:
+    # taking the line out of the flow made the rows jump on every "Loading..." (audit, 2026-10-24).
+    echo = JS[JS.index('function echo(message) {'):]
+    echo = echo[:echo.index('\n        }')]
+    assert 'say(message);' in echo and "classList.add('pp-cpick__status--quiet')" in echo
+    assert "'sr-only'" not in JS[JS.index('function say(message) {'):JS.index('function fail_from(')]
+    assert '.pp-cpick__status--quiet { color: transparent;' in CSS
 
 
 def test_the_editable_square_has_a_pointer_cursor():
@@ -599,7 +606,7 @@ def test_reset_clears_the_search_layout_class_and_the_catchup_copy():
 def test_the_sheet_announces_which_square_it_opened():
     """`aria-labelledby` points at the title, but nothing announces that element changing -- so the dialog's
     announced name stayed "Choose a game" and a screen-reader user never learned which square was open."""
-    assert "say(panel.label + ': ' + els.sub.textContent);" in JS
+    assert "echo(panel.label + ': ' + els.sub.textContent);" in JS
 
 
 def test_a_disabled_square_stops_lifting_under_the_cursor():

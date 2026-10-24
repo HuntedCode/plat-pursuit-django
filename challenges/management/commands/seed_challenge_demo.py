@@ -925,8 +925,10 @@ class Command(BaseCommand):
                     w('    on the HALL OF FAME -- no ordinal title (this type pays a day-marker ladder)')
                 else:
                     w('    on the HALL OF FAME -- no title (third or later completion)')
-            else:
+            elif run.completed_count:
                 w('    on the CHALLENGES browse page (in flight)')
+            else:
+                w('    on its owner\'s profile only (nothing done yet, so not on the browse page)')
         w('')
         w(self.style.MIGRATE_HEADING('And the pages'))
         w('    %s   (yours)' % reverse('my_challenges'))

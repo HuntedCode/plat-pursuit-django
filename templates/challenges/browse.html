@@ -32,6 +32,9 @@
                     {% include 'challenges/partials/_browse_header_actions.html' %}
                 </div>
 
+                {% comment %}NO TALLY AT ZERO, as on the Hall of Fame (review CH-01, CH-03): the empty state below already
+                says so.{% endcomment %}
+                {% if in_flight %}
                 <div class="text-right flex items-baseline gap-1 whitespace-nowrap md:block shrink-0">
                     {% comment %}NO `data-countup`: neither script this page loads initialises it, and
                     `utils.js` has no global auto-init for it -- see the matching note on the Hall of Fame's
@@ -42,6 +45,7 @@
                     Tailwind arbitrary value in a template.{% endcomment %}
                     <span class="text-xs text-base-content/50 md:mt-1 md:block md:uppercase md:tracking-wider">in flight</span>
                 </div>
+                {% endif %}
             </div>
         </div>
     </section>

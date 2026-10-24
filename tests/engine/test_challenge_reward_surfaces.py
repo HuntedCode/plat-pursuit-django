@@ -1034,3 +1034,49 @@ def test_the_chip_does_not_call_the_cards_own_resumable_run_elsewhere(client):
     assert 'pp-cowed' in jobs
     assert 'of a hidden run' not in jobs, 'the card IS showing it, so it is not elsewhere'
     assert 'on another run' not in jobs
+
+
+# ── the fresh-eyes review, 2026-10-24 (docs/design/reviews/challenges.md) ───────────────────────────────
+
+def test_an_unearned_title_does_not_look_held(client):
+    """CH-06: the unearned title wore the same filled chip as an earned one, so a run at 0/26 looked like it
+    held "A-Z Champion"; only a hover tooltip said otherwise."""
+    profile = _hunter(client)
+    challenge = svc.start(profile, CHALLENGE_TYPE_AZ)
+
+    body = client.get(reverse('challenge_detail', args=[challenge.id])).content.decode()
+
+    assert 'bd-chip--ghost shrink-0" title="Awarded when this run is finished">Earns A-Z Champion<' in body
+    assert 'bd-chip--accent shrink-0" title="Earned"' not in body
+
+
+def test_an_earned_title_keeps_the_filled_chip(client):
+    profile = _hunter(client)
+    challenge, _jobs = _finish_jobs_run(profile)
+
+    body = client.get(reverse('challenge_detail', args=[challenge.id])).content.decode()
+
+    assert 'bd-chip--accent shrink-0" title="Earned">' in body
+    assert '>Earns ' not in body
+
+
+def test_the_owners_actions_fold_to_icons_on_a_phone(client):
+    """CH-05: three labelled actions stacked into two rows above the board on a phone. Share and Optimize fold
+    to icon buttons there and keep their names for a screen reader."""
+    profile = _hunter(client)
+    profile.is_linked = True
+    profile.save(update_fields=['is_linked'])
+    challenge = svc.start(profile, CHALLENGE_TYPE_AZ)
+
+    body = client.get(reverse('challenge_detail', args=[challenge.id])).content.decode()
+
+    share = body[body.rindex('<button', 0, body.index('data-challenge-share')):body.index('</button>', body.index('data-challenge-share'))]
+    assert 'pp-cacts__fold' in share and 'aria-label=' in share and '<span class="hidden md:inline">Share</span>' in share
+    optimize = body[body.index('href="%s"' % reverse('challenge_optimizer')) - 120:]
+    optimize = optimize[:optimize.index('</a>')]
+    assert 'pp-cacts__fold' in optimize and 'aria-label="Optimize"' in optimize
+    # As tall as Back beside them and square: the size `.pp-cta--icon` fills (audit, 2026-10-24).
+    fold = _challenge_css()
+    fold = fold[fold.index('.pp-cacts__fold {'):]
+    fold = fold[:fold.index('}')]
+    assert 'min-height: var(--cta-h)' in fold and 'min-width: var(--cta-h)' in fold
