@@ -249,28 +249,6 @@ scroller.destroy();
 
 Fetches next page via AJAX with `X-Requested-With: XMLHttpRequest`, parses HTML, appends matching elements to the grid. Automatically stops when a page returns no matching elements or 404.
 
-### PlatPursuit.UnsavedChangesManager
-
-Warns users before navigating away with unsaved changes. Intercepts link clicks, browser back button, and tab close.
-
-```js
-PlatPursuit.UnsavedChangesManager.init({
-    hasUnsavedChanges: () => formIsDirty,     // Required: returns boolean
-    onSaveAndLeave: async (url) => { ... },   // Optional: save before leaving
-    showSaveButton: true,                      // Optional: show save option in modal
-    modalId: 'unsaved-changes-modal',          // Optional: custom modal ID
-});
-```
-
-| Method | Purpose |
-|--------|---------|
-| `init(config)` | Initialize with config (destroys previous if any) |
-| `forceNavigate(url)` | Navigate without checking for changes |
-| `isActive()` | Check if manager is initialized |
-| `destroy()` | Remove all event listeners and reset |
-
-Requires a `<dialog>` element with buttons: `#unsaved-stay-btn`, `#unsaved-discard-btn`, `#unsaved-save-btn`.
-
 ### PlatPursuit.ZoomAwareObserver
 
 Drop-in `IntersectionObserver` replacement. It was built to survive the legacy **ZoomScaler**
@@ -797,4 +775,4 @@ on the filtered element, and a `<button>` inside it never receives its click.
 
 - [Template Architecture](template-architecture.md): Where utils.js is included and how the zoom wrapper works
 - [Dashboard](../features/dashboard.md): Uses DragReorderManager for module reordering
-- [Roadmap System](../features/roadmap-system.md): Uses API, UnsavedChangesManager, DragReorderManager in the staff editor
+- [Roadmap System](../features/roadmap-system.md): Uses API, DragReorderManager in the staff editor
