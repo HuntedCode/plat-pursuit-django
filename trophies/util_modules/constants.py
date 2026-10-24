@@ -88,16 +88,32 @@ TITLE_ID_BLACKLIST = [
 # Special accounts for search/development
 SEARCH_ACCOUNT_IDS = ['7532533859249281768']
 
-# Region code mappings
-NA_REGION_CODES = ['IP', 'UB', 'UP', 'US', 'UT']  # North America
-EU_REGION_CODES = ['EB', 'EP']  # Europe
-JP_REGION_CODES = ['JA', 'JB', 'JP', 'KP']  # Japan
-AS_REGION_CODES = ['HA', 'HB', 'HP', 'HT']  # Asia
-KR_REGION_CODES = ['KR']  # Korea
-CN_REGION_CODES = ['CN']  # China
-
-# All recognized regions
+# All recognized regions, in display order (a list's `Game.region` is stored in this order).
 REGIONS = ['NA', 'EU', 'JP', 'AS', 'KR', 'CN']
+
+# 2-letter PSN content-id prefix -> region. A prefix names the account a product is PUBLISHED under,
+# not where it is sold (a worldwide `HP` product is in the US store too), so this is only the fallback
+# when no storefront sells a title ID. `KP` is Korea; `IP` (Sony worldwide/system titles, and the old
+# "unknown" placeholder) names no region. See docs/architecture/trophy-list-regions.md.
+PREFIX_REGIONS = {
+    'UP': 'NA', 'UB': 'NA', 'US': 'NA', 'UT': 'NA',
+    'EP': 'EU', 'EB': 'EU',
+    'JP': 'JP', 'JA': 'JP', 'JB': 'JP',
+    'HP': 'AS', 'HA': 'AS', 'HB': 'AS', 'HT': 'AS',
+    'KP': 'KR', 'KR': 'KR',
+    'CN': 'CN',
+}
+
+# The storefronts asked whether they sell a title ID: (country, language, region it stands for). TW
+# and SG answer exactly like HK (probed 2026-10-23), so HK speaks for AS. CN sells its own title IDs.
+STOREFRONTS = [
+    ('US', 'en-US', 'NA'),
+    ('GB', 'en-GB', 'EU'),
+    ('JP', 'ja-JP', 'JP'),
+    ('HK', 'en-HK', 'AS'),
+    ('KR', 'ko-KR', 'KR'),
+    ('CN', 'zh-Hans-CN', 'CN'),
+]
 
 # Badge XP values
 BRONZE_STAGE_XP = 250  # XP per concept completed at Bronze tier

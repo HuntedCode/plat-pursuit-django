@@ -223,7 +223,7 @@ class Command(BaseCommand):
                 deleted_count += redis_client.delete(queue)
 
             # Clear profile_jobs:* (all queues), sync locks, orchestrator pending flags, and dedup sets
-            for pattern in ['profile_jobs:*', 'deferred_jobs:*', 'pending_sync_complete:*', 'sync_started_at:*', 'sync_trophies_lock:*', 'shovelware_concept_lock:*', 'sync_orchestrator_pending:*', 'sync_queued_games:*', 'sync_complete_in_progress:*', 'finalize_phase:*']:
+            for pattern in ['profile_jobs:*', 'deferred_jobs:*', 'pending_sync_complete:*', 'sync_started_at:*', 'sync_trophies_lock:*', 'shovelware_concept_lock:*', 'sync_orchestrator_pending:*', 'sync_queued_games:*', 'sync_complete_in_progress:*', 'finalize_phase:*', 'region_walk:*']:
                 matching_keys = redis_client.keys(pattern)
                 if matching_keys:
                     deleted_count += redis_client.delete(*matching_keys)

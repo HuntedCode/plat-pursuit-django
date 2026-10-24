@@ -71,11 +71,14 @@ class Command(BaseCommand):
         self._summary(by_bucket, judged)
         self._verdicts(stats, judged)
         self._coverage(stats['coverage'])
+        w(self.style.MIGRATE_HEADING('Store walk'))
+        on_lists, walked = stats['title_ids_on_lists'], stats['title_ids_walked']
+        w(f"  {on_lists:,} distinct title IDs sit on trophy lists (whole catalogue, ignores --platform); "
+          f"{walked:,} walked ({100 * walked / on_lists if on_lists else 0:.1f}%), "
+          f"{stats['title_ids_with_region']:,} with any region.")
+        w("  An unwalked title ID's label is its dataset prefix (a guess for worldwide products), and the "
+          "regional rule does not act on it yet.\n")
         self._sections(by_bucket, only, opts['sample'])
-        w(self.style.MIGRATE_HEADING('Blind spot'))
-        w("  Sync overwrites any title ID stored as 'IP' (unknown, including dataset rows with no region) "
-          "with the US store's answer, so those title IDs hold the same wrong NA as their lists and the "
-          "lists are not counted above. Run populate_title_ids first to reset the dataset ones.")
 
     # -- output ---------------------------------------------------------------------------
 
@@ -133,6 +136,8 @@ class Command(BaseCommand):
             for row in shown:
                 w(f'  {self._line(row)}')
                 w(f'      {self._detail(row)}')
+                if row['siblings']:
+                    w(f'      {self._siblings(row)}')
             if len(bucket_rows) > len(shown):
                 w(f'    ... and {len(bucket_rows) - len(shown):,} more (--bucket {bucket} to list them all).')
             w('')
@@ -145,7 +150,22 @@ class Command(BaseCommand):
 
     @staticmethod
     def _detail(row):
-        tids = ', '.join(f'{tid}={code or "?"}' for tid, code in row['title_ids']) or 'no title IDs'
+        tids = ', '.join(
+            f'{tid}={prefix or "?"}' + ('' if stores is None else f' sold {"/".join(stores) or "nowhere"}')
+            for tid, prefix, stores in row['title_ids']) or 'no title IDs'
         return (f"stored {_codes(row['stored'])}, title IDs say {_codes(row['expected'])} [{tids}]; "
                 f"rule says {row['verdict']} ({row['reason']}); "
                 f"concept {row['concept_id'] or '-'}, unit {row['unit'] or '-'}")
+
+    @staticmethod
+    def _siblings(row):
+        """The lists the verdict compared this one against, so a hand check needs no second query.
+        `*` marks a disjoint sibling (they sort first, so the cap never hides the deciding one);
+        `[admin]` marks a region-locked sibling judged by its admin-set label. Capped, since a
+        launcher-style unit (Call of Duty HQ) can hold a dozen."""
+        cap = 4
+        shown = [f"{'*' if s['disjoint'] else ''}{s['name']} ({s['np_id']}, {'/'.join(s['platforms']) or '?'}) "
+                 f"{_codes(s['regions'])}{' [admin]' if s['locked'] else ''}"
+                 for s in row['siblings'][:cap]]
+        more = len(row['siblings']) - cap
+        return 'siblings: ' + '; '.join(shown) + (f'; +{more} more' if more > 0 else '')

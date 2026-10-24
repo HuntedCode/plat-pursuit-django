@@ -17,8 +17,8 @@ The most critical operation in the system is `Concept.absorb(other)`. When a con
 
 | File | Purpose |
 |------|---------|
-| `trophies/models.py` (lines 658-881) | `Concept` model: fields, `absorb()`, `create_default_concept()`, `add_title_id()`, `check_and_mark_regional()`, slug generation |
-| `trophies/models.py` (lines 427-526) | `Game` model: fields, `add_concept()`, `add_region()` |
+| `trophies/models.py` (lines 658-881) | `Concept` model: fields, `absorb()`, `create_default_concept()`, `add_title_id()`, slug generation |
+| `trophies/models.py` (lines 427-526) | `Game` model: fields, `add_concept()` |
 | `trophies/models.py` (lines 882-894) | `TitleID` model |
 | `trophies/models.py` (GameFamily) | `GameFamily` model (keyed on `igdb_id`, populated via IGDB enrichment) |
 | `trophies/services/psn_api_service.py` | `create_concept_from_details()`: creates or retrieves a Concept from PSN API response data; `update_profile_game_with_title_stats()`: checks for stale concepts during sync |
@@ -66,7 +66,10 @@ The most critical operation in the system is `Concept.absorb(other)`. When a con
 |-------|------|-------|
 | `title_id` | CharField(50), unique | PSN title ID string (e.g., `"PPSA01501_00"`) |
 | `platform` | CharField(10) | Platform code (`"PS4"`, `"PS5"`, etc.). Can be corrected during sync if it mismatches the Game's platform |
-| `region` | CharField(10) | Region code. Initialized as `"IP"` (indeterminate) and updated from PSN API response. Known to be unreliable: see [trophy-list-regions.md](trophy-list-regions.md) |
+| `region` | CharField(10) | Content-id prefix (`"EP"`, `"UP"`, ...), blank when unknown. Trusted only when `region_source` is `"dataset"`; a fallback for title IDs no store sells. See [trophy-list-regions.md](trophy-list-regions.md) |
+| `region_source` | CharField(10) | `"dataset"` when `populate_title_ids` wrote `region`; blank otherwise (auto-created, or written by the old sync) |
+| `store_regions` | JSONField (list) | Regions of the storefronts that sell this exact title ID, from the store walk |
+| `store_checked_at` | DateTimeField (null) | When every storefront last answered. Null: not walked yet |
 
 **Indexes**: `title_id`, `region`
 
@@ -99,7 +102,7 @@ families are created inline during IGDB enrichment via `get_or_create`. See
    - `concept.update_release_date()` and `concept.update_media()` populate metadata
    - `game.add_concept(concept)` assigns the concept (triggers `absorb()` if needed)
    - `concept.add_title_id()` records the title ID association
-   - `concept.check_and_mark_regional()` flags games with multiple stacks per platform
+   - `region_service.after_title_id_synced()` rebuilds the list's region label and regional flag (and its unit's), and queues the store walk for a title ID never walked. See [trophy-list-regions.md](trophy-list-regions.md)
    - At sync_complete, `_try_igdb_enrich` runs per-game anchoring: each Game in the PSN concept gets `match_game` -> `anchor_game_to_canonical(game, raw_id)`, moving the Game to its per-version `str(raw_igdb_id)` slot. The PSN concept absorbs away via `add_concept`'s cascade once empty. Compilations whose individual games don't IGDB-match fall back to concept-level `enrich_concept` so the PSN concept still gets an IGDBMatch.
 5. If the API returns an error or fails:
    - `Concept.create_default_concept(game)` creates a stub concept (`PP_N`)

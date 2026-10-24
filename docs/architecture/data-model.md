@@ -58,7 +58,7 @@ Key relationships:
 - `concept` FK to `Concept`
 
 ### TitleID
-Mapping record for PSN Title IDs. Each record stores a `title_id`, its `platform`, and `region`. Used during sync to resolve game identity.
+Mapping record for PSN Title IDs. Each record stores a `title_id`, its `platform`, its content-id prefix `region` (trusted only when `region_source='dataset'`), and the store walk's answer (`store_regions`, `store_checked_at`): which storefronts sell it. Used during sync to resolve game identity, and as the source of every trophy list's region (see [trophy-list-regions.md](trophy-list-regions.md)).
 
 ### ProfileGame
 The join between Profile and Game. Tracks play statistics: `progress` (0-100), `earned_trophies` (JSON dict), `first_played_date_time`, `last_played_date_time`, `has_plat`, `hidden_flag`, and denormalized trophy counts.

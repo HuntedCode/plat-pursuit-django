@@ -122,7 +122,9 @@ Sync operations use a two-tier orchestrator pattern:
 | `handle_privacy_error` | high_priority | Handle PSN privacy settings blocking access |
 | `sync_trophy_groups` | medium_priority | Fetch DLC/group metadata for a single game |
 | `sync_title_stats` | medium_priority | Fetch play time, play count, first/last played; resolve concept-less PS4/PS5 games to title IDs |
-| `sync_title_id` | medium_priority | Resolve title ID to Concept (game metadata, media, region) |
+| `sync_title_id` | medium_priority | Resolve title ID to Concept (game metadata, media); rebuild the list's region and queue its store walk |
+| `resolve_title_id_region` | bulk_priority (from sync and from the walk) | Ask six storefronts whether they sell one title ID; record it and rebuild the lists carrying it. Profile-less and uncounted (`profile_id=None`, `skip_counter=True`), so no hunter's sync waits on it. See [trophy-list-regions.md](trophy-list-regions.md) |
+| `region_walk_refill` | bulk_priority | One step of `resolve_title_regions`: queue the next batch of walk jobs plus a refill behind them; stops itself when a batch walks nothing |
 | `sync_trophies` | low_priority | Fetch all trophies + earned status for a single game; refresh PP earn rates for that game |
 | `sync_trophies` (whale) | bulk_priority | Same as above but for profiles exceeding the bulk threshold |
 
@@ -148,7 +150,7 @@ Both initial and follow-up syncs run through the same `profile_refresh` orchestr
 5. **sync_trophy_groups** (per game, if needed): Fetches DLC/group structure, creates `TrophyGroup` records, syncs concept-level trophy groups for the Review Hub.
 6. **sync_trophies** (per game): Fetches all trophies with earned status. Processes in batches of 50 within `transaction.atomic()` and `sync_signal_suppressor()`. Creates/updates `Trophy` and `EarnedTrophy` records. Triggers shovelware detection for platinums. Creates deferred platinum notifications. Refreshes PP-specific `Trophy.earn_rate` for the game's trophies inline (one targeted UPDATE so new games don't show 0% until the daily cron runs).
 7. **sync_title_stats** (queued only when concept-less modern games were detected during the walk): Fetches play statistics (play time, play count) and maps title IDs to games. For unresolved title IDs, calls `trophy_titles_for_title` to discover the `np_communication_id` mapping, then queues `sync_title_id` jobs. **Limitation**: this path can only resolve games whose `title_ids` (PPSA/CUSA SKUs) are present in PSN's `title_stats` response. Games whose `trophy_titles` entry never returned a `title_id` are unreachable here and must rely on the inline default-concept fallback for legacy platforms.
-8. **sync_title_id** (per title ID): Calls `game_title` to get concept details (publisher, genres, media, release date). Creates or updates `Concept` records. Assigns concepts to games via `Game.add_concept()`. Detects Asian-language regional titles. Falls back to `Concept.create_default_concept()` on any failure.
+8. **sync_title_id** (per title ID): Calls `game_title` to get concept details (publisher, genres, media, release date). Creates or updates `Concept` records. Assigns concepts to games via `Game.add_concept()`. Rebuilds the list's region and queues its store walk (`region_service.after_title_id_synced`); when PSN gives no details, falls back to the title's script for an Asian region. Falls back to `Concept.create_default_concept()` on any failure.
 9. **_complete_job**: After each child job, decrements `profile_jobs:{profile_id}:{queue}`. When all counters reach zero and `pending_sync_complete` exists, queues `sync_complete`.
 10. **sync_complete**: The finalization pipeline:
     - Drains deferred IGDB enrichments queued by `sync_title_id`

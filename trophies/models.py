@@ -16,11 +16,6 @@ logger = logging.getLogger("psn_api")
 from datetime import date, timedelta
 from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception_type
 from core.client_ip import client_ip
-from trophies.util_modules.language import count_unique_game_groups, calculate_trimmed_mean
-from trophies.util_modules.constants import (
-    TITLE_STATS_SUPPORTED_PLATFORMS, NA_REGION_CODES, EU_REGION_CODES,
-    JP_REGION_CODES, AS_REGION_CODES, KR_REGION_CODES, CN_REGION_CODES,
-)
 from trophies.managers import (
     ProfileManager, GameManager, ProfileGameManager,
     BadgeManager, BadgeSeriesQuerySet, CommentManager, ChecklistManager,
@@ -761,31 +756,6 @@ class Game(models.Model):
             from trophies.services.rating_service import RatingService
             CommentService.invalidate_cache(concept)
             RatingService.invalidate_cache(concept)
-    
-    @retry(stop=stop_after_attempt(3), wait=wait_fixed(0.5), retry=retry_if_exception_type(OperationalError))
-    def add_region(self, region: str):
-        if not region or self.region_lock:
-            return
-        if region in NA_REGION_CODES:
-            region = 'NA'
-        elif region in EU_REGION_CODES:
-            region = 'EU'
-        elif region in JP_REGION_CODES:
-            region = 'JP'
-        elif region in AS_REGION_CODES:
-            region = 'AS'
-        elif region in KR_REGION_CODES:
-            region = 'KR'
-        elif region in CN_REGION_CODES:
-            region = 'CN'
-        else:
-            return
-        with transaction.atomic():
-            game = Game.objects.select_for_update(nowait=True).get(pk=self.pk)
-            if region not in game.region:
-                game.region.append(region)
-                game.save(update_fields=['region'])
-                self.region = game.region
     
     @retry(stop=stop_after_attempt(3), wait=wait_fixed(0.5), retry=retry_if_exception_type(OperationalError))
     def add_title_id(self, title_id: str):
@@ -1801,15 +1771,6 @@ class Concept(models.Model):
                 concept.save(update_fields=['title_ids'])
                 self.title_ids = concept.title_ids
 
-    def check_and_mark_regional(self):
-        """Check if this concept has multiple games for the same platform. If so, mark as regional. Run post sync."""
-        for platform in TITLE_STATS_SUPPORTED_PLATFORMS:
-                games = self.games.filter(title_platform__contains=platform, region_lock=False)
-                if count_unique_game_groups(games) > 1:
-                    for game in games:
-                        game.is_regional = True
-                        game.save(update_fields=['is_regional'])
-
     def update_media(self, media, icon_url, bg_url):
         if media:
             self.media = media
@@ -1854,9 +1815,36 @@ class Concept(models.Model):
         return self.unified_title or self.concept_id
 
 class TitleID(models.Model):
+    """One PSN title ID (a product SKU, e.g. `PPSA03208_00`) and where it is sold.
+
+    Two region sources, kept apart because they answer different questions (see
+    docs/architecture/trophy-list-regions.md). `region` is the 2-letter content-id PREFIX, which names
+    the account the product is published under; it is the only signal for a title ID no storefront
+    sells any more. `store_regions` is the set of storefronts that sell this exact title ID, filled by
+    the store walk, and is the truth whenever it has an answer.
+    """
+    REGION_SOURCE_DATASET = 'dataset'
+    REGION_SOURCE_CHOICES = [
+        (REGION_SOURCE_DATASET, 'andshrew PlayStation-Titles dataset'),
+        ('', 'Unknown (auto-created, or written by sync before 2026-10)'),
+    ]
+
     title_id = models.CharField(max_length=50, unique=True)
     platform = models.CharField(max_length=10)
     region = models.CharField(max_length=10, blank=True)
+    region_source = models.CharField(
+        max_length=10, blank=True, default='', choices=REGION_SOURCE_CHOICES,
+        help_text="Where `region` came from. Only a dataset prefix is trusted: sync used to write the "
+                  "US store's answer here, which named the store asked, not the title.",
+    )
+    store_regions = models.JSONField(
+        default=list, blank=True,
+        help_text="Region codes of the storefronts that sell this exact title ID (empty: sold nowhere).",
+    )
+    store_checked_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text="When every storefront last answered for this title ID. Null: never walked.",
+    )
 
     class Meta:
         indexes = [
