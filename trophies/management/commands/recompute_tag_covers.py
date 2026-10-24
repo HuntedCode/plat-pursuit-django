@@ -10,7 +10,10 @@ representative_game (the tile cover), per grouping:
      reshuffles between page loads). Bounded to POOL_CAP so the shuffle never scans a whole large grouping.
   2. Fallback: the most-recent member game with real art.
   3. Last resort: any most-recent member game (so a games-having grouping never renders the empty placeholder).
-  Franchises pass a cover filter so excluded / spin-off links don't provide the cover (matches the live pick).
+  Franchises pass link filters so excluded / spin-off links don't provide the cover, and rank their OWN games
+  first: among the games with art, only those in the fewest visible franchises of the franchise's type are
+  eligible (so a crossover such as Dengeki Bunko: Fighting Climax covers a franchise only when nothing more its
+  own has art), and the contract preference applies within those (DS-11).
 
 related_tags (Genres/Themes only -- the detail-page rail): the top-`RELATED_N` OTHER same-type tags ranked by
 game co-occurrence, stored as an ordered slug list. The co-occurrence GROUP BY is the reason this is
@@ -30,7 +33,7 @@ import logging
 
 from django.core.management.base import BaseCommand
 from django.db import connection
-from django.db.models import Avg, Count, Exists, OuterRef, Q
+from django.db.models import Avg, Count, Exists, Min, OuterRef, Q, Subquery
 
 from trophies.models import (
     Genre, Theme, Franchise, Company, Game, Contract, Concept, IGDBMatch, ProfileGame,
@@ -52,11 +55,12 @@ _HAS_ART = (
     | Q(concept__concept_icon_url__gt='')
     | Q(title_image__gt='')
 )
-# Franchise covers ignore excluded / spin-off links (matches the live cover annotation's visible-link filter).
-_FRANCHISE_COVER_FILTER = Q(
-    concept__concept_franchises__is_excluded=False,
-    concept__concept_franchises__is_spinoff=False,
-)
+# Franchise covers ignore excluded / spin-off links (the browse and detail pages' visible-link filter). These are
+# kwargs, not a Q, because they must land in the SAME .filter() call as the franchise id: a second call on a
+# multi-valued relation is a second join, which asks whether the game has ANY clean link, and a crossover's link
+# to its own franchise answered yes (Ace Attorney's tile showed Marvel vs. Capcom 3, DS-11).
+_VISIBLE_LINK = {'is_excluded': False, 'is_spinoff': False}
+_FRANCHISE_COVER_FILTER = {f'concept__concept_franchises__{k}': v for k, v in _VISIBLE_LINK.items()}
 
 
 class Command(BaseCommand):
@@ -69,19 +73,22 @@ class Command(BaseCommand):
     POOL_CAP = 50   # bound the per-grouping contract pool so the offline shuffle never scans a whole big one
     RELATED_N = 6   # how many related tags to store per genre/theme
 
-    # Per-grouping config. `cover_filter` narrows the games eligible to provide the cover; `related` marks the
-    # models that carry related_tags (genres/themes); `iterate` bounds which rows we bother recomputing.
+    # Per-grouping config. `cover_filter` narrows the games eligible to provide the cover (link kwargs, applied
+    # with the grouping id in one .filter()); `own_first` ranks a franchise's own games above crossovers;
+    # `related` marks the models that carry related_tags (genres/themes); `iterate` bounds which rows we recompute.
     CONFIGS = [
         {'model': Genre, 'through': ConceptGenre, 'field': 'genre',
-         'path': 'concept__concept_genres__genre', 'cover_filter': None, 'related': True, 'iterate': None},
+         'path': 'concept__concept_genres__genre', 'cover_filter': {}, 'own_first': False, 'related': True,
+         'iterate': None},
         {'model': Theme, 'through': ConceptTheme, 'field': 'theme',
-         'path': 'concept__concept_themes__theme', 'cover_filter': None, 'related': True, 'iterate': None},
+         'path': 'concept__concept_themes__theme', 'cover_filter': {}, 'own_first': False, 'related': True,
+         'iterate': None},
         {'model': Franchise, 'through': ConceptFranchise, 'field': 'franchise',
          'path': 'concept__concept_franchises__franchise', 'cover_filter': _FRANCHISE_COVER_FILTER,
-         'related': False, 'iterate': Q(franchise_concepts__is_excluded=False)},
+         'own_first': True, 'related': False, 'iterate': Q(franchise_concepts__is_excluded=False)},
         # Companies have no link-level exclusion flags, so no cover_filter; iterate only companies with games.
         {'model': Company, 'through': ConceptCompany, 'field': 'company',
-         'path': 'concept__concept_companies__company', 'cover_filter': None,
+         'path': 'concept__concept_companies__company', 'cover_filter': {}, 'own_first': False,
          'related': False, 'iterate': Q(company_concepts__concept__games__isnull=False)},
     ]
 
@@ -125,11 +132,13 @@ class Command(BaseCommand):
         if cfg['iterate'] is not None:
             qs = qs.filter(cfg['iterate']).distinct()
         only_fields = ['id', 'representative_game'] + (['related_tags'] if cfg['related'] else [])
+        if cfg['own_first']:
+            only_fields.append('source_type')
 
         updates = []
         changed_fields = set()
         for row in qs.only(*only_fields):
-            gid = self._pick(row.id, cfg['path'], contract_exists, cfg['cover_filter'])
+            gid = self._pick(row, cfg, contract_exists)
             changed = False
             if row.representative_game_id != gid:
                 row.representative_game_id = gid
@@ -252,27 +261,38 @@ class Command(BaseCommand):
             Model.objects.bulk_update(updates, fields, batch_size=200)
         return len(updates)
 
-    def _pick(self, row_id, path, contract_exists, cover_filter=None):
-        base = Game.objects.filter(**{path: row_id})
-        if cover_filter is not None:
-            base = base.filter(cover_filter)
+    def _pick(self, row, cfg, contract_exists):
+        base = Game.objects.filter(**{cfg['path']: row.id}, **cfg['cover_filter'])
+        art = base.filter(_HAS_ART)
+        if cfg['own_first']:
+            art = self._own_games(art, row.source_type)
         # 1. Contract games with real art: the most-recent POOL_CAP, then a stable per-grouping variety pick.
         pool = list(
-            base.filter(_HAS_ART).filter(contract_exists)
+            art.filter(contract_exists)
             .order_by(*_MOST_RECENT_RELEASE_ORDER)
             .values_list('id', flat=True)[:self.POOL_CAP]
         )
         if pool:
-            return min(pool, key=lambda gid: hashlib.md5(f"{row_id}:{gid}".encode()).hexdigest())
+            return min(pool, key=lambda gid: hashlib.md5(f"{row.id}:{gid}".encode()).hexdigest())
         # 2. Most-recent member game with real art.
-        gid = (
-            base.filter(_HAS_ART).order_by(*_MOST_RECENT_RELEASE_ORDER)
-            .values_list('id', flat=True).first()
-        )
+        gid = art.order_by(*_MOST_RECENT_RELEASE_ORDER).values_list('id', flat=True).first()
         if gid:
             return gid
         # 3. Any most-recent member game (so a games-having grouping never falls to the empty placeholder).
         return base.order_by(*_MOST_RECENT_RELEASE_ORDER).values_list('id', flat=True).first()
+
+    def _own_games(self, games, source_type):
+        """Narrow `games` to those in the fewest visible franchises of `source_type`: a franchise's own games
+        before the crossovers it shares (DS-11). Only same-type links count, because most games sit in a
+        franchise AND its series. A franchise of nothing but crossovers keeps its least-shared ones."""
+        shared = Subquery(
+            ConceptFranchise.objects.filter(
+                concept=OuterRef('concept'), franchise__source_type=source_type, **_VISIBLE_LINK,
+            ).values('concept').annotate(c=Count('id')).values('c')[:1]
+        )
+        games = games.annotate(shared=shared)
+        fewest = games.aggregate(m=Min('shared'))['m']
+        return games if fewest is None else games.filter(shared=fewest)
 
     def _related(self, Through, tag_field, path, tag_id):
         """Top-RELATED_N OTHER same-type tags by shared-concept co-occurrence (an ordered slug list)."""

@@ -62,14 +62,14 @@ Browse cards wear a colored type badge under the name so users can tell franchis
 
 ### Representative Cover Art
 
-Each browse card shows cover art for its most recent release, with a three-tier fallback chain to handle missing data gracefully:
+Each browse card shows the cover of one member game, `Franchise.representative_game`, picked nightly by `recompute_tag_covers` and read through one `select_related` (see [cron-jobs.md](../guides/cron-jobs.md)). The pick, in order:
 
-1. `title_image` (PSN store art)
-2. IGDB cover constructed from `IGDBMatch.igdb_cover_image_id`
-3. `title_icon_url` (generic PS icon)
-4. Folder icon placeholder
+1. **Only visible links count**: `is_excluded` and `is_spinoff` links never provide the art.
+2. **The franchise's own games first** (DS-11, 2026-10-24): among the members with real art, only those in the fewest visible franchises of the same `source_type` are eligible. A crossover (Dengeki Bunko: Fighting Climax, a member of a dozen franchises) covers a franchise only when nothing more its own has art. Only same-type links count, because most games sit in a franchise AND its series.
+3. **A contract game among those**, with a stable per-franchise variety shuffle; else the most recent.
+4. **Any most-recent member** when none has art, so a franchise with games never shows the empty placeholder.
 
-Picked via three parallel `Subquery` annotations so the fallback happens in the template (not SQL), keeping the query simple. Non-excluded, non-spin-off links contribute equally; `_MOST_RECENT_RELEASE_ORDER` is the tiebreak.
+The card renders the game through `display_image_url`, the site's usual IGDB-first fallback chain.
 
 ### Detail Page Grouping
 
@@ -145,6 +145,7 @@ Browse page sort is simpler: alphabetical (default), reverse alphabetical, most 
 
 - **`is_excluded` is sticky only under the lock**: `ConceptFranchise.is_excluded=True` survives an enrichment refresh only when `concept.franchises_locked=True`. The writer doesn't touch the column directly, but on an unlocked concept the ROW itself gets wiped + recreated on every refresh (the wipe is part of `_apply_enrichment`). Document the lock requirement when staff sets an exclusion.
 
+- **A link's flags go in the same `.filter()` call as its franchise.** `Game.objects.filter(concept__concept_franchises__franchise=f).filter(concept__concept_franchises__is_spinoff=False)` is two joins: it asks whether the game has ANY non-spin-off link, and a crossover's link to its own franchise answers yes. That is how Ace Attorney's tile showed Marvel vs. Capcom 3, which its page hides (DS-11). One call (or one `Q`) keeps both conditions on the same link row.
 - **Spin-off flag is collection-only and lives on the link**: `ConceptFranchise.is_spinoff` is set only for collection (Series) memberships, from IGDB's `/collection_memberships` type (2 = Spin-off). A game can be a normal Member of one series and a Spin-off of another, so the flag is per-link, never per-concept. It suppresses the game from the *collection's* list/counts and from collection badge stage coverage, but NOT from the game's own About card (a spin-off still belongs to its parent series). The signal is not in `raw_response`, so the only ways to populate it are live enrichment (one extra IGDB call when a game has collections) or the `backfill_collection_spinoffs` command (which re-queries IGDB). Don't expect a cache rebuild to recover it.
 
 - **Progress rings use conic-gradient, not SVG**: The `w-7 h-7` progress ring on version rows is a pure CSS conic-gradient with a masked inner circle — no SVG, no JS. Integer percentages only (`ProfileGame.progress` is an IntegerField). Font size is `text-[8px]` to fit inside the ring cleanly; don't bump it without checking every browser.
