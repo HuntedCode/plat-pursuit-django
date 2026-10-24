@@ -298,6 +298,10 @@ class MyChallengesView(LoginRequiredMixin, _LinkedProfileRequired, TemplateView)
         # says about the hunter (a saved plan, the weekly allowance) is two single-row reads, only when shown.
         context['can_plan'] = any(card['state'] == 'active' and card['type'] in PLANNABLE_TYPES
                                   for card in context['cards'])
+        # THE HEADER'S SECOND NUMBER (owner, 2026-10-24, review CH-04). The tally was "0 finished" for every
+        # hunter on prod, the page's headline a zero. Until there is a finish it counts the runs in progress,
+        # read off the cards already resolved, so it costs no query.
+        context['in_progress_total'] = sum(1 for card in context['cards'] if card['state'] == 'active')
         if context['can_plan']:
             context['optimizer'] = optimizer_drafts.door_status(profile, self.request.user)
             context['optimizer_is_new'] = timezone.localdate() < OPTIMIZER_NEW_UNTIL
@@ -1810,12 +1814,20 @@ class CalendarDayView(View):
         return resp
 
 
+def runs_in_flight():
+    """The runs the Challenges page lists: visible, unfinished, and started. See `ChallengesBrowseView`.
+
+    A function rather than the view's method because the Hall of Fame asks the same question while it is
+    empty, and two spellings of "in flight" would be how the pages came to disagree."""
+    return Challenge.objects.visible().filter(is_complete=False, completed_count__gt=0)
+
+
 @method_decorator(
     ratelimit(group=CHALLENGES_BROWSE_RATELIMIT_GROUP, key='ip', rate='60/m',
               method=('GET', 'HEAD'), block=True),
     name='get')
 class ChallengesBrowseView(_ChallengeBrowseView):
-    """`/community/challenges/` -- every run in progress, so a visitor can see the thing being used.
+    """`/community/challenges/` -- every STARTED run in progress, so a visitor can see the thing being used.
 
     IT REPLACES THE COMING-SOON PLACEHOLDER at the same URL and the same `name`, which is why the placeholder
     was written to hold both: nothing that links here has to change.
@@ -1823,6 +1835,13 @@ class ChallengesBrowseView(_ChallengeBrowseView):
     IN PROGRESS MEANS UNFINISHED AND NOT HIDDEN. `visible()` is the public read path -- a hidden run is off
     its owner's profile and out of the hub, which is what hiding means -- and the finished ones have their own
     page.
+
+    AND STARTED: AT LEAST ONE SQUARE DONE (owner, 2026-10-24, review CH-01). Six days after launch 91 of the
+    213 runs on prod had nothing done, 57 of the 72 Job Coverage ones, so the second half of the page was
+    "0/26 LETTERS" cards and the headline counted them as in flight. A run with nothing done is not yet
+    anything to look at. It still has its page, reachable by link and from its owner's profile, and it joins
+    the browse with its first square. `completed_count` and not `filled_count`: a picked game is a plan, and
+    the card's own figure is the done count, so the page and its cards agree about what "started" means.
     """
 
     template_name = 'challenges/browse.html'
@@ -1830,7 +1849,7 @@ class ChallengesBrowseView(_ChallengeBrowseView):
     BROWSE_URL_NAME = 'challenges'
     EMPTY_COPY = (
         'No runs in flight',
-        'Start a run from My Challenges and it shows up here.',
+        'Start a run from My Challenges. It shows up here once it has progress.',
     )
 
     SORTS = {
@@ -1846,7 +1865,7 @@ class ChallengesBrowseView(_ChallengeBrowseView):
     DEFAULT_SORT = 'progress'
 
     def base_queryset(self):
-        return Challenge.objects.visible().filter(is_complete=False)
+        return runs_in_flight()
 
     def full_page_context(self):
         # THE COUNT IS UNFILTERED, deliberately: the headline says how many runs are in flight ACROSS the
@@ -2029,11 +2048,29 @@ class HallOfFameView(_ChallengeBrowseView):
             'plaques': plaques_for(runs),
         }
 
+    #: How many runs the empty Hall of Fame shows as the race to be first: one full row on a desktop, 2 x 2 below it.
+    CLOSEST_COUNT = 4
+
     def full_page_context(self):
+        finished = self.base_queryset().count()
+        # THE RACE STANDS DOWN WHENEVER THE TOOLBAR IS UP, on the template's own condition (a raw `q` of any
+        # length draws it). The race replaces `#browse-results`, the toolbar's htmx target, so with both on the
+        # page a filter matched nothing to swap and "Clear filters" was gone with the grid (audit, 2026-10-24).
+        racing = not finished and not self.has_filters() and not (self.request.GET.get('q') or '').strip()
         return {
             # THE INTRO FOR THE RECALL LINK, as on the Challenges page: never auto-opened here.
             **intro_context(self.request, may_arm=False),
-            'finished': self.base_queryset().count(),
+            'finished': finished,
+            # THE RACE, UNTIL THE FIRST FINISH (owner, 2026-10-24, review CH-03). Nobody had finished a run
+            # six days after launch and a run is 25 or 26 platinums, so the page was "0 finished" over an
+            # empty state for weeks. It shows the runs nearest the line instead: the Challenges page's own
+            # queryset and its own "Most progress" order, so the two pages cannot disagree about who leads.
+            # One bounded read, and none at all once anybody has finished. `-pk` last, as the browse's own
+            # `get_queryset` appends it: at launch many runs tie on share and count, and without it the two
+            # pages could name a different leader on every load.
+            'closest': (list(runs_in_flight().select_related('profile')
+                             .order_by(*ChallengesBrowseView.SORTS['progress'][1], '-pk')[:self.CLOSEST_COUNT])
+                        if racing else []),
             'breadcrumb': [
                 {'text': 'Home', 'url': reverse('home')},
                 {'text': 'Challenges', 'url': reverse('challenges')},

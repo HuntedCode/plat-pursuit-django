@@ -1311,3 +1311,17 @@ def test_each_line_carries_its_board_positions_for_the_sort_toggle(client):
 
     assert lines[both.slug]['sort'] == {AZ: 0, JOBS: board.index(job_b.slug)}   # A is the first letter
     assert lines[az_only.slug]['sort'] == {AZ: 1}                               # B; no job square
+
+
+def test_the_wizards_dock_is_opaque():
+    """Review CH-09 (2026-10-24): at 94% the step's cards showed through the docked Next bar, so on a short
+    laptop it read as a band printed across two cards rather than a bar floating over them."""
+    from pathlib import Path
+
+    css = (Path(__file__).resolve().parents[2] / 'static' / 'css' / 'components' / 'challenge-optimizer.css').read_text(
+        encoding='utf-8')
+    dock = css[css.index('.pp-cplan__dock {'):]
+    dock = dock[:dock.index(chr(10) + "}")]
+    assert 'background: var(--pp-bg-1);' in dock
+    assert 'transparent' not in dock
+

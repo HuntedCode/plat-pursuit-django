@@ -7,16 +7,17 @@ list, where a word per row would crowd out the run's name on a phone.
 
 The glyph is Lucide's share-2, the one the franchise and tag pages already use for sharing.
 
-Expects: run (a Challenge), compact (optional bool). `share_preview_qs` (the run page's, empty elsewhere) carries the
+Expects: run (a Challenge), compact, tight and fold (optional bools). `share_preview_qs` (the run page's, empty elsewhere) carries the
 team's `?preview=challenge-states` door onto both card URLs.
 {% endcomment %}
-<button type="button" class="pp-cta pp-cta--ghost{% if compact %} pp-cshare--compact{% endif %}" data-challenge-share
+<button type="button" class="pp-cta pp-cta--ghost{% if compact %} pp-cshare--compact{% endif %}{% if fold %} pp-cacts__fold{% endif %}" data-challenge-share
         data-html-url="{% url 'challenge_card_html' run.id %}{{ share_preview_qs }}"
         data-png-url="{% url 'challenge_card_png' run.id %}{{ share_preview_qs }}"
         data-name="{{ run.name }}"
         aria-label="Share a card of {{ run.name }}">
     <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
     {% comment %}`tight`: the label steps aside at 1024-1279, where My Challenges' three-across cards are narrowest.
-    The button's `aria-label` keeps its name.{% endcomment %}
-    <span{% if compact %} class="hidden md:inline"{% elif tight %} class="lg:max-xl:sr-only"{% endif %}>Share</span>
+    `fold`: a square icon button below `md:`, beside the run page's other actions (`.pp-cacts__fold`).
+    The button's `aria-label` keeps its name either way.{% endcomment %}
+    <span{% if compact or fold %} class="hidden md:inline"{% elif tight %} class="lg:max-xl:sr-only"{% endif %}>Share</span>
 </button>

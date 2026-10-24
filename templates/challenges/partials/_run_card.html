@@ -1,5 +1,5 @@
-{% comment %}One run as a card: in flight on `/community/challenges/`, in flight or finished on a hunter's
-profile tab. A finish shown off at full size is the Hall of Fame's `_run_hero.html`, because a finished run is
+{% comment %}One run as a card: in flight on `/community/challenges/` (and as the race on an empty Hall of Fame),
+in flight or finished on a hunter's profile tab. A finish shown off at full size is the Hall of Fame's `_run_hero.html`, because a finished run is
 a different object from a run in progress and neither is served well by the other's shape.
 
 NO COVER ART HERE, and the reason has changed even though the answer has not. It used to be cost -- a cover
@@ -25,7 +25,7 @@ second tab stop to the same place -- the browse-card pattern the design system s
 
 `index` desyncs the supporter shimmer per card, which is why the mark takes it rather than inheriting it.
 {% endcomment %}
-{% load humanize mark_tags %}
+{% load mark_tags custom_filters %}
 <a class="pp-crun pp-centry" href="{% url 'challenge_detail' run.pk %}">
     <div class="pp-crun__head">
         {% comment %}THE TYPE, as a chip with its name rather than an icon alone: a glyph by itself would need
@@ -56,7 +56,11 @@ second tab stop to the same place -- the browse-card pattern the design system s
         {% include 'components/horizon.html' with progress=run_progress height='6px' %}
     </div>
 
-    {% comment %}A CALENDAR SAYS WHEN IT LAST MOVED, NOT WHEN IT STARTED: it is filled from history at creation,
-    so "200/365 · Started 2 hours ago" implied two hundred days of progress since this morning.{% endcomment %}
-    <p class="pp-crun__foot">{% if run.is_complete %}Finished <time datetime="{{ run.completed_at|date:'c' }}">{{ run.completed_at|date:'j M Y' }}</time>{% elif run.challenge_type == 'calendar' %}Updated {{ run.updated_at|naturaltime }}{% else %}Started {{ run.created_at|naturaltime }}{% endif %}</p>
+    {% comment %}WHEN IT LAST MOVED, IN ONE UNIT, FOR EVERY TYPE. The Calendar said so first: it is filled from
+    history at creation, so "200/365 · Started 2 hours ago" implied two hundred days of progress since this
+    morning. The slot runs kept "Started", in `naturaltime` ("Started 5 days, 21 hours ago", two lines on a
+    phone). Since review CH-08 they all say when they last moved, in `compact_since`: on a page sorted by progress
+    the last move is the useful one, and `updated_at` is saved with the progress counters for every type
+    (`challenge_service`, `calendar_fill`).{% endcomment %}
+    <p class="pp-crun__foot">{% if run.is_complete %}Finished <time datetime="{{ run.completed_at|date:'c' }}">{{ run.completed_at|date:'j M Y' }}</time>{% else %}{% with ago=run.updated_at|compact_since %}Updated <time datetime="{{ run.updated_at|date:'c' }}">{% if ago == 'Now' %}just now{% else %}{{ ago }}{% endif %}</time>{% endwith %}{% endif %}</p>
 </a>

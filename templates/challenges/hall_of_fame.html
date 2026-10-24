@@ -57,6 +57,8 @@ view for a fixed-size blob of geometry, and leaving the page one `{% templatetag
                     {% include 'challenges/partials/_browse_header_actions.html' %}
                 </div>
 
+                {% comment %}NO TALLY UNTIL THERE IS A FINISH (review CH-03): "0 finished" was the page's headline.{% endcomment %}
+                {% if finished %}
                 <div class="text-right flex items-baseline gap-1 whitespace-nowrap md:block shrink-0">
                     {% comment %}NO `data-countup`. This page loads `browse-filters.js` and
                     `challenges-browse.js`; neither initialises it, and `utils.js` has no global
@@ -71,22 +73,38 @@ view for a fixed-size blob of geometry, and leaving the page one `{% templatetag
                     note that this must not be done and must not be fixed by lowering the bound.{% endcomment %}
                     <span class="text-xs text-base-content/50 md:mt-1 md:block md:uppercase md:tracking-wider">finished</span>
                 </div>
+                {% endif %}
             </div>
         </div>
     </section>
 
     {% comment %}NO TOOLBAR UNTIL SOMETHING HAS FINISHED -- the likely state at launch, where filters over
-    nothing read as a broken page. Kept whenever a filter is set.{% endcomment %}
+    nothing read as a broken page. Kept whenever a filter is set, and then the page is the (empty) list with its
+    "Clear filters", not the race below: the view only races when no toolbar is drawn.{% endcomment %}
     {% if finished or has_filters or query %}
     {% include 'challenges/partials/_browse_toolbar.html' with browse_url=browse_url form_id='hof-form' %}
     {% endif %}
 
+    {% comment %}THE RACE, UNTIL THE FIRST FINISH (owner, 2026-10-24, review CH-03). With nobody finished the page was
+    an empty state for weeks; it shows the runs nearest the line instead, as the Challenges page draws them, so the
+    first finish has somebody to be. `closest` is empty once anybody has finished, and the page is the list again.
+    No sentinel or spinner here: there is no grid to scroll, and the scroller stands down without one.{% endcomment %}
+    {% if closest %}
+    <section class="pp-hof-race" aria-labelledby="hof-race-title">
+        <h2 class="pp-hof-race__title" id="hof-race-title">Nobody has finished one yet</h2>
+        <p class="pp-hof-race__sub">Closest to being the first:</p>
+        <div class="pp-crun-grid">
+            {% for run in closest %}{% include 'challenges/partials/_run_card.html' with run=run index=forloop.counter0 %}{% endfor %}
+        </div>
+    </section>
+    {% else %}
     <div id="browse-results">
         {% include 'challenges/partials/browse_results.html' %}
     </div>
 
     <div id="ch-sentinel" class="h-4" aria-hidden="true"></div>
     <div id="ch-loading" class="pp-gbrowse__loading hidden"><span class="pp-gbrowse__spinner" aria-hidden="true"></span></div>
+    {% endif %}
 </div>
 {% endblock %}
 

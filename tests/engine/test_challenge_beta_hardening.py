@@ -120,7 +120,11 @@ def test_a_hidden_finished_calendar_card_offers_resume_not_share():
 def test_the_import_confirmation_leads_every_history_render():
     panel = _fn('renderHistoryPanel')
     assert panel.index("pendingNote = '';") < panel.index('dropPrompts();'), 'cleared before the branches'
-    assert panel.count('say(lead + ') == 3, 'a branch says something without the import confirmation'
+    # Every branch leads with the confirmation, and SHOWS it when there is one: `echo` paints nothing, so a
+    # branch may only fall back to it when `lead` is empty (review CH-10, audit 2026-10-24).
+    assert 'echo(lead' not in panel, 'the import confirmation would be spoken but never seen'
+    assert panel.count('say(lead + ') + panel.count('(lead ? say : echo)(lead + ') == 3, \
+        'a branch says something without the import confirmation'
     catch = _fn('loadHistory')
     assert "pendingNote = '';" in catch[catch.index('.catch('):]
 
@@ -612,7 +616,9 @@ def test_an_empty_launch_shows_a_way_in_and_no_toolbar():
     for name in ('challenges', 'challenges_hall_of_fame'):
         body = Client().get(reverse(name)).content.decode()
         assert 'aria-label="Challenge type"' not in body, '%s draws filters over nothing' % name
-        assert 'href="%s" class="pp-cta">Start a challenge' % reverse('my_challenges') in body, name
+        # A visitor is sent to SIGN-UP and back (review CH-02), not to the login gate.
+        signup = '%s?next=%s' % (reverse('account_signup'), reverse('my_challenges'))
+        assert 'href="%s" class="pp-cta">Start a challenge' % signup in body, name
 
 
 def test_a_filter_keeps_its_toolbar_so_it_can_be_cleared():
@@ -649,6 +655,8 @@ def test_the_type_switcher_fits_one_row_on_a_phone():
 
 def test_a_calendar_card_says_when_it_moved_not_when_it_started():
     run = svc.start(_hunter(), CHALLENGE_TYPE_CALENDAR)
+    # A day filled, so the run is on the browse at all (review CH-01: a run joins it with its first square).
+    Challenge.objects.filter(pk=run.pk).update(filled_count=1, completed_count=1)
     body = Client().get(reverse('challenges')).content.decode()
     card = body[body.index(reverse('challenge_detail', args=[run.id])):]
     card = card[:card.index('</a>')]

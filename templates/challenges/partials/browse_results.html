@@ -70,9 +70,10 @@ elements, so a class added by JS in `afterSwap` is wiped again and the cards unh
         {% if not has_filters and not query %}
         {% comment %}THE WAY IN, on the page everybody sees first at launch. An empty board with nothing to press
         was a dead end; My Challenges is where a run starts (and explains the beta to a hunter who cannot yet).
-        A signed-out reader is sent through login and back.{% endcomment %}
+        A signed-out reader goes to SIGN-UP and back (review CH-02): it went to My Challenges, whose login gate
+        greeted a newcomer with "Welcome back".{% endcomment %}
         <div class="pp-gtile-empty__action">
-            <a href="{% url 'my_challenges' %}" class="pp-cta">Start a challenge</a>
+            <a href="{% if user.is_authenticated %}{% url 'my_challenges' %}{% else %}{% url 'account_signup' %}?next={% url 'my_challenges' %}{% endif %}" class="pp-cta">Start a challenge</a>
         </div>
         {% endif %}
         {% if has_filters %}

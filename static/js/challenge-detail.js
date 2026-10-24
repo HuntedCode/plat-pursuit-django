@@ -179,8 +179,11 @@
                 // WAITING, which fell on every claim -- a reward number ticking down to zero -- and was
                 // rendered only while something was owed, so Claim-all (which clears everything by
                 // definition) and the final single claim never animated at all.
+                //
+                // FROM ZERO ON THE FIRST CLAIM. Until then the headline is the pay rate, which carries no
+                // `data-countup` (review CH-05), so a missing figure means nothing was claimed yet.
                 var oldEl = wrap.querySelector('[data-countup]');
-                var before = oldEl ? parseInt(oldEl.dataset.countup || '', 10) : NaN;
+                var before = oldEl ? parseInt(oldEl.dataset.countup || '', 10) : 0;
                 // THE ENTRANCE IS SPENT. `pp-head-cascade` animates the wrapper's direct children, and the
                 // line below replaces them -- so leaving the class on would replay the card's arrival on every
                 // claim, which reads as the panel appearing again rather than updating. It has done its job by
@@ -640,6 +643,8 @@
             qualifyChip: dialog.querySelector('[data-cpick-qualify-chip]'),
             badge: dialog.querySelector('[data-cpick-badge]'),
             platforms: dialog.querySelectorAll('[data-cpick-platform]'),
+            // "All", pressed while no platform is (review CH-10): the default, said rather than implied.
+            platformAll: dialog.querySelector('[data-cpick-platform-all]'),
             // THE NEXT PAGE: the sentinel the observer watches, its button, and the scroll container both are
             // measured against.
             more: dialog.querySelector('[data-cpick-more]'),
@@ -763,7 +768,16 @@
         function say(message) {
             if (!els.status) { return; }
             els.status.textContent = message || '';
-            els.status.classList.remove('pp-cpick__status--error');
+            els.status.classList.remove('pp-cpick__status--error', 'pp-cpick__status--quiet');
+        }
+
+        /** An announcement that only restates the subtitle ("B: 13 games fit" under "13 games fit"): spoken through
+         *  the live region, its text not painted (review CH-10). QUIET, NOT `sr-only`: the line keeps its place, so
+         *  the rows do not jump up when results land and down again at the next "Loading...". Never for a message
+         *  that says anything the subtitle does not, the import confirmation least of all. */
+        function echo(message) {
+            say(message);
+            if (els.status) { els.status.classList.add('pp-cpick__status--quiet'); }
         }
 
         /** A refusal, toned so it does not read as "Loading...", and routed somewhere visible. */
@@ -771,6 +785,7 @@
             if (!stillOpen()) { reportAway(message); return; }
             if (!els.status) { return; }
             els.status.textContent = message;
+            els.status.classList.remove('pp-cpick__status--quiet');
             els.status.classList.add('pp-cpick__status--error');
         }
 
@@ -873,6 +888,13 @@
             return url + (url.indexOf('?') === -1 ? '?' : '&') + extra.join('&');
         }
 
+        /** "All" is pressed exactly while no platform is. */
+        function syncPlatformAll() {
+            if (!els.platformAll) { return; }
+            var any = Array.prototype.some.call(els.platforms || [], function (box) { return box.checked; });
+            els.platformAll.setAttribute('aria-pressed', any ? 'false' : 'true');
+        }
+
         /** Whether a narrowing filter is on (the badge or a platform), so an empty list can say why it is empty. */
         function filtering() {
             return !!(els.badge && els.badge.checked)
@@ -951,7 +973,7 @@
                     historyCount(p.shown);
                     // THE WHOLE HISTORY WAS WALKED AND NOTHING QUALIFIED: "nothing in the first batch" is no
                     // longer the honest sentence, and its "search to look further" fact has nothing left to find.
-                    if (!p.more && !p.shown) { historyCount(0, true, p.query); say(els.sub.textContent); }
+                    if (!p.more && !p.shown) { historyCount(0, true, p.query); echo(els.sub.textContent); }
                 }
                 syncMore();
                 // A PRESSED BUTTON HANDS FOCUS ON to the first new offer, and the count is said: the button may
@@ -1010,7 +1032,7 @@
                 // NAMED, not just counted. `aria-labelledby` points at the title, but nothing announces
                 // that element changing -- so the dialog's announced name stayed "Choose a game" and a
                 // screen-reader user never learned which square they had opened.
-                say(panel.label + ': ' + els.sub.textContent);
+                echo(panel.label + ': ' + els.sub.textContent);
             }
 
             renderCatchup(panel);
@@ -1101,7 +1123,7 @@
                 say(filtering() ? 'No games match that with your filters.' : 'No games match that.');
                 return;
             }
-            say(els.sub.textContent);
+            echo(els.sub.textContent);
             appendSearchRows(panel);
             startPaging('search', null, panel, panel.offset + panel.showing);
         }
@@ -1517,7 +1539,8 @@
                         + 'game to look further.';
                     if (els.noteFacts) { els.noteFacts.appendChild(li); }
                 }
-                say(lead + els.sub.textContent);
+                // SEEN WHEN IT CONFIRMS AN IMPORT: `lead` is news the subtitle does not carry.
+                (lead ? say : echo)(lead + els.sub.textContent);
                 // AN EMPTY WINDOW CAN STILL HAVE A NEXT ONE. The sheet looks a little further by itself (up to
                 // `AUTO_EMPTY_PAGES`), and the button keeps going after that.
                 startPaging('history', null, panel, panel.cursor);
@@ -1527,7 +1550,7 @@
             // more offers exist. The count is what is on screen, and it grows as pages land.
             els.sub.textContent = panel.showing + ' ready to place';
             appendHistoryRows(panel);
-            say(lead + 'From your history: ' + els.sub.textContent);
+            (lead ? say : echo)(lead + 'From your history: ' + els.sub.textContent);
             startPaging('history', null, panel, panel.cursor);
         }
 
@@ -2151,6 +2174,7 @@
             if (els.qualify) { els.qualify.checked = true; }
             if (els.badge) { els.badge.checked = false; }
             Array.prototype.forEach.call(els.platforms || [], function (box) { box.checked = false; });
+            syncPlatformAll();
             paging = null;
             syncMore();
         }
@@ -2221,8 +2245,18 @@
             }
             if (els.badge) { els.badge.addEventListener('change', refilter); }
             Array.prototype.forEach.call(els.platforms || [], function (box) {
-                box.addEventListener('change', refilter);
+                box.addEventListener('change', function () { syncPlatformAll(); refilter(); });
             });
+            // PRESSING ALL CLEARS THE PLATFORMS. Already pressed, it is the state it names, so it does nothing.
+            if (els.platformAll) {
+                els.platformAll.addEventListener('click', function () {
+                    var any = Array.prototype.some.call(els.platforms || [], function (box) { return box.checked; });
+                    if (!any) { return; }
+                    Array.prototype.forEach.call(els.platforms || [], function (box) { box.checked = false; });
+                    syncPlatformAll();
+                    refilter();
+                });
+            }
         }
 
         // THE NEXT PAGE, fetched as the sentinel nears the bottom of the sheet. The button does the same by hand.

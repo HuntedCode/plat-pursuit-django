@@ -847,6 +847,9 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
        stays in the tree and simply holds no text. */
     min-height: 1.1em;
 }
+/* Spoken, not painted: a count that only restates the subtitle (`echo` in challenge-detail.js, review CH-10). The
+   line keeps its height, so the rows below do not jump as the status comes and goes. */
+.pp-cpick__status--quiet { color: transparent; user-select: none; }
 
 /* A REFUSAL MUST NOT LOOK LIKE "Loading...". Every failure path wrote into the status line in the same dim
    grey as the progress messages, so "That did not save." and "Saving..." were visually identical -- the
@@ -1850,6 +1853,15 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
 @media (min-width: 640px)  { .pp-crun-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; } }
 @media (min-width: 1024px) { .pp-crun-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 @media (min-width: 1536px) { .pp-crun-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+
+/* ── The Hall of Fame before its first finish: the race (review CH-03) ──
+ * The four runs nearest the line, drawn as the Challenges page draws them, under one line saying why they are
+ * here. FOUR, IN FULL ROWS at every width: 2 x 2 up to a desktop and four across from there, where the browse
+ * grid alone would leave three of three, four of five or a lone fourth card on a row of its own. */
+.pp-hof-race__title { font-size: 15px; font-weight: 700; color: var(--pp-text); }
+.pp-hof-race__sub { margin: 2px 0 10px; font-size: 13px; color: var(--pp-text-mute); }
+@media (min-width: 640px) and (max-width: 1023px) { .pp-hof-race .pp-crun-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1536px) { .pp-hof-race .pp-crun-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 
 .pp-crun {
     display: flex;
@@ -5116,6 +5128,13 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
    `md:` the class stops applying and it is the ordinary labelled CTA, the same size as the active card's. */
 @media (max-width: 767px) { .pp-cshare--compact { padding: 0.5rem; } }
 
+/* The run page's owner row on a phone (review CH-05): Share and Optimize fold to square icon buttons the height of
+   the labelled Back beside them (`--cta-h`, the square `.pp-cta--icon` fills), so the three hold one row instead of
+   stacking into two above the board. */
+@media (max-width: 767px) {
+    .pp-cacts__fold { padding: 0; min-width: var(--cta-h); min-height: var(--cta-h); justify-content: center; }
+}
+
 /* The share dialog has no Rate button, so on phones Close would sit alone in half of the plat modal's
    two-column actions grid with an empty cell beside it. */
 @media (max-width: 639px) {
@@ -5359,6 +5378,14 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     color: var(--pp-text-mute); margin-right: 2px;
 }
 @media (min-width: 768px) { .pp-cpick__flabel { display: inline; } }
+/* "All", the platform default made visible (review CH-10): a button, not a checkbox, so it reads as pressed by
+   `aria-pressed` and wears the same pressed look as a ticked chip beside it. */
+.pp-cpick__allchip[aria-pressed="true"] {
+    border-color: color-mix(in oklab, var(--pp-primary) 55%, var(--pp-border));
+    background: color-mix(in oklab, var(--pp-primary) 18%, transparent);
+    color: var(--pp-text);
+}
+.pp-cpick__allchip:focus-visible { outline: 2px solid var(--pp-list-accent, var(--pp-primary)); outline-offset: 2px; }
 .pp-cpick__fico { width: 13px; height: 13px; margin-right: 5px; flex: 0 0 auto; }
 
 /* A ROW'S PLATFORMS, as the site's flat platform tags (`.bd-meta-tag`, chips.css): facts about the game, not
