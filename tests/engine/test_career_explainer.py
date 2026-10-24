@@ -180,3 +180,20 @@ def test_the_explainer_never_grows_its_own_dev_panel():
     text = (Path(settings.BASE_DIR) / 'templates' / 'trophies' / 'partials' / 'career' /
             '_career_explainer.html').read_text(encoding='utf-8')
     assert 'ccx-dev' not in text
+
+
+def test_the_dev_replay_button_has_a_handler_in_debug(linked_client, settings):
+    """The dev panel kept its Replay button when the explainer moved onto DetailModal, but the handler went,
+    so the button did nothing for six weeks. The button and the code that answers it render together."""
+    settings.DEBUG = True
+    body = linked_client.get('/career/', **CF).content.decode()
+
+    assert 'data-explainer-replay>Replay' in body
+    assert "closest('[data-explainer-replay]')" in body, 'the Replay button renders with nothing listening'
+
+
+def test_the_dev_replay_never_ships_to_prod(linked_client, settings):
+    settings.DEBUG = False
+    body = linked_client.get('/career/', **CF).content.decode()
+
+    assert 'data-explainer-replay' not in body

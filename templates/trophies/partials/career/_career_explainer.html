@@ -137,6 +137,12 @@ cut). This partial must stay panel-free; a guard test scans it for the panel's c
         document.addEventListener('click', function (e) {
             if (!e.target.closest) { return; }
             var trigger = e.target.closest('[data-career-open]');
+            {% if explainer_debug %}
+            // The dev panel's Replay (career.html), render-gated with its button so it never ships to prod. It
+            // replays the open and its collage; the first-visit auto-open needs `career_explainer` cleared
+            // from ui_flags. Lost once, in the DetailModal move, which kept only the edhint.
+            trigger = trigger || e.target.closest('[data-explainer-replay]');
+            {% endif %}
             if (trigger) { e.preventDefault(); api.open(trigger); }
         });
     });
