@@ -97,6 +97,31 @@ def test_the_jobs_catalogue_is_public(client):
     assert resp.status_code == 200 and 'Archivist' in resp.content.decode()
 
 
+def test_the_catalogue_header_carries_one_count_and_no_tiles(client):
+    """PR-02 (2026-10-24): four heartbeat tiles ("Jobs 25" beside the tally's own 25, live contracts, games
+    in contracts, all-time XP) filled a phone's first screen and helped nobody pick a job. The tally stays.
+
+    With the heartbeat WARM: the tiles only ever rendered once the cron had filled it, so a cold cache would
+    pass this on the old template."""
+    from django.core.cache import cache
+    from django.utils import timezone
+
+    now = timezone.now()
+    key = f"site_heartbeat_{now.date().isoformat()}_{now.hour:02d}"
+    cache.set(key, {'expanded': {
+        'jobs_total': {'value': 25}, 'contracts_live': {'value': 12},
+        'games_in_contracts': {'value': 800}, 'job_xp_banked': {'value': 91000},
+    }}, 120)
+    try:
+        html = client.get(reverse('jobs_browse')).content.decode()
+    finally:
+        cache.delete(key)
+    head = html[html.index('class="pp-bhead'):html.index('</section>', html.index('class="pp-bhead'))]
+
+    assert 'data-jobs-count' in head, 'the tally went with the tiles'
+    assert 'class="scard' not in head, 'the catalogue tiles are back in the header'
+
+
 def test_the_catalogue_counts_are_grouped_not_per_card(client):
     """The contracts figure is an ANNOTATION on the queryset, so the page costs the same number of queries
     whatever the catalogue holds. A count per card is the shape that looks fine at 25 jobs and is wrong on
@@ -842,13 +867,23 @@ def test_the_header_figures_actually_count_up(client):
     """Both tallies carried `data-countup` and nothing on this page ever called `countUp` -- the attribute
     was inert on the hunter tally this replaced, and the rebuild doubled it before anyone noticed. A
     `data-*` hook with no caller reads exactly like a working one in the markup, which is why it survives;
-    the same bug shipped on the catalogue page and was caught the same way."""
+    the same bug shipped on the catalogue page and was caught the same way.
+
+    Since PR-03 the header's figures are the viewer's standing (level, XP banked, to next level), so this
+    renders for a linked hunter and counts inside the header card only: the contract cards below carry their
+    own `data-countup`, which would satisfy a page-wide count with the header empty."""
+    from trophies.models import ProfileJobXP
+
     _solo()
     job = _job('archivist', 'Archivist')
     _contract('One', [job])
+    profile = ProfileFactory(is_linked=True)
+    ProfileJobXP.objects.create(profile=profile, job=job, total_xp=2500, level=2, is_linked=True)
+    client.force_login(profile.user)
 
     body = client.get(reverse('job_detail', args=['archivist'])).content.decode()
-    assert body.count('data-countup') >= 3
+    head = body[body.index('pp-head-cascade'):body.index('jobd-switch')]
+    assert head.count('data-countup') == 3, 'the standing figures lost their count-up hooks'
     assert 'PlatPursuit.countUp' in body, 'the header figures are decorative -- nothing counts them up'
     # Scoped to the header CARD, which is what `.pp-head-cascade` marks. The selector named
     # `.jobd__tallies` until the stats row replaced it -- and a dead SELECTOR fails exactly as silently as
@@ -856,17 +891,19 @@ def test_the_header_figures_actually_count_up(client):
     assert ".pp-head-cascade [data-countup]" in body
 
 
-def test_the_header_uses_the_shared_page_header_shape(client):
-    """`.pp-bhead` / `__id` / `__tally`, the structure every rebuilt browse and detail header uses. The
-    discipline-tinted icon chip stays bespoke because nothing shared carries one."""
+def test_the_header_row_is_not_the_browse_phone_grid(client):
+    """The icon chip, title and discipline sit in their own row. They used to borrow `.pp-bhead`, the browse
+    headers' phone grid (title beside a tally, lede spanning under both), which placed them into those areas
+    and pushed the job's name to the far right of a phone (PR-03, 2026-10-24)."""
     _solo()
     _job('archivist', 'Archivist')
 
     body = client.get(reverse('job_detail', args=['archivist'])).content.decode()
     # From the head CONTAINER, not the <h1>: the icon chip precedes the title, so slicing at the heading
     # cuts the very element this asserts on.
-    head = body[body.index('pp-bhead jobd__head'):body.index('jobd-switch')]
-    assert 'pp-bhead__id' in head and 'jobd__ic' in head
+    head = body[body.index('class="jobd__head"'):body.index('jobd-switch')]
+    assert 'jobd__ic' in head and '>Archivist</h1>' in head
+    assert 'pp-bhead' not in head, 'the job header is back on the browse phone grid'
     assert 'pp-head-cascade' in body, 'the header lost its shared entrance cascade'
 
 
@@ -1267,38 +1304,74 @@ def test_the_job_icon_sprite_is_on_the_page(client):
     assert 'id="jobicon-' in body, 'the icon sprite is missing, so every job pill draws a blank'
 
 
-def test_the_header_carries_the_jobs_three_objective_stats(client):
-    """A real header, on the shared `.scard` row every rebuilt detail page uses -- what the job IS, before
-    anything about the viewer.
-
-    PURSUERS IS BACK HERE, reversing two earlier calls in this same rebuild, so the reasoning is pinned
-    with the test. It was dropped from the catalogue TILE for saying more about which games happen to be
-    popular than about the job, and dropped from this header when it was one of only two figures and read
-    as the headline. As one of three on the job's own page, with its board one click away, it is a fact
-    about the job rather than a claim about its worth.
-
-    All three are already computed for the page, so the row costs no queries: contracts and XP from the
-    same calls the Contracts tab makes, Pursuers from the same count the Ranks tab uses.
-    """
+def test_the_header_states_the_job_in_one_line(client):
+    """What the job IS, as one facts line (PR-03, 2026-10-24). It was three `.scard` tiles that filled a
+    phone's first screen before the reader's standing or a single contract; the Discovery detail pages made
+    the same move (`.pp-factline`, DS-04). All three figures were already computed for the page."""
     _solo()
     job = _job('archivist', 'Archivist')
     _contract('One', [job])
     _xp(job, 'SomeHunter', 500)
 
     body = client.get(reverse('job_detail', args=['archivist'])).content.decode()
-    head = body[body.index('pp-bhead jobd__head'):body.index('jobd-switch')]
+    head = body[body.index('class="jobd__head"'):body.index('jobd-switch')]
 
-    # One count, not a sum: `class="scard"` is a PREFIX of `class="scard" style`, so adding the two
-    # double-counts the accented cell.
-    assert head.count('class="scard"') == 3, 'the header is not the three-stat row'
-    for label in ('Contracts', 'Total XP', 'Pursuers'):
-        assert f'>{label}</div>' in head, f'the header is missing its {label} stat'
-    # The XP figure is the one the catalogue tile promised, so the two pages cannot quote different totals.
-    # Anchored to the XP cell, and to the comma-formatted rendering `intcomma` actually produces. The
-    # `or` branch was unreachable (`data-countup` always emits the raw integer) and the needle was
-    # unanchored -- `6000` anywhere in the three-card slice satisfied it, including a different stat.
-    xp_cell = head[head.index('Total XP'):]
-    assert f'{CONTRACT_XP_TOTAL:,}' in xp_cell, 'the header is not showing the catalogue XP figure'
+    assert 'class="scard' not in head, 'the three tiles are back'
+    facts = head[head.index('class="pp-factline"'):]
+    facts = facts[:facts.index('</p>')]
+    assert '<b>1</b> contract<' in facts
+    # The XP figure is the one the catalogue card promised, so the two pages cannot quote different totals.
+    assert f'<b>{CONTRACT_XP_TOTAL:,}</b> XP across them' in facts
+    assert '<b>1</b> pursuer<' in facts
+
+
+def test_a_job_nobody_has_pursued_does_not_say_zero_pursuers(client):
+    """Rule 3: "0 pursuers" is a fact about nothing yet."""
+    _solo()
+    job = _job('archivist', 'Archivist')
+    _contract('One', [job])
+
+    body = client.get(reverse('job_detail', args=['archivist'])).content.decode()
+    facts = body[body.index('class="pp-factline"'):]
+    assert 'pursuer' not in facts[:facts.index('</p>')]
+
+
+def test_a_linked_viewers_standing_leads_the_header(client):
+    """PR-03 (owner, 2026-10-24): where you stand on this job comes straight under its name, before what the
+    job is."""
+    from trophies.models import ProfileJobXP
+
+    _solo()
+    job = _job('archivist', 'Archivist', description='Keeps the records.')
+    _contract('One', [job])
+    profile = ProfileFactory(is_linked=True)
+    ProfileJobXP.objects.create(profile=profile, job=job, total_xp=2500, level=2, is_linked=True)
+    client.force_login(profile.user)
+
+    body = client.get(reverse('job_detail', args=['archivist'])).content.decode()
+    head = body[body.index('class="jobd__head"'):body.index('jobd-switch')]
+
+    assert head.index('jobd__mine') < head.index('Keeps the records.') < head.index('class="pp-factline"')
+
+
+def test_the_contracts_list_names_its_default(client):
+    """PR-08: an unpressed "Latest" chip on its own read as the list's label while the list showed every
+    contract. The count and order are always shown; Latest reads as the filter beside them."""
+    _solo()
+    job = _job('archivist', 'Archivist')
+    for i in range(3):
+        _contract(f'Some {i}', [job])
+
+    body = client.get(reverse('job_detail', args=['archivist'])).content.decode()
+    assert '3 contracts, A to Z' in body
+
+
+def test_a_job_with_no_contracts_has_no_toolbar(client):
+    _solo()
+    _job('archivist', 'Archivist')
+
+    body = client.get(reverse('job_detail', args=['archivist'])).content.decode()
+    assert 'class="jobd-newbar"' not in body, '"0 contracts, A to Z" above the empty state is absence twice'
 
 
 def test_the_header_tells_a_linked_viewer_what_the_job_means_to_them(client):
@@ -1804,7 +1877,7 @@ def test_the_header_count_stays_the_jobs_own_total(client):
     body = client.get(reverse('job_detail', args=['archivist']),
                       {'tab': 'contracts', 'new': '1'}).content.decode()
 
-    assert 'data-countup="4"' in body, 'the header must still count all four contracts'
+    assert '<b>4</b> contracts' in body, 'the header must still count all four contracts'
     assert '1 of 4 shown' in body, 'the FILTERED count belongs beside the chip, not in the header'
 
 

@@ -39,34 +39,19 @@
                 {% endif %}
             </div>
 
-            {% comment %} Collection stats -- the substance in the header, Career-style scard grid (replaces the
-            old completion bar + tier split). Edition composition (Legacy HD / Ultra HD earned) + what you're
-            chasing + what you've mastered. Aggregates you can't read off the wall. Hidden on an empty album. {% endcomment %}
+            {% comment %} The collection in one line (PR-04, 2026-10-24): edition composition (Ultra HD / Legacy
+            HD earned), what you are chasing, what you have mastered. It was four `.scard` tiles, which with the
+            tally and the toolbar put the first badge under a phone's tab bar, and showed a newcomer three of
+            them at 0. Each figure appears only when it is not zero (rule 3); the same move the Discovery detail
+            pages made (`.pp-factline`). Hidden on an empty album. {% endcomment %}
             {% if summary.total %}
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mt-3 md:mt-4">
-                {% for e in summary.editions %}
-                <div class="scard">
-                    <div class="scard__label">{{ e.label }}</div>
-                    <div class="scard__value pp-tally" data-countup="{{ e.count }}">{{ e.count }}</div>
-                    <div class="scard__sub">badges earned</div>
-                </div>
-                {% endfor %}
-                <div class="scard">
-                    <div class="scard__label">In progress</div>
-                    <div class="scard__value pp-tally text-primary" data-countup="{{ summary.in_progress }}">{{ summary.in_progress }}</div>
-                    <div class="scard__sub">in the works</div>
-                </div>
-                <div class="scard">
-                    <div class="scard__label">Holographic</div>
-                    <div class="scard__value pp-tally" data-countup="{{ summary.holo }}">{{ summary.holo }}</div>
-                    <div class="scard__sub">mastered at 100%</div>
-                </div>
-            </div>
-            {% comment %} Two of the four cells above are labelled with edition names off PlatformGroup, so
-            a reader meets their OWN total split by a word nobody defined. The hint trails the grid rather
-            than sitting in the cells: `.scard` is a shared primitive on 22 surfaces and an interactive
-            child does not belong in it, and two icons in a four-cell grid would read as clutter.
-            {% endcomment %}
+            <p class="pp-factline">
+                {% for e in summary.editions %}{% if e.count %}<span><b>{{ e.count|intcomma }}</b> {{ e.label }} earned</span>{% endif %}{% endfor %}
+                {% if summary.in_progress %}<span><b>{{ summary.in_progress|intcomma }}</b> in progress</span>{% endif %}
+                {% if summary.holo %}<span><b>{{ summary.holo|intcomma }}</b> holographic</span>{% endif %}
+            </p>
+            {% comment %} The line above, and the gallery's filters, name editions with words off PlatformGroup
+            that nobody has defined. The hint trails them. {% endcomment %}
             <div class="pp-edhint-row mt-2">
                 <a class="pp-edhint" href="{% url 'badge_how_it_works' %}">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>

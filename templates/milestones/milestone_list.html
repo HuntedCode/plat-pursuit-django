@@ -104,6 +104,10 @@
                 {% endif %}
             </div>
 
+            {% comment %} Status + progress only for a hunter with progress to show (PR-07, 2026-10-24). Signed out
+            (or unlinked) every card said "Not yet started" over an empty bar, eight times: absence as content.
+            The preview keeps what each milestone IS and its ladder of rungs, which says what is waiting. {% endcomment %}
+            {% if ms_has_progress %}
             {# Status line: prestige (highest earned + rarity) or a nudge toward the first rung. #}
             <div class="msc__status">
                 {% if card.maxed %}
@@ -114,7 +118,7 @@
                 {% else %}
                 <span class="msc__reached msc__reached--none">Not yet started</span>
                 {% endif %}
-                {% if ms_has_progress %}<span class="msc__tier-pill" title="Tiers earned">{{ card.earned_count }}<span class="msc__tier-of">/{{ card.total_tiers }}</span> tiers</span>{% endif %}
+                <span class="msc__tier-pill" title="Tiers earned">{{ card.earned_count }}<span class="msc__tier-of">/{{ card.total_tiers }}</span> tiers</span>
             </div>
 
             {# Progress toward the next rung. #}
@@ -124,10 +128,11 @@
                     <div class="pp-horizon__track"><span class="pp-horizon__fill"></span></div>
                 </div>
                 <div class="msc__prog-cap">
-                    {% if ms_has_progress %}<span class="msc__prog-val">{{ card.value|intcomma }}</span> / {% endif %}<span>{{ card.next_threshold|intcomma }}</span>
+                    <span class="msc__prog-val">{{ card.value|intcomma }}</span> / <span>{{ card.next_threshold|intcomma }}</span>
                     <span class="msc__prog-next">next tier</span>
                 </div>
             </div>
+            {% endif %}
             {% endif %}
 
             {% comment %}The full ladder: 10 rungs, earned / next / locked. Lifted above the stretched action

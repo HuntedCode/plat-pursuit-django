@@ -1,10 +1,11 @@
 """The browse-page stats that ride the hourly site heartbeat (2026-08 consolidation): the Genres & Themes
-switcher counts and the Jobs and Hunters header grids. They were request-path computes before (the tag
-counts two hot DISTINCT joins on every request AND swap of /genres/); the heartbeat is their only compute
-site and the views are pure cache reads.
+switcher counts and the Hunters header grid. They were request-path computes before (the tag counts two
+hot DISTINCT joins on every request AND swap of /genres/); the heartbeat is their only compute site and the
+views are pure cache reads.
 
-The six browse LIST pages' tile grids were removed by the browse pass (DS-04, 2026-10-22), and the stats
-only they read went with them; `test_browse_pass.py` pins both halves.
+The six browse LIST pages' tile grids were removed by the browse pass (DS-04, 2026-10-22), and the Jobs
+header's by the Progression pass (PR-02, 2026-10-24); the stats only they read went with them, and
+`test_browse_pass.py` pins both halves.
 """
 import pytest
 
@@ -52,36 +53,10 @@ def test_a_failed_stat_flags_partial_not_fatal(monkeypatch):
     assert data['expanded']['genres_with_games']['value'] is None
     assert data['expanded']['themes_with_games']['value'] is None
     # The neighbor block is untouched by the failure.
-    assert data['expanded']['games_in_contracts']['value'] == 0
+    assert data['expanded']['ratings_total']['value'] == 0
 
 
-def test_jobs_block():
-    """jobs_total counts the FULL board, fallback included -- the /jobs/ wall renders every job
-    (Freelancer among them) and its own tally counts 25; an exclusion here contradicted the page
-    (the audit's 24-vs-25 catch). Pinned by DELTA against the migration-seeded catalog: adding a
-    fallback job MOVES the count."""
-    from tests.factories import ProfileFactory
-    from trophies.models import Contract, Job, ProfileJobXP
-
-    seeded = Job.objects.count()
-    assert seeded > 0, 'the migration-seeded Job catalog must be present'
-    job = Job.objects.exclude(is_fallback=True).first()
-    Contract.objects.create(name='Live One', slug='live-one', igdb_id=70001, is_live=True)
-    Contract.objects.create(name='Dead One', slug='dead-one', igdb_id=70002, is_live=False)
-    ProfileJobXP.objects.create(profile=ProfileFactory(), job=job, total_xp=450)
-    ProfileJobXP.objects.create(profile=ProfileFactory(), job=job, total_xp=250)
-
-    exp = compute_site_heartbeat()['expanded']
-    assert exp['jobs_total']['value'] == seeded
-    assert exp['contracts_live']['value'] == 1
-    assert exp['job_xp_banked']['value'] == 700
-
-    Job.objects.create(name='Fallback', slug='fallback-x', discipline=job.discipline,
-                       is_fallback=True)
-    assert compute_site_heartbeat()['expanded']['jobs_total']['value'] == seeded + 1
-
-
-# ── The page renders that still carry a grid (Jobs, Hunters) ──────────────────────────────
+# ── The page renders that still carry a grid (Hunters) ──────────────────────────────
 
 def _warm(**expanded):
     """Write the hourly heartbeat bucket (the badge-catalog header tests' pattern)."""
@@ -119,17 +94,6 @@ def _page_pins(client, url, payload, marker, context_key, swap_headers):
     finally:
         cache.delete(key)
     assert not swap.context.get(context_key)
-
-
-def test_jobs_browse_grid(client):
-    _page_pins(
-        client, '/jobs/',
-        {'expanded': {
-            'jobs_total': {'value': 25}, 'contracts_live': {'value': 12},
-            'games_in_contracts': {'value': 800}, 'job_xp_banked': {'value': 91000},
-        }},
-        'Job XP banked', 'jobs_stats', {'HTTP_HX_REQUEST': 'true'},
-    )
 
 
 def test_hunters_browse_grid(client):

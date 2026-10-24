@@ -24,57 +24,23 @@ belong to (via `contract_modal_preview`), so a third catalogue would be a third 
     <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 shadow-lg shadow-neutral mb-3"
              style="--disc: var(--disc-{{ job.discipline }}); border-left-color: var(--disc);">
         <div class="card-body p-3 md:p-5 lg:p-6 pp-head-cascade">
-            {% comment %} The shared page-header shape (`.pp-bhead` / `__id` / `__tally`), the one every
-            rebuilt browse and detail page uses, with this page's own discipline-tinted icon chip kept
-            because nothing shared carries it. It was a bespoke `.jobd__head` flex row: fine at the time,
-            and one more place the header had to be re-solved. {% endcomment %}
-            <div class="pp-bhead jobd__head">
+            {% comment %} Icon chip + title + discipline. NOT `.pp-bhead`: that class is the browse headers'
+            phone grid (a title beside a tally, the lede spanning under both), and borrowing it placed this
+            row's pieces into those areas, pushing the job's name to the far right of a phone (PR-03). {% endcomment %}
+            <div class="jobd__head">
                 <span class="jobd__ic" style="--disc: var(--disc-{{ job.discipline }});">{% job_icon job.icon '' %}</span>
-                <div class="pp-bhead__id min-w-0">
+                <div class="jobd__id min-w-0">
                     <h1 class="text-lg md:text-xl lg:text-2xl font-bold">{{ job.name }}</h1>
                     <p class="jobd__disc">{{ job.get_discipline_display }}</p>
                 </div>
             </div>
 
-            {% if job.description %}
-            <p class="jobd__desc">{{ job.description }}</p>
-            {% endif %}
-
-            {% comment %} WHAT THIS JOB IS, objectively -- the shared `.scard` row every rebuilt detail
-            header uses (franchise, company, genre, collection). It replaced two hand-placed figures in the
-            title row, which was a pill with numbers beside it rather than a header.
-
-            All three are already computed for this page, so the row costs nothing: contracts and XP come
-            from the same places the Contracts tab does, and hunters from the same count the Ranks tab
-            uses.
-
-            HUNTERS IS BACK, and that is a deliberate reversal. It was dropped from the CATALOGUE tile for
-            saying more about which games are popular than about the job, and dropped from this header
-            when it was the sole headline figure. As one of three on the job's own page, with its board a
-            click away, it is a fact about the job rather than a claim about its worth. {% endcomment %}
-            <div class="grid grid-cols-3 gap-2 md:gap-3 mt-3 md:mt-4">
-                <div class="scard">
-                    <div class="scard__label">Contracts</div>
-                    <div class="scard__value pp-tally" data-countup="{{ contract_total }}">{{ contract_total|intcomma }}</div>
-                    <div class="scard__sub">feed this job</div>
-                </div>
-                {% comment %} "Total XP", not "XP to earn": this is the job's whole SUPPLY across every
-                live contract, not what is left for the viewer. A hunter who has banked five of six
-                contracts would read the full figure under a label promising it is still earnable. {% endcomment %}
-                <div class="scard" style="--scard-accent: var(--disc);">
-                    <div class="scard__label">Total XP</div>
-                    <div class="scard__value pp-tally" data-countup="{{ xp_supply }}">{{ xp_supply|intcomma }}</div>
-                    <div class="scard__sub">across its contracts</div>
-                </div>
-                <div class="scard">
-                    <div class="scard__label">Pursuers</div>
-                    <div class="scard__value pp-tally" data-countup="{{ board_total }}">{{ board_total|intcomma }}</div>
-                    <div class="scard__sub">have banked XP</div>
-                </div>
-            </div>
-
             {% if show_my_standing %}
-            {% comment %} YOUR standing in this job, once and in the header -- the same rule the Global
+            {% comment %} YOUR standing LEADS (PR-03, 2026-10-24, owner): signed in, where you stand on this job
+            is the first thing under its name, and the job's own totals follow as one line. It sat under three
+            tiles of them, so on a phone the reader's own level was below the fold of the hero.
+
+            Once and in the header -- the same rule the Global
             Boards landing follows: a per-row personal marker would make the board per-viewer and forfeit
             caching for a page that is otherwise identical for everyone.
 
@@ -97,20 +63,40 @@ belong to (via `contract_modal_preview`), so a third catalogue would be a third 
                 </div>
                 <div class="jobd__mine-figs">
                     <span class="jobd__mine-fig">
-                        <b class="pp-tally">{{ my_job_level|default:"1" }}</b>
+                        <b class="pp-tally" data-countup="{{ my_job_level|default:1 }}">{{ my_job_level|default:"1" }}</b>
                         <span>level</span>
                     </span>
                     <span class="jobd__mine-fig">
-                        <b class="pp-tally">{{ my_job_banked|intcomma }}</b>
+                        <b class="pp-tally" data-countup="{{ my_job_banked|default:0 }}">{{ my_job_banked|intcomma }}</b>
                         <span>XP banked</span>
                     </span>
                     <span class="jobd__mine-fig jobd__mine-fig--next">
-                        <b class="pp-tally">{{ my_job_to_next|intcomma }}</b>
+                        <b class="pp-tally" data-countup="{{ my_job_to_next|default:0 }}">{{ my_job_to_next|intcomma }}</b>
                         <span>to next level</span>
                     </span>
                 </div>
                 {% include 'components/horizon.html' with progress=my_job_next_pct accent='var(--disc)' height='6px' %}
             </div>
+            {% endif %}
+
+            {% if job.description %}
+            <p class="jobd__desc">{{ job.description }}</p>
+            {% endif %}
+
+            {% comment %} WHAT THIS JOB IS, in one line (PR-03, 2026-10-24): the three `.scard` tiles this
+            replaced filled a phone's first screen before the reader's standing or a single contract. The same
+            move the Discovery detail pages made (`.pp-factline`, DS-04). All three figures were already computed
+            for the page: contracts and XP by the Contracts tab, pursuers by the Ranks tab's count.
+
+            "XP across them", not "XP to earn": this is the job's whole SUPPLY across every live contract, not
+            what is left for the viewer. Nothing at zero (rule 3): no line at all for a job with no contracts
+            (its tab's empty state says so), and pursuers only when there are some. {% endcomment %}
+            {% if contract_total %}
+            <p class="pp-factline">
+                <span><b>{{ contract_total|intcomma }}</b> contract{{ contract_total|pluralize }}</span>
+                <span><b>{{ xp_supply|intcomma }}</b> XP across them</span>
+                {% if board_total %}<span><b>{{ board_total|intcomma }}</b> pursuer{{ board_total|pluralize }}</span>{% endif %}
+            </p>
             {% endif %}
         </div>
     </section>
@@ -160,8 +146,14 @@ belong to (via `contract_modal_preview`), so a third catalogue would be a third 
         and dropping it would make the row jump. Here it would be the only control on the page, and a
         lone dimmed chip that does nothing reads as broken rather than as informative. Most jobs sit
         at zero between publishing waves, so this is the common case, not the edge. {% endcomment %}
-        {% if new_count %}
+        {% comment %} The count is ALWAYS shown, with its order (PR-08, 2026-10-24): an unpressed "Latest 67"
+        on its own read as the list's label while the list showed all 311. Now the default says what it is,
+        and Latest reads as the filter beside it. Not on a job with no contracts: the empty state says so. {% endcomment %}
+        {% if contract_total %}
         <div class="jobd-newbar">
+            {% if new_only %}<span class="jobd-newbar__count">{{ filtered_total|intcomma }} of {{ contract_total|intcomma }} shown</span>
+            {% else %}<span class="jobd-newbar__count">{{ contract_total|intcomma }} contract{{ contract_total|pluralize }}, A to Z</span>{% endif %}
+            {% if new_count %}
             {% comment %} `aria-current`, not `aria-pressed`: this is an <a> (a link, so Back undoes
             it), and aria-pressed is only valid on role="button" -- assistive tech ignores it there,
             so the active state would reach sighted users through .is-active and nobody else. Career
@@ -170,7 +162,7 @@ belong to (via `contract_modal_preview`), so a third catalogue would be a third 
                href="?tab=contracts{% if not new_only %}&amp;new=1{% endif %}"
                {% if new_only %}aria-current="true"{% endif %}
                title="Contracts added in the last {{ new_window_days }} days">Latest<span class="rp-chip__n">{{ new_count }}</span></a>
-            {% if new_only %}<span class="jobd-newbar__count">{{ filtered_total }} of {{ contract_total }} shown</span>{% endif %}
+            {% endif %}
         </div>
         {% endif %}
 
@@ -237,11 +229,11 @@ belong to (via `contract_modal_preview`), so a third catalogue would be a third 
 {% block js_scripts %}
 {{ block.super }}
 <script>
-    // The header figures COUNT UP on arrival, like every other Tally on the site. Both carried
-    // `data-countup` and nothing ever called `countUp` on this page -- the attribute was inert here
-    // before this rebuild (on the hunter tally it replaced) and I doubled it before noticing. A
-    // `data-*` hook with no caller is indistinguishable from a working one in the markup, which is
-    // exactly why it survives.
+    // The header figures COUNT UP on arrival, like every other Tally on the site: since PR-03 (2026-10-24)
+    // those are the viewer's own standing (level, XP banked, to next level), the job's totals having
+    // become a static facts line. They carried `data-countup` once before with nothing ever calling
+    // `countUp` on this page -- a `data-*` hook with no caller is indistinguishable from a working one in
+    // the markup, which is exactly why it survives.
     //
     // First paint only, with no tick-on-change: unlike the catalogue's tally these figures are static
     // for the page -- nothing here filters them.

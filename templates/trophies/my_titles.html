@@ -39,7 +39,9 @@ server-rendered; JS only toggles.
                 Every title here is earned, never handed out. Clear a badge series and it's yours to wear.
             </p>
 
-            {# ── The nameplate: what you're wearing right now. ── #}
+            {% comment %} The nameplate: what you're wearing right now. Only once you hold a title (PR-05,
+            2026-10-24): before that it could only say "No title equipped", the first of a page of zeros. {% endcomment %}
+            {% if yours %}
             <div class="ttl-plate ttl-plate--hero{% if not equipped_title %} ttl-plate--empty{% endif %} mt-3 md:mt-4" data-ttl-plate>
                 <span class="ttl-plate__label">Currently wearing</span>
                 {% if equipped_title %}
@@ -57,27 +59,30 @@ server-rendered; JS only toggles.
                 <span class="ttl-plate__hint">Pick one from Yours below</span>
                 {% endif %}
             </div>
-
-            <div class="grid grid-cols-2 md:grid-cols-3 gap-2 md:gap-3 mt-3 md:mt-4">
-                <div class="scard">
-                    <div class="scard__label">Yours</div>
-                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ yours_count }}">{{ yours_count }}</div>
-                    <div class="scard__sub">titles earned</div>
-                </div>
-                <div class="scard">
-                    <div class="scard__label">Within reach</div>
-                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ within_reach_count }}">{{ within_reach_count }}</div>
-                    <div class="scard__sub">series in progress</div>
-                </div>
-                <div class="scard col-span-2 md:col-span-1">
-                    <div class="scard__label">All titles</div>
-                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ all_count }}">{{ all_count }}</div>
-                    <div class="scard__sub">across every series</div>
-                </div>
-            </div>
+            {% endif %}
+            {% comment %} No count tiles (PR-05): "Yours", "Within reach" and "All titles" repeated the
+            switcher's own chip counts one screen up, and for a newcomer they were three zeros. {% endcomment %}
         </div>
     </section>
 
+    {% if not yours %}
+    {% comment %} BEFORE THE FIRST TITLE (PR-05, 2026-10-24, owner: "lead with the way in"). A hunter with no
+    title met a page of absence: an empty nameplate, three zero counts, three zero tabs, then "No titles yet"
+    at the bottom, below a phone's fold. Now the page says how a title is earned and shows the nearest ones:
+    the series they are closest to clearing, or with nothing started, the titles most hunters hold. The
+    nameplate and the switcher arrive with the first title. {% endcomment %}
+    <section class="ttl-firstin" aria-labelledby="ttl-firstin-title">
+        <h2 class="ttl-firstin__title" id="ttl-firstin-title">Your first title</h2>
+        <p class="ttl-firstin__body">Clear a badge series, platinum every game in its set, and its title is yours to wear.</p>
+        {% if first_title_picks %}
+        <p class="ttl-note">{% if within_reach %}Closest to yours: series you've already put work into.{% else %}The titles most hunters have earned.{% endif %}</p>
+        <div class="ttl-wall" data-ttl-grid>
+            {% for entry in first_title_picks %}{% include 'trophies/partials/titles/_title_plate.html' with entry=entry view=within_reach|yesno:'reach,all' %}{% endfor %}
+        </div>
+        {% endif %}
+        <a href="{% url 'badges_list' %}" class="pp-cta pp-cta--sm ttl-firstin__cta">Browse badges</a>
+    </section>
+    {% else %}
     {# ── Switcher: the three ways in. All panels are SSR; JS only toggles. ── #}
     <div class="flex items-center justify-center md:justify-end mt-4 mb-3">
         <div class="pp-switch" role="tablist" aria-label="Title views" data-ttl-switch>
@@ -99,21 +104,12 @@ server-rendered; JS only toggles.
     {# ── Yours ── #}
     <div id="ttl-yours" role="tabpanel" aria-labelledby="ttl-tab-yours" tabindex="0" class="ttl-panel" data-ttl-panel="yours">
         <h2 class="sr-only">Titles you've earned</h2>
-        {% if yours %}
         {% comment %}Every panel carries a note line -- it sets the sort AND keeps the first card at the
         same vertical position across all three, so switching views doesn't jump.{% endcomment %}
         <p class="ttl-note">Titles you've earned. Newest first.</p>
         <div class="ttl-wall" data-ttl-grid>
             {% for entry in yours %}{% include 'trophies/partials/titles/_title_plate.html' with entry=entry view='yours' %}{% endfor %}
         </div>
-        {% else %}
-        <div class="ttl-empty">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11.562 3.266a.5.5 0 0 1 .876 0L15.39 8.87a1 1 0 0 0 1.516.294L21.183 5.5a.5.5 0 0 1 .798.519l-2.834 10.246a1 1 0 0 1-.956.734H5.81a1 1 0 0 1-.957-.734L2.02 6.02a.5.5 0 0 1 .798-.519l4.276 3.664a1 1 0 0 0 1.516-.294z"/><path d="M5 21h14"/></svg>
-            <p class="ttl-empty__title">No titles yet</p>
-            <p class="ttl-empty__body">Clear a badge series and its title is yours.</p>
-            <a href="{% url 'badges_list' %}" class="ttl-empty__cta">Browse badges</a>
-        </div>
-        {% endif %}
     </div>
 
     {# ── Within reach: unheld, already started, closest first. ── #}
@@ -149,6 +145,7 @@ server-rendered; JS only toggles.
         </div>
         {% endif %}
     </div>
+    {% endif %}
 </div>
 {% endblock %}
 

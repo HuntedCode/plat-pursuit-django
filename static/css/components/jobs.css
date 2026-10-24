@@ -178,7 +178,7 @@
    line leave each about 80px -- the tallies drop to their own row and keep their size rather than
    shrinking to fit beside a title. */
 .jobd__head { display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
-.jobd__head > .pp-bhead__id { flex: 1 1 12rem; }
+.jobd__head > .jobd__id { flex: 1 1 12rem; }
 .jobd__ic {
     width: 42px; height: 42px; flex: 0 0 auto; display: grid; place-items: center; border-radius: var(--pp-radius-lg);
     background: color-mix(in oklab, var(--disc, var(--pp-primary)) 14%, transparent);

@@ -16,7 +16,7 @@ the hand-offs between pages.
 | Daily loop | Lobby, Career, contracts and claims | Reviewed 2026-10-20 | [daily-loop.md](daily-loop.md) |
 | Discovery | Browse games, game detail, trophy lists, Recently Added, franchises, companies, genres and themes, search | Reviewed 2026-10-22 | [discovery.md](discovery.md) |
 | Discovery, below the hero | The game page's tabs and the trophy list page, top to bottom | Reviewed and fixed 2026-10-22 | [game-and-list-lower.md](game-and-list-lower.md) |
-| Progression | Badges (browse, detail, how it works), Jobs (browse, detail), Collection, Milestones, Titles | Not started | |
+| Progression | Badges (browse, detail, how it works), Jobs (browse, detail), Collection, Milestones, Titles | Reviewed 2026-10-24 | [progression.md](progression.md) |
 | Challenges | The Challenges system (public since 2026-10-18) | Not started | |
 | Authoring | Roadmap guide page and editor, Game Lists (browse, detail, create and edit, My Lists), Rate My Games | Not started | |
 | Identity and social | Profiles, the site-wide leaderboards, share cards, Monthly Recap | Not started | |

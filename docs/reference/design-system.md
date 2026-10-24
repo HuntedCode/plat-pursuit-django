@@ -378,8 +378,14 @@ shown"), and nothing else sits beside it. The four-tile `.scard` grids the brows
 gone: they counted a different unit from the grid ("Total games 40,125", which were trophy lists, over "15,824
 games shown"), and on a phone they pushed every result below the first screen (DS-02). Site-wide numbers belong
 on the landing. This holds on the six Discovery list pages (Games, Trophy Lists, Recently Added, Franchises,
-Companies, Genres & Themes). Jobs, Hunters and Badges still carry a tile grid: they belong to review slices not
-yet run (Challenges, Identity and social), which will apply the same rule.
+Companies, Genres & Themes) and, since the [Progression review](../design/reviews/progression.md) (2026-10-24,
+PR-02), on Jobs and Badges. Hunters still carries a tile grid until the Identity and social slice.
+
+**The hunter's own shelves follow it too** (Collection, Titles, a job page's header; PR-03 to PR-05): what is
+there goes in one `.pp-factline`, and a figure that would read 0 is left out rather than shown (rule 3 of the
+[Page Principles](../design/page-principles.md)). Two sightings now: the tiles came off the Discovery list pages
+by page list, the Progression pages kept theirs because they were not on it. When a header grows a tile, the
+question is which line of the facts it replaces.
 
 **A detail page's totals are one line of facts, `.pp-factline`** (franchise, company, genre/theme detail):
 

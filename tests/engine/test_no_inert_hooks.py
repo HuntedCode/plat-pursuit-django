@@ -28,7 +28,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 #: Pages that had an inert `data-countup` and now call `countUp`. Each entry is (template, why it broke).
 FIXED = [
     ('trophies/jobs_browse.html', 'the catalogue tally snapped in while the wall staggered around it'),
-    ('trophies/job_detail.html', 'both header figures, inherited inert and then doubled'),
+    ('trophies/job_detail.html', 'the header figures (now the standing block), inherited inert and then doubled'),
     ('trophies/badge_how_it_works.html', 'three tallies, static above beats that animated'),
 ]
 

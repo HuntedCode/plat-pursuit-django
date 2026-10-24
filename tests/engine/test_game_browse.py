@@ -651,16 +651,17 @@ def test_bare_games_renders_everything_in_place(client):
     assert 'Old Gen Game' in resp.content.decode()
 
 
-def test_site_heartbeat_has_catalog_coverage():
-    """compute_site_heartbeat runs the games-in-contracts coverage query (the Jobs header reads it) and
-    exposes it under `expanded`. Empty DB -> 0, no crash. Its badge-series twin fed only the Browse Games
-    tiles and went with them (DS-04)."""
+def test_site_heartbeat_computes_no_catalog_coverage():
+    """Both catalogue-coverage counts went with the header tiles that were their only readers: the
+    badge-series one with Browse Games' (DS-04), the contract one with the Jobs header's (PR-02). An
+    empty DB still computes the rest without a crash."""
     from core.services.site_heartbeat import compute_site_heartbeat
 
     expanded = compute_site_heartbeat().get('expanded', {})
 
     assert 'games_in_badges' not in expanded
-    assert expanded.get('games_in_contracts', {}).get('value') == 0
+    assert 'games_in_contracts' not in expanded
+    assert expanded['ratings_total']['value'] == 0
 
 
 def test_sticky_minibar_and_sentinel_render(client):
@@ -705,7 +706,7 @@ def test_header_has_no_tiles_even_when_the_heartbeat_is_warm(client):
     key = f"site_heartbeat_{now.date().isoformat()}_{now.hour:02d}"
     cache.set(key, {
         'always': {'games_total': {'value': 12847, 'delta': 156}},
-        'expanded': {'games_in_contracts': {'value': 312}},
+        'expanded': {'ratings_total': {'value': 312}},
     }, 120)
     try:
         url, params = _url()

@@ -213,7 +213,17 @@ class MyTitlesView(LoginRequiredMixin, TemplateView):
         )
         # All: the full live vocabulary (already name-ordered by the queryset).
 
+        # Before the first title (PR-05, 2026-10-24, owner): no nameplate, counts or switcher, which for a
+        # hunter with none were a page of zeros. The page leads with the way in instead: the series closest
+        # to giving them a title, or, with nothing started, the titles most hunters have earned (the
+        # likeliest first ones). Bounded slices of lists already built; no query.
+        first_title_picks = []
+        if not yours:
+            first_title_picks = (within_reach[:3] if within_reach
+                                 else sorted(entries, key=lambda e: (-e['holders'], e['name']))[:6])
+
         context.update({
+            'first_title_picks': first_title_picks,
             'equipped_title': equipped.title if equipped else None,
             'yours': yours,
             'within_reach': within_reach,

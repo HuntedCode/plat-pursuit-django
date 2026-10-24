@@ -1,6 +1,6 @@
-"""The badge-list header shows generalized CATALOG stats (from the hourly heartbeat), not the
-viewer's own progress: Badge series / Stages / Points available / New this week. Mirrors the browse
-header treatment. Cold cache (no cron yet) simply omits the grid.
+"""The badge-list header carries ONE count, its tally, and no catalogue tiles (PR-02, 2026-10-24). It used to
+show four heartbeat stats (Badge series / Stages / Points available / New this week), the "182 series" twice on
+the first screen. The catalogue figures still feed How badges work (`badge_catalog_stats`).
 """
 import pytest
 from django.core.cache import cache
@@ -17,7 +17,7 @@ def _warm(**expanded):
     return key
 
 
-def test_badge_header_scard_grid_renders_when_heartbeat_warm(client):
+def test_badge_header_has_no_catalogue_tiles_even_when_the_heartbeat_is_warm(client):
     key = _warm(
         badges_total={'value': 142, 'delta': 6},
         badge_stages_total={'value': 2910},
@@ -28,14 +28,8 @@ def test_badge_header_scard_grid_renders_when_heartbeat_warm(client):
     finally:
         cache.delete(key)
 
-    assert 'scard' in content
-    assert 'Badge series' in content and 'Stages' in content
-    # 'Points available', not 'XP available': badge XP is Badge Points to the reader as of the
-    # 2026-08 rename (see test_badge_points_vocabulary). The internal key is still `earnable_xp`.
-    assert 'Points available' in content and 'New this week' in content
-    assert '142' in content          # badges_total flows through
-    assert '2,910' in content        # stages (intcomma)
-    assert '1,834,000' in content    # total earnable XP (intcomma)
+    assert 'Points available' not in content and 'New this week' not in content
+    assert 'class="scard' not in content
     assert '{#' not in content       # multi-line comment leak guard
 
 

@@ -137,26 +137,6 @@ def compute_site_heartbeat() -> dict:
     badge_earnable_xp = _community_value('badge_earnable_xp', 'total')
     badge_xp_total = _community_value('badge_xp', 'total')
 
-    # Catalogue coverage: distinct games that are part of a live contract, the Jobs header's
-    # discovery hook. A catalogue-wide aggregate -> hourly cron, never the request path.
-    try:
-        from trophies.models import Contract, Game, IGDBMatch
-        # Contract membership is igdb-derived: a game counts if its concept is anchored + trusted and
-        # shares a raw igdb_id with a live Contract.
-        _live_contract_igdb = Contract.objects.filter(
-            is_live=True, igdb_id__isnull=False).values_list('igdb_id', flat=True)
-        games_in_contracts = (
-            Game.objects.filter(
-                concept__anchor_migration_completed_at__isnull=False,
-                concept__igdb_match__status__in=IGDBMatch.TRUSTED_STATUSES,
-                concept__igdb_match__igdb_id__in=_live_contract_igdb,
-            ).distinct().count()
-        )
-    except Exception:
-        logger.exception("games_in_contracts query failed")
-        games_in_contracts = None
-        is_partial = True
-
     # Genres & Themes index: how many of each actually carry games, the tab switcher's counts (two
     # DISTINCT existence counts over 4-table joins -- moved here from a hot per-request compute in
     # 2026-08, they ran on every request AND every filter swap of /genres/).
@@ -173,22 +153,6 @@ def compute_site_heartbeat() -> dict:
     except Exception:
         logger.exception("genre/theme index stats query failed")
         genres_with_games = themes_with_games = None
-        is_partial = True
-
-    # Jobs browse header: the catalog scale + the live contract pool + the XP hunters have
-    # banked across every job (a whole-table Sum -> cron). games_in_contracts above completes
-    # its four-stat grid.
-    try:
-        from trophies.models import Contract, Job, ProfileJobXP
-        # The FULL board, fallback included: the /jobs/ wall renders every job (Freelancer
-        # among them) and its own tally counts 25 -- a 24 here contradicted the page it
-        # headlines (the audit's catch).
-        jobs_total = Job.objects.count()
-        contracts_live = Contract.objects.filter(is_live=True).count()
-        job_xp_banked = ProfileJobXP.objects.aggregate(total=Sum('total_xp'))['total'] or 0
-    except Exception:
-        logger.exception("jobs browse stats query failed")
-        jobs_total = contracts_live = job_xp_banked = None
         is_partial = True
 
     # Community ratings -- the landing's Ratings section reads these. The distinct over the full
@@ -272,11 +236,6 @@ def compute_site_heartbeat() -> dict:
                 'label': 'Hours hunted',
                 'sublabel': 'real PSN playtime',
             },
-            'games_in_contracts': {
-                'value': games_in_contracts,
-                'label': 'Games in contracts',
-                'sublabel': 'catalogue',
-            },
             'genres_with_games': {
                 'value': genres_with_games,
                 'label': 'Genres with games',
@@ -286,21 +245,6 @@ def compute_site_heartbeat() -> dict:
                 'value': themes_with_games,
                 'label': 'Themes with games',
                 'sublabel': 'catalogue',
-            },
-            'jobs_total': {
-                'value': jobs_total,
-                'label': 'Jobs',
-                'sublabel': 'on the board',
-            },
-            'contracts_live': {
-                'value': contracts_live,
-                'label': 'Live contracts',
-                'sublabel': 'open now',
-            },
-            'job_xp_banked': {
-                'value': job_xp_banked,
-                'label': 'Job XP banked',
-                'sublabel': 'all-time',
             },
             'ratings_total': {
                 'value': ratings_total,

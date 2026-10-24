@@ -625,6 +625,7 @@ def test_milestones_page_renders_for_linked_profile(client):
     assert 'Closest milestone' in content
     assert 'msc--link' in content              # cards are actionable
     assert 'class="msc__action"' in content    # stretched-link overlay
+    assert 'class="msc__prog"' in content      # a hunter with progress keeps the bar toward the next rung
     assert '{%' not in content and '{#' not in content
 
 
@@ -637,6 +638,9 @@ def test_milestones_page_renders_for_anonymous(client):
     assert resp.status_code == 200
     assert 'Platinum Hunter' in content
     assert 'Link your PSN account' in content   # anon preview nudge
+    # PR-07 (2026-10-24): what each milestone is and its rungs, not eight "Not yet started" over empty bars.
+    assert content.count('class="msc__ladder"') == 8
+    assert 'Not yet started' not in content and 'class="msc__prog"' not in content
 
 
 def test_demo_context_covers_all_states():

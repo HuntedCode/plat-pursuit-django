@@ -102,10 +102,6 @@
     }
 
     function boot(first) {
-        if (first && PP.countUp) {
-            document.querySelectorAll('[data-scard-count]').forEach(function (el) { PP.countUp(el, 900); });
-        }
-
         // Re-derive the active view from the DOM. On an HTMX history restore the markup is a fresh
         // snapshot while this module's `current` still holds the pre-navigation value -- reading it back
         // keeps them in sync (a desync makes show() early-return, or slide the wrong way).

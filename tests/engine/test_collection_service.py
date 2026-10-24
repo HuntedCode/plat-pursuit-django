@@ -546,9 +546,10 @@ def test_an_earned_edition_has_nothing_left_to_chase():
     assert (frame['chase_done'], frame['chase_total']) == (0, 0)
 
 
-def test_collection_page_is_a_single_gallery_with_stat_grid(client):
-    """The page ships as one Gallery: no Case, no view toggle -- a Career-style .scard stat grid in the header
-    (editions + in-progress + holographic) over the wall, with the full catalog as the collected denominator."""
+def test_collection_page_is_a_single_gallery_with_a_facts_line(client):
+    """The page ships as one Gallery: no Case, no view toggle, the full catalog as the collected denominator,
+    and the composition as one facts line that names only what is there (PR-04, 2026-10-24: it was four
+    `.scard` tiles, two of them 0 for a newcomer)."""
     profile = ProfileFactory(is_linked=True)
     _, a = _series('rs-page')
     _hold(profile, a['ultra-hd'])
@@ -558,8 +559,14 @@ def test_collection_page_is_a_single_gallery_with_stat_grid(client):
     html = client.get(reverse('badge_collection')).content.decode()
 
     assert 'class="pp-minibar"' in html and 'data-minibar-coll-filters' in html
-    assert 'scard__value' in html and 'In progress' in html and 'Holographic' in html   # the stat grid
+    facts = html[html.index('class="pp-factline"'):]
+    facts = facts[:facts.index('</p>')]
+    assert 'Ultra HD earned' in facts
+    assert 'holographic' not in facts, 'a zero is back in the facts line'
+    assert 'class="scard' not in html, 'the stat tiles are back'
     assert '/ 4</span>' in html                               # earned 1 of the full 4-badge catalog (2 series x 2)
+    # The gallery's count names what it counts: the started badges, not the catalogue in the tally.
+    assert 'data-visible-count>1 started</span>' in html
     assert 'data-edition-jump' not in html                    # the old edition-jump chips are gone
     assert 'pp-coll-tier' not in html                         # the old tier-composition row is gone
     assert 'data-collection-view' not in html                 # the Case/Gallery view toggle is gone
