@@ -16,9 +16,19 @@ the hand-offs between pages.
 | Daily loop | Lobby, Career, contracts and claims | Reviewed 2026-10-20 | [daily-loop.md](daily-loop.md) |
 | Discovery | Browse games, game detail, trophy lists, search | Reviewed 2026-10-22 | [discovery.md](discovery.md) |
 | Discovery, below the hero | The game page's tabs and the trophy list page, top to bottom | Reviewed and fixed 2026-10-22 | [game-and-list-lower.md](game-and-list-lower.md) |
+| Progression | Badges (browse, detail, how it works), Jobs (browse, detail), Collection, Milestones, Titles | Not started | |
 | Challenges | The Challenges system (public since 2026-10-18) | Not started | |
-| Identity and social | Profiles, badges, leaderboards, share cards | Not started | |
-| Account | Settings, membership, fundraiser | Not started | |
+| Authoring | Roadmap guide page and editor, Game Lists (browse, detail, create and edit, My Lists), Rate My Games | Not started | |
+| Identity and social | Profiles, leaderboards (site-wide and per game), share cards, Monthly Recap | Not started | |
+| Account | Settings, membership, fundraiser, the Support hub and its public roadmap | Not started | |
+| Odds and ends | What's new, About, Contact, Privacy, Terms, the arcade, the badge-reveal event page, the archived reviews page, goodbye, the 404 and 500 pages | Not started | |
+
+The slices run in table order. Progression, Authoring and Odds and ends were added on 2026-10-24, when a walk
+of every live route found pages no slice named: the jobs, collection, milestones and titles pages sat between
+Daily loop (Career and the board) and Identity (badges); roadmaps and lists had no home (Discovery's sample game
+had no roadmap). Badges moved from Identity into Progression, beside the jobs they share a shape with (a
+catalogue you browse and progress through). Staff and mod pages, and routes that only redirect, are out of
+scope. When a page is added, give it a slice here.
 
 ## Site-wide findings
 
