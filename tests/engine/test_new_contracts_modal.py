@@ -1134,9 +1134,12 @@ def test_a_cover_can_never_grow_taller_than_the_screen_allows():
     assert 'max-height: 24vh' in art
     # And tighter again where the viewport is short, which is where it actually mattered: a
     # 1366x768 laptop and a 667px phone both overflowed the dialog at 24vh.
-    # Qualified to phones and tablets: unqualified it fired on every laptop and cost the desktop
-    # 30% of its cover height for no fit benefit -- on the design system's primary target.
-    assert ('@media (max-height: 800px) and (max-width: 1023px) { .nc__hero-art { max-height: 18vh; } }') in css
+    # By HEIGHT at every width (2026-10-23). It was qualified to phones and tablets on the theory that
+    # it cost a desktop cover height for no fit benefit, but a 1366x768 laptop's WINDOW is about 657px
+    # tall, and there the buttons hung below the dialog. A desktop window (about 950px at 1080p) is
+    # past 800px, so it still keeps the full covers; test_new_contracts_fit_browser measures both.
+    assert '@media (max-height: 800px) { .nc__hero-art { max-height: 18vh; } }' in css
+    assert '@media (max-height: 700px) { .nc__hero-art { max-height: 15vh; } }' in css
     assert 'object-position: top' in _rule(css, '.nc__hero-art img'), (
         'cropping without object-top eats the logo at the top of the cover'
     )
