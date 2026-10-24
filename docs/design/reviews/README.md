@@ -14,21 +14,23 @@ the hand-offs between pages.
 |-------|--------|--------|--------|
 | First visit | Anon landing, sign up / sign in, email verify, link PSN, first sync, first arrival on the lobby + Career | Reviewed 2026-10-20 | [first-visit.md](first-visit.md) |
 | Daily loop | Lobby, Career, contracts and claims | Reviewed 2026-10-20 | [daily-loop.md](daily-loop.md) |
-| Discovery | Browse games, game detail, trophy lists, search | Reviewed 2026-10-22 | [discovery.md](discovery.md) |
+| Discovery | Browse games, game detail, trophy lists, Recently Added, franchises, companies, genres and themes, search | Reviewed 2026-10-22 | [discovery.md](discovery.md) |
 | Discovery, below the hero | The game page's tabs and the trophy list page, top to bottom | Reviewed and fixed 2026-10-22 | [game-and-list-lower.md](game-and-list-lower.md) |
 | Progression | Badges (browse, detail, how it works), Jobs (browse, detail), Collection, Milestones, Titles | Not started | |
 | Challenges | The Challenges system (public since 2026-10-18) | Not started | |
 | Authoring | Roadmap guide page and editor, Game Lists (browse, detail, create and edit, My Lists), Rate My Games | Not started | |
-| Identity and social | Profiles, leaderboards (site-wide and per game), share cards, Monthly Recap | Not started | |
-| Account | Settings, membership, fundraiser, the Support hub and its public roadmap | Not started | |
-| Odds and ends | What's new, About, Contact, Privacy, Terms, the arcade, the badge-reveal event page, the archived reviews page, goodbye, the 404 and 500 pages | Not started | |
+| Identity and social | Profiles, the site-wide leaderboards, share cards, Monthly Recap | Not started | |
+| Account | Settings and the account pages it links to (email addresses, password reset, re-authenticate, inactive account, the sign-out confirm), membership and its welcome page, fundraiser, the Support hub and its public roadmap, the beta-access gate | Not started | |
+| Odds and ends | What's new, About, Contact, Privacy, Terms, the arcade, the badge-reveal event page, the archived reviews page, goodbye, the 404 and 429 pages, and a 500 page (none exists yet: a server error shows Django's bare "Server Error (500)") | Not started | |
 
 The slices run in table order. Progression, Authoring and Odds and ends were added on 2026-10-24, when a walk
 of every live route found pages no slice named: the jobs, collection, milestones and titles pages sat between
 Daily loop (Career and the board) and Identity (badges); roadmaps and lists had no home (Discovery's sample game
-had no roadmap). Badges moved from Identity into Progression, beside the jobs they share a shape with (a
-catalogue you browse and progress through). Staff and mod pages, and routes that only redirect, are out of
-scope. When a page is added, give it a slice here.
+had no roadmap); and the account pages allauth serves, the beta-access gate and the error pages sat in none.
+Badges moved from Identity into Progression, beside the jobs they share a shape with (a catalogue you browse and
+progress through). A game's leaderboard is a panel inside the game page, so it belongs to "Discovery, below the
+hero". Staff and mod pages, fragments, and routes that only redirect are out of scope. When a page is added, give
+it a slice here.
 
 ## Site-wide findings
 
