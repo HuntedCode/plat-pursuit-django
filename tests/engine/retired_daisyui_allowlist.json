@@ -130,9 +130,6 @@
  "templates/partials/site_banner.html": {
   "btn": 3
  },
- "templates/partials/unsaved_changes_modal.html": {
-  "btn": 7
- },
  "templates/recap/_timezone_modal.html": {
   "btn": 8,
   "select": 3

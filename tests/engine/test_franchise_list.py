@@ -254,3 +254,122 @@ def test_excluded_only_and_spinoff_only_franchises_stay_hidden(client):
     assert 'Visible IP' in content
     assert 'Excluded Only' not in content
     assert 'Spinoff Only' not in content
+
+
+# ── The cover comes from the franchise's own games (DS-11, 2026-10-24) ─────────────────────────────────────
+
+def _member(fr, art, contract=False, **link):
+    """A game in `fr` (art = its title image, or '' for none); `contract` puts a live Contract on it."""
+    from trophies.models import ConceptFranchise, Contract
+    game = GameFactory(title_platform=['PS5'], title_image=art)
+    igdb_id = next(_ig_seq)
+    IGDBMatchFactory(concept=game.concept, igdb_id=igdb_id)
+    ConceptFranchise.objects.create(concept=game.concept, franchise=fr, **link)
+    if contract:
+        Contract.objects.create(name=f'c{igdb_id}', slug=f'c{igdb_id}', is_live=True, igdb_id=igdb_id)
+    return game
+
+
+def _bare(name, source_type='franchise'):
+    from trophies.models import Franchise
+    return Franchise.objects.create(igdb_id=next(_fr_seq), name=name, slug=name.lower().replace(' ', '-'),
+                                    source_type=source_type)
+
+
+def _cover(fr):
+    call_command('recompute_tag_covers', verbosity=0)
+    fr.refresh_from_db()
+    return fr.representative_game_id
+
+
+def test_a_spinoff_with_a_clean_link_elsewhere_never_provides_the_cover():
+    """Ace Attorney's tile showed Marvel vs. Capcom 3, which its page hides. The spin-off test above passes
+    because its spin-off has no other link: the link filters ran as a second .filter() call, a second join,
+    so they asked whether the game had ANY clean link, and the crossover's own franchise answered yes."""
+    from trophies.models import ConceptFranchise
+    fr, other = _bare('Ace Attorney'), _bare('Marvel vs Capcom')
+    crossover = _member(other, 'https://example.com/MVC3.jpg', contract=True)
+    ConceptFranchise.objects.create(concept=crossover.concept, franchise=fr, is_spinoff=True)
+    own = _member(fr, 'https://example.com/own.jpg')
+
+    assert _cover(fr) == own.id
+
+
+def test_an_excluded_link_with_a_clean_link_elsewhere_never_provides_the_cover():
+    from trophies.models import ConceptFranchise
+    fr, other = _bare('Curated Two'), _bare('Elsewhere')
+    crossover = _member(other, 'https://example.com/X.jpg', contract=True)
+    ConceptFranchise.objects.create(concept=crossover.concept, franchise=fr, is_excluded=True)
+    own = _member(fr, 'https://example.com/own.jpg')
+
+    assert _cover(fr) == own.id
+
+
+def test_the_franchises_own_game_beats_a_crossover_with_a_contract():
+    """Accel World's tile showed Dengeki Bunko: Fighting Climax, a real member of a dozen franchises, because
+    it was the only one with a contract. A game in fewer franchises is more this franchise's own."""
+    from trophies.models import ConceptFranchise
+    fr, other = _bare('Accel World'), _bare('Sword Art Online')
+    crossover = _member(fr, 'https://example.com/DBFC.jpg', contract=True)
+    ConceptFranchise.objects.create(concept=crossover.concept, franchise=other)
+    own = _member(fr, 'https://example.com/own.jpg')
+
+    assert _cover(fr) == own.id
+    # The crossover's other franchise has no own game with art, so it still gets one rather than none.
+    assert _cover(other) == crossover.id
+
+
+def test_among_its_own_games_a_contract_still_leads():
+    fr = _bare('Contracted')
+    _member(fr, 'https://example.com/a.jpg')
+    contracted = _member(fr, 'https://example.com/b.jpg', contract=True)
+    _member(fr, 'https://example.com/c.jpg')
+
+    assert _cover(fr) == contracted.id
+
+
+def test_a_series_link_does_not_make_a_game_a_crossover():
+    """Most games sit in a franchise AND its series. Only same-type links count: a game in the Ratchet & Clank
+    franchise and the Ratchet & Clank series is still the franchise's own."""
+    from trophies.models import ConceptFranchise
+    fr, series, rival = _bare('Ratchet IP'), _bare('Ratchet Series', 'collection'), _bare('Rival IP')
+    mainline = _member(fr, 'https://example.com/main.jpg')
+    ConceptFranchise.objects.create(concept=mainline.concept, franchise=series)
+    # The contract sits on the crossover, so counting every link type (a tie at two each) would hand it the tile.
+    crossover = _member(fr, 'https://example.com/x.jpg', contract=True)
+    ConceptFranchise.objects.create(concept=crossover.concept, franchise=rival)
+
+    assert _cover(fr) == mainline.id
+
+
+def test_a_hidden_link_does_not_make_a_game_a_crossover():
+    """A spin-off or excluded link elsewhere is not a visible membership, so it does not count as sharing."""
+    from trophies.models import ConceptFranchise
+    fr, parent = _bare('Agents IP'), _bare('Saints IP')
+    agents = _member(fr, 'https://example.com/agents.jpg', contract=True)
+    ConceptFranchise.objects.create(concept=agents.concept, franchise=parent, is_spinoff=True)
+    _member(fr, 'https://example.com/other.jpg')
+
+    assert _cover(fr) == agents.id
+
+
+def test_an_own_game_without_art_never_beats_a_crossover_with_it():
+    """Own-ness ranks games that have art; a tile with an empty placeholder is worse than a crossover's."""
+    from trophies.models import ConceptFranchise
+    fr, other = _bare('Artless'), _bare('Arty')
+    _member(fr, '')
+    crossover = _member(fr, 'https://example.com/x.jpg')
+    ConceptFranchise.objects.create(concept=crossover.concept, franchise=other)
+
+    assert _cover(fr) == crossover.id
+
+
+def test_a_series_ranks_its_own_games_among_series():
+    """The same ranking for a series: a crossover that sits in other series loses to the series' own game."""
+    from trophies.models import ConceptFranchise
+    series, other = _bare('Spyro Series', 'collection'), _bare('Skylanders Series', 'collection')
+    crossover = _member(series, 'https://example.com/skylanders.jpg', contract=True)
+    ConceptFranchise.objects.create(concept=crossover.concept, franchise=other)
+    own = _member(series, 'https://example.com/spyro.jpg')
+
+    assert _cover(series) == own.id

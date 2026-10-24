@@ -14,11 +14,23 @@ the hand-offs between pages.
 |-------|--------|--------|--------|
 | First visit | Anon landing, sign up / sign in, email verify, link PSN, first sync, first arrival on the lobby + Career | Reviewed 2026-10-20 | [first-visit.md](first-visit.md) |
 | Daily loop | Lobby, Career, contracts and claims | Reviewed 2026-10-20 | [daily-loop.md](daily-loop.md) |
-| Discovery | Browse games, game detail, trophy lists, search | Reviewed 2026-10-22 | [discovery.md](discovery.md) |
+| Discovery | Browse games, game detail, trophy lists, Recently Added, franchises, companies, genres and themes, search | Reviewed 2026-10-22 | [discovery.md](discovery.md) |
 | Discovery, below the hero | The game page's tabs and the trophy list page, top to bottom | Reviewed and fixed 2026-10-22 | [game-and-list-lower.md](game-and-list-lower.md) |
+| Progression | Badges (browse, detail, how it works), Jobs (browse, detail), Collection, Milestones, Titles | Not started | |
 | Challenges | The Challenges system (public since 2026-10-18) | Not started | |
-| Identity and social | Profiles, badges, leaderboards, share cards | Not started | |
-| Account | Settings, membership, fundraiser | Not started | |
+| Authoring | Roadmap guide page and editor, Game Lists (browse, detail, create and edit, My Lists), Rate My Games | Not started | |
+| Identity and social | Profiles, the site-wide leaderboards, share cards, Monthly Recap | Not started | |
+| Account | Settings and the account pages it links to (email addresses, password reset, re-authenticate, inactive account, the sign-out confirm), membership and its welcome page, fundraiser, the Support hub and its public roadmap, the beta-access gate | Not started | |
+| Odds and ends | What's new, About, Contact, Privacy, Terms, the arcade, the badge-reveal event page, the archived reviews page, goodbye, the 404 and 429 pages, and a 500 page (none exists yet: a server error shows Django's bare "Server Error (500)") | Not started | |
+
+The slices run in table order. Progression, Authoring and Odds and ends were added on 2026-10-24, when a walk
+of every live route found pages no slice named: the jobs, collection, milestones and titles pages sat between
+Daily loop (Career and the board) and Identity (badges); roadmaps and lists had no home (Discovery's sample game
+had no roadmap); and the account pages allauth serves, the beta-access gate and the error pages sat in none.
+Badges moved from Identity into Progression, beside the jobs they share a shape with (a catalogue you browse and
+progress through). A game's leaderboard is a panel inside the game page, so it belongs to "Discovery, below the
+hero". Staff and mod pages, fragments, and routes that only redirect are out of scope. When a page is added, give
+it a slice here.
 
 ## Site-wide findings
 
@@ -30,6 +42,9 @@ Findings that belong to no single slice. Same status values as the slice records
 | SW-02 | Medium | The back-to-top button (`templates/partials/back_to_top.html`, DaisyUI `btn-primary`, 64px at `lg`) is the loudest element on every page, and on a phone it covers a contract card's Claim button. Seen as [FV-10](first-visit.md) and [DL-06](daily-loop.md) | fixed: `feature/ui/site-wide-noise` (quiet house icon button, offered only on scroll-up, inert while hidden) |
 | SW-03 | Low | Every trophy-list detail page (`/games/<np_communication_id>/`) throws a console error: `game_detail.html` loads `submit_shimmer.js`, which wires `#filter-form` / `#submit-btn`, and the page's form is `#gd-filter-form`. Pre-existing; found by the 2026-10 cleanup's browser pass | fixed: `fix/review-leftovers` (the script was dead on its only page, so it was deleted) |
 | SW-04 | Low | `templates/recap/monthly_recap.html` loads `color-grid-modal.js`, but nothing on the page calls it (its only host was the deleted platinum grid). A dead script load. Pre-existing; found by the 2026-10 cleanup's audit | fixed: `fix/review-leftovers` (script and tag deleted; `tests/engine/test_template_static_refs_exist.py` now fails on any `{% static %}` path that does not exist) |
+| SW-05 | Low | A keyboard user can tab onto a row hidden under a modal's sticky footer: focus scrolls the row to the scroller's bottom edge, which the footer covers (WCAG 2.2 "focus not obscured"). Mouse and touch users are fine, since scrolling to the end clears the footer. Seen on the contract modal (Career's Claim footer, and the badge page's "Browse all Contracts" and sign-up footers), the report modal and the quick-rate modal. Found by the 2026-10-24 laptop sweep | open: each scroller needs a `scroll-padding-bottom` the height of its footer |
+
+**Short-laptop sweep (2026-10-24).** After three laptop bugs (the claim ceremony, the pinned chrome, the new-contracts modal), every modal and overlay a hunter can open on dev was measured at 1280x633 and 1366x657: each control scrolled into view and checked against the screen, its panel and what covers it. All 30 reachable ones keep their buttons on screen and inside the dialog. Not reachable on dev (no data or no subscription): the fundraiser badge picker, membership cancel, a game list's edit and report, the calendar opening and the optimizer's plan.
 
 ### SW-01: DaisyUI, foundation versus retired components
 
@@ -118,7 +133,7 @@ this order:
 | 2 | Total players (`feature/models/concept-player-count`) | DS-08 | Each player counted once per game (distinct profiles across its lists), stored on the concept and refreshed nightly, the `Genre.player_count` pattern. Cards and the game page both read it, so neither double-counts a hunter who owns two versions; Most Played on game-card grids sorts by it too. Done |
 | 3 | Browse pass (`feature/ui/browse-pass`) | DS-02, DS-04, DS-06 | No stat tiles on the six browse list pages, one count that matches the grid; detail pages fold their tiles into one line. One card anatomy (title with two lines reserved, one hooks row that keeps its height, the footer lined up under it); the hunter's mark on the cover; the trophy breakdown only on single-list cards, platforms on every card. Two-row phone toolbar. Breadcrumbs hidden on phones site-wide. Done |
 | 4 | Game page pass (`feature/ui/game-page-pass`) | DS-07, DS-09, DS-13 (family row) | The hunter's status card (with a claim line when a contract has XP waiting); the platinum stat (a gem in the rarity grade, or a hollow gem and the trophy count when there is no platinum); Share / Add to list / Report an issue on the first screen at equal weight; the cover's edges as the hero's edges; facts, badges and Jobs into About; trophy list picker cards that can be told apart. The trophy list page's hero moved to the next branch, with a mock-up first (owner, 2026-10-22) |
-| 5 | Franchise art (`fix/franchise-cover-art`) | DS-11 | A franchise's card art comes from its own games, not a crossover it appears in |
+| 5 | Franchise art (`fix/franchise-cover-art`) | DS-11 | A franchise's card art comes from its own games, not a crossover it appears in: hidden links stay hidden (one join, not two), and the games in the fewest franchises of its type come before the contract preference. Done |
 
 **Owner decisions** (2026-10-22):
 

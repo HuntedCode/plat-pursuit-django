@@ -207,7 +207,7 @@ The global CLAUDE.md defines the three-phase workflow (Plan, Build, Polish). Bel
 ### Phase 1 Additions: Reuse Targets
 
 Before exiting plan mode, specifically search:
-- `static/js/utils.js` for utilities (API, ToastManager, HTMLUtils, debounce, InfiniteScroller, UnsavedChangesManager, ZoomAwareObserver)
+- `static/js/utils.js` for utilities (API, ToastManager, HTMLUtils, debounce, InfiniteScroller, ZoomAwareObserver)
 - Existing JS files for similar UI patterns (modals, tabs, infinite scroll, form handling)
 - Existing templates for component patterns that can be reused or extended
 - Existing Django views/services for logic that can be shared rather than duplicated

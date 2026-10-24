@@ -29,10 +29,9 @@ PRIVATE_CHIP = 'Only you can see this list'
 def _dialog(body):
     """Just the create dialog.
 
-    `base.html` includes five site-wide modals of its own (unsaved-changes, theme nudge, guidelines
-    ...), all still on the legacy `modal-box` idiom -- so a whole-page search for DaisyUI classes is
-    answered by the chrome and says nothing about this page. Third time a substring assertion here
-    has been answered by something outside the thing under test.
+    `base.html` used to include site-wide modals of its own, on the legacy `modal-box` idiom -- so a
+    whole-page search for DaisyUI classes was answered by the chrome and said nothing about this page.
+    Third time a substring assertion here has been answered by something outside the thing under test.
     """
     start = body.index('<dialog id="gl-create"')
     return body[start:body.index('</dialog>', start)]
