@@ -44,6 +44,22 @@ screen from tablet to a 1440 desktop.
   the series the hunter is closest to finishing and a link to Badges. The plate, counts and tabs appear once a title
   is owned.
 
+### After the screenshots (owner, same day)
+
+The owner reviewed before/after screenshots of the built pass and asked for four more, on the same branch:
+
+- **The badges hint beckons (PR-06).** With no modal, the hint must not be missed: on every load it lights to
+  primary while a ring pings twice off its icon, then settles back (`.pp-edhint--beckon`). Reduced motion keeps the
+  colour and drops the ring.
+- **The ring's share reads compactly (PR-01's card).** "+2,000" all but touched the 58 to 66px ring; it reads "+2k"
+  and "+1.5k" (`compact_number`). The job tile's title keeps the exact figure.
+- **A job you have not started (PR-03).** The standing block stays, so a newcomer learns it exists, but says "No
+  XP banked here yet. Every contract for this job pays into it." (the second sentence only when the job has
+  contracts) instead of "1 level, 0 XP banked, Not ranked yet" over an empty bar. Hiding it was considered and rejected by the owner.
+- **The Collection header (PR-04).** Its row wrapped, so on a phone and a tablet the "0 / 4" tally fell to a line of
+  its own and sat off-centre over its label. It is now the browse headers' `.pp-bhead` (tally beside the title),
+  and the editions hint shares the facts line's row.
+
 ## Principles checklist
 
 | Page | 1 Hunter first | 2 Job leads (375px) | 3 No absence | 5 Numbers agree | 6 Defaults visible |

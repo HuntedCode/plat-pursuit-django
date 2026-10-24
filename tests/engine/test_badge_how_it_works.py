@@ -133,7 +133,8 @@ def test_every_surface_that_speaks_the_edition_vocabulary_explains_it(surface):
     src = (ROOT / surface).read_text(encoding='utf-8')
     markup = re.sub(r'\{%\s*comment\s*%\}.*?\{%\s*endcomment\s*%\}', '', src, flags=re.S)
 
-    assert 'class="pp-edhint"' in markup, f'{Path(surface).name} names editions with no way to look them up'
+    # The hint's own class, alone or with a placement utility, never `pp-edhint-row` (its wrapper).
+    assert re.search(r'class="pp-edhint[" ]', markup), f'{Path(surface).name} names editions with no way to look them up'
     assert "{% url 'badge_how_it_works' %}" in markup, f'{Path(surface).name} hint points nowhere'
 
 

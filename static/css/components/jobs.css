@@ -231,3 +231,5 @@
    breakpoint that hid the figure on a 375px iPhone SE and showed it on a 414px Pro Max: two phones,
    two layouts, from a cutoff nothing else on the site uses. */
 @media (max-width: 640px) { .jobd__mine-fig--next { display: none; } }
+/* Nothing banked yet: one plain line where the figures would be, sized like them. */
+.jobd__mine-start { margin: 6px 0 0; font-size: 12.5px; line-height: 1.45; color: var(--pp-text-dim); }

@@ -20,6 +20,7 @@ sync's recompute_standing -- covered by test_badge_xp), so these tests just set 
 State is derived through the shared badge_xp.edition_display_state, same as the live badge-detail view.
 (Replaces the retired per-tier binder/Case suite.)
 """
+import re
 from datetime import timedelta
 
 import pytest
@@ -570,6 +571,33 @@ def test_collection_page_is_a_single_gallery_with_a_facts_line(client):
     assert 'data-edition-jump' not in html                    # the old edition-jump chips are gone
     assert 'pp-coll-tier' not in html                         # the old tier-composition row is gone
     assert 'data-collection-view' not in html                 # the Case/Gallery view toggle is gone
+
+
+def test_the_header_keeps_its_tally_beside_the_title(client):
+    """Owner, 2026-10-24: the header row used to `flex-wrap`, so on a phone and a tablet the tally fell to a
+    line of its own and right-aligned inside a box only as wide as its label, a stray centred "0 / 4". It is
+    now the browse headers' `.pp-bhead` (title and tally share a row on a phone, the lede spans under both)
+    and does not wrap from 768px up. The phone grid lives in CSS keyed on these hooks, so a lost hook is a
+    silent revert."""
+    profile = ProfileFactory(is_linked=True)
+    _, a = _series('rs-head')
+    _hold(profile, a['ultra-hd'])
+    client.force_login(profile.user)
+
+    html = client.get(reverse('badge_collection')).content.decode()
+    head = html[html.index('class="pp-bhead'):html.index('</section>', html.index('class="pp-bhead'))]
+
+    for hook in ('pp-bhead__id', 'pp-bhead__title', 'pp-bhead__sub', 'pp-bhead__tally'):
+        assert hook in head, f'the header lost its {hook!r} hook, so the phone layout stops applying'
+    row = head[:head.index('>')]
+    assert 'flex-wrap' not in row, 'the header row wraps again, so the tally drops under the title on a tablet'
+    # The editions hint shares the facts line's row instead of taking a line of its own: both sit inside
+    # the one wrapper that holds the facts line, and nothing closes between them.
+    open_at = head.rindex('<div', 0, head.index('class="pp-factline"'))
+    row = head[open_at:]
+    row = row[:row.index('</div>')]
+    assert 'class="pp-factline"' in row and re.search(r'class="pp-edhint[" ]', row), 'the hint is off the facts row'
+    assert '<div' not in row[4:], 'the hint is wrapped in a row of its own inside the facts row'
 
 
 # --- the detail modal ----------------------------------------------------------

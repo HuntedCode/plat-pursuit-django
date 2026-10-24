@@ -80,7 +80,8 @@ information that matters).
 - **Reachable forever, unlike badges**: badges never reopen a modal, because their teaching has a
   fuller home at /badges/how-it-works (a second, shorter copy would drift). Browse Badges used to
   greet a first visit with a one-shot modal; since 2026-10-24 (PR-06) it never interrupts, and its
-  header's `.pp-edhint` LINKS to that page instead. Career has no long-form page -- the modal IS
+  header's `.pp-edhint` LINKS to that page instead. So it is not missed, that hint beckons once on
+  every load (`.pp-edhint--beckon`: a colour beat and a ring ping, no ring under reduced motion). Career has no long-form page -- the modal IS
   the teaching -- so the summary card's `.pp-edhint`
   ("How does my Career work?", `data-career-open`) reopens it. One copy, no drift. Reopens
   close silently: only an armed (first-visit) dismissal writes the flag.

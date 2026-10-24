@@ -51,8 +51,19 @@ belong to (via `contract_modal_preview`), so a third catalogue would be a third 
 
             Rendered for every linked viewer, ranked or not: gating the whole block on `my_rank` made it
             simply absent for a hunter who has banked nothing here, which reads as a missing feature
-            rather than as the answer to the question they opened the page with. {% endcomment %}
+            rather than as the answer to the question they opened the page with.
+
+            Nothing banked yet is said in words (owner, 2026-10-24): kept, so a newcomer learns the block
+            exists, but "1 level, 0 XP banked, Not ranked yet" over an empty bar was three zeros leading
+            the page (rule 3). "Banked", not "started": a hunter can be pursuing, even holding a claimable
+            contract, with nothing banked yet. No "below": the block heads both tabs. {% endcomment %}
             <div class="jobd__mine" style="--disc: var(--disc-{{ job.discipline }});">
+                {% if not my_job_banked %}
+                <div class="jobd__mine-head">
+                    <span class="jobd__mine-k">Your standing</span>
+                </div>
+                <p class="jobd__mine-start">No XP banked here yet.{% if contract_total %} Every contract for this job pays into it.{% endif %}</p>
+                {% else %}
                 <div class="jobd__mine-head">
                     <span class="jobd__mine-k">Your standing</span>
                     {% if my_rank %}
@@ -76,6 +87,7 @@ belong to (via `contract_modal_preview`), so a third catalogue would be a third 
                     </span>
                 </div>
                 {% include 'components/horizon.html' with progress=my_job_next_pct accent='var(--disc)' height='6px' %}
+                {% endif %}
             </div>
             {% endif %}
 

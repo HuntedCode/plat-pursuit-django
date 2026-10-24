@@ -21,7 +21,7 @@ other ~130 lines would start drifting immediately -- the same mistake this codeb
 three times over in one week (three hand-rolled FLIPs, a re-rolled filter chip, a re-rolled board row).
 The map branch stays the default and is what Career renders, untouched.
 {% endcomment %}
-{% load humanize job_icons %}
+{% load humanize custom_filters job_icons %}
 <div class="rp-row card group relative overflow-hidden bg-base-200/70 border-2 border-base-300 shadow-md shadow-neutral transition-all {% if p.status == 'claimable' %}rp-row--claimable{% elif p.status == 'accepted' %}rp-row--accepted{% endif %}" data-status="{{ p.status }}" data-slug="{{ p.slug }}" style="--rp-fam: {{ p.family_color }};">
     <span class="rp-row__accent" aria-hidden="true" style="background: {{ p.family_gradient }};"></span>
     {% comment %} Phone row's art: the PORTRAIT cover, which is what a game looks like at thumbnail size (the
@@ -159,10 +159,14 @@ The map branch stays the default and is what Career renders, untouched.
                     which named something the number is not -- and overflowed the 58px ring on the longer
                     jobs (Cartographer, Infiltrator, Survivalist). It was also the THIRD printing of that
                     name in one view: the page header, the job tile beside this ring, and here. The tight
-                    spot on the card was being spent on the one fact the reader already had twice. {% endcomment %}
+                    spot on the card was being spent on the one fact the reader already had twice.
+
+                    The share itself is compact ("+2k", "+1.5k"): "+2,000" all but touched the ring (owner,
+                    2026-10-24). The default 6,000 splits into whole hundreds across 1 to 6 jobs, so the short
+                    form loses nothing there, and the job tile's title still carries the exact figure. {% endcomment %}
                     <div class="rp-ring__xp">
                         {% if job %}
-                        <span class="pp-tally">+{{ p.xp_each|intcomma }}</span>
+                        <span class="pp-tally">+{{ p.xp_each|compact_number }}</span>
                         <span class="rp-ring__xp-cap">XP</span>
                         {% else %}
                         <span class="pp-tally">{{ p.elements|length }}</span>

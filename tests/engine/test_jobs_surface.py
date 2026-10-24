@@ -962,6 +962,21 @@ def test_the_ring_caption_is_the_numbers_unit_and_nothing_longer(client):
     assert 'Cartographer' in body.split('rp-jobtile__name', 1)[1].split('</span>', 1)[0]
 
 
+def test_the_ring_reads_the_share_compactly(client):
+    """Owner, 2026-10-24: "+2,000" all but touched the ring (46px of text in a 66px ring). The centre reads
+    "+2k" and "+1.5k"; the exact figure stays on the job tile's title, where there is room for it."""
+    _solo()
+    a, b, c, d = (_job(s, s.title()) for s in ('archivist', 'bard', 'cleric', 'druid'))
+    _contract('Three ways', [a, b, c])      # 6,000 / 3
+    _contract('Four ways', [a, b, c, d])    # 6,000 / 4
+
+    body = client.get(reverse('job_detail', args=['archivist']), {'tab': 'contracts'}).content.decode()
+    shares = re.findall(r'class="rp-ring__xp">\s*<span class="pp-tally">([^<]*)<', body)
+
+    assert sorted(shares) == ['+1.5k', '+2k'], shares
+    assert '+2,000 XP' in body, 'the exact share is gone from the job tile title'
+
+
 def test_the_hover_link_is_shared_with_career_not_copied():
     """Third extraction this week (after the shuffle and the cover skeleton), and the same reasoning: two
     pages doing one thing drift, and the drift is invisible because each looks right on its own page."""
@@ -1400,16 +1415,47 @@ def test_the_header_tells_a_linked_viewer_what_the_job_means_to_them(client):
 
 def test_an_unranked_linked_viewer_still_gets_the_block(client):
     """`{% if my_rank %}` alone made it vanish for a hunter who has banked nothing in this job -- exactly
-    the reader most in need of being told where they stand. Level 1 is the floor, not a blank."""
+    the reader most in need of being told where they stand.
+
+    Said in words, not zeros (owner, 2026-10-24): "1 level, 0 XP banked, Not ranked yet" over an empty bar
+    led the page with three zeros. The block stays, so a newcomer learns it exists."""
     _solo()
     _job('archivist', 'Archivist')
     profile = ProfileFactory(is_linked=True)
     client.force_login(profile.user)
 
     body = client.get(reverse('job_detail', args=['archivist'])).content.decode()
-    assert 'Your standing' in body and 'Not ranked yet' in body
     mine = body[body.index('jobd__mine'):body.index('jobd-switch')]
-    assert '>1</b>' in mine
+    assert 'Your standing' in mine and 'No XP banked here yet.' in mine
+    # The job has no contracts, so the block does not promise any.
+    assert 'Every contract' not in mine
+    # The figures' labels, not the words: the sentence itself says "XP banked".
+    for zero in ('<span>XP banked</span>', 'Not ranked yet', '<span>to next level</span>', 'data-countup'):
+        assert zero not in mine, f'the not-started block still prints {zero!r}'
+
+
+def test_the_standing_figures_return_with_the_first_xp(client):
+    """The words are for nothing banked only: one grant and the figures are back."""
+    _solo()
+    job = _job('archivist', 'Archivist')
+    profile = ProfileFactory(is_linked=True)
+    ProfileJobXP.objects.create(profile=profile, job=job, total_xp=100, level=1, is_linked=True)
+    client.force_login(profile.user)
+
+    mine = client.get(reverse('job_detail', args=['archivist'])).content.decode()
+    mine = mine[mine.index('jobd__mine'):mine.index('jobd-switch')]
+    assert 'No XP banked here yet.' not in mine and 'XP banked' in mine and '>100</b>' in mine
+
+
+def test_the_not_started_line_names_the_contracts_only_when_there_are_some(client):
+    _solo()
+    job = _job('archivist', 'Archivist')
+    _contract('One', [job])
+    client.force_login(ProfileFactory(is_linked=True).user)
+
+    mine = client.get(reverse('job_detail', args=['archivist'])).content.decode()
+    mine = mine[mine.index('jobd__mine'):mine.index('jobd-switch')]
+    assert 'No XP banked here yet. Every contract for this job pays into it.' in mine
 
 
 def test_the_standing_block_is_absent_for_anon(client):
@@ -1513,12 +1559,12 @@ def test_a_signed_in_hunter_with_no_XP_is_TOLD_they_are_not_ranked(client):
     client.force_login(viewer.user)
 
     body = client.get(reverse('job_detail', args=['archivist']), {'tab': 'ranks'}).content.decode()
-    assert 'Your standing' in body and 'Not ranked yet' in body
+    assert 'Your standing' in body and 'No XP banked here yet.' in body
 
     # ...and a hunter who IS ranked gets the number, not the placeholder.
     ProfileJobXP.objects.create(profile=viewer, job=job, total_xp=900, level=2, is_linked=True)
     body = client.get(reverse('job_detail', args=['archivist']), {'tab': 'ranks'}).content.decode()
-    assert '#1' in body and 'Not ranked yet' not in body
+    assert '#1' in body and 'Not ranked yet' not in body and 'No XP banked here yet.' not in body
 
 
 def test_a_signed_OUT_visitor_gets_no_standing_block_at_all(client):
