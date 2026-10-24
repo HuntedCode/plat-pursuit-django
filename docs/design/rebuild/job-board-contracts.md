@@ -687,6 +687,16 @@ person the modal exists for.
   live and reaches nobody's modal until `announce_contracts` POSTS it. A baselined row is settled,
   not posted, so it never reaches a modal at all. That also means **the modal never fires if the cron is not
   registered**: no announcement, no stamp, no modal.
+- **Short screens are fitted by HEIGHT, at every width** (2026-10-23). The dialog's `overflow: visible`
+  (the discipline popovers need it) means nothing pushed past its bottom can be scrolled to, so its
+  height rules are what keep "Got it" on screen. They were width-gated (under 1024px) on the theory that
+  a wide screen is a tall one, and a laptop (1366x657, or about 1280x633 at 150% scaling) kept the full
+  covers with the buttons hanging below the dialog. Under 800px tall the covers cap at 18vh and, on a
+  screen 768px or wider, the dialog at 92vh; under 700px, 15vh and 94vh (both clamped to the modal's
+  20px gutters). Phones keep the 88vh dialog: their `vh` ignores the browser toolbars, and that slack is
+  what keeps the buttons clear of them. Under 620px tall (a phone held sideways is 844-932px WIDE, so the
+  phone-width rules missed it) the covers AND the discipline filter go. `test_new_contracts_fit_browser.py` renders the real modal
+  at laptop and phone sizes and asks for the buttons inside and two rows of the list.
 - **A facet counted independently can promise more than the list shows.** Past the cap, an
   aggregate over the full queryset advertises contracts the list cannot display, and the filter
   leads somewhere emptier than the number said. Build facets from `rows`.

@@ -1411,7 +1411,7 @@
  * by side is the layout, and a narrower shell would shrink them into thumbnails. */
 /* THE DIALOG IS A FRAME, NOT A DOCUMENT. `.pp-howto__dialog` scrolls its whole self, which put the
    close button off screen and let the reader scroll the modal instead of the list. Here the dialog is
-   a flex column pinned to 88vh: the header, heroes and toolbar hold still, and only `.nc__list`
+   a flex column pinned to 88vh (more on a short wide screen, below): the header, heroes and toolbar hold still, and only `.nc__list`
    scrolls. `.pp-howto` raises the specificity over that base rule (series-list.css imports later).
 
    `overflow: visible` is load-bearing, not a leftover. The discipline popovers are absolutely
@@ -1582,14 +1582,24 @@
 .nc__empty:empty { margin: 0; }
 .nc__more { margin-top: 10px; font-size: 12px; color: var(--pp-text-mute); text-align: center; }
 
-/* SHORT VIEWPORTS ARE THE REAL CONSTRAINT, not narrow ones. The dialog is capped at 88vh but its
+/* SHORT VIEWPORTS ARE THE REAL CONSTRAINT, not narrow ones. The dialog is capped (88vh on a phone) but its
    non-scrolling chrome is not, so on a 667px-tall phone -- or a 1366x768 laptop -- the heroes pushed
    the footer buttons past the bottom of the screen, and `overflow: visible` means there is no
    scrollbar to reach them with. The sibling peek modal solves the same problem with a viewport
-   unit inside a min() (`badge-inspect.css`) rather than height queries -- this is the first pair
-   in components/, and they earn it because the art has to disappear, not merely shrink. Below
+   unit inside a min() (`badge-inspect.css`) rather than height queries -- these were the first in
+   components/, and they earn it because the art has to disappear, not merely shrink. Below
    620px it goes entirely: on a landscape phone the list is the content. */
-@media (max-height: 800px) and (max-width: 1023px) { .nc__hero-art { max-height: 18vh; } }
+/* LAPTOPS TOO, at any width (2026-10-23). This band was `max-width: 1023px` only, on the theory that a wide
+   screen is a tall one; a laptop is wide and SHORT (1366x657, or about 1280x633 at 150% scaling), so it got
+   the full 24vh covers and the buttons hung 19-34px below the dialog. A short WIDE screen also lifts the 88vh
+   cap, since the 12vh of margin it leaves is room the list needs more than the scrim does: at 1280x633 the list
+   went from its 72px floor (one row) to 100px. Clamped to the modal's 20px gutters. Phones keep 88vh: there
+   `vh` is measured with the browser's toolbars hidden, and the 12vh of slack is what keeps "Got it" clear of
+   them while they show. `test_new_contracts_fit_browser.py` measures it. */
+@media (max-height: 800px) { .nc__hero-art { max-height: 18vh; } }
+@media (max-height: 700px) { .nc__hero-art { max-height: 15vh; } }
+@media (max-height: 800px) and (min-width: 768px) { .pp-howto .nc__dialog { max-height: min(92vh, calc(100vh - 40px)); } }
+@media (max-height: 700px) and (min-width: 768px) { .pp-howto .nc__dialog { max-height: min(94vh, calc(100vh - 40px)); } }
 /* A PHONE GETS SMALLER COVERS THAN A LAPTOP, at any height. The two height queries above and below
    left a gap: a 390x844 phone (iPhone 12-15) is TALLER than 800px, so it kept the 24vh covers AND
    the full three-row filter, which by arithmetic is the tightest chrome budget left on this modal
@@ -1599,8 +1609,10 @@
    narrow there, which is true at every height. Computed, not observed -- the arithmetic says it was
    marginally over, and 18vh puts it comfortably clear. */
 @media (max-width: 767px) { .nc__hero-art { max-height: 18vh; } }
+/* The filter goes here too, at ANY width: "a landscape phone loses both" below assumed the phone was under
+   768px wide, but one held sideways is 844-932px, kept the filter, and its buttons hung below the dialog. */
 @media (max-height: 620px) {
-    .nc__heroes, .nc__more { display: none; }
+    .nc__heroes, .nc__more, .nc__filter { display: none; }
     .nc__list { min-height: 56px; }
 }
 /* A SMALL PHONE GETS THE COVERS, and the FILTER is what gives way (owner's call, 2026-09).
