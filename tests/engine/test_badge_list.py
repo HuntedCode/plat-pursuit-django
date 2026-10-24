@@ -612,77 +612,20 @@ def test_series_query_count_constant_regardless_of_catalog_size(client):
     assert len(small) < 20
 
 
-# ------------------------------------------------------------------ header: forge explainer --------------
-# "How badges work" is staged as the forge journey: 3 beats + the two-editions legend, with real .pp-med
-# medallions (forge_meds) as the payoff. It lives in the shared header, so it teaches on both views.
+# ------------------------------------------------------------------ header: the teaching hint -----------
+# PR-06 (2026-10-24): the browse page no longer opens "How badges work" over a first visit. The header carries
+# a hint that LINKS to the page (one teaching home, no shorter copy to drift), and no catalogue tiles (PR-02).
 
-def test_forge_explainer_renders_the_journey(client):
+@pytest.mark.parametrize('params', [{}, {'view': 'gallery'}])
+def test_the_header_links_to_the_teaching_instead_of_interrupting(client, params):
     _series_groups('x', 'X', [('ultra-hd', 'Ultra HD')])
-    html = client.get(SERIES).content.decode()
-    assert 'pp-forge' in html
-    assert html.count('data-beat=') == 4                # four beats: set -> platinum -> claim -> master
-    assert 'data-forge-mint' in html                    # the claim medallion (beat 3) is struck/minted
-    assert 'pp-med--holographic' in html                # beat 4: the mastered medallion is holographic
-    assert 'pp-forge__editions' in html                 # the two-editions reward legend
-    assert 'Legacy HD' in html                          # the legend names both editions (only Ultra HD tiles exist)
-    assert 'PS3 &amp; PS Vita' in html                  # the Legacy HD platform scope
+    html = client.get(SERIES, params).content.decode()
+    head = html[html.index('class="pp-bhead'):html.index('</section>', html.index('class="pp-bhead'))]
 
-
-def test_forge_explainer_states_the_mastery_mechanic(client):
-    _series_groups('x', 'X', [('ultra-hd', 'Ultra HD')])
-    html = client.get(SERIES).content.decode()
-    assert 'Master it' in html                          # the mastery beat
-    # Mastery = 100% (incl. DLC) on every stage -- NOT the inverse; the copy must say so.
-    assert '100% every stage, DLC and all' in html and 'holographic' in html
-
-
-def test_forge_uses_real_badge_art_and_wires_the_peek(client):
-    # A live badge WITH custom subject art -> the forge composes that real art onto the metal plates AND the
-    # illustrations become interactive: tapping any opens that real badge's quick-peek (like the page's tiles).
-    series = BadgeSeriesFactory(series_slug='art', name='Arty', badge_image='badges/series/arty.png')
-    pg = PlatformGroupFactory(key='ultra-hd', name='Ultra HD', platforms=['PS5'])
-    gb = GroupBadgeFactory(series=series, platform_group=pg, is_live=True, earned_count=999)
-    html = client.get(SERIES).content.decode()
-    assert 'badges/series/arty.png' in html          # the real subject rides the medallion plates, not a plate
-    assert 'pp-forge-peek"' in html                  # the illustrations carry the interactive class (attr, not JS)
-    assert 'data-badge-id="%d"' % gb.id in html      # ... wired to that real badge's quick-peek
-
-
-def test_forge_medallions_not_interactive_without_a_source_badge(client):
-    # No badge has custom art -> no example to inspect, so the illustrations render but stay non-interactive
-    # (no false click affordance). Match the class ATTRIBUTE (double-quote) so the JS selector doesn't count.
-    _series_groups('x', 'X', [('ultra-hd', 'Ultra HD')])
-    html = client.get(SERIES).content.decode()
-    assert 'pp-forge' in html and 'pp-forge-peek"' not in html
-
-
-def test_forge_explainer_renders_on_gallery_too(client):
-    _series_groups('x', 'X', [('ultra-hd', 'Ultra HD')])
-    html = client.get(GALLERY, {'view': 'gallery'}).content.decode()
-    assert 'pp-forge' in html and 'data-forge-mint' in html   # the shared modal teaches on both views
-
-
-def test_howto_modal_is_first_run_only(client):
-    """Inverted 2026-08. This used to assert TWO recall buttons (header + mini-bar) that re-opened the
-    modal on demand.
-
-    The teaching moved to `/badges/how-it-works/` -- a real URL, because support links it, search indexes
-    it, and three surfaces render these edition names without being able to explain them: the badge detail
-    group tabs, this page's gallery filter chips, and the Collection's edition stat labels. With a fuller
-    home in place, a button re-opening a SHORTER copy is how the two drift apart, so the modal keeps only
-    its onboarding job: greet a first visit, then hand off.
-
-    The modal itself stays. What went is the permanent chrome around it.
-    """
-    _series_groups('x', 'X', [('ultra-hd', 'Ultra HD')])
-    html = client.get(SERIES).content.decode()
-
-    assert 'id="badge-howto" hidden' in html      # the modal, hidden until the JS opens it on a first visit
-    assert 'pp-howto__got' in html                # the "Got it" dismiss inside it
-    assert '/badges/how-it-works/' in html        # the hand-off to the permanent home
-
-    assert 'class="pp-howto-btn' not in html, 'the header recall button is back'
-    assert 'pp-minibar__howto' not in html, 'the mini-bar recall button is back'
+    assert 'class="pp-edhint' in head and 'href="/badges/how-it-works/"' in head, 'the header lost its way in'
+    assert 'id="badge-howto"' not in html, 'the first-visit modal is back'
+    assert 'id="badge-peek"' not in html, 'the quick-peek dialog is back, and nothing on this page opens it'
+    assert 'class="scard' not in head, 'the catalogue tiles are back in the header'
 
 
 def test_the_header_reflows_the_lede_across_both_columns_on_a_phone(client):

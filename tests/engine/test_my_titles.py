@@ -424,3 +424,56 @@ def test_the_grade_reaches_the_plate_through_the_shared_component(client):
     assert 'Mythic' in content
     assert 'pp-rarity-surface' in content, 'the plate must take its material from the shared scale'
     assert 'ttl-plate__grade' not in content, 'a page-local grade class means the copy came back'
+
+
+# ── Before the first title (PR-05, 2026-10-24) ──────────────────────────────────────────────────────────
+
+def test_a_hunter_with_no_title_meets_the_way_in_not_a_page_of_zeros(client):
+    """No nameplate, counts or switcher (they could only say zero); the series closest to a title leads."""
+    p = ProfileFactory()
+    near = _series_with_title('Ratchet', 'Lombax Legend')
+    far = _series_with_title('Jak', 'Precursor')
+    _series_with_title('Sly', 'Master Thief')
+    SeriesBadgeStanding.objects.create(profile=p, series_slug=near.series_slug, progress_bp=8000,
+                                       stages_cleared=4, stages_total=5)
+    SeriesBadgeStanding.objects.create(profile=p, series_slug=far.series_slug, progress_bp=2000,
+                                       stages_cleared=1, stages_total=5)
+
+    content = _get(client, p).content.decode()
+
+    assert 'class="ttl-firstin"' in content and 'Your first title' in content
+    assert 'data-ttl-plate' not in content, 'the empty nameplate is back'
+    assert 'data-ttl-switch' not in content, 'the zero-count switcher is back'
+    assert 'class="scard' not in content, 'the zero-count tiles are back'
+    way_in = content[content.index('class="ttl-firstin"'):]
+    way_in = way_in[:way_in.index('</section>')]   # the card only: the footer links to /badges/ too
+    assert way_in.index('Lombax Legend') < way_in.index('Precursor'), 'the closest series does not lead'
+    assert 'Master Thief' not in way_in, 'an unstarted series crowded in beside the started ones'
+    assert 'href="/badges/"' in way_in
+
+
+def test_with_nothing_started_the_way_in_shows_the_titles_most_hunters_hold(client):
+    p = ProfileFactory()
+    common = _series_with_title('Astro', 'Bot Wrangler')
+    _series_with_title('Gravity', 'Shifter')
+    for _ in range(2):
+        UserTitle.objects.create(profile=ProfileFactory(), title=common.title, source_type='badge_series',
+                                 source_id=common.id)
+
+    content = _get(client, p).content.decode()
+    way_in = content[content.index('class="ttl-firstin"'):]
+
+    assert way_in.index('Bot Wrangler') < way_in.index('Shifter'), 'the most-held title does not lead'
+    assert 'The titles most hunters have earned.' in way_in
+
+
+def test_a_title_holder_gets_the_switcher_and_no_count_tiles(client):
+    p = ProfileFactory()
+    held = _series_with_title('Astro', 'Bot Wrangler')
+    UserTitle.objects.create(profile=p, title=held.title, source_type='badge_series', source_id=held.id)
+
+    content = _get(client, p).content.decode()
+
+    assert 'data-ttl-switch' in content and 'data-ttl-plate' in content
+    assert 'class="ttl-firstin"' not in content
+    assert 'class="scard' not in content, 'the count tiles repeat the switcher chips'

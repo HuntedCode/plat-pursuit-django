@@ -78,9 +78,14 @@ collection-gallery.css, wired by collection.js (initGallery).
 
     {% comment %} Meta row: result count + applied-filter pills + clear. Keeping the count/clear here (not
     in the toolbar) means applying a filter never wraps the toolbar to a second line. Pills are built +
-    toggled by collection.js from the filter state. {% endcomment %}
+    toggled by collection.js from the filter state.
+
+    The count names what it counts (PR-04, 2026-10-24). The gallery holds the badges you have STARTED (earned
+    or in progress), while the header's tally is collected out of the whole catalogue, so a bare "3 of 3"
+    under "0 / 4 badges collected" read as the page disagreeing with itself. collection.js keeps the same
+    wording when a filter narrows it. {% endcomment %}
     <div class="pp-gallery__meta">
-        <span class="pp-gallery__stats" data-visible-count>{{ list_badges|length }} of {{ list_badges|length }}</span>
+        <span class="pp-gallery__stats" data-visible-count>{{ list_badges|length }} started</span>
         <div class="pp-gallery__pills" data-gallery-pills></div>
         <button type="button" class="pp-gallery__clear" data-clear-filters hidden>Clear filters</button>
     </div>

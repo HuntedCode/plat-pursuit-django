@@ -41,9 +41,10 @@ The `always` group renders as the four primary stat tiles. The `expanded` group 
 
 The heartbeat is also the compute site for the **browse-page stats** that remain (the 2026-08
 consolidation: hourly cron, never the request path). `expanded` additionally carries
-`genres_with_games` / `themes_with_games` (the Genres & Themes tab switcher's counts),
-`games_in_contracts` / `jobs_total` / `contracts_live` / `job_xp_banked` (Jobs browse), and the
-badge-catalog values the Badges browse header reads. Browse Hunters reuses four values the ribbon
+`genres_with_games` / `themes_with_games` (the Genres & Themes tab switcher's counts) and the
+badge-catalog values How badges work reads (`badge_catalog_stats`). The Jobs browse header's four
+(`games_in_contracts`, `jobs_total`, `contracts_live`, `job_xp_banked`) were deleted with its tiles on
+2026-10-24 (PR-02), as the Discovery list pages' were on 2026-10-22: a browse header carries one count. Browse Hunters reuses four values the ribbon
 already computes (`profiles_total`, `trophies_total`, `platinums_total`, `trophies_24h`). Consuming
 views read via `heartbeat_values(*keys)` (searches `always` + `expanded`) or `get_cached_heartbeat()`
 and their templates hide the stat until the cron has warmed the cache.

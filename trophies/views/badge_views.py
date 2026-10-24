@@ -29,7 +29,6 @@ SERIES_SORTS = [
 SERIES_SORT_KEYS = {k for k, _ in SERIES_SORTS}
 SERIES_SORT_DEFAULT = 'name'
 
-from django.conf import settings
 from django.core.cache import cache
 from django.core.exceptions import ObjectDoesNotExist
 from django.core.paginator import Paginator
@@ -64,11 +63,9 @@ logger = logging.getLogger("psn_api")
 
 
 def badge_catalog_stats():
-    """The badge-COLLECTION catalog stats for the header (what the collection OFFERS, not the
-    viewer's own progress -- this is a browse page): badge series, stages to complete, total
-    earnable XP, and new-this-week. All read from the hourly-cached site heartbeat, so it's
-    zero DB cost on the request path; the grid only shows once the cron has warmed the cache
-    (the template gates on earnable_xp)."""
+    """What the badge collection OFFERS, for How badges work's headline numbers: badge series, stages
+    to complete and total earnable XP. Read from the hourly-cached site heartbeat, so it costs nothing on
+    the request path; each number hides itself until the cron has warmed the cache."""
     from core.services.site_heartbeat import get_cached_heartbeat
     expanded = (get_cached_heartbeat() or {}).get('expanded') or {}
 
@@ -77,7 +74,6 @@ def badge_catalog_stats():
 
     return {
         'series': _value('badges_total'),
-        'series_new': (expanded.get('badges_total') or {}).get('delta'),
         'stages': _value('badge_stages_total'),
         'earnable_xp': _value('badge_earnable_xp'),
     }
@@ -366,8 +362,6 @@ class BadgeListView(ListView):
             'gallery_q': g.get('q', ''),
             'gallery_sorts': GALLERY_SORTS,
             'gallery_page_size': GALLERY_PAGE_SIZE,          # keeps the JS paginateBy in sync (no magic 48)
-            'catalog_stats': badge_catalog_stats(),  # generalized collection stats (hourly-cached)
-            'forge_meds': badge_forge_medallions(),          # sample edition medallions for the header explainer
             'breadcrumb': [
                 {'text': 'Home', 'url': reverse_lazy('home')},
                 {'text': 'Badges'},
@@ -383,11 +377,6 @@ class BadgeListView(ListView):
     def get_context_data(self, **kwargs):
         context = (self._gallery_context_data(**kwargs) if self._view_mode() == 'gallery'
                    else self._series_context_data(**kwargs))
-        # Dev-only replay control for the first-run modal. It is one-shot by design, gated on a
-        # localStorage flag, so once dismissed there is no way back to it in a browser short of clearing
-        # site data by hand -- which makes iterating on the thing needlessly painful. Same shape as the
-        # Collection's `dev_mint` ceremony replay, and it never renders in prod.
-        context['dev_howto'] = settings.DEBUG
         return context
 
     def _series_context_data(self, **kwargs):
@@ -422,8 +411,6 @@ class BadgeListView(ListView):
             'paginator': paginator,
             'is_paginated': page_obj.has_other_pages(),
             'series_page_size': SERIES_PAGE_SIZE,
-            'catalog_stats': badge_catalog_stats(),
-            'forge_meds': badge_forge_medallions(),   # sample edition medallions for the header explainer
             'form': self.get_filter_form(),
             'series_authed': profile is not None,
             'series_states': [s for s in g.getlist('state') if s in _GALLERY_STATES],

@@ -7,16 +7,11 @@
 
 /* View toggle (Series | Gallery) is now the shared .pp-switch component (components/switcher.css). */
 
-/* ── "How badges work" -> the FORGE JOURNEY, in a first-run MODAL (badge_howto.html): it auto-opens once on a
- * first visit and never again. This block styles the modal shell; the .pp-forge body + its choreography
- * (shared, below) render inside the dialog.
- *
- * The recall-button styles that used to open this block (.pp-howto-btn in the header, .pp-minibar__howto in
- * the mini-bar) are deleted: the modal is one-shot now and the teaching lives at `badge_how_it_works`, so
- * nothing renders those classes. `.pp-minibar__flbl` stays -- the sibling Filters buttons still use it. ── */
-
-/* The how-to modal shell: a wide, scrollable dialog over the shared .pp-detail-modal scrim/entrance
- * (badge-inspect.css). Wide enough that the forge journey goes horizontal on desktop. */
+/* ── The how-to modal shell (`.pp-howto`), shared by Career's explainer and rank ladder, the Challenges
+ * tutorials, the launch greeting, What's New and New on the Job Board. It began as the Badges browse
+ * first-run modal; that one is gone (PR-06, 2026-10-24: the browse page links to `badge_how_it_works`
+ * instead of interrupting a first visit), and the shell outlived it. A wide, scrollable dialog over the
+ * shared .pp-detail-modal scrim/entrance (badge-inspect.css). ── */
 .pp-howto__dialog { width: min(940px, 100%); max-height: 88vh; overflow-y: auto; text-align: left; }
 .pp-howto__body { padding: 4px 2px; }
 .pp-howto__title { display: flex; align-items: center; gap: 9px; font-family: var(--pp-font-display); font-weight: 800; font-size: 18px; color: var(--pp-text); margin-bottom: 12px; }
@@ -34,7 +29,7 @@
 @media (hover: hover) { .pp-howto__more:hover { border-bottom-color: var(--pp-primary); } }
 .pp-howto__more:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 3px; }
 
-/* ── Browse Badges header, phone layout ──
+/* ── Browse header, phone layout (Browse Badges, Jobs, and since 2026-10-24 Collection) ──
  *
  * The same move the hunter-profile header makes (`.pp-phero__id`): reflow into the dead space rather than
  * stack. The lede is nested under the title, so on a phone it renders in a ~233px column beside the tally
@@ -88,6 +83,25 @@
 .pp-edhint:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 3px; border-radius: 3px; }
 @media (prefers-reduced-motion: reduce) { .pp-edhint { transition: none; } }
 
+/* The beckon: Browse Badges' hint is the only way into the teaching since no modal greets a first visit
+   (PR-06), and the owner did not want it missed. So on every load, once the header has cascaded in
+   (`.pp-head-cascade` lands its last possible child at 0.7s), the hint lights to primary while a ring pings twice off its icon, then
+   settles back to its quiet resting colour. A beat, never a loop: neon is a transient state, not resting
+   chrome (motion-patterns #6). Reduced motion keeps the colour beat and drops the ring. Plain var() in the
+   keyframes, never color-mix() (lightningcss strips it from @keyframes). */
+.pp-edhint--beckon { position: relative; animation: ppEdhintBeckon 2.4s var(--pp-ease) 0.8s; }
+/* No 0% / 100% stops: the beat starts from and returns to the link's OWN colour, so a pointer already on it
+   keeps its hover colour rather than being forced back to mute (an animation outranks :hover). */
+@keyframes ppEdhintBeckon { 15%, 70% { color: var(--pp-primary); } }
+@media (prefers-reduced-motion: no-preference) {
+    .pp-edhint--beckon::before {
+        content: ''; position: absolute; left: 0; top: 50%; width: 13px; height: 13px; margin-top: -6.5px;
+        border-radius: 50%; border: 1.5px solid var(--pp-primary); opacity: 0; pointer-events: none;
+        animation: ppEdhintPing 1.1s cubic-bezier(0.22, 1, 0.36, 1) 0.95s 2;
+    }
+}
+@keyframes ppEdhintPing { 0% { transform: scale(1); opacity: 0.8; } 100% { transform: scale(2.6); opacity: 0; } }
+
 /* The standalone form: its own line, trailing the control it explains. Right-aligned so it reads as a
    footnote to the block above rather than as a new item in it.
    No margin of its own -- one consumer sits mid-page and needs the spacing, the other is the last child
@@ -126,7 +140,6 @@
  *
  * One rule for all of them rather than a block each. Four identical copies is four chances to fix one
  * and not the others. */
-#badge-howto.is-closing,
 #career-howto.is-closing,
 #launch-welcome.is-closing,
 #cal-opening.is-closing,
@@ -138,7 +151,6 @@
 
 /* The dialog's settle is transform MOTION, so it is reduced-motion-gated. */
 @media (prefers-reduced-motion: no-preference) {
-    #badge-howto.is-closing .pp-detail-modal__dialog,
     #career-howto.is-closing .pp-detail-modal__dialog,
     #launch-welcome.is-closing .pp-detail-modal__dialog,
     #cal-opening.is-closing .pp-detail-modal__dialog,
@@ -152,28 +164,13 @@
 @keyframes ppHowtoFadeOut { to { opacity: 0; } }
 @keyframes ppHowtoDialogOut { to { transform: translateY(8px) scale(0.985); } }
 
-/* ── The forge journey body (shared: renders inside the how-to modal) ── */
+/* ── Forge pieces other surfaces reuse: the lede (every how-to modal), the cover fan (Career's explainer
+ * and How badges work), the platinum cluster, the holographic word and the tappable medallion wrapper (How
+ * badges work). The forge JOURNEY they were cut from (beats, connectors, editions legend and its
+ * choreography) lived in the deleted browse modal and went with it. ── */
 .pp-forge__lede { font-size: 13.5px; line-height: 1.55; color: var(--pp-text-dim); max-width: 72ch; margin-bottom: 16px; }
 
-/* The flow: mobile + tablet = a vertical stack (beats + short vertical connectors); lg+ = a horizontal row
- * (four beats + three connectors need the desktop width to breathe). */
-.pp-forge__flow { list-style: none; margin: 0 0 4px; padding: 0; display: flex; flex-direction: column; align-items: center; gap: 2px; }
-@media (min-width: 1024px) { .pp-forge__flow { flex-direction: row; align-items: flex-start; justify-content: center; gap: 4px; margin-bottom: 10px; } }
-.pp-forge__beat { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 7px; padding: 6px 4px; }
-@media (min-width: 1024px) { .pp-forge__beat { flex: 1 1 0; max-width: 192px; } }
-/* A fixed-height art stage so the beats' captions line up regardless of the art's size. */
-.pp-forge__art { display: grid; place-items: center; height: 88px; }
-@media (min-width: 768px) { .pp-forge__art { height: 104px; } }
-.pp-forge__cap { display: inline-flex; align-items: center; gap: 6px; font-family: var(--pp-font-display); font-weight: 800; font-size: 13.5px; color: var(--pp-text); }
-.pp-forge__n {
-    display: grid; place-items: center; width: 19px; height: 19px; border-radius: 50%; flex: 0 0 auto;
-    font-size: 11px; font-weight: 800; color: var(--pp-primary);
-    background: color-mix(in oklab, var(--pp-primary) 14%, transparent);
-    border: 1px solid color-mix(in oklab, var(--pp-primary) 40%, transparent);
-}
-.pp-forge__desc { font-size: 11.5px; line-height: 1.4; color: var(--pp-text-mute); max-width: 26ch; }
-
-/* Beat 1 -- the themed SET: a small fan of three game covers (pure CSS, no assets). */
+/* The themed SET: a small fan of three game covers (pure CSS, no assets). */
 .pp-forge__fan { position: relative; width: 66px; height: 74px; }
 .pp-forge__cover {
     position: absolute; left: 50%; top: 50%; width: 44px; height: 60px; margin: -30px 0 0 -22px; border-radius: 5px;
@@ -187,7 +184,7 @@
 /* Drawn so a cover reads as a GAME rather than a failed image (FV-14, owner 2026-10-21): a trophy mark up top and
    a title bar (name + a shorter subtitle line) along the bottom. Still no asset: the mark is the house trophy
    glyph (partials/icons/trophy_cup.html) as an inline-SVG mask. The middle card's mark is platinum. Pseudo-
-   elements, so the three hosts (Career explainer, badge how-to, How badges work) need no markup change, and
+   elements, so the hosts (Career explainer, How badges work) need no markup change, and
    the explainer's fan-out moves them with their card. */
 .pp-forge__cover {
     --cover-ink: color-mix(in oklab, var(--pp-text) 30%, transparent);
@@ -207,93 +204,22 @@
 }
 .pp-forge__cover:nth-child(2)::after { --cover-mark: var(--color-trophy-platinum); }
 
-/* Beat 2 -- platinum EVERY game: a cluster of platinum trophies (centre one larger). */
+/* Platinum EVERY game: a cluster of platinum trophies (centre one larger). */
 .pp-forge__plats { display: inline-flex; align-items: flex-end; gap: 5px; }
 .pp-forge__plats img { width: 30px; height: 30px; object-fit: contain; filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.35)); }
 .pp-forge__plats img:nth-child(2) { width: 40px; height: 40px; }
-
-/* Beats 3 + 4 -- the forged medallions (the real .pp-med object, sized for the header). */
-.pp-forge__art--med .pp-med { --sz: 84px; }
-@media (min-width: 768px) { .pp-forge__art--med .pp-med { --sz: 96px; } }
 
 /* Interactive forge medallions (tap -> the source badge's quick-peek). The hover lift/shine comes from the
    .pp-med--earned component styles; here we just make the role=button wrapper feel tappable + keyboard-clear. */
 .pp-forge-peek { cursor: pointer; border-radius: 14px; }
 .pp-forge-peek:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 3px; }
 
-/* Connector between beats: a line that draws in + a flow chevron. Vertical run on mobile/tablet, horizontal
- * on lg+. The final leg (--master, beat 3 -> 4) is holo-tinted, since it is the mastery transformation. */
-.pp-forge__link { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 2px 0; color: color-mix(in oklab, var(--pp-primary) 62%, var(--pp-text-mute)); }
-.pp-forge__line { display: block; width: 2px; height: 16px; border-radius: 2px; transform-origin: top; background: linear-gradient(180deg, color-mix(in oklab, var(--pp-primary) 55%, transparent), color-mix(in oklab, var(--pp-primary) 18%, transparent)); }
-.pp-forge__chev { width: 15px; height: 15px; flex: 0 0 auto; transform: rotate(90deg); }
-.pp-forge__link--master { color: #c9a7ff; }
-.pp-forge__link--master .pp-forge__line { background: linear-gradient(180deg, #8fd2ea, #c9a7ff 55%, #ffd36e); }
-@media (min-width: 1024px) {
-    .pp-forge__link { flex-direction: row; align-self: flex-start; margin-top: 42px; padding: 0 2px; }   /* align to the art row */
-    .pp-forge__line { width: 26px; height: 2px; transform-origin: left; background: linear-gradient(90deg, color-mix(in oklab, var(--pp-primary) 55%, transparent), color-mix(in oklab, var(--pp-primary) 18%, transparent)); }
-    .pp-forge__link--master .pp-forge__line { background: linear-gradient(90deg, #8fd2ea, #c9a7ff 55%, #ffd36e); }
-    .pp-forge__chev { transform: none; }
-}
-
-/* Editions legend: the two real edition medallions, labelled + platform-scoped, name tinted in its metal. */
-.pp-forge__editions { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px 22px; margin-top: 14px; padding-top: 16px; border-top: 1px solid var(--pp-border); }
-.pp-forge__ed { --card-metal: var(--pp-text-dim); display: inline-flex; align-items: center; gap: 10px; }
-.pp-forge__ed[data-tier="gold"]     { --card-metal: #e7c25c; }
-.pp-forge__ed[data-tier="platinum"] { --card-metal: #8fd2ea; }
-.pp-forge__ed-med .pp-med { --sz: 42px; }
-.pp-forge__ed-med .pp-med__count { display: none; }
-.pp-forge__ed-text { display: flex; flex-direction: column; line-height: 1.2; }
-.pp-forge__ed-name { font-family: var(--pp-font-display); font-weight: 800; font-size: 13px; color: var(--card-metal); }
-.pp-forge__ed-scope { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pp-text-mute); }
-
-.pp-forge__foot { font-size: 12px; line-height: 1.55; color: var(--pp-text-dim); margin-top: 14px; }
 /* "holographic" is set in an iridescent gradient text, so the word demonstrates the payoff it names. */
 .pp-forge__holo {
     font-weight: 800;
     background: linear-gradient(92deg, #8fd2ea, #c9a7ff 42%, #ffd36e 74%, #8fd2ea);
     -webkit-background-clip: text; background-clip: text; color: transparent;
 }
-
-/* ── Forge choreography. JS arms the section (.is-armed, added pre-paint only when motion is allowed) to hold
- * the hidden start states, then lights it on reveal (.is-lit) -> beats rise + settle staggered, connectors
- * draw, the payoff medallion mints (real .is-minting ceremony, added by JS) + its foil sweeps once, and the
- * legend + foot fade in last. Without JS / under reduced motion, nothing is armed, so it all shows statically.
- * `both` fill holds each element's end state after its animation. ── */
-.pp-forge.is-armed .pp-forge__beat,
-.pp-forge.is-armed .pp-forge__link,
-.pp-forge.is-armed .pp-forge__editions,
-.pp-forge.is-armed .pp-forge__foot { opacity: 0; }
-.pp-forge.is-armed .pp-forge__line { transform: scaleY(0); }
-@media (min-width: 1024px) { .pp-forge.is-armed .pp-forge__line { transform: scaleX(0); } }
-@media (prefers-reduced-motion: no-preference) {
-    .pp-forge.is-lit .pp-forge__beat { animation: ppForgeBeat 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
-    .pp-forge.is-lit [data-beat="1"] { animation-delay: 0.05s; }
-    .pp-forge.is-lit [data-beat="2"] { animation-delay: 0.28s; }
-    .pp-forge.is-lit [data-beat="3"] { animation-delay: 0.51s; }
-    .pp-forge.is-lit [data-beat="4"] { animation-delay: 0.74s; }
-    /* Connectors (flow children 2, 4, 6) draw in just after their preceding beat. */
-    .pp-forge.is-lit .pp-forge__link { animation: ppForgeFade 0.4s ease both; }
-    .pp-forge.is-lit .pp-forge__link:nth-child(2) { animation-delay: 0.20s; }   /* after beat 1 */
-    .pp-forge.is-lit .pp-forge__link:nth-child(4) { animation-delay: 0.43s; }   /* after beat 2 */
-    .pp-forge.is-lit .pp-forge__link:nth-child(6) { animation-delay: 0.66s; }   /* after beat 3 (mastery leg) */
-    .pp-forge.is-lit .pp-forge__line { animation: ppForgeDrawY 0.42s ease both; }
-    .pp-forge.is-lit .pp-forge__link:nth-child(2) .pp-forge__line { animation-delay: 0.20s; }
-    .pp-forge.is-lit .pp-forge__link:nth-child(4) .pp-forge__line { animation-delay: 0.43s; }
-    .pp-forge.is-lit .pp-forge__link:nth-child(6) .pp-forge__line { animation-delay: 0.66s; }
-    .pp-forge.is-lit .pp-forge__editions { animation: ppForgeFade 0.5s ease 0.98s both; }
-    .pp-forge.is-lit .pp-forge__foot { animation: ppForgeFade 0.5s ease 1.12s both; }
-    /* The mastered medallion's foil sweeps once as beat 4 lands -- the holographic payoff (diagonal wipe, no
-       color-mix in the keyframe). Only beat 4 is .pp-med--holographic, so this targets it alone. */
-    .pp-forge.is-lit .pp-forge__art--med .pp-med--holographic .pp-med__foil { animation: ppForgeFoil 1.15s ease 0.9s 1; }
-}
-@media (min-width: 1024px) and (prefers-reduced-motion: no-preference) {
-    .pp-forge.is-lit .pp-forge__line { animation-name: ppForgeDrawX; }
-}
-@keyframes ppForgeBeat { from { opacity: 0; transform: translateY(12px) scale(0.96); } to { opacity: 1; transform: none; } }
-@keyframes ppForgeFade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
-@keyframes ppForgeDrawX { from { transform: scaleX(0); } to { transform: scaleX(1); } }
-@keyframes ppForgeDrawY { from { transform: scaleY(0); } to { transform: scaleY(1); } }
-@keyframes ppForgeFoil { 0% { background-position: 100% 0%; opacity: 0.15; } 45% { opacity: 0.62; } 100% { background-position: 0% 100%; opacity: 0.3; } }
 
 /* Series toolbar: the Series view uses the Gallery's compact toolbar verbatim -- .pp-bgal__bar + a Filters
  * toggle + a collapsible .pp-bgal__advanced panel (all styled in browse-gallery.css). No Series-specific

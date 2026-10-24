@@ -208,6 +208,16 @@
 @media (hover: hover) { .ttl-empty__cta:hover { background: color-mix(in oklab, var(--pp-primary) 12%, transparent); } }
 .ttl-empty__cta:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
 
+/* ---- Before the first title (PR-05, 2026-10-24): the way in leads ----
+   Replaces the nameplate, the three count tiles and the switcher for a hunter who holds no title, all of
+   which could only say zero. A surface of its own, not bare text on the page background: it IS the page's
+   content until the first title arrives. */
+.ttl-firstin { margin-top: 12px; padding: 16px; border-radius: var(--pp-radius-lg); background: var(--pp-bg-1); border: 1px solid var(--pp-border); }
+@media (min-width: 768px) { .ttl-firstin { padding: 20px 22px; } }
+.ttl-firstin__title { font-family: var(--pp-font-display); font-weight: 800; font-size: 1.05rem; color: var(--pp-text); }
+.ttl-firstin__body { margin: 4px 0 14px; font-size: 0.875rem; line-height: 1.5; color: var(--pp-text-dim); max-width: 60ch; }
+.ttl-firstin__cta { margin-top: 14px; }
+
 /* ---- Equip flash: the "it's mine" beat when a title becomes the one you wear ---- */
 @media (prefers-reduced-motion: no-preference) {
     .ttl-plate--hero.is-flash { --ttl-flash: color-mix(in oklab, var(--pp-primary) 60%, transparent); animation: ttlFlash 0.62s var(--pp-ease, ease-out); }

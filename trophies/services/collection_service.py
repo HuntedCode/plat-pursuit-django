@@ -213,8 +213,8 @@ def build_collection_context(profile, sort=DEFAULT_SORT):
             fr['is_new'] = bool(ea and ea >= recent_cutoff)
             list_badges.append(fr)
 
-            # Edition composition: EVERY engaged edition appears (held count, 0 allowed) so the header stat
-            # grid is stable -- a series you've only started still contributes its Legacy HD / Ultra HD cards.
+            # Edition composition: EVERY engaged edition is counted (0 allowed). The header's facts line names
+            # only the editions with something earned (rule 3, PR-04), so a 0 here is simply not printed.
             ec = edition_counts.get(gb.platform_group.key)
             if ec is None:
                 ec = edition_counts[gb.platform_group.key] = {
@@ -244,9 +244,11 @@ def build_collection_context(profile, sort=DEFAULT_SORT):
         # showing a spare edition of one.
         #
         # Filtered AFTER the summary loop: `earned` / `in_progress` / `holo` / `recent` count what the
-        # hunter HAS and the filter cannot change them, while `editions` is deliberately built from every
-        # engaged edition so the header's stat grid stays stable rather than flickering as editions come
-        # and go.
+        # hunter HAS and the filter cannot change them. `editions` is built from every engaged edition; the
+        # header's facts line prints only the ones with a count.
+        #
+        # The gallery labels what survives "N started" (PR-04). That holds for the kept untouched editions
+        # too: they belong to a series with a standing, i.e. one the hunter has genuinely begun.
         #
         # This reverses an earlier call -- the untouched edition was kept as a "waiting mount" on the theory
         # that "0 / 5 stages" was motivating there. In practice it read as clutter and crowded out the

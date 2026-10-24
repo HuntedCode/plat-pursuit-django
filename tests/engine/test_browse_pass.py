@@ -41,7 +41,7 @@ _OLD_TILE_PAYLOAD = {
         'themes_with_games': {'value': 21}, 'games_tagged': {'value': 5400}, 'tags_applied': {'value': 9800},
     },
 }
-_DELETED_KEYS = ('games_in_badges', 'lists_total', 'lists_regional', 'lists_with_plat', 'games_tagged',
+_DELETED_KEYS = ('games_in_contracts', 'jobs_total', 'contracts_live', 'job_xp_banked', 'games_in_badges', 'lists_total', 'lists_regional', 'lists_with_plat', 'games_tagged',
                  'tags_applied', 'franchises_total', 'series_total', 'franchise_games', 'franchise_spinoffs',
                  'companies_total', 'companies_developers', 'companies_publishers', 'company_games')
 
@@ -90,8 +90,8 @@ def test_the_heartbeat_no_longer_computes_what_only_the_tiles_read():
 
     for key in _DELETED_KEYS:
         assert key not in expanded, key
-    # The readers that remain: the genre/theme switcher, Jobs.
-    for key in ('genres_with_games', 'themes_with_games', 'games_in_contracts', 'jobs_total'):
+    # The readers that remain: the genre/theme switcher. Jobs' four went with its tiles (PR-02).
+    for key in ('genres_with_games', 'themes_with_games'):
         assert key in expanded, key
 
 

@@ -182,6 +182,15 @@ across the landed element) timed to fire *just after* it settles:
 ```
 Reference: the rank hand-off in `claim-ceremony.css` (`ccxHoToIn` + `ccxHoSheen`).
 
+### Beckon a quiet affordance (once, on load)
+When a quiet link is the only way into something a visitor should not miss (Browse Badges' "How do
+badges work?", which replaced a first-visit modal), give it ONE beat after the page's entrance settles:
+a colour lift to primary and a ring pinging off its icon, then back to rest. Never a loop: a resting
+affordance that keeps moving is noise (principle 3). Start it after the header cascade (`0.8s`, past
+`.pp-head-cascade`'s last child), use `var()` colours in the keyframes (never `color-mix()`), and keep
+the colour beat but drop the ring under reduced motion. Reference: `.pp-edhint--beckon` in
+`series-list.css`, pinned in a real browser by `test_badge_hint_beckon_browser.py`.
+
 ### Persistent acknowledgment markers
 A "you have something new" marker should persist until acted on: add the class, then
 `el.addEventListener('pointerenter', clear, { once: true })`. `{ once: true }` = no listener leak,

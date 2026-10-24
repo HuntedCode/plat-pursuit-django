@@ -67,8 +67,9 @@ See [home-page.md](home-page.md) for the router, the event contract, and the fin
 
 ## Surface 2: the Career "how it works" modal
 
-`templates/trophies/partials/career/_career_explainer.html`: a first-visit MODAL in the badge
-howto's mold (auto-opens once, focus trap, Escape/scrim/Got-it dismiss), with three beats in
+`templates/trophies/partials/career/_career_explainer.html`: a first-visit MODAL in the mold of
+the old Browse Badges first-run modal (auto-opens once, focus trap, Escape/scrim/Got-it dismiss;
+that modal was retired on 2026-10-24, see below), with three beats in
 Jeffrey's own words: 25 jobs / five disciplines, Contracts (curated game sets assigned jobs by
 genre and theme), and Pursuer (complete contracts to earn XP toward jobs and the overall
 level). Jeffrey chose the modal over the earlier inline card ("more in the face" for
@@ -76,13 +77,16 @@ information that matters).
 
 - **Server-side auto-open gate**: the modal markup renders for everyone, but `data-auto` (the
   auto-open arm) renders only while `career_explainer` is absent from `request.user.ui_flags`.
-- **Reachable forever, unlike badges**: the badge howto is one-shot because its teaching has a
-  fuller home at /badges/how-it-works (a recall button would let two copies drift). Career has
-  no long-form page -- the modal IS the teaching -- so the summary card's `.pp-edhint`
+- **Reachable forever, unlike badges**: badges never reopen a modal, because their teaching has a
+  fuller home at /badges/how-it-works (a second, shorter copy would drift). Browse Badges used to
+  greet a first visit with a one-shot modal; since 2026-10-24 (PR-06) it never interrupts, and its
+  header's `.pp-edhint` LINKS to that page instead. So it is not missed, that hint beckons once on
+  every load (`.pp-edhint--beckon`: a colour beat and a ring ping, no ring under reduced motion). Career has no long-form page -- the modal IS
+  the teaching -- so the summary card's `.pp-edhint`
   ("How does my Career work?", `data-career-open`) reopens it. One copy, no drift. Reopens
   close silently: only an armed (first-visit) dismissal writes the flag.
 - **The collage**: below the beats, the three ideas as objects with chevrons between them --
-  a quad of real job icons, the badge howto's own cover fan (a contract IS a set of games),
+  a quad of real job icons, the shared cover fan `.pp-forge__fan` (a contract IS a set of games),
   and a Pursuer ring. Arm-then-light choreography replays on every open (fan snaps open,
   arc sweeps); classless markup is the FINAL state, so no-JS and reduced-motion always see
   the finished collage.
@@ -93,8 +97,8 @@ information that matters).
 - **ONE dev panel per page**: `.ccx-dev` is fixed to left/bottom 12px, so a second instance
   stacks over the first and eats its clicks (shipped once, guard-tested now). New dev
   affordances join the page's existing panel as extra rows.
-- **Career only, by design**: a Collection explainer was explicitly rejected (the badge
-  "how badges work" modal already owns that teaching moment).
+- **Career only, by design**: a Collection explainer was explicitly rejected (the How badges
+  work page already owns that teaching moment).
 
 ## Surface 3: the PlatPursuit 1.0 launch greeting
 
@@ -173,7 +177,7 @@ the current one are a 400, and it never rewinds. The per-type Challenges tutoria
 flags (`challenge_tutorial_<type>`), in `UI_FLAGS` via `tutorials.TYPE_FLAGS`. Doc:
 [challenge-systems.md](challenge-systems.md#the-tutorials).
 
-Client discipline (from the badge howto + timezone modal prior art):
+Client discipline (from the retired badge howto + timezone modal prior art):
 
 - Fire-and-forget `PlatPursuit.API.post('/api/v1/user/quick-settings/', {setting: 'ui_flag',
   value: '<flag>'})` with **no success toast** (dismissing a hint should not earn a

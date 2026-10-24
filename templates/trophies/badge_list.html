@@ -52,17 +52,16 @@
                 </div>
             </div>
 
-            {% comment %} Generalized catalogue stats (what the collection OFFERS) -- NOT the viewer's own
-            progress, since this is a browse page.
-
-            The "how badges work" teaching is NOT here and no longer has a button here either. It greets a
-            first visit once as a modal (badge_howto.html) and then lives at `badge_how_it_works` -- a real
-            URL, because support links it, search indexes it, and three surfaces render these edition
-            names without being able to explain them (the gallery filter chips below, the badge detail
-            group tabs, and the Collection stats -- each now carries a `.pp-edhint`). A header button for a
-            one-time explainer was ~37px of the header and the wrong anchor: the confusion happens where
-            the edition tabs are, not here. {% endcomment %}
-            {% include 'trophies/partials/badge_list/badge_catalog_stats.html' %}
+            {% comment %} The way into the teaching (PR-06, 2026-10-24). It used to greet a first visit as a modal over
+            the page, which on a phone was a long scroll before any badge showed. Now it waits to be asked, and it
+            LINKS to `badge_how_it_works` rather than opening a shorter copy: one teaching home, so there is no
+            second version to drift. The header's catalogue tiles went with it (PR-02): the tally is the count. {% endcomment %}
+            <div class="mt-2 md:mt-3">
+                <a class="pp-edhint pp-edhint--beckon" href="{% url 'badge_how_it_works' %}">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+                    How do badges work?
+                </a>
+            </div>
         </div>
     </section>
 
@@ -123,25 +122,6 @@
         {% endif %}
     </div>
 
-    {% comment %} "How badges work" first-run modal: auto-opens once and never again (there is no recall
-    button; from the second visit on the teaching lives at `badge_how_it_works`). Placed BEFORE the
-    quick-peek modal so a medallion tap inside it opens the peek stacked on top, and OUTSIDE #badge-view
-    so a view-toggle swap does not re-render its <script> and double-register the document listeners.
-    {% endcomment %}
-    {% include 'trophies/partials/badge_list/badge_howto.html' %}
-
-    {% comment %} Quick-peek modal (shared by both views): a medallion tap fetches the public
-    group_badge_quick_peek partial (the grouping-badge showcase) into the body. Reuses the collection's
-    .pp-detail-modal chrome (global CSS). data-peek-url is the reverse with a 0 placeholder the JS swaps for
-    the tapped GroupBadge id. {% endcomment %}
-    <div class="pp-detail-modal" id="badge-peek" data-peek-url="{% url 'group_badge_quick_peek' 0 %}" hidden>
-        <div class="pp-detail-modal__scrim" data-peek-close></div>
-        <div class="pp-detail-modal__dialog" role="dialog" aria-modal="true" aria-label="Badge detail" tabindex="-1">
-            <button type="button" class="pp-detail-modal__close" data-peek-close aria-label="Close badge detail">&times;</button>
-            <div class="pp-detail-modal__body" data-peek-body></div>
-        </div>
-    </div>
-
 {% endblock %}
 
 {% block js_scripts %}
@@ -157,7 +137,7 @@
         // Element state -- (re)assigned by wireView() on first load AND on HTMX Back/Forward history restore
         // (which swaps in fresh nodes without re-firing afterSwap). The body-level listeners below are added
         // once and persist across a restore (document.body survives), so wireView must NOT re-add them.
-        var scroller = null, revealHandle = null, peek = null, peekEl = null, vtoggles = [];
+        var scroller = null, revealHandle = null, vtoggles = [];
         // The filter drawer's handle. Page-level because the toolbar is REPLACED on every view swap, so
         // each wireFilters() must destroy the previous one rather than stack a second set of listeners.
         var panelHandle = null;
@@ -213,34 +193,13 @@
             });
         }
 
-        // Quick-peek modal: a medallion tap GROWS the PUBLIC group_badge_quick_peek partial into the shared
-        // #badge-peek dialog -- the collection's .pp-detail-modal chrome + the shared pick-up/put-down
-        // controller (PlatPursuit.Medallion.detailModal). data-peek-url is the reverse with a 0 placeholder.
-        // peekEl / peek are (re)created in wireView() (the #badge-peek dialog is a fresh node after a restore).
-        // Grow the peek from the tapped source cell. sourceEl is the Series group cell (.pp-scard__group) or
-        // the Gallery cell (.pp-bgal__card) -- both hold the .pp-med the controller measures + hides.
-        function openPeek(badgeId, sourceEl) {
-            if (!peek || !badgeId) { return; }
-            var tmpl = peekEl.getAttribute('data-peek-url') || '';
-            var url = tmpl.replace(/0\/$/, badgeId + '/');
-            if (!url || url === tmpl) { return; }
-            peek.open(url, sourceEl);
-        }
-
         document.addEventListener('click', function (e) {
             if (!e.target.closest) { return; }
             // Let modified clicks (open-in-new-tab/window) fall through to native anchor navigation instead of
             // being hijacked into the modal -- every tile element is a real anchor with an href.
             if (e.metaKey || e.ctrlKey || e.shiftKey) { return; }
-            // Medallion tap -> quick-peek modal, now ONLY for the header forge illustrations (.pp-forge-peek).
             // The Series/Gallery cards are plain anchors that link straight to the badge detail page with the
-            // right edition tab open (?group=<key>), so they navigate natively -- no modal.
-            var cell = e.target.closest('.pp-forge-peek');
-            if (cell && cell.getAttribute('data-badge-id')) {
-                e.preventDefault();
-                openPeek(cell.getAttribute('data-badge-id'), cell);
-                return;
-            }
+            // right edition tab open (?group=<key>), so they navigate natively.
             // Whole-tile click: a Series tile's real anchors (the name heading, the group cells) navigate
             // themselves; a click anywhere ELSE on the tile (its padding + the gaps around those links) still
             // goes to the series detail, so the whole card is clickable rather than just the links.
@@ -249,18 +208,6 @@
             if (tile) {
                 var open = tile.querySelector('.pp-scard__open');
                 if (open && open.href) { window.location.href = open.href; }
-            }
-        });
-
-        // Keyboard activation for the forge illustrations (role=button spans, not native anchors): Enter/Space
-        // opens the same peek. The Series/Gallery cells are real anchors, so they already activate by keyboard.
-        document.addEventListener('keydown', function (e) {
-            if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') { return; }
-            if (!e.target.closest) { return; }
-            var pk = e.target.closest('.pp-forge-peek');
-            if (pk && pk.getAttribute('data-badge-id')) {
-                e.preventDefault();
-                openPeek(pk.getAttribute('data-badge-id'), pk);
             }
         });
 
@@ -419,15 +366,7 @@
             if (first && window.PlatPursuit && PlatPursuit.countUp) {   // count up on first load only, not on restore
                 var catalogCount = document.querySelector('[data-badge-count]');
                 if (catalogCount) { PlatPursuit.countUp(catalogCount, 900); }
-                document.querySelectorAll('[data-scard-count]').forEach(function (el) { PlatPursuit.countUp(el, 900); });
             }
-            // Quick-peek modal controller on the (fresh) #badge-peek dialog. Tear down the prior controller
-            // first so its document keydown handler doesn't accumulate across history restores.
-            if (peek && peek.destroy) { peek.destroy(); }
-            peekEl = document.getElementById('badge-peek');
-            peek = (peekEl && window.PlatPursuit && PlatPursuit.Medallion && PlatPursuit.Medallion.detailModal)
-                ? PlatPursuit.Medallion.detailModal({ modal: peekEl, bodySel: '[data-peek-body]', closeSel: '[data-peek-close]' })
-                : null;
             // Keyboard-enable the Series/Gallery toggle(s): roving tabindex + Arrow/Home/End move focus. MANUAL
             // activation -- the chips are HTMX <a> links, so Enter/click does the swap natively. Toolbar + mini-bar.
             vtoggles = Array.prototype.slice.call(document.querySelectorAll('.pp-switch')).map(function (grp) {

@@ -1317,6 +1317,22 @@
     box-shadow: 0 0 12px color-mix(in oklab, var(--disc, var(--pp-primary)) 38%, transparent);
 }
 @media (prefers-reduced-motion: reduce) { .rp-jobtile { transition: none; } }
+/* NARROW CARDS TAKE TWO COLUMNS (PR-01, 2026-10-24). Three named tiles need about 230px of job column: the
+   widest name, "Cartographer", is 67px at 10px bold. The job page's grid gives a card 299 to 318px on a
+   laptop or a 4-up desktop and 355px on a tablet, and `overflow-wrap: anywhere` broke names mid-word there
+   ("Gunsling / er", 30 of 97 tiles at 1280). Two columns, centred so 3 and 5 jobs end on a centred tile
+   rather than a hole. Measured against the CARD, not the viewport: the card's width depends on how many
+   columns the grid has, which changes at every breakpoint, and between 640 and 790px no column count
+   leaves room for three. Only the job-scoped card is a container, so Career's board is untouched.
+   FROM 640px ONLY: under it the card is the phone list row, which hides these tiles with a selector of the
+   same specificity (`.rp-row .rp-jobtiles`), and this rule, coming later, would show them again. */
+.rp-row:has(.rp-jobtiles) { container: rp-card / inline-size; }
+@media (min-width: 640px) {
+    @container rp-card (max-width: 364.98px) {
+        .rp-jobtiles:not([data-n="1"]) { display: flex; flex-wrap: wrap; justify-content: center; }
+        .rp-jobtiles:not([data-n="1"]) > .rp-jobtile { flex: 0 0 calc(50% - 2px); }
+    }
+}
 
 /* The ring says the same thing in the same breath: your arc holds, the rest recede. The segments already
    carry their job slug (`_ring_segments` tags them expressly so the ring and the job display can
@@ -1332,7 +1348,8 @@
 
 /* ── Career how-it-works beats (.cxp) ────────────────────────────────────────
    Lives inside the first-visit MODAL (partials/career/_career_explainer.html, the
-   badge-howto pattern); the inline card these styled originally is retired. */
+   `.pp-howto` shell, first built for the since-retired badge how-to); the inline card
+   these styled originally is retired. */
 .cxp__stack { display: flex; flex-direction: column; gap: 0.9rem; margin-top: 0.9rem; }
 .cxp__beat { display: flex; align-items: flex-start; gap: 0.7rem; min-width: 0; text-align: left; }
 .cxp__num {

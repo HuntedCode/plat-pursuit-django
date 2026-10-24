@@ -153,7 +153,9 @@
             if (animate === false) mutate(); else flip(mutate);
             var visible = 0;
             cells.forEach(function (c) { if (isShown(c)) visible++; });
-            if (stats) stats.textContent = visible + ' of ' + total;
+            // "N started" unfiltered, "n of N shown" narrowed: the gallery holds the started badges, which the
+            // header's catalogue tally does not count (collection_gallery.html, PR-04).
+            if (stats) stats.textContent = visible === total ? total + ' started' : visible + ' of ' + total + ' shown';
             if (emptyMsg) emptyMsg.hidden = visible !== 0;
             updateSuggest(visible);
             syncClear();

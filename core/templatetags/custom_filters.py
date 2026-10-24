@@ -449,7 +449,10 @@ def format_time(value):
 
 @register.filter
 def compact_number(value):
-    """Format large numbers compactly: 1234 -> 1.2k, 25000 -> 25k, 1500000 -> 1.5M."""
+    """Format large numbers compactly: 1234 -> 1.2k, 25000 -> 25k, 1500000 -> 1.5M.
+
+    Truncates to one decimal, never rounds up: 1,999 reads "1.9k", not "2k". It labels XP a contract pays
+    (the job-page ring) as well as player counts, and a short form must not claim more than the figure."""
     try:
         n = int(value)
     except (TypeError, ValueError):
@@ -457,10 +460,10 @@ def compact_number(value):
     if n < 1000:
         return str(n)
     elif n < 1000000:
-        result = f"{n / 1000:.1f}k"
+        result = f"{n // 100 / 10:.1f}k"
         return result.replace('.0k', 'k')
     else:
-        result = f"{n / 1000000:.1f}M"
+        result = f"{n // 100000 / 10:.1f}M"
         return result.replace('.0M', 'M')
 
 

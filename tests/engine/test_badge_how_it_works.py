@@ -116,122 +116,6 @@ def test_the_page_teaches_all_four_beats(client):
     assert 'DLC' in body, 'the page does not say that mastery includes DLC'
 
 
-def test_the_modal_is_one_shot_with_no_recall_buttons():
-    """Its job is to greet a first visit. Keeping a button to re-open a SHORTER copy of teaching that now
-    has a fuller, linkable home is how the two drift apart -- and a permanent header affordance for a
-    one-time explainer was ~37px of a header that had none to spare, anchored nowhere near the confusion.
-    """
-    page = (ROOT / 'templates' / 'trophies' / 'badge_list.html').read_text(encoding='utf-8')
-    markup = re.sub(r'\{%\s*comment\s*%\}.*?\{%\s*endcomment\s*%\}', '', page, flags=re.S)
-    markup = re.sub(r'\{#.*?#\}', '', markup, flags=re.S)
-
-    assert 'data-howto-open' not in markup, 'a recall button for the one-shot modal is back'
-    assert 'pp-howto-btn' not in markup, 'the header teaching button is back'
-    assert 'pp-minibar__howto' not in markup, 'the mini-bar teaching button is back'
-
-    # The modal itself stays -- it is the onboarding beat, not the thing that was removed.
-    assert 'badge_howto.html' in page, 'the first-run modal was removed along with its buttons'
-
-
-def test_the_dev_replay_control_never_ships_to_prod():
-    """The modal is one-shot and gated on a localStorage flag, so once dismissed there is no way back to
-    it in a browser short of clearing site data -- which makes iterating on it painful. The replay button
-    fixes that for local work, and it is the ONE re-open path allowed to exist.
-
-    Which makes the gate the whole point. Ungated, this is precisely the permanent recall affordance the
-    rest of this change removed, shipped to every visitor. Exercised through the real view under both
-    settings rather than by matching `{% if %}` in the source, because the string is easy to keep while
-    breaking what feeds it -- `dev_howto` is set in `BadgeListView.get_context_data`, and a template that
-    still reads a context key nobody sets renders nothing and passes a source check.
-    """
-    from django.test import Client, override_settings
-
-    with override_settings(DEBUG=True):
-        assert 'data-howto-replay' in Client().get(reverse('badges_list')).content.decode(), (
-            'the dev replay button is missing in DEBUG -- there is no way to re-open the modal locally'
-        )
-
-    with override_settings(DEBUG=False):
-        assert 'data-howto-replay' not in Client().get(reverse('badges_list')).content.decode(), (
-            'the dev replay button renders with DEBUG off -- it is a permanent recall button in prod'
-        )
-
-
-def test_the_replay_clears_the_flag_rather_than_forcing_the_modal_open():
-    """Replay removes `pp-badges-howto-seen` and then opens normally, so what plays is a genuine first
-    visit: dismissing re-sets the flag exactly as it would for a real visitor, and pressing again re-arms.
-
-    An always-open dev mode would have been simpler and worse -- it cannot show a bug in the gating
-    itself, which is the part of this modal most likely to break and the least likely to be noticed.
-    """
-    modal = (ROOT / 'templates' / 'trophies' / 'partials' / 'badge_list'
-             / 'badge_howto.html').read_text(encoding='utf-8')
-    start = modal.find("closest('[data-howto-replay]')")
-    assert start != -1, 'nothing handles the dev replay button'
-    open_brace = modal.index('{', start)
-    depth, end = 0, None
-    for i, ch in enumerate(modal[open_brace:], open_brace):
-        depth += (ch == '{') - (ch == '}')
-        if depth == 0:
-            end = i
-            break
-    branch = modal[start:end]
-
-    assert 'removeItem(SEEN_KEY' in branch, (
-        'replay does not clear the seen flag, so it is a force-open that bypasses the real gating'
-    )
-    assert 'open(' in branch, 'replay clears the flag but never opens the modal'
-
-
-def test_the_modal_hands_off_to_the_page():
-    """Without this link the modal is a dead end: dismissed once, and the reader has no route to the
-    fuller version. It trails "Got it" rather than leading, because most readers are done."""
-    modal = (ROOT / 'templates' / 'trophies' / 'partials' / 'badge_list'
-             / 'badge_howto.html').read_text(encoding='utf-8')
-    markup = re.sub(r'\{%\s*comment\s*%\}.*?\{%\s*endcomment\s*%\}', '', modal, flags=re.S)
-
-    assert "{% url 'badge_how_it_works' %}" in markup, 'the modal no longer links to the page'
-    assert 'data-howto-close' in markup, 'the modal lost its dismiss control'
-
-
-def test_following_the_link_out_counts_as_having_been_greeted():
-    """The seen flag is written by `close()`, and an anchor navigates instead of closing -- so the link
-    shipped without this branch left `pp-badges-howto-seen` unset for exactly the reader who took it. That
-    reader gets the modal auto-popped at them again on their next visit: the one who engaged MOST is the
-    only one it repeats for, and the "genuinely one-shot" claim this whole change rests on is false.
-
-    Asserted on the marker + the write together, and NOT on the substring `SEEN_KEY` alone -- that name
-    appears four other times in this file, so a check for it would survive deleting the branch entirely.
-    """
-    modal = (ROOT / 'templates' / 'trophies' / 'partials' / 'badge_list'
-             / 'badge_howto.html').read_text(encoding='utf-8')
-
-    assert 'data-howto-more' in modal, 'the hand-off link lost the marker the controller keys on'
-
-    # Bounded by BRACE DEPTH, not by a character count. A fixed window overruns the branch and picks up
-    # the `preventDefault` belonging to the close branch below it, which makes the last assertion here
-    # fail on correct code -- and, had the window been shorter, would have made it pass on broken code.
-    start = modal.find("closest('[data-howto-more]')")
-    assert start != -1, 'nothing handles the hand-off link -- taking it leaves the modal unseen'
-    open_brace = modal.index('{', start)
-    depth, end = 0, None
-    for i, ch in enumerate(modal[open_brace:], open_brace):
-        depth += (ch == '{') - (ch == '}')
-        if depth == 0:
-            end = i
-            break
-    assert end is not None, 'the hand-off branch is unbalanced'
-    branch = modal[start:end]
-
-    assert 'setItem(SEEN_KEY' in branch, (
-        'the hand-off branch does not record the visit; the modal will auto-pop again'
-    )
-    # It must NOT swallow the click: the navigation is the entire point of the link.
-    assert 'preventDefault' not in branch, (
-        'the hand-off branch cancels the click, so the link goes nowhere'
-    )
-
-
 @pytest.mark.parametrize('surface', [
     'templates/trophies/badge_detail.html',                        # the group-switch TABS
     'templates/trophies/partials/badge_list/gallery.html',         # the PLATFORM filter chips
@@ -249,7 +133,8 @@ def test_every_surface_that_speaks_the_edition_vocabulary_explains_it(surface):
     src = (ROOT / surface).read_text(encoding='utf-8')
     markup = re.sub(r'\{%\s*comment\s*%\}.*?\{%\s*endcomment\s*%\}', '', src, flags=re.S)
 
-    assert 'class="pp-edhint"' in markup, f'{Path(surface).name} names editions with no way to look them up'
+    # The hint's own class, alone or with a placement utility, never `pp-edhint-row` (its wrapper).
+    assert re.search(r'class="pp-edhint[" ]', markup), f'{Path(surface).name} names editions with no way to look them up'
     assert "{% url 'badge_how_it_works' %}" in markup, f'{Path(surface).name} hint points nowhere'
 
 
@@ -362,7 +247,6 @@ def _visible_copy(rel):
 
 @pytest.mark.parametrize('rel', [
     'templates/trophies/badge_how_it_works.html',
-    'templates/trophies/partials/badge_list/badge_howto.html',
 ])
 def test_the_badge_teaching_uses_no_dashes_in_copy(rel):
     """House rule: no em dashes in anything a reader sees. The literal `--` matters just as much here,
@@ -374,7 +258,6 @@ def test_the_badge_teaching_uses_no_dashes_in_copy(rel):
 
 @pytest.mark.parametrize('rel', [
     'templates/trophies/badge_how_it_works.html',
-    'templates/trophies/partials/badge_list/badge_howto.html',
 ])
 def test_the_retired_forge_vocabulary_stays_out_of_copy(rel):
     """Forging / minting / striking belonged to an older badge system that was moved off, so it now
