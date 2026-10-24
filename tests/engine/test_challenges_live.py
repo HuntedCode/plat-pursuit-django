@@ -3571,3 +3571,141 @@ def test_a_signed_out_visitor_gets_no_my_challenges_button(client, page):
     body = client.get(reverse(page)).content.decode()
     assert 'data-my-challenges' not in body
     assert 'data-ctut-open="challenges-intro"' in body[:body.index('</section>')], 'the intro link left the header'
+
+
+# ── the fresh-eyes review, 2026-10-24 (docs/design/reviews/challenges.md) ───────────────────────────────
+
+def test_a_run_with_nothing_done_stays_off_the_browse_until_its_first_square(client):
+    """CH-01 (owner): 91 of 213 runs on prod had nothing done and filled the page's second half with
+    "0/26 LETTERS". A run joins the browse, and the headline count, with its first square."""
+    untouched = _run(_hunter('Untouched'), done=0)
+    planned = _run(_hunter('Planned'), done=0)
+    Challenge.objects.filter(pk=planned.pk).update(filled_count=3)   # games picked, none done: still a plan
+    started = _run(_hunter('Started'), done=1)
+
+    body = client.get(reverse('challenges')).content.decode()
+
+    assert reverse('challenge_detail', args=[started.pk]) in body
+    for run in (untouched, planned):
+        assert reverse('challenge_detail', args=[run.pk]) not in body
+    assert 'md:text-3xl">1</span>' in body, 'the headline counts the started run only'
+    # The run itself is still a page, by link.
+    assert client.get(reverse('challenge_detail', args=[untouched.pk])).status_code == 200
+
+
+def test_an_empty_browse_has_no_zero_headline(client):
+    body = client.get(reverse('challenges')).content.decode()
+    assert 'in flight</span>' not in body, '"0 in flight" over the empty state is the zero twice'
+
+
+def test_the_empty_hall_of_fame_shows_the_race_to_be_first(client):
+    """CH-03 (owner): nobody had finished a run, so the page was "0 finished" over an empty state. Until the
+    first finish it shows the runs nearest the line, in the Challenges page's own order."""
+    near = _run(_hunter('Near'), done=20)
+    far = _run(_hunter('Far'), done=5)
+    _run(_hunter('Nothing'), done=0)
+    _run(_hunter('Hidden'), done=24, hidden=True)
+
+    body = client.get(reverse('challenges_hall_of_fame')).content.decode()
+
+    race = body[body.index('class="pp-hof-race"'):body.index('</section>', body.index('class="pp-hof-race"'))]
+    assert 'Nobody has finished one yet' in race
+    assert race.index(reverse('challenge_detail', args=[near.pk])) < race.index(
+        reverse('challenge_detail', args=[far.pk])), 'the nearest leads'
+    assert race.count('href="/community/challenges/') == 2, 'only started, visible runs race'
+    assert 'finished</span>' not in body, 'no "0 finished" tally'
+    assert 'id="browse-results"' not in body
+
+
+def test_the_race_is_four_runs_at_most(client):
+    for i in range(6):
+        _run(_hunter('Racer%d' % i), done=i + 1)
+    body = client.get(reverse('challenges_hall_of_fame')).content.decode()
+    race = body[body.index('class="pp-hof-race"'):]
+    assert race.count('href="/community/challenges/') == 4
+
+
+def test_the_race_ends_with_the_first_finish(client):
+    _run(_hunter('Racer'), done=20)
+    winner = _run(_hunter('Winner'), done=25, complete=True)
+
+    body = client.get(reverse('challenges_hall_of_fame')).content.decode()
+
+    assert 'pp-hof-race' not in body
+    assert reverse('challenge_detail', args=[winner.pk]) in body
+    assert 'finished</span>' in body, 'the tally returns with something to count'
+
+
+def test_a_visitor_is_invited_to_start_their_own(client):
+    """CH-02 (owner): signed out, the public pages had nothing to press, and the one way in led to sign-in.
+    Every public Challenges page offers sign-up, coming back to My Challenges."""
+    run = _run(_hunter('Somebody'), CHALLENGE_TYPE_AZ, done=3, total=26)
+    signup = '%s?next=%s' % (reverse('account_signup'), reverse('my_challenges'))
+
+    for url in (reverse('challenges'), reverse('challenges_hall_of_fame'),
+                reverse('challenge_detail', args=[run.pk])):
+        body = client.get(url).content.decode()
+        assert 'href="%s"' % signup in body and 'data-start-own' in body, url
+
+    assert 'Start your own A-Z Challenge' in client.get(reverse('challenge_detail', args=[run.pk])).content.decode()
+
+
+def test_a_signed_in_reader_is_not_invited_to_sign_up(client):
+    viewer = _hunter('Viewer')
+    client.force_login(viewer.user)
+    run = _run(_hunter('Somebody'), done=3)
+    for url in (reverse('challenges'), reverse('challenge_detail', args=[run.pk])):
+        assert 'data-start-own' not in client.get(url).content.decode(), url
+
+
+def test_a_card_says_when_its_run_last_moved_in_one_unit(client):
+    """CH-08: `naturaltime` printed "Started 5 days, 21 hours ago", two lines on a phone, and the slot runs
+    said when they STARTED. Every in-flight card now says when it last moved, in one unit."""
+    run = _run(_hunter('Mover'), done=2)
+    from datetime import timedelta
+
+    Challenge.objects.filter(pk=run.pk).update(updated_at=timezone.now() - timedelta(days=5, hours=21))
+
+    body = client.get(reverse('challenges')).content.decode()
+    card = body[body.index(reverse('challenge_detail', args=[run.pk])):]
+    card = card[:card.index('</a>')]
+
+    assert '5d ago</time>' in card and 'Updated' in card
+    assert 'Started' not in card and 'hours' not in card
+
+
+@pytest.mark.parametrize('qs', ['?type=az', '?q=someone', '?q=ab'])
+def test_a_filtered_hall_of_fame_is_the_list_not_the_race(client, qs):
+    """The race replaces `#browse-results`, the toolbar's htmx target, and the toolbar is drawn whenever a filter is
+    set. With both on the page every chip and keystroke had nothing to swap and "Clear filters" was gone (audit,
+    2026-10-24). A filter means the list, even an empty one."""
+    _run(_hunter('Racer'), done=20)
+
+    body = client.get(reverse('challenges_hall_of_fame') + qs).content.decode()
+
+    assert 'pp-hof-race' not in body
+    assert 'id="browse-results"' in body
+    # A term under the search's minimum is not applied, so it is not a filter to clear; the toolbar still shows.
+    if qs != '?q=ab':
+        assert 'Clear filters' in body
+
+
+def test_the_race_breaks_ties_as_the_browse_does(client):
+    """Same share, same count: the browse orders by `-pk` last, and the race must name the same leader."""
+    first = _run(_hunter('First'), done=10)
+    second = _run(_hunter('Second'), done=10)
+
+    race = client.get(reverse('challenges_hall_of_fame')).content.decode()
+    race = race[race.index('class="pp-hof-race"'):]
+    browse = client.get(reverse('challenges')).content.decode()
+
+    for page in (race, browse):
+        assert page.index(reverse('challenge_detail', args=[second.pk])) < page.index(
+            reverse('challenge_detail', args=[first.pk]))
+
+
+def test_a_card_moved_this_minute_says_just_now(client):
+    run = _run(_hunter('Fresh'), done=1)
+    body = client.get(reverse('challenges')).content.decode()
+    card = body[body.index(reverse('challenge_detail', args=[run.pk])):]
+    assert '>just now</time>' in card[:card.index('</a>')]

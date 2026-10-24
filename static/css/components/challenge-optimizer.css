@@ -300,9 +300,12 @@ button.pp-cplan__sq:focus-visible { outline: 2px solid var(--disc); outline-offs
 .pp-cplan__dock {
     position: sticky; z-index: 20; bottom: calc(56px + env(safe-area-inset-bottom, 0px) + 8px);
     display: flex; gap: 8px; padding: 10px;
-    background: color-mix(in oklab, var(--pp-bg-1) 94%, transparent);
+    /* OPAQUE (review CH-09). At 94% the step's cards showed through it, so on a short laptop's first screen the
+       dock read as a band printed across the middle of two cards rather than as a bar floating over them. The
+       shadow now lifts it from above too, the side the content scrolls in from. */
+    background: var(--pp-bg-1);
     border: 1px solid var(--pp-border); border-radius: var(--pp-radius-lg);
-    box-shadow: 0 8px 24px -12px rgba(0, 0, 0, 0.6);
+    box-shadow: 0 -6px 18px -10px rgba(0, 0, 0, 0.55), 0 8px 24px -12px rgba(0, 0, 0, 0.6);
 }
 @media (min-width: 1024px) { .pp-cplan__dock { bottom: 12px; } }
 

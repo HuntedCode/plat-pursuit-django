@@ -1089,3 +1089,52 @@ def test_the_form_door_still_sends_a_page_visitor_to_log_in(client):
 
     assert resp.status_code == 302
     assert 'login' in resp['Location']
+
+
+# ── the fresh-eyes review, 2026-10-24 (docs/design/reviews/challenges.md, CH-04) ───────────────────────
+
+def _signed_in(client):
+    user = UserFactory()
+    # Premium, as this file's other hunters: the test settings keep the members-first beta gate on.
+    profile = ProfileFactory(user=user, is_linked=True, user_is_premium=True)
+    client.force_login(user)
+    return profile
+
+
+def test_the_headline_counts_runs_in_progress_until_there_is_a_finish(client):
+    """It was "0 finished" for every hunter on prod: the page's headline a zero."""
+    profile = _signed_in(client)
+    body = client.get(reverse('my_challenges')).content.decode()
+    head = body[:body.index('</section>')]
+    assert 'finished</span>' not in head and 'in progress</span>' not in head, 'nothing to count, no number'
+
+    svc.start(profile, CHALLENGE_TYPE_AZ)
+    head = client.get(reverse('my_challenges')).content.decode()
+    head = head[:head.index('</section>')]
+    assert 'in progress</span>' in head and '>1</span>' in head
+    assert 'finished</span>' not in head
+
+
+def test_the_runs_come_before_the_optimizer(client):
+    """On a phone the optimizer's card filled the first screen and put the runs' Continue under the tab bar.
+    The page's job is carrying on, so the runs lead (owner, 2026-10-24)."""
+    profile = _signed_in(client)
+    svc.start(profile, CHALLENGE_TYPE_AZ)   # an A-Z run is what opens the optimizer's door
+
+    body = client.get(reverse('my_challenges')).content.decode()
+
+    assert 'data-optimizer-door' in body, 'the door still shows'
+    assert body.index('>A-Z</h2>') < body.index('data-optimizer-door')
+
+
+def test_a_finish_takes_the_headline_from_the_runs_in_progress(client):
+    profile = _signed_in(client)
+    svc.start(profile, CHALLENGE_TYPE_AZ)
+    done = svc.start(profile, CHALLENGE_TYPE_JOBS)
+    Challenge.objects.filter(pk=done.pk).update(filled_count=done.total_slots, completed_count=done.total_slots,
+                                                is_complete=True, completed_at=timezone.now())
+
+    head = client.get(reverse('my_challenges')).content.decode()
+    head = head[:head.index('</section>')]
+
+    assert 'finished</span>' in head and 'in progress</span>' not in head

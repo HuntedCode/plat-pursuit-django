@@ -2024,7 +2024,8 @@ def test_the_ladder_states_the_comparison_figure_only_when_it_differs():
     assert 'days with any platinum' not in _body(run), 'nothing to compare yet'
 
     CalendarDay.objects.filter(challenge=run, month=4, day=4).update(in_all=True, in_clean=False)
-    assert '2 days with any platinum' in _body(run)
+    # Saying what makes the two counts differ (review CH-07): without it, two day counts in one card disagreed.
+    assert '2 days with any platinum, shovelware included' in _body(run)
 
 
 def test_a_finished_run_has_nothing_left_to_go():

@@ -13,7 +13,15 @@ itself here; My Challenges is where it auto-opens.{% endcomment %}
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
         How Challenges work
     </button>
-    {% if user.is_authenticated and user.profile %}
+    {% if not user.is_authenticated %}
+    {% comment %}THE WAY IN FOR A VISITOR (owner, 2026-10-24, review CH-02). These pages had nothing to press
+    signed out, so a visitor who came to look at the feature could not start using it. Sign-up, not sign-in:
+    the reader is new, and `next` brings them back to My Challenges once they are in.{% endcomment %}
+    <a href="{% url 'account_signup' %}?next={% url 'my_challenges' %}" class="pp-cta min-h-11" data-start-own>
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
+        Start your own
+    </a>
+    {% elif user.profile %}
     <a href="{% url 'my_challenges' %}" class="pp-cta min-h-11" data-my-challenges>
         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
         My Challenges

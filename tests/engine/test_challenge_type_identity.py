@@ -31,6 +31,14 @@ GLYPH = {
 FLAG = 'M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3'
 
 
+def _started(run):
+    """One square done, written directly: the browse lists a run from its first square (review CH-01)."""
+    from challenges.models import Challenge
+
+    Challenge.objects.filter(pk=run.pk).update(filled_count=1, completed_count=1)
+    return run
+
+
 def _hunter(client=None):
     user = UserFactory()
     profile = ProfileFactory(user=user, user_is_premium=True)
@@ -247,7 +255,7 @@ def test_a_hub_card_wears_its_glyph_and_counts_in_its_unit():
 
 def test_the_hub_filter_gives_each_type_its_own_glyph_and_keeps_the_grid_for_all():
     """The filter's `else` branch drew the four-square "All" grid for the Calendar too."""
-    svc.start(_hunter(), CHALLENGE_TYPE_AZ)   # the toolbar only renders once there is a run to filter
+    _started(svc.start(_hunter(), CHALLENGE_TYPE_AZ))   # the toolbar only renders once there is a run to filter
     body = Client().get(reverse('challenges')).content.decode()
     switch = body[body.index('aria-label="Challenge type"'):]
     switch = switch[:switch.index('</div>')]
@@ -302,7 +310,7 @@ def test_my_challenges_cards_use_the_short_labels():
 
 
 def test_the_hub_filter_and_cards_use_the_short_labels():
-    run = svc.start(_hunter(), CHALLENGE_TYPE_JOBS)
+    run = _started(svc.start(_hunter(), CHALLENGE_TYPE_JOBS))
     body = Client().get(reverse('challenges')).content.decode()
     switch = body[body.index('aria-label="Challenge type"'):]
     switch = switch[:switch.index('</div>')]

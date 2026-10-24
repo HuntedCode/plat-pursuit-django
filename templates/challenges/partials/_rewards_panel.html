@@ -43,9 +43,21 @@ Params: challenge, rewards (`rewards.summary`), is_owner.{% endcomment %}
 
             AND NO `--glow`. The glow means "this is a reward", but the page's own subject tally (the run's
             completion count) does not carry it, and a secondary number glowing while the primary one does
-            not is backwards. The accent colour already says what this number is.{% endcomment %}
-            <span class="pp-cpay__xp pp-tally pp-tally--md">{% if rewards.paid_xp %}+{% endif %}<span data-countup="{{ rewards.paid_xp }}">{{ rewards.paid_xp|intcomma }}</span></span>
+            not is backwards. The accent colour already says what this number is.
+
+            THE PAY UNTIL THE FIRST CLAIM, THE CLAIMED TOTAL AFTER IT (owner, 2026-10-24, review CH-05). This
+            reverses 2026-09-30, when the big number meant "claimed" for the whole run, zero included: on prod
+            that made a fresh Job Coverage run's loudest figure a "0" with what the run pays in small print under
+            it. The caption always names which number it is. The pay carries no `data-countup`, so the first
+            claim's re-render ticks the claimed total up from nothing (`apply` in challenge-detail.js) instead of
+            counting from the rate.{% endcomment %}
+            {% if rewards.paid_xp %}
+            <span class="pp-cpay__xp pp-tally pp-tally--md">+<span data-countup="{{ rewards.paid_xp }}">{{ rewards.paid_xp|intcomma }}</span></span>
             <span class="pp-cpay__cap">Job XP claimed</span>
+            {% else %}
+            <span class="pp-cpay__xp pp-tally pp-tally--md">+{{ rewards.per_square|intcomma }}</span>
+            <span class="pp-cpay__cap">Job XP per finished square</span>
+            {% endif %}
         </div>
         <div class="pp-cpay__act">
             {% comment %}WHAT IS STILL OWED, beside the button that claims it. A fact at body size, so it
@@ -168,15 +180,14 @@ Params: challenge, rewards (`rewards.summary`), is_owner.{% endcomment %}
     </details>
     {% endif %}
 
-    {% comment %}The rate, stated once, AND WHAT A WHOLE RUN PAYS (owner, 2026-09-30). The second figure is
-    here rather than in the headline because the headline measures what has been CLAIMED and should keep
-    meaning that for the whole run -- on a fresh run it is a large accent zero, and the honest fix is to put
-    the forward-looking number where a hunter asking "what is this worth" will read it, not to swap what the
-    big number means part-way through.
+    {% comment %}The rate, stated once, AND WHAT A WHOLE RUN PAYS (owner, 2026-09-30). Before the first
+    claim the headline is the rate, so the foot drops it rather than saying it twice (2026-10-24).
 
     It carried "paid to that square's job" as well, which is mechanism -- prose belongs in a comment like this
     one, not in the 12px line under a reward.{% endcomment %}
-    <p class="pp-cpay__foot">{{ rewards.per_square|intcomma }} Job XP per finished square,
-        {{ rewards.full_xp|intcomma }} for a full run.</p>
+    <p class="pp-cpay__foot">
+        {% if rewards.paid_xp %}{{ rewards.per_square|intcomma }} Job XP per finished square,
+        {{ rewards.full_xp|intcomma }} for a full run.{% else %}{{ rewards.full_xp|intcomma }} Job XP for a full run.{% endif %}
+    </p>
     {% endif %}
 </div>
