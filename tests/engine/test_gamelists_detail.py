@@ -4743,6 +4743,7 @@ def test_an_entry_wears_what_every_version_carries_and_says_it(client):
     assert body.count('<use href="#pp-gflag-online"/>') == 1, 'one entry flagged, the other not'
     css = _read('static/css/components/gamelists.css')
     assert '.gl-rank ~ .pp-gflags--stack { top: 37px; left: 7px; }' in css
+    assert '.gl-rank ~ .pp-gflags--stack { top: 41px; left: 8px; }' in css, 'clear of the larger plate from 768px'
 
 
 def test_the_add_a_game_search_sends_each_results_flags():

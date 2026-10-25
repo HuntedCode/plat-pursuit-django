@@ -35,15 +35,15 @@ def test_the_versions_list_other_platforms_row():
 
 
 def test_a_family_row_reads_its_whole_games_keys_not_its_lists():
-    """A family row links the sibling's whole game, so it draws the keys `_build_family_versions` computed."""
+    """On the About tab a family row links the sibling's whole game, so it draws the keys `_build_family_versions`
+    computed."""
     game = _flagged()
     row = {'concept': game.concept, 'game': game, 'flag_keys': ()}
-    html = render_to_string('trophies/partials/game_detail/_version_sections.html',
-                            {'other_versions': [], 'family_versions': [row]})
+    ctx = {'other_versions': [], 'family_versions': [row], 'family_game_pages': True}
+    html = render_to_string('trophies/partials/game_detail/_version_sections.html', ctx)
     assert ONLINE not in html, "the row's own list is online, but its game is not"
     row['flag_keys'] = ('online',)
-    assert ONLINE in render_to_string('trophies/partials/game_detail/_version_sections.html',
-                                      {'other_versions': [], 'family_versions': [row]})
+    assert ONLINE in render_to_string('trophies/partials/game_detail/_version_sections.html', ctx)
 
 
 def test_a_recently_added_dlc_card_carries_its_lists_flags_but_not_buggy():
@@ -76,3 +76,12 @@ def test_a_calendar_day_card_keeps_its_link_name_and_says_the_flags_after_the_ti
     html = render_to_string('challenges/partials/_calendar_day.html', {'plats': [plat], 'square': square})
     assert f'<span aria-hidden="true"><span class="pp-gflags' in html, 'hidden inside the link'
     assert ', online trophies</span>' in html, 'and said after the title'
+
+
+def test_a_family_row_off_the_about_tab_links_one_list_and_wears_its_own():
+    """On the Trophy List page a family row links the sibling's most-played LIST, so it wears that list's flags."""
+    game = _flagged()
+    row = {'concept': game.concept, 'game': game, 'flag_keys': ()}
+    html = render_to_string('trophies/partials/game_detail/_version_sections.html',
+                            {'other_versions': [], 'family_versions': [row], 'family_game_pages': False})
+    assert ONLINE in html

@@ -454,8 +454,9 @@ class ConceptContextMixin:
             rep = sib.rep_list[0] if getattr(sib, 'rep_list', None) else None
             if rep:
                 out.append({'concept': sib, 'game': rep})
-        # A family row is titled with the sibling's NAME and links its whole game, so its flag badges are the
-        # ones every list of that game carries (owner, 2026-10-24), not its most-played list's own. One query.
+        # Where a family row links the sibling's whole game (the Game page's About tab), its flag badges are the
+        # ones every list of that game carries (owner, 2026-10-24); the template falls back to the row's own list
+        # where the row links that list instead. One query.
         flags = work_keys_for_games([row['game'] for row in out])
         for row in out:
             row['flag_keys'] = flags.get(row['game'].pk, ())

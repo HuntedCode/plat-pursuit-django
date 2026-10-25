@@ -103,8 +103,8 @@ model) around ONE list viewport tab:
   list is obtainable). It reuses List detail's `_game_flags.html` (fed the shared keys), Shovelware in
   the platform row as there. A flag only some lists have stays on those lists' own pages: naming it for the
   game would tell a hunter on the good list that their game is broken. For the same reason there is no "No
-  Known Issues" chip here: the flags row renders only when a real flag is shared (`has_chips`), so the partial's
-  clean state never shows, and an empty shared set does not mean no list has an issue.
+  Known Issues" chip here: the page leaves the partial's `clean` unset, so an empty shared set draws nothing, and
+  an empty shared set does not mean no list has an issue.
 - **Family** (the concept's different-igdb siblings: remasters, remakes, collections): a section of the
   About tab's "Versions & editions" card, each row a one-hop link to THEIR Game page with its platform
   chips (so "Jak II" on PS3 reads apart from this PS4 page, DS-13). It was a hero band capped at six until

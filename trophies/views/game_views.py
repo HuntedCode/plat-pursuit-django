@@ -512,7 +512,9 @@ class RandomGameView(View):
         qs = Game.objects.all()
 
         if form.is_valid():
-            qs, _ = apply_game_browse_filters(qs, form)
+            # `by_page` because Lucky sits only on the whole-game grids (Browse Games, tag detail), so a flag
+            # filter must land on a game the grid itself would list (owner, 2026-10-24).
+            qs, _ = apply_game_browse_filters(qs, form, by_page=True)
 
         # No election needed for Lucky: any sibling resolves to the same Game page. NOTE the
         # distribution is LIST-weighted (a 6-stack work is 6x likelier than a single-list one)

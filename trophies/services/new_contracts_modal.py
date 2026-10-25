@@ -285,10 +285,11 @@ def new_for(profile, user, limit=MAX_LIST, preview=False):
     newest = max(stamps) if stamps else None
 
     # Each contract's flag badges (owner, 2026-10-24), the picker's "can it still be finished?" rule, as on the
-    # board, and none on a claimed one, as there. Three queries for the slice, bounded by MAX_LIST. Imported here,
+    # board, and none on a finished one, as there. Three queries for the slice, bounded by MAX_LIST. Imported here,
     # which keeps this module's import free of the challenges app.
     from challenges.services.contract_flags import contract_flag_keys
-    flags = contract_flag_keys([row for row in rows if row.status != 'accepted'])
+    from trophies.services.contracts_service import FINISHED_STATUSES
+    flags = contract_flag_keys([row for row in rows if row.status not in FINISHED_STATUSES])
     for row in rows:
         row.flag_keys = flags.get(row.pk, [])
 

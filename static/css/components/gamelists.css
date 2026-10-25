@@ -423,6 +423,7 @@
    cards are wide enough that 26px starts to read as timid. */
 @media (min-width: 768px) {
     .gl-rank { top: 8px; left: 8px; height: 29px; font-size: 1.02rem; border-radius: 9px; }
+    .gl-rank ~ .pp-gflags--stack { top: 41px; left: 8px; }
 }
 /* THE GRIPS EXIST ONLY IN POSITION-EDITING MODE.
  *

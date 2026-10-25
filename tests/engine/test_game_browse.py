@@ -857,3 +857,16 @@ def test_no_page_version_follows_the_game_pages_membership():
     GameFactory(concept=None, title_name='N delisted', is_delisted=True)
 
     assert matches() == {'U delisted', 'L delisted', 'N delisted'}
+
+
+def test_lucky_lands_only_on_a_game_the_filtered_grid_would_list(client):
+    """Lucky sits on the whole-game grids, so "Delisted" means every list there too: a game delisted on one list
+    only is not a result, and Lucky says so rather than opening a page with no Delisted chip."""
+    _work('Pulled On One', {'is_delisted': True}, {'is_delisted': False})
+
+    resp = client.get(reverse('random_game'), {'show_delisted': 'on'})
+    assert resp.status_code == 302 and resp.url.startswith(reverse('games_list'))
+
+    everywhere = _work('Pulled Everywhere', {'is_delisted': True}, {'is_delisted': True})
+    resp = client.get(reverse('random_game'), {'show_delisted': 'on'})
+    assert resp.url == everywhere[0].concept.game_page_url()

@@ -101,14 +101,17 @@ def test_a_square_wears_its_games_flags_until_it_is_finished():
 
 
 def test_a_finished_contract_wears_no_badges_on_the_board_as_a_finished_square_does():
-    """Claimed on the board, Banked in History: its trophies are earned, so "can it still be finished?" is moot.
+    """Ready to Claim or Claimed on the board, Banked in History: its trophies are earned, so "can it still be
+    finished?" is moot.
     The flags are read only for the open ones, and a page with none open reads nothing."""
-    claimed, banked, open_ = _online('Bravo Claimed'), _online('Bravo Banked'), _online('Bravo Open')
-    cards = [{'status': 'accepted'}, {'status': 'available', 'is_history': True}, {'status': 'available'}]
+    claimed, banked, ready, open_ = (_online('Bravo Claimed'), _online('Bravo Banked'), _online('Bravo Ready'),
+                                     _online('Bravo Open'))
+    cards = [{'status': 'accepted'}, {'status': 'available', 'is_history': True}, {'status': 'claimable'},
+             {'status': 'pursuing'}]
 
-    contracts_service._attach_flags(cards, [claimed, banked, open_])
+    contracts_service._attach_flags(cards, [claimed, banked, ready, open_])
 
-    assert [c['flag_keys'] for c in cards] == [[], [], ['delisted', 'online']]
+    assert [c['flag_keys'] for c in cards] == [[], [], [], ['delisted', 'online']]
     with CaptureQueriesContext(connection) as ctx:
         contracts_service._attach_flags([{'status': 'accepted'}], [claimed])
     assert len(ctx.captured_queries) == 0

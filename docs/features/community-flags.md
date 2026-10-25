@@ -132,7 +132,7 @@ Since 2026-10-24 (owner) a game's flags show **everywhere the game is displayed*
 plate with one Lucide glyph, stacked on a cover's corner or at the end of a row. Four flags are everywhere:
 **Unobtainable** (red, a struck-out trophy), **Delisted** (amber, a struck-out store), **Online trophies** (blue,
 wifi) and **Shovelware** (amber, a shovel). **Buggy trophies** (amber, a bug) keeps only the places it already
-showed: the Game pages and the browse cards.
+showed: the Game pages, the browse cards and a franchise's version rows.
 
 | Piece | Where |
 |-------|-------|
@@ -149,8 +149,8 @@ showed: the Game pages and the browse cards.
 | The card is | It shows | Function |
 |-------------|----------|----------|
 | One trophy list (a hunter's own game, a day's platinum, a Trophy Lists card, a version row) | that list's own flags | `own_keys`, `game\|flag_keys` |
-| A whole game (a Game List entry, a rating, a search result, a condensed browse card) | a flag only when EVERY list on its Game page has it | `work_keys_for_games`, `work_keys_for_concepts` |
-| A contract (the Career board, a job, the new-contracts modal, a challenge square, the picker) | a flag only when no way to finish the contract avoids it, and none once it is finished (Claimed, Banked, a finished square) | `contract_flags.contract_flag_keys` |
+| A whole game (a Game List entry, a rating, a search result, a condensed browse card, a family row on the About tab) | a flag only when EVERY list on its Game page has it | `work_keys_for_games`, `work_keys_for_concepts` |
+| A contract (the Career board, a job, the new-contracts modal, a challenge square, the picker) | a flag only when no way to finish the contract avoids it, and none once its trophies are earned (Ready to Claim, Claimed, Banked, a finished square) | `contract_flags.contract_flag_keys` |
 
 "Every list on its Game page" is the page's own membership (`game_grouping_service.page_version_rows`, the same
 rule `GamePageView._resolve` uses), so a whole-game card agrees with the page it links. It answers "can I still do
