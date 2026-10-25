@@ -249,8 +249,11 @@ class ConceptContextMixin:
 
         from trophies.models import GroupBadge
         from trophies.services.badge_list_service import build_list_cards
+        # Every membership path (`stage_has_concept_q`): a direct member, a bundle member, or the list
+        # holding a trophy-group member (a collection's DLC group counts toward its own game's badge).
+        from trophies.services.stage_membership import stage_has_concept_q
         series_slugs = (
-            Stage.objects.filter(concepts__games=game)
+            Stage.objects.filter(stage_has_concept_q([game.concept_id]))
             .exclude(series_slug__isnull=True).exclude(series_slug='')
             .values_list('series_slug', flat=True).distinct()
         )

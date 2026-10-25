@@ -294,10 +294,13 @@ def _badge_lines(profile, concept, game):
     if not concept:
         return []
 
+    # Whole-list members only (`lists_only`): this card celebrates the LIST's completion, and a trophy-group
+    # member's list is a collection whose own platinum does not count for that stage.
+    from trophies.services.stage_membership import stage_has_concept_q
     live_slugs = BadgeSeries.objects.live().values_list('series_slug', flat=True)
     slugs = set(
         Stage.objects
-        .filter(concepts=concept, series_slug__in=live_slugs)
+        .filter(stage_has_concept_q([concept.id], lists_only=True), series_slug__in=live_slugs)
         .exclude(series_slug__isnull=True).exclude(series_slug='')
         # .order_by() strips Stage.Meta.ordering, which would otherwise ride the SELECT and defeat
         # .distinct() (a concept in two same-series stages -> duplicate rows).

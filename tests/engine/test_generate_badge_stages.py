@@ -514,7 +514,7 @@ def test_append_never_adds_to_a_bundle_stage_and_reports_it_instead():
 
     out = _run(badge.series_slug, '--append')
 
-    assert "Stage 1 (existing, uses a bundle): ADD BY HAND" in out
+    assert "Stage 1 (existing, uses a bundle or trophy group): ADD BY HAND" in out
     assert "Episode 2" in out
     assert "Nothing written: every addition is for a bundle stage (1)" in out
     assert "Next:" not in out

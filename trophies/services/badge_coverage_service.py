@@ -23,10 +23,10 @@ against the stages; `generate_badge_stages` builds stages from it. Keeping one d
 freshly generated badge audit clean.
 """
 
-from django.db.models import Q
 from django.db.models.functions import Lower
 
 from trophies.models import BadgeSeries, Concept
+from trophies.services.stage_membership import in_series_q
 from trophies.services.developer_family_service import (
     developer_family_ids, family_developer_credits, sorted_studio_names,
 )
@@ -71,14 +71,10 @@ def series_candidates(series):
 
 
 def covered_concept_ids(series_slug):
-    """Concepts covered by one of the series' stages: a direct stage member (Stage.concepts) OR a member of
-    a ConceptBundle on a stage (Stage.concept_bundles -> ConceptBundle.concepts). Missing the bundle path
+    """Concepts covered by one of the series' stages, by any membership path (`in_series_q`): a direct
+    member, a ConceptBundle member, or the list holding a trophy-group member. Missing the bundle path
     falsely flagged bundle-covered games as uncovered."""
-    return set(
-        Concept.objects.filter(
-            Q(stages__series_slug=series_slug) | Q(bundles__stage__series_slug=series_slug)
-        ).values_list('id', flat=True)
-    )
+    return set(Concept.objects.filter(in_series_q([series_slug])).values_list('id', flat=True))
 
 
 def audit_badge_coverage():

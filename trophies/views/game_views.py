@@ -19,7 +19,7 @@ from django.views.generic import ListView, DetailView
 from urllib.parse import urlencode
 from trophies.mixins import HtmxListMixin
 from trophies.views.concept_context import ConceptContextMixin
-from ..models import SHOVELWARE_FLAGGED_STATUSES, Game, Trophy, Profile, EarnedTrophy, ProfileGame, TrophyGroup, Concept, FeaturedGuide, Stage, UserConceptRating
+from ..models import SHOVELWARE_FLAGGED_STATUSES, Game, Trophy, Profile, EarnedTrophy, ProfileGame, TrophyGroup, Concept, FeaturedGuide, UserConceptRating
 from ..forms import GameSearchForm, GameDetailForm, GuideSearchForm
 from trophies.util_modules.constants import ALL_PLATFORMS
 from trophies.util_modules.trophy_progress import psn_progress
@@ -165,19 +165,17 @@ def build_game_card_context(page_games, request, condensed=False):
     # ── Pursuer hooks: the badge SERIES a game belongs to + its home CONTRACT. Both concept-keyed and
     #    batched over the page's <=30 concepts (whale-safe -- 3 bounded queries, never per-card). ──
     badge_cap = 3
-    concept_id_set = set(concept_ids)
 
-    # concept -> distinct badge series_slugs it appears in (1 query over the M2M).
+    # concept -> distinct badge series_slugs it appears in, through EVERY membership path (a direct member, a
+    # bundle member, or the list holding a trophy-group member). One query: each path is its own LEFT JOIN,
+    # so a row carries one slug per path (None where that path has none); bounded by the page's concepts.
+    from trophies.services.stage_membership import concept_series_paths
+    paths = concept_series_paths()
     concept_series = defaultdict(set)
-    for cid, slug in (
-        Stage.objects.filter(concepts__in=concept_ids)
-        .exclude(series_slug__isnull=True).exclude(series_slug='')
-        # .order_by() strips Stage.Meta.ordering (stage_number), which would otherwise ride the
-        # SELECT + defeat .distinct() (a concept in two same-series stages -> duplicate rows).
-        .values_list('concepts', 'series_slug').order_by().distinct()
+    for cid, *slugs in (
+        Concept.objects.filter(id__in=concept_ids).values_list('id', *paths).order_by().distinct()
     ):
-        if cid in concept_id_set:
-            concept_series[cid].add(slug)
+        concept_series[cid].update(slug for slug in slugs if slug)
 
     # series_slug -> {name, attribution ids} for each SERIES that ships a live group badge (1 query).
     # The three FK ids ride along so the sort below can rank by attribution without materialising the

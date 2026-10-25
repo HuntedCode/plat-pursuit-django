@@ -8,10 +8,11 @@ from django.db.models import (
 from django.db.models.functions import Coalesce, Lower, Cast, Greatest
 
 from trophies.models import (
-    BadgeSeries, Trophy, UserConceptRating, Stage, ConceptGenre, ConceptTheme,
+    BadgeSeries, Concept, Trophy, UserConceptRating, ConceptGenre, ConceptTheme,
     ConceptEngine, Contract, IGDBMatch,
 )
 from trophies.services.game_grouping_service import no_page_version
+from trophies.services.stage_membership import in_series_q
 
 
 # ---------------------------------------------------------------------------
@@ -231,14 +232,10 @@ def apply_game_browse_filters(qs, form, sort_val='', by_page=False):
 
     if form.cleaned_data.get('in_badge'):
         # Series that ship a live GROUP badge (grouping-badge system); a game is "in a badge" if its concept
-        # has a stage in one of those series.
+        # is on a stage of one of those series, by any path (`in_series_q`: a direct member, a bundle member,
+        # or the list holding a trophy-group member). One uncorrelated subquery, hashed once.
         live_slugs = BadgeSeries.objects.live().values_list('series_slug', flat=True)
-        qs = qs.filter(Exists(
-            Stage.objects.filter(
-                concepts=OuterRef('concept_id'),
-                series_slug__in=live_slugs,
-            )
-        ))
+        qs = qs.filter(concept_id__in=Concept.objects.filter(in_series_q(live_slugs)).values('id'))
 
     # --- Contract filters (the game's home Job-Board contract) ---
     # Specific jobs (a discipline selects all its jobs client-side) win over the broad "in a contract"

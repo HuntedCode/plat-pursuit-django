@@ -27,7 +27,7 @@ badges over the same stages, because they are genuinely different games to hunt.
 | Edition | `PlatformGroup` | A platform set (`key`, `platforms`, `exclude_delisted`) |
 | The badge | `GroupBadge` | `BadgeSeries` x `PlatformGroup`. The earnable thing |
 | A hold | `UserGroupBadge` | Binary: the row exists iff the hunter currently meets the bar |
-| Stages | `Stage` (+ `ConceptBundle`) | Series-level. Every edition works the same stage list |
+| Stages | `Stage` (+ `ConceptBundle`, `Stage.trophy_groups`) | Series-level. Every edition works the same stage list |
 
 **Holds are binary.** There is no `maintenance` state: a revoke DELETES the row. Rank is derived live
 from `earned_at` among current holders, so if a series grows, whoever first clears the harder iteration
@@ -108,6 +108,66 @@ without base".
 
 A `ConceptBundle` collapses to a single synthetic game and is held to the same two bars, but **every**
 member must meet them — see the `ConceptBundle` docstring in `trophies/models.py`.
+
+### Trophy groups as stage members
+
+Some lists carry whole games as DLC trophy groups (the Kingdom Hearts PS5 collections ship Re:Chain of
+Memories, KH II and others as groups of one list, none of them needed for its platinum). Finishing one of
+those never shows up as a finished list, so `Stage.trophy_groups` (M2M to `ConceptTrophyGroup`) lets a stage
+count ONE group on its own. The owner's rules (2026-10-24):
+
+| Rule | How |
+|---|---|
+| The group at 100% clears the stage **and** counts for holo | `group_state` in `evaluate_with_catalog`: both bars read the group's own `ProfileTrophyGroup`, because the group is the whole game it stands for |
+| The list at 100% counts too | the same invariant as `game_state`: `ProfileGame.progress == 100` means every group in it is done, so a stale group row cannot deny credit |
+| No cross-credit, either way | the list's platinum (its `default` group) never clears a group's stage, and a group never clears a stage that lists the whole list |
+| Gating is the list's | each version carrying the group is a unit with that version's platforms, obtainable and delisted status, like any game |
+| A version without the group cannot clear it | a CTG is concept-level; `group_members` pairs it with each version's own `TrophyGroup`, and a version lacking it is not a unit |
+
+One unit per version, built in ONE place, `badge_orchestrator.stage_units`, which the required-stage count,
+every evaluation and the badge page's scope check all call.
+
+**The read.** A group's progress comes from its own small `ProfileTrophyGroup` read over
+`catalog['group_tg_ids']`, an explicit id list in both regimes, and no query at all when no stage has a group.
+It never rides the `whole_catalogue` subquery: that statement runs once per profile on the nightly sweep, and
+routing groups through it joined every concept's trophy groups into all ~300,000 of them. Only whole-list
+games feed the default-group (base) read, so a list that is on a stage just for one of its groups never reads
+its own base bar.
+
+**Authoring.** Pick the group in the stage's "Trophy groups" box in admin. A list may not also be on the
+same stage as a whole list or a bundle member (`StageAdminForm.clean`): the two would set different bars for
+one list. To count the game in a collection's MAIN group on its own (so holo means that game at 100%, not the
+whole collection), add the list's `default` group here instead of the list itself. Its card is then named with
+PSN's own name for that group (the `default` CTG is always called "Base Game"), else the list's title. The
+bundle inline refuses a list whose group is on the stage too (`ConceptBundleInlineFormSet`). Both checks read
+the stage's SAVED members, as the bundle-vs-standalone check always has, so a change to both in one save is
+checked against the other's previous state. `generate_badge_stages --append` never writes onto a stage that
+holds a list through a group; it reports the addition for a hand edit, as it does for bundles.
+
+**On the badge page** trophy groups sit on their own row UNDER the stage's full lists (owner, 2026-10-25), so
+a group card never sits among full lists looking like one. The row leads with a banner, one sentence per group
+scoped to its list ("In Y, only the trophies in X count here"), so groups from two different lists each name
+theirs, and the stage's full lists still read as counting in full. A stage held only by groups opens straight
+onto the row, and its collapsed header counts "N trophy groups" (one per card, as it counts versions of games). The card's
+art also carries a "Trophy group" label, which stays in view on a phone after the panel's head scrolls away.
+A group whose list is unobtainable on the edition goes in the stage's unobtainable list like any version,
+named "X · in Y".
+A group card is named for the group, shows its icon, says
+which list it ships in ("Part of Y"), and
+reads the viewer's progress on the group (its `pgame` is the `ProfileTrophyGroup` row). It carries no contract
+band and no platinum chip, since both are the whole list's. Its ratings are the group's own. My Stats counts
+the group as a game of its own (as the hero's "N games" does) with the group's trophies, never the list's;
+it skips the trophies only when the list is also on screen whole, which already counted them. The list's
+play time cannot be split, so a group adds none, and a group is "platted" only when it holds an earned
+platinum, as a whole list without one never is.
+
+**Questions about the list itself do NOT follow the group path** (`lists_only=True` on the helpers): the
+art-reveal community platinum count, job-board coverage, contract job tags, the taxonomy report, the
+completion card, and the Challenge Optimizer. There the concept is a whole collection, a different game, so
+its platinum is not badge work and its contract does not cover the stage. Everything that asks which badges a
+game counts toward DOES follow it: the engine, sync, the DLC sweep, `evaluate_badges --series`, the coverage
+audit, the Game page's "Counts toward", the browse badge pills and "In a badge" filter, and the company
+filter.
 
 > **Changed 2026-09** (owner's call). Satisfaction used to be scoped to qualifying games the way gating
 > still is, so each edition had to be cleared on its own platform. The per-edition *independence* that
@@ -235,10 +295,14 @@ fixture that needs two INDEPENDENT editions must give them stages that do not ov
 shared-stage shape no longer produces an untouched edition. See `_split_edition_series` in
 `tests/engine/test_badge_xp.py`.
 
-**Bundled games are not in `Stage.concepts`.** A concept is either a direct stage member or a
-`ConceptBundle` member on that stage, never both. Any query that finds "the series a game belongs to"
-must check `Q(concepts=...) | Q(concept_bundles__concepts=...)`. Matching only the first misses every
-bundled game, which was a real bug in both engines.
+**A stage reaches its games three ways, and every membership query must follow all three.** Direct
+(`Stage.concepts`), bundled (`concept_bundles -> concepts`) and trophy group (`trophy_groups -> concept`).
+Use `trophies/services/stage_membership.py` (`in_series_q`, `stage_has_concept_q`, or
+`concept_series_paths()` / `stage_concept_paths()` to read through each path), with `lists_only=True` for a
+question about the list itself (see the trophy-group section). Matching only the first path misses every
+bundled game, which was a real bug in both engines; retyping the paths at a call site is how the next one
+would happen. Not yet moved over, and still reading `Stage.concepts` alone: the site-wide unique-badge-games
+stat (`core/services/stats.py`).
 
 **Editions overlap for trophies but not for badges.** A cross-gen game counts toward both editions'
 trophy figures, but a `GroupBadge` belongs to exactly one `PlatformGroup`. So per-edition badge counts sum
@@ -282,7 +346,7 @@ fails open, with no error, is the reason this lives on the field now. Other `Fra
 **Stages duplicate onto a new slug.** `Stage` joins to a series by a bare `series_slug` string, so a
 franchise badge that mirrors a series badge means re-entering the same concept picks stage by stage.
 `StageAdmin`'s "Duplicate selected stages under a new series slug" action copies a selection wholesale:
-number, title, the standalone concepts, and each `ConceptBundle`
+number, title, the standalone concepts, the trophy groups, and each `ConceptBundle`
 with its own members. The originals are untouched, the whole run is one transaction (a committed stage
 with no concepts reads to the engine as instantly satisfied, not as broken), and a stage number already
 present on the target slug is SKIPPED and named in the message rather than renumbered -- renumbering would

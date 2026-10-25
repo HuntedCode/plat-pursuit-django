@@ -16,18 +16,15 @@ See docs/design/rebuild/badge-backend-rebuild.md.
 """
 from django.core.management.base import BaseCommand
 from django.db import transaction
-from django.db.models import Q
-
 from trophies.models import Badge, BadgeSeries, GroupBadge, PlatformGroup, Game
+from trophies.services.stage_membership import in_series_q
 
 
 def _detect_groups(slug):
-    """Return (spanned_groups, unmapped_platforms, game_count) for a series' stages' games (standalone +
-    bundle members)."""
+    """Return (spanned_groups, unmapped_platforms, game_count) for a series' stages' games (every
+    membership path)."""
     games = list(
-        Game.objects.filter(
-            Q(concept__stages__series_slug=slug) | Q(concept__bundles__stage__series_slug=slug)
-        ).distinct().only('title_platform')
+        Game.objects.filter(in_series_q([slug], 'concept__')).distinct().only('title_platform')
     )
     groups = list(PlatformGroup.objects.filter(is_active=True))
     spanned = [g for g in groups if any(g.matches_platforms(game.title_platform) for game in games)]

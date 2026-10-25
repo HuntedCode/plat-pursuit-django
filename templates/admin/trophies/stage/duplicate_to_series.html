@@ -17,7 +17,7 @@ make is copying the wrong selection, and a number cannot show that.
 
 <p>
     Copy the {{ stages|length }} stage{{ stages|length|pluralize }} below onto a new series slug. The
-    originals are left alone. Each copy keeps its number, title, concepts, and concept bundles.
+    originals are left alone. Each copy keeps its number, title, concepts, trophy groups, and concept bundles.
 </p>
 
 <ul>
@@ -26,7 +26,8 @@ make is copying the wrong selection, and a number cannot show that.
         <strong>{{ stage.series_slug }}</strong> &mdash; stage {{ stage.stage_number }}
         {% if stage.title %}&ldquo;{{ stage.title }}&rdquo;{% endif %}
         <small style="color:#888;">
-            ({{ stage.concepts.count }} concept{{ stage.concepts.count|pluralize }}{% if stage.concept_bundles.count %},
+            ({{ stage.concepts.count }} concept{{ stage.concepts.count|pluralize }}{% if stage.trophy_groups.count %},
+            {{ stage.trophy_groups.count }} trophy group{{ stage.trophy_groups.count|pluralize }}{% endif %}{% if stage.concept_bundles.count %},
             {{ stage.concept_bundles.count }} bundle{{ stage.concept_bundles.count|pluralize }}{% endif %})
         </small>
     </li>

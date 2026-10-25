@@ -130,6 +130,8 @@ This method migrates ALL related data from `other` (the orphaned concept) to `se
 
 3. **ConceptTrophyGroups**: Iterates `other.concept_trophy_groups.all()`. Non-duplicate groups (by `trophy_group_id`) are re-pointed to `self`. Duplicate groups are left on `other` and cascade-delete with it. This step MUST happen before Reviews so that re-pointed reviews can reference the surviving CTG.
 
+   **Stage.trophy_groups (M2M)**, right after: a re-pointed CTG carries its stage rows with it; each doomed duplicate's stage rows are moved onto the survivor's CTG for the same `trophy_group_id` (`add()` skips a stage that already has it), or the cascade would silently drop the group from its badge stage.
+
 4. **Reviews**: Iterates `other.reviews.all()`. Skips duplicates keyed by `(profile_id, concept_trophy_group_id)`. Non-duplicates are re-pointed with `save(update_fields=['concept'])`.
 
 5. **Checklists** (legacy): `other.checklists.update(concept=self)`. Bulk update, includes cascaded sections, items, votes, reports, and user progress. The checklist system was removed in favor of staff-authored Roadmaps, but the underlying tables are retained so historical data is preserved across concept merges.

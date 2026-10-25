@@ -11,6 +11,7 @@ from collections import defaultdict
 from django.core.management.base import BaseCommand
 
 from trophies.models import Badge, Concept, Contract, IGDBMatch, Stage
+from trophies.services.stage_membership import stage_concept_paths
 
 
 class Command(BaseCommand):
@@ -39,16 +40,15 @@ class Command(BaseCommand):
             self.stdout.write(self.style.WARNING('No badge series found.'))
             return
 
-        # Badge games per series: direct stage members + bundle members.
+        # Badge games per series: direct and bundle members. Not trophy-group members: their list's
+        # contract finishes the whole list, which does not cover the stage (the Challenge Optimizer skips
+        # them for the same reason).
         stage_concepts = defaultdict(set)
-        for slug, cid in (Stage.objects.filter(series_slug__in=slugs)
-                          .values_list('series_slug', 'concepts__id')):
-            if cid:
-                stage_concepts[slug].add(cid)
-        for slug, cid in (Stage.objects.filter(series_slug__in=slugs)
-                          .values_list('series_slug', 'concept_bundles__concepts__id')):
-            if cid:
-                stage_concepts[slug].add(cid)
+        for path in stage_concept_paths(lists_only=True):
+            for slug, cid in (Stage.objects.filter(series_slug__in=slugs)
+                              .values_list('series_slug', f'{path}__id')):
+                if cid:
+                    stage_concepts[slug].add(cid)
 
         # Covered = an ANCHORED concept whose raw igdb_id keys a Contract, OR is in a bundle.
         contract_igdb_ids = set(Contract.objects.exclude(igdb_id=None).values_list('igdb_id', flat=True))

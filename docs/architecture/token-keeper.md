@@ -249,7 +249,8 @@ This handles PSN username changes where a user might have been tracked under the
 
 After sync completion, `evaluate_for_sync(profile, touched_profilegame_ids)` evaluates the grouping-badge
 subsystem. It resolves the touched games to their concepts, those concepts to the badge SERIES they appear
-in (via `Stage.concepts` **or** `Stage.concept_bundles`), and evaluates every live edition of those series.
+in (via `Stage.concepts`, `Stage.concept_bundles` **or** `Stage.trophy_groups`, `stage_has_concept_q`), and
+evaluates every live edition of those series.
 Badge XP is recomputed from scratch into the standing tables by the same call.
 
 Scoping is by series rather than by badge deliberately: `recompute_standing` REPLACES a series' standing

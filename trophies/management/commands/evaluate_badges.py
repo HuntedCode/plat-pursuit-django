@@ -21,10 +21,11 @@ raised the bar (old low tier -> full platform group); the glance just surfaces t
 from collections import Counter
 
 from django.core.management.base import BaseCommand
-from django.db.models import Q, Max
+from django.db.models import Max
 
 from trophies.models import Profile, GroupBadge, BadgeSeries, Game, ProfileGame, UserBadge
 from trophies.services.badge_apply import plan, evaluate_and_apply_batch
+from trophies.services.stage_membership import in_series_q
 from trophies.services.badge_orchestrator import (
     build_catalog, evaluate_with_catalog, recompute_required_stages, resolve_group_badges,
 )
@@ -163,10 +164,8 @@ class Command(BaseCommand):
 
     @staticmethod
     def _series_player_ids(slug):
-        """Distinct profile ids that have PLAYED any game in the series (standalone or bundle member)."""
-        game_ids = Game.objects.filter(
-            Q(concept__stages__series_slug=slug) | Q(concept__bundles__stage__series_slug=slug)
-        ).values_list('id', flat=True)
+        """Distinct profile ids that have PLAYED any game in the series (any membership path)."""
+        game_ids = Game.objects.filter(in_series_q([slug], 'concept__')).values_list('id', flat=True)
         return ProfileGame.objects.filter(game_id__in=game_ids).values_list('profile_id', flat=True).distinct()
 
     def _compare_legacy(self, opts):

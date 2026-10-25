@@ -149,6 +149,29 @@
 /* Body */
 .bd-gcard__body { display: flex; flex-direction: column; gap: 5px; padding: 8px 9px; flex: 1; }
 .bd-gcard__name { font-size: 0.76rem; font-weight: 600; line-height: 1.2; color: var(--pp-text); display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; transition: color var(--pp-dur) var(--pp-ease); }
+/* A trophy-group card's list: the game ships inside it, so the card names it under the game's own name. */
+/* ...and the art says "Trophy group", on a shade along its foot (above the progress bar), so the cover is not
+   read as the whole game. */
+.bd-gcard__group {
+    position: absolute; left: 0; right: 0; bottom: 4px; display: flex; align-items: center; gap: 5px;
+    padding: 14px 8px 5px; font-size: 0.6rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--pp-secondary); background: linear-gradient(to top, oklch(0 0 0 / 0.82), transparent);
+}
+.bd-gcard__group svg { width: 12px; height: 12px; flex-shrink: 0; }
+/* The stage's trophy-group row, under its full lists: a banner (one sentence per group, in the label's
+   colour), then the group cards in the stage's own grid. The full-list grid above already ends in its
+   padding, so the row adds none on top; `--lead` (no full lists above) gives the banner its own. */
+.bd-groups--lead { padding-top: 14px; }
+.bd-gnote {
+    display: flex; align-items: flex-start; gap: 8px; margin: 0 14px; padding: 9px 11px;
+    border-radius: var(--pp-radius-md); font-size: 0.76rem; line-height: 1.45; color: var(--pp-text-dim);
+    background: color-mix(in oklch, var(--pp-secondary) 9%, transparent);
+    border: 1px solid color-mix(in oklch, var(--pp-secondary) 28%, transparent);
+}
+.bd-gnote svg { width: 15px; height: 15px; flex-shrink: 0; margin-top: 1px; color: var(--pp-secondary); }
+.bd-gnote strong { color: var(--pp-text); font-weight: 700; }
+.bd-gnote + .bd-gnote { margin-top: 6px; }
+.bd-gcard__from { margin-top: -2px; font-size: 0.62rem; line-height: 1.2; color: var(--pp-text-mute); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bd-gcard__badges { display: flex; flex-wrap: wrap; gap: 3px; }
 .bd-gcard__facts { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 9px; margin-top: auto; font-size: 0.64rem; font-weight: 600; color: var(--pp-text-mute); }
 .bd-gcard__pct { color: var(--pp-text-dim); font-weight: 700; font-variant-numeric: tabular-nums; }
