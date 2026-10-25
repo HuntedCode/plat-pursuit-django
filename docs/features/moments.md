@@ -108,7 +108,7 @@ One beat per moment, in the earn vocabulary (visual-identity.md), never confetti
 | milestone | the number swells in, a platinum ring pulses out, the biggest burst of sparks |
 
 **The sparks explode** (owner, 2026-10-25): `sparkBurst(..., { explode: true })` throws them across much of the
-screen, mostly upward, then lets them fall slowly (3 to 4.5s) under gravity off the BOTTOM edge of the page.
+screen, mostly upward, then lets them fall (2 to 2.7s, owner-tuned: longer read as hanging) under gravity off the BOTTOM edge of the page.
 That is why the spark layer is the whole viewport, beside the dialog. About half as many on a phone.
 
 **Pick it up** (owner, 2026-10-25): a badge moment's medallion is a button. Tapping it (or Enter / Space) lifts it

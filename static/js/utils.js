@@ -2738,10 +2738,10 @@ function explodeSparks(layer, cx, cy, color, n) {
         const size = 0.7 + Math.random() * 0.8;
         const anim = s.animate([
             { transform: `translate(0,0) scale(${size})`, opacity: 1, easing: 'cubic-bezier(0.15, 0.7, 0.35, 1)' },
-            { transform: `translate(${dx}px,${dy}px) scale(${size})`, opacity: 1, offset: 0.2,
-              easing: 'cubic-bezier(0.45, 0, 0.85, 0.55)' },     // the top of the arc, then gravity takes it
+            { transform: `translate(${dx}px,${dy}px) scale(${size})`, opacity: 1, offset: 0.18,
+              easing: 'cubic-bezier(0.4, 0, 0.9, 0.6)' },        // the top of the arc, then gravity takes it
             { transform: `translate(${dx + drift}px,${floor}px) scale(${size * 0.6})`, opacity: 0.85 },
-        ], { duration: 3000 + Math.random() * 1500 });
+        ], { duration: 2000 + Math.random() * 700 });    // long enough to fall off the page, never to hang
         anim.onfinish = () => s.remove();
     }
 }
