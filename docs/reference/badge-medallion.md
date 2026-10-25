@@ -157,11 +157,20 @@ The companion **flip** (to a back face) is still a planned follow-up.
      `will-change` to the card.
   2. **On ANY ancestor of the 3D scene:** a `filter` / `overflow` ≠ visible / `will-change: transform`
      re-flattens the whole subtree. The dialog's own `overflow: auto` (scroll) + base `will-change:
-     transform` did this — both are overridden to `visible` / `auto` on the dialog in the 3D block.
+     transform` did this — both are overridden to `visible` / `auto` in the 3D block, but on the
+     Collection's dialog (`#collection-detail`) only. The other peeks (`#badge-peek`, `#pp-moments-peek`)
+     keep a scrolling dialog, so their clip edge is the dialog's padding box (next gotcha).
   3. **On a CHILD:** `mix-blend-mode` on a descendant isolates a compositing group that flattens the
      card. The JS-injected `.pp-med__glare` originally had `mix-blend-mode: screen`; injecting it *into
      the card* flattened the very depth it sat in. The glare now uses a plain (no-blend) highlight.
   If depth ever disappears again, walk the scene → card → layers chain AND every ancestor for one of these.
+- **The tilt needs room around the hero, in `--sz` terms** (owner, 2026-10-25). At full tilt (15 degrees
+  plus the 1.05 scale) the raised glass dome swings ~19% of `--sz` past the badge's resting box (50px at
+  260px, measured in a real browser), more than the dialog's 28px padding, so a scrolling peek clipped it
+  and its bottom swung into the meter. `badge-inspect.css` gives the hero `margin: calc(var(--sz) * 0.13)`
+  and the meter a `0.24` gap (no bottom margin when a meter is there: its gap holds the swing). Raising the
+  tilt `MAX` in `medallion.js` means re-measuring; `test_the_inspector_leaves_the_medallion_room_to_turn`
+  fails until you do.
 - **The rising-colour fill img is `.pp-med__fill-l`, NOT `.pp-med__l`.** It's nested in `.pp-med__fill`
   and deliberately outside the `.pp-med__l` class so the state darkening filters (`… .pp-med__l:nth-child(2)`)
   don't grey it out — it must stay full-colour. Same reason maintenance tarnish is on `.pp-med__l`, not

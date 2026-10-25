@@ -830,3 +830,32 @@ def test_an_unearned_badge_others_own_still_shows_its_real_grade():
 
     assert 'Common' in html
     assert 'Be the first' not in html, 'a graded badge the viewer has not earned shows the nudge'
+
+
+def test_the_inspector_leaves_the_medallion_room_to_turn():
+    """The inspector clipped the medallion while you turned it (owner, 2026-10-25).
+
+    At full tilt (medallion.js: 15 degrees plus a 1.05 scale) the raised glass dome swings ~19.4% of --sz past
+    the badge's resting box (measured in a real browser: 50px at the 260px hero, the near edge rising toward
+    the viewer). The dialog only gave it its 28px padding, so a peek whose dialog scrolls cut the dome off,
+    and its bottom swung into the progress meter. Pinned as the measured invariant: the room around the
+    medallion and the meter's gap each clear that swing, and a bigger tilt must be re-measured.
+    """
+    import re
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2]
+    css = re.sub(r'/\*[\s\S]*?\*/', '',
+                 (root / 'static' / 'css' / 'components' / 'badge-inspect.css').read_text(encoding='utf-8'))
+    js = (root / 'static' / 'js' / 'medallion.js').read_text(encoding='utf-8')
+    swing, hero, padding, spare = 0.194, 260, 28, 8
+
+    tilt = re.search(r'var MAX = (\d+);\s*//\s*degrees of tilt', js)
+    assert tilt and int(tilt.group(1)) <= 15, 'the tilt grew past what the room was measured for: re-measure it'
+
+    room = re.search(r'\.pp-bdetail__stage \.pp-med\s*\{\s*margin:\s*calc\(var\(--sz\) \* ([\d.]+)\);', css)
+    assert room, 'the inspector gives the medallion no room of its own to turn in'
+    assert float(room.group(1)) * hero + padding >= swing * hero + spare, 'the turning dome reaches the dialog edge'
+
+    gap = re.search(r'\.pp-bdetail__stage \.pp-med__meter\s*\{\s*margin-top:\s*calc\(var\(--sz\) \* ([\d.]+)\);', css)
+    assert gap and float(gap.group(1)) * hero >= swing * hero + spare, 'the turning badge swings into its meter'
