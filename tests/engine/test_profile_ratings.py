@@ -10,9 +10,10 @@ from pathlib import Path
 
 import pytest
 from django.db import connection
+from django.template.loader import render_to_string
 from django.test.utils import CaptureQueriesContext
 
-from trophies.models import UserConceptRating
+from trophies.models import Game, UserConceptRating
 from trophies.services.rating_service import (
     PROFILE_RATING_SORTS,
     build_profile_ratings_page,
@@ -184,9 +185,9 @@ def test_the_platinumed_version_is_the_one_linked():
 
 
 def test_query_count_does_not_follow_the_size_of_the_wall():
-    """Four queries flat: the ratings, the community scores, the games, and which of those concepts define
-    a platinum (for the verdict wording). The wall is the one place an N+1 is invisible in review and
-    obvious in production."""
+    """Five queries flat: the ratings, the community scores, the games, which of those concepts define a
+    platinum (for the verdict wording), and every version's flags (the badges). The wall is the one place an N+1
+    is invisible in review and obvious in production."""
     profile = ProfileFactory(is_linked=True)
     for i in range(20):
         _rated(profile, title=f'Game {i}')
@@ -194,12 +195,12 @@ def test_query_count_does_not_follow_the_size_of_the_wall():
     with CaptureQueriesContext(connection) as ctx:
         rows = build_profile_ratings_page(profile)
         # Touch everything a card draws, so a lazy relation would fire here rather than in the template.
-        [(r.card_game.display_image_url, r.concept.unified_title, r.community_avg) for r in rows]
+        [(r.card_game.display_image_url, r.concept.unified_title, r.community_avg, r.flag_keys) for r in rows]
 
     assert len(rows) == 20
-    assert len(ctx.captured_queries) == 4, (
-        'the builder is documented as four queries flat on the base wall -- a fifth is a decision, not '
-        'an accident'
+    assert len(ctx.captured_queries) == 5, (
+        "the builder is documented as five queries flat on the base wall (the fifth, every version's flags for "
+        "the badges, was the owner's decision of 2026-10-24) -- a sixth is a decision, not an accident"
     )
 
 
@@ -404,9 +405,9 @@ def test_the_landscape_art_costs_no_extra_query(client):
         rows = build_profile_ratings_page(profile)
         [r.concept.landscape_url for r in rows]
 
-    assert len(ctx.captured_queries) == 4, (
-        'the builder is documented as four queries flat on the base wall -- a fifth is a decision, not '
-        'an accident'
+    assert len(ctx.captured_queries) == 5, (
+        "the builder is documented as five queries flat on the base wall (the fifth, every version's flags for "
+        "the badges, was the owner's decision of 2026-10-24) -- a sixth is a decision, not an accident"
     )
     assert not any('raw_response' in q['sql'] for q in ctx.captured_queries)
 
@@ -1023,3 +1024,19 @@ def test_the_placeholder_icon_survives_the_band():
 
     md = css[css.index('@media (min-width: 768px) { .pp-rcard__shot--placeholder'):]
     assert 'padding: 16%' in md[:md.index('\n')], 'the column panel lost its proportional inset'
+
+
+def test_a_rating_card_shows_what_every_version_of_the_game_carries():
+    """A rating is about the whole game, so its badges are the every-version ones (owner, 2026-10-24)."""
+    profile = ProfileFactory(is_linked=True)
+    rating = _rated(profile, title='Pulled')
+    Game.objects.filter(concept=rating.concept).update(is_delisted=True, has_online_trophies=True)
+    rows = build_profile_ratings_page(profile)
+    assert rows[0].flag_keys == ('delisted', 'online')
+
+    GameFactory(concept=rating.concept, is_delisted=False, has_online_trophies=True)
+    assert build_profile_ratings_page(profile)[0].flag_keys == ('online',), 'one version still on sale'
+    html = render_to_string('trophies/partials/profile_detail/rating_list_items.html',
+                            {'profile_ratings': build_profile_ratings_page(profile), 'profile': profile})
+    assert '<use href="#pp-gflag-online"/>' in html and 'pp-gflags--strip' in html
+    assert 'pp-gflag-delisted' not in html

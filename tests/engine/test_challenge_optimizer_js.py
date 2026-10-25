@@ -956,3 +956,13 @@ def test_badge_names_carry_their_type():
     row = JS[JS.index('function stageRow('):]
     assert "var detail = [group.type, group.editions].filter(Boolean).join(', ');" in row
     assert "type: s.type_label || ''" in JS[JS.index('function stageList('):JS.index('function stageRow(')]
+
+
+def test_the_plan_and_its_cards_draw_flags_as_the_sites_badges():
+    """The run page picker's treatment (owner, 2026-10-24): the same glyph the game wears everywhere, feature-tested
+    against a stale utils.js, with no label table of the page's own."""
+    helper = JS[JS.index('function flagBadges(flags) {'):]
+    helper = helper[:helper.index('}') + 1]
+    assert "flags && flags.length && PP.flagBadges ? PP.flagBadges(flags, 'sm', 'row') : null" in helper
+    assert JS.count('flagBadges(item.availability)') == 1 and JS.count('flagBadges(flags)') >= 2
+    assert 'AVAILABILITY_LABELS' not in JS and 'availabilityChip' not in JS

@@ -1,4 +1,4 @@
-{% load humanize custom_filters %}{% comment %} One rating, as a card. The wall's whole content, and the
+{% load humanize custom_filters flag_badges %}{% comment %} One rating, as a card. The wall's whole content, and the
 template the scroller appends -- so it holds cards and nothing else.
 
 WIDE, and deliberately not a cover-forward portrait card. The first cut was one, which borrowed
@@ -46,6 +46,10 @@ Each rating carries `card_game`, `community_avg` and `community_n`, attached in 
         (and since the slim-down retarget the title still links -- game_page_url needs no game row).{% endcomment %}
         <img class="pp-rcard__shot pp-rcard__shot--cover" src="{{ r.concept.cover_url }}" alt="" loading="lazy" decoding="async">
         {% endif %}
+
+        {% comment %}What the GAME carries, every version agreeing (`r.flag_keys`, owner 2026-10-24), along the art's
+        corner: the verdict stamp holds the right-hand side.{% endcomment %}
+        {% flag_badges r.flag_keys 'sm' 'strip' %}
 
         {% comment %}The verdict, stamped over the art at a size you cannot miss.
 

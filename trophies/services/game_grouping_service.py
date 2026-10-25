@@ -20,9 +20,9 @@ from __future__ import annotations
 from collections import OrderedDict
 from typing import Iterable, Mapping
 
-from django.db.models import F, OuterRef, Q, Subquery
+from django.db.models import Exists, F, OuterRef, Q, Subquery
 
-from trophies.models import Game, ProfileGame
+from trophies.models import Game, IGDBMatch, ProfileGame
 
 
 def fetch_user_progress_map(profile, games):
@@ -429,3 +429,77 @@ def version_peer_qs(game):
     if igdb_id is not None:
         return Game.objects.filter(concept__igdb_match__igdb_id=igdb_id)
     return Game.objects.filter(concept_id=concept.pk)
+
+
+def page_version_rows(anchors, fields):
+    """`{anchor: [row, ...]}`: the `fields` of every trophy list on each anchor's GAME PAGE, for a page of anchors.
+
+    `anchors` are `(anchor, concept_id, igdb_id, match_status)` tuples, where the anchor is whatever the caller keys
+    by (a game id, a concept id). THE GAME PAGE'S MEMBERSHIP, because the cards that use this link that page and
+    must agree with it (`GamePageView._resolve`): a concept with a TRUSTED match lives on its IGDB page, whose lists
+    are every game sharing the IGDB id, whatever those games' own match status (membership is ungated); any other
+    concept lives on its `c/` page, which is its own games. Games with a blank or null np id are not lists there
+    (the page's floor), so they are not rows here. An anchor with no concept has no Game page and gets nothing.
+
+    DELIBERATELY NOT `version_peer_qs`, which groups by any match's IGDB id, trusted or not: that is the About
+    tab's and the bulk-flag endpoint's rule, and for an untrusted match the two answer differently.
+
+    `concept_id` and `concept__igdb_match__igdb_id` are read for the grouping and then dropped from the rows, so
+    they cannot be among `fields`.
+
+    ONE query for the page however many anchors, bounded by the page and never by a hunter's library. Rows are
+    dicts of `fields` (`values()`).
+    """
+    anchors = list(anchors)
+    igdb_of, concept_of = {}, {}
+    for anchor, cid, igdb, status in anchors:
+        if cid is None:
+            continue
+        if igdb is not None and status in IGDBMatch.TRUSTED_STATUSES:
+            igdb_of[anchor] = igdb
+        else:
+            concept_of[anchor] = cid
+    if not igdb_of and not concept_of:
+        return {}
+    where = Q()
+    if igdb_of:
+        where |= Q(concept__igdb_match__igdb_id__in=set(igdb_of.values()))
+    if concept_of:
+        where |= Q(concept_id__in=set(concept_of.values()))
+    by_igdb, by_concept = {}, {}
+    rows = (Game.objects.filter(where, np_communication_id__isnull=False).exclude(np_communication_id='')
+            .values('concept_id', 'concept__igdb_match__igdb_id', *fields))
+    for row in rows:
+        igdb = row.pop('concept__igdb_match__igdb_id')
+        cid = row.pop('concept_id')
+        # BOTH maps, not either: a row can belong to an IGDB page and, through its own untrusted concept, to a
+        # `c/` page anchored elsewhere on the same card grid.
+        if igdb is not None:
+            by_igdb.setdefault(igdb, []).append(row)
+        if cid is not None:
+            by_concept.setdefault(cid, []).append(row)
+    out = {anchor: by_igdb.get(igdb, []) for anchor, igdb in igdb_of.items()}
+    out.update({anchor: by_concept.get(cid, []) for anchor, cid in concept_of.items()})
+    return out
+
+
+def no_page_version(lacking):
+    """A `Q` for Game rows whose GAME PAGE has no list matching `lacking`: the database-side twin of
+    `page_version_rows`, for a filter that must agree with the badges.
+
+    "Delisted" on a whole-game grid means every list on the page is delisted (owner, 2026-10-24), which is
+    "no list on the page is NOT delisted", so a caller passes `lacking=Q(is_delisted=False)` beside its own
+    `is_delisted=True`. Same membership as `page_version_rows`: a trusted match's page is every game sharing
+    its IGDB id (ungated), any other concept's is its own games, and the np floor applies. A row with no
+    concept has no page and passes, leaving its own column to decide.
+
+    Correlated `EXISTS`, served by the concept and IGDB id indexes, and only ever beside a flag filter that has
+    already cut the population to the flagged rows.
+    """
+    listed = Q(np_communication_id__isnull=False) & ~Q(np_communication_id='')
+    by_igdb = Game.objects.filter(listed, lacking,
+                                  concept__igdb_match__igdb_id=OuterRef('concept__igdb_match__igdb_id'))
+    by_concept = Game.objects.filter(listed, lacking, concept_id=OuterRef('concept_id'))
+    trusted = Q(concept__igdb_match__status__in=IGDBMatch.TRUSTED_STATUSES,
+                concept__igdb_match__igdb_id__isnull=False)
+    return (trusted & ~Exists(by_igdb)) | (~trusted & ~Exists(by_concept))

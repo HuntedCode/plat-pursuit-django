@@ -1,4 +1,4 @@
-{% load humanize %}{% comment %} One game of one day: its header, and the trophies earned in it.
+{% load humanize flag_badges %}{% comment %} One game of one day: its header, and the trophies earned in it.
 
 Shared by the day MODAL and the standalone day PAGE, which rendered ~28 identical lines each. They are one
 thing displayed in two frames; two copies is the drift the rebuild exists to remove.
@@ -40,6 +40,9 @@ Expects `s` (a session dict with `trophies_list` attached) and `profile` (for th
                 {% endfor %}
             </span>
         </span>
+
+        {% comment %}The list's OWN flags (owner, 2026-10-24): a session is one trophy list, the one played.{% endcomment %}
+        {% flag_badges s.game|flag_keys 'sm' 'row' %}
 
         {% comment %}Named for the GAME, not for the state: an accessible name that says "Hide" while the
         thing is already hidden is the classic trap, so `aria-expanded` carries the state and the name

@@ -138,6 +138,8 @@
 .bd-gcard__flag--plat { top: 5px; right: 5px; box-shadow: none; filter: drop-shadow(0 1px 2px oklch(0 0 0 / 0.5)); }
 .bd-gcard__flag--guide { top: 5px; left: 5px; width: 18px; height: 18px; background: color-mix(in oklch, var(--pp-accent) 88%, transparent); color: var(--pp-bg-0); }
 .bd-gcard__flag--guide svg { width: 11px; height: 11px; }
+/* The flag badges share the guide flag's corner, so with a guide they start under it. */
+.bd-gcard__flag--guide ~ .pp-gflags--stack { top: 27px; }
 .bd-gcard__cbar { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: oklch(0 0 0 / 0.45); }
 .bd-gcard__cbar span { display: block; height: 100%; }
 .bd-gcard__cbar--low { background: var(--pp-error); }

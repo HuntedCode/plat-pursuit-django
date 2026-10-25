@@ -1,4 +1,4 @@
-{% load custom_filters static humanize job_icons %}
+{% load custom_filters static humanize job_icons flag_badges %}
 {% comment %} Stage game card, rebuilt from scratch (Variant A): cover-forward + a distinct CONTRACT footer
 band (the game's home Contract -- jobs + XP -- a hook into the gamification system). Curated to what a
 hunter needs at a glance: cover (state overlay + one progress bar), name, your % + plat status, community
@@ -17,6 +17,9 @@ container, not one big <a>. {% endcomment %}
             <span class="bd-gcard__flag bd-gcard__flag--plat" aria-hidden="true">{% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-platinum)' size='w-3.5 h-3.5' %}</span>
             {% endif %}
             {% if has_guide %}<span class="bd-gcard__flag bd-gcard__flag--guide"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg><span class="sr-only">Roadmap available</span></span>{% endif %}
+            {% comment %}This list's own flags (owner, 2026-10-24): a stage card is one trophy list. Under the guide
+            flag when there is one, which holds the same corner.{% endcomment %}
+            {% flag_badges game|flag_keys 'sm' %}
             {% if pgame and prog > 0 %}
             <span class="bd-gcard__cbar"><span class="{% if prog < 33 %}bd-gcard__cbar--low{% elif prog < 66 %}bd-gcard__cbar--mid{% elif prog < 100 %}bd-gcard__cbar--high{% else %}bd-gcard__cbar--max{% endif %}" style="width: {{ prog }}%"></span></span>
             {% endif %}

@@ -1,4 +1,4 @@
-{% comment %}One Calendar square, opened: the platinums its owner earned on that date.
+{% load flag_badges %}{% comment %}One Calendar square, opened: the platinums its owner earned on that date.
 
 A FRAGMENT, fetched on click. The sheet owns the dialog chrome, so this file is contents only.
 
@@ -58,7 +58,7 @@ THIRD PERSON, because a run page is public. A reader is usually looking at someb
     `role="list"` survives Tailwind's preflight stripping the implicit role from an unstyled list, which
     on WebKit is the difference between a list announcing its length and announcing nothing.{% endcomment %}
     <ul class="pp-cday__shelf" role="list">
-        {% for plat in plats %}
+        {% for plat in plats %}{% with plat_flags=plat.game|flag_keys|flag_drop:'shovelware' %}
         {% comment %}A GAME CAN APPEAR TWICE, and it is not a render fault: a `Game` carrying two
         `trophy_type='platinum'` rows is a catalogue data fault, and the stored count and this shelf
         report it the same way -- so the layers agree and the page looks wrong. Deduping here would make
@@ -107,6 +107,10 @@ THIRD PERSON, because a run page is public. A reader is usually looking at someb
                 {% endcomment %}
                 <span class="pp-cday__veil" aria-hidden="true"></span>
                 {% endif %}
+                {% comment %}The list's own flags (owner, 2026-10-24), less shovelware: the card says that one in
+                words below, with why it matters here. Hidden here and said after the title instead, so the link's
+                name still starts with the game and its year.{% endcomment %}
+                {% if plat_flags %}<span aria-hidden="true">{% flag_badges plat_flags 'sm' %}</span>{% endif %}
             </span>
 
             {% comment %}THE YEAR IS STRUCK, as an engraving: uppercase,
@@ -116,6 +120,7 @@ THIRD PERSON, because a run page is public. A reader is usually looking at someb
             cannot.{% endcomment %}
             <span class="pp-cday__year">{{ plat.on|date:"Y" }}</span>
             <span class="pp-cday__title">{{ plat.game.title_name }}</span>
+            {% if plat_flags %}<span class="sr-only">{% for key in plat_flags %}, {{ key|flag_label|lower }}{% endfor %}</span>{% endif %}
             </a>
 
             {% if not plat.clean %}
@@ -132,7 +137,7 @@ THIRD PERSON, because a run page is public. A reader is usually looking at someb
             <span class="pp-cday__on">{{ plat.on|date:"j F" }}</span>
             {% endif %}
         </li>
-        {% endfor %}
+        {% endwith %}{% endfor %}
     </ul>
     {% else %}
     {% comment %}REACHABLE even on a square that draws: fills are monotone, so a game reclassified as

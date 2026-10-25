@@ -343,14 +343,16 @@ Every row carries `platforms`: the union over the contract's member games in dis
 (`ordered_platform_union`), each with the `platform_color_str` tone, read in one `Game` query per page
 (`picker._decorations`, which shares one membership read with the covers).
 
-Rows also carry `availability`, drawn as red **Delisted** / **Unobtainable** chips (owner, 2026-10-10). The rule is
-**"can this still be finished?"**: a flag shows only when no way to finish the contract has a listed (or obtainable)
-stack. A contract finishes through ANY stack of its own concepts, so one listed stack there means no flag; or through
+Rows also carry `availability`, drawn as the site's flag badges (owner, 2026-10-10; badges and the online and
+shovelware flags 2026-10-24, see [community flags](community-flags.md#where-flags-show-badges)). The rule lives in
+`challenges/services/contract_flags.py`, shared with every other surface a contract shows on, and is
+**"can this still be finished?"**: a flag shows only when no way to finish the contract has a stack without it. A contract finishes through ANY stack of its own concepts, so one listed stack there means no flag; or through
 a bundle, which counts only as a WHOLE (`_detect_tiers`), so a bundle clears the flag only when every one of its
 concepts has a listed stack. A concept with no games on record yet counts as unknown and never causes a flag.
 `eligibility.contract_membership` keeps the bundles grouped for exactly this
 (`member_concepts_by_contract` is its flattened union). A contract with no member games on record shows none. Same
-`Game` query as the platforms, so no extra cost.
+`Game` query as the platforms, so no extra cost. A board's squares share their covers' membership read with
+`contract_flag_keys(contracts, membership)`, so the squares' badges cost one query.
 
 The Challenges page and the Hall of Fame link **My Challenges** from their header (owner, 2026-10-18), a solid
 button beside "How Challenges work" (`partials/_browse_header_actions.html`). It used to sit at the end of the
@@ -1555,6 +1557,7 @@ prod first.
 | `challenges/services/challenge_service.py` | **every write**, and every gate |
 | `challenges/services/eligibility.py` | the pools, the hatch count, the importer's date |
 | `challenges/services/picker.py` | the three panels: read-only, decides nothing. Also `unobtainable_contract_ids()`, the cached set the optimizer never suggests |
+| `challenges/services/contract_flags.py` | a contract's flag badges, "can it still be finished?" (`contract_flag_keys`, `finishable`), shared by the picker, the squares and the Career board |
 | `challenges/services/plan_solver.py` + `challenges/services/planner.py` | the optimizer's pure solver, and its data (pool, badge stages, plan). See [The optimizer](#the-optimizer) |
 | `challenges/services/allowance.py` | the optimizer's weekly allowance (`OptimizerAllowance`): one free plan a week, members any time |
 | `challenges/services/build_line.py` | the optimizer's first-come line for whole-catalogue pool builds (raw Redis) |

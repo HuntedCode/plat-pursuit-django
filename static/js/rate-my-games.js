@@ -160,7 +160,7 @@ window.PlatPursuit = window.PlatPursuit || {};
                         unified_title: g.unified_title,
                         concept_icon_url: g.concept_icon_url,
                         slug: g.slug,
-                        is_shovelware: !!g.is_shovelware,
+                        flags: g.flags || [],
                         is_dlc: true,
                     }));
                 });
@@ -298,8 +298,16 @@ window.PlatPursuit = window.PlatPursuit || {};
 
             var dlcFlag = el('rmg-flag-dlc');
             if (dlcFlag) { dlcFlag.classList.toggle('hidden', !isDlc); }
-            var shovelFlag = el('rmg-flag-shovel');
-            if (shovelFlag) { shovelFlag.classList.toggle('hidden', !game.is_shovelware); }
+            // The game's flag badges (owner, 2026-10-24), every version agreeing, beside the DLC flag. Shovelware
+            // among them replaces the card's old "Shovelware" word, and only shows when the hunter opted it in.
+            // Feature-tested: a cached utils.js can predate the helper, and the card is whole without them.
+            var flagRow = el('rmg-flags');
+            if (flagRow) {
+                var old = flagRow.querySelector('.pp-gflags');
+                if (old) { old.remove(); }
+                var badges = (game.flags || []).length && PP.flagBadges ? PP.flagBadges(game.flags, 'md', 'row') : null;
+                if (badges) { flagRow.appendChild(badges); }
+            }
 
             var formTitle = el('rmg-form-title');
             if (formTitle) { formTitle.textContent = isDlc ? 'Rate this DLC' : 'Rate this game'; }

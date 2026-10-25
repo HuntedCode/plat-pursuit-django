@@ -478,16 +478,17 @@ def concepts_defining_a_platinum(concept_ids):
 def build_profile_ratings_page(profile, sort='recent', page=1, per_page=RATINGS_PER_PAGE, dlc=False):
     """One page of a hunter's ratings, with everything each card draws already attached.
 
-    Four queries flat on the base wall, three on the DLC one: the ratings themselves, the community scores
-    for the concepts on it, the games behind those concepts, and (base only) which of those concepts define
-    a platinum, for the verdict wording. Nothing here scales with the size of the account -- only with
-    `per_page`.
+    Five queries flat on the base wall, four on the DLC one: the ratings themselves, the community scores
+    for the concepts on it, the games behind those concepts, (base only) which of those concepts define
+    a platinum, for the verdict wording, and every version's flags for the badges (owner, 2026-10-24). Nothing
+    here scales with the size of the account -- only with `per_page`.
 
     Sliced rather than paginated. `Paginator` runs a `COUNT(*)` over the whole set on every page, and the
     header already knows the total from `profile_rating_summary`, so paying for it again per page buys
     nothing.
     """
     from trophies.models import UserConceptRating
+    from trophies.services.flag_badges import work_keys_for_concepts
 
     if sort not in _RATING_SORT_ORDERS:
         sort = PROFILE_RATING_SORTS[0][0]
@@ -511,9 +512,12 @@ def build_profile_ratings_page(profile, sort='recent', page=1, per_page=RATINGS_
     plat_concepts = concepts_defining_a_platinum(
         set() if dlc else {r.concept_id for r in rows}
     )
+    # A rating is about the whole GAME, so its badges are the ones every version carries (owner, 2026-10-24).
+    flags = work_keys_for_concepts(r.concept for r in rows)
 
     for r in rows:
         r.card_game = games.get(r.concept_id)
+        r.flag_keys = flags.get(r.concept_id, ())
         # Shown only when someone OTHER than this hunter has rated it too: "you 4.5, community 4.5" against
         # a sample of one is not a comparison, it is the same number printed twice.
         stats = community.get((r.concept_id, r.concept_trophy_group_id))

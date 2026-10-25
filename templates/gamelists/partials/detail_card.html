@@ -1,4 +1,4 @@
-{% comment %}ONE CARD on a list, extracted 2026-09 when sections arrived.
+{% load flag_badges %}{% comment %}ONE CARD on a list, extracted 2026-09 when sections arrived.
 
 Its own partial because a sectioned list renders one grid PER GROUP, and the alternative was an
 `{% if groups %}` wrapped around two near-identical copies of this markup -- which is how the two
@@ -30,7 +30,7 @@ Rendered inside `detail_group.html`, which owns the grid and the section header.
     ordering -- the entire content of a ranked list -- was the one thing a screen reader never got.
     The JS repainted that span after every drag, maintaining a string nothing announced.{% endcomment %}
     <a href="{{ item.concept.game_page_url }}" class="pp-gcard" data-gcard
-       aria-label="{% if is_ranked %}Number {{ item.display_rank }}: {% endif %}{{ item.concept.unified_title }}">
+       aria-label="{% if is_ranked %}Number {{ item.display_rank }}: {% endif %}{{ item.concept.unified_title }}{% for key in item.flag_keys %}, {{ key|flag_label|lower }}{% endfor %}">
         <div class="pp-gcard__cover">
             {% if item.cover %}
             {% comment %}`display_image_url` is the single source for the cover chain (IGDB-first),
@@ -75,6 +75,9 @@ Rendered inside `detail_group.html`, which owns the grid and the section header.
             spoken rank has to live there rather than here.{% endcomment %}
             <span class="gl-rank" aria-hidden="true">{{ item.display_rank }}</span>
             {% endif %}
+            {% comment %}What the GAME carries, every version agreeing (owner, 2026-10-24), under the rank plate on a
+            ranked list. The link's `aria-label` replaces anything inside it, so the flags are said there too.{% endcomment %}
+            {% flag_badges item.flag_keys %}
         </div>
 
         <div class="pp-gcard__body">

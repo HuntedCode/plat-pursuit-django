@@ -11,6 +11,7 @@ from trophies.models import (
     BadgeSeries, Trophy, UserConceptRating, Stage, ConceptGenre, ConceptTheme,
     ConceptEngine, Contract, IGDBMatch,
 )
+from trophies.services.game_grouping_service import no_page_version
 
 
 # ---------------------------------------------------------------------------
@@ -171,7 +172,7 @@ def annotate_community_ratings(qs, concept_ref_path='concept_id'):
     )
 
 
-def apply_game_browse_filters(qs, form, sort_val=''):
+def apply_game_browse_filters(qs, form, sort_val='', by_page=False):
     """Apply all GameSearchForm filters to a Game queryset.
 
     Args:
@@ -179,6 +180,9 @@ def apply_game_browse_filters(qs, form, sort_val=''):
         form: A *valid* GameSearchForm instance.
         sort_val: The selected sort value (needed to decide whether
                   rating annotations are required for sorting).
+        by_page: True on the whole-game grids (one card per Game page: Browse
+                 Games, tag detail), where a flag filter must match the card's
+                 badge: every list on the page carries it.
 
     Returns:
         (qs, annotations_applied): The filtered queryset and a set of strings
@@ -253,22 +257,22 @@ def apply_game_browse_filters(qs, form, sort_val=''):
         )
 
     # --- Community flag filters (hide wins on conflict) ---
-    if form.cleaned_data.get('hide_delisted'):
-        qs = qs.filter(is_delisted=False)
-    elif form.cleaned_data.get('show_delisted'):
-        qs = qs.filter(is_delisted=True)
-    if form.cleaned_data.get('hide_unobtainable'):
-        qs = qs.filter(is_obtainable=True)
-    elif form.cleaned_data.get('show_unobtainable'):
-        qs = qs.filter(is_obtainable=False)
-    if form.cleaned_data.get('hide_online'):
-        qs = qs.filter(has_online_trophies=False)
-    elif form.cleaned_data.get('show_online'):
-        qs = qs.filter(has_online_trophies=True)
-    if form.cleaned_data.get('hide_buggy'):
-        qs = qs.filter(has_buggy_trophies=False)
-    elif form.cleaned_data.get('show_buggy'):
-        qs = qs.filter(has_buggy_trophies=True)
+    # SHOW MATCHES THE BADGE (owner, 2026-10-24). On a whole-game grid the card wears a flag only when every
+    # list on its Game page has it, so "Delisted" there means no list on the page is still listed; otherwise
+    # a filtered card could arrive without the badge it was filtered for. HIDE needs no twin: dropping the
+    # flagged rows leaves a card only for a page with an unflagged list, which is a card without the badge.
+    for hide, show, flagged, clear in (
+        ('hide_delisted', 'show_delisted', Q(is_delisted=True), Q(is_delisted=False)),
+        ('hide_unobtainable', 'show_unobtainable', Q(is_obtainable=False), Q(is_obtainable=True)),
+        ('hide_online', 'show_online', Q(has_online_trophies=True), Q(has_online_trophies=False)),
+        ('hide_buggy', 'show_buggy', Q(has_buggy_trophies=True), Q(has_buggy_trophies=False)),
+    ):
+        if form.cleaned_data.get(hide):
+            qs = qs.filter(clear)
+        elif form.cleaned_data.get(show):
+            qs = qs.filter(flagged)
+            if by_page:
+                qs = qs.filter(no_page_version(clear))
 
     # --- Community rating filters (dual-range sliders) ---
     rating_min = form.cleaned_data.get('rating_min') or 0

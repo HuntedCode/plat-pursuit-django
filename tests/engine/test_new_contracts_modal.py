@@ -474,9 +474,10 @@ def test_the_modals_cost_does_not_grow_with_the_number_of_heroes(hunter):
     assert cost() == two, 'the modal got more expensive purely by having more heroes'
     # AND AN ABSOLUTE CEILING. The comparison above is relative, so a mutation adding one CONSTANT
     # query per render -- dropping `with_ranking=False`, reading Job.DISCIPLINES from the DB --
-    # moves both sides equally and is invisible to it. Four: the count, the rows, the jobs
-    # prefetch, the hero covers. `newest` comes from the rows in memory and costs nothing.
-    assert two == 4, 'the modal costs %d queries per render, not 4' % two
+    # moves both sides equally and is invisible to it. Seven: the count, the rows, the jobs
+    # prefetch, the hero covers, and three for the rows' flag badges (owner, 2026-10-24: membership's two
+    # and the member games' flags). `newest` comes from the rows in memory and costs nothing.
+    assert two == 7, 'the modal costs %d queries per render, not 7' % two
 
 
 def test_hero_covers_are_one_query_however_many_heroes_there_are(hunter, django_assert_num_queries):

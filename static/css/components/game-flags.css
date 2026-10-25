@@ -1,0 +1,45 @@
+/* Game flag badges (owner, 2026-10-24): what a game carries (unobtainable, delisted, online trophies, shovelware,
+   and buggy on the Game pages and browse), on every surface that shows a game. Drawn by `{% flag_badges %}`
+   (trophies/templatetags/flag_badges.py) and `PlatPursuit.flagBadges` (utils.js), glyphs from the sprite in
+   partials/icons/_game_flag_sprite.html.
+
+   AN OPAQUE TINTED PLATE, NOT THE TONAL CHIP. `.bd-chip`'s 12% wash is mixed over `--pp-bg-2` and read fine on a
+   panel, but on a cover it was a 13px pill over somebody's key art, which is how a flag went unseen. The plate is
+   the tone mixed into the page's own surface, so it reads the same on any art, and its shadow lifts it off a
+   light cover. */
+.pp-gflags { display: flex; gap: 4px; pointer-events: none; }
+.pp-gflags--stack, .pp-gflags--strip { position: absolute; top: 6px; left: 6px; z-index: 2; }
+.pp-gflags--stack { flex-direction: column; }
+.pp-gflags--row { flex-shrink: 0; align-items: center; }
+.pp-gflags--sm { gap: 3px; }
+:is(.pp-gflags--stack, .pp-gflags--strip).pp-gflags--sm { top: 4px; left: 4px; }
+
+.pp-gflag {
+    --c: var(--pp-text-dim);
+    --pp-gflag-plate: color-mix(in oklab, var(--c) 20%, var(--pp-bg-1));
+    /* The struck-out glyphs cut their slash through in this colour (see the sprite): the plate's own, so the gap
+       reads as a gap. Its own variable so a surface that draws the glyph on something else can say what. */
+    --pp-gflag-cut: var(--pp-gflag-plate);
+    display: inline-grid; place-items: center; flex-shrink: 0;
+    width: 22px; height: 22px; border-radius: 7px;
+    color: var(--c);
+    background: var(--pp-gflag-plate);
+    border: 1px solid color-mix(in oklab, var(--c) 60%, transparent);
+    box-shadow: 0 1px 3px rgb(0 0 0 / 0.45);
+    /* Back on for the badge alone, so its `title` shows on a desktop hover; the stack's own box stays click-through.
+       Inside a card's link a tap on a badge is still a tap on the card. */
+    pointer-events: auto;
+}
+/* Size only: the stroke is the symbol's own (Lucide's 2), which a `<use>` copy keeps over anything set here. */
+.pp-gflag__i { width: 14px; height: 14px; }
+.pp-gflags--sm .pp-gflag { width: 18px; height: 18px; border-radius: 6px; }
+.pp-gflags--sm .pp-gflag__i { width: 12px; height: 12px; }
+
+/* Tones by severity: red is "you cannot get these trophies", amber a caution, blue information. */
+.pp-gflag--error   { --c: var(--pp-error); }
+.pp-gflag--warning { --c: var(--pp-warning); }
+.pp-gflag--info    { --c: var(--pp-info); }
+
+/* The Game pages' labelled chips (`_game_flags.html`) draw the same glyphs on `.bd-chip`'s own surface, so a
+   struck-out glyph cuts its slash in THAT colour (the chip's recipe in chips.css), not a badge plate's. */
+.pp-gflag-chip { --pp-gflag-cut: color-mix(in oklab, var(--c) 12%, var(--pp-bg-2)); }

@@ -1247,3 +1247,37 @@ def test_a_refused_submit_is_never_silent():
         'onChange no longer clears the urged line between games'
     )
 
+
+
+# ── flag badges (owner, 2026-10-24) ───────────────────────────────────────────────────────────────
+
+@pytest.mark.parametrize('queue_type', ['base', 'dlc'])
+def test_each_card_carries_the_games_every_version_flags(client, queue_type):
+    """A rating is about the whole game, so the card wears what every version carries, on both halves of the
+    queue. It replaced the card's own "Shovelware" word, which only ever said one of them."""
+    from trophies.models import Game
+
+    profile = _hunter()
+    game = _dlc_ready(profile, name='Flagged Pack') if queue_type == 'dlc' else _ratable(profile, name='Flagged')
+    Game.objects.filter(pk=game.pk).update(has_online_trophies=True, is_obtainable=False)
+    client.force_login(profile.user)
+
+    body = client.get(QUEUE, {'queue_type': queue_type}).json()
+
+    if queue_type == 'dlc':
+        assert [grp['flags'] for grp in body['groups']] == [['unobtainable', 'online']]
+    else:
+        assert [item['flags'] for item in body['queue']] == [['unobtainable', 'online']]
+    assert 'is_shovelware' not in str(body), 'the old single-flag field is gone'
+
+
+def test_the_card_draws_the_flags_as_the_sites_badges():
+    js = (ROOT / 'static' / 'js' / 'rate-my-games.js').read_text(encoding='utf-8')
+    assert "(game.flags || []).length && PP.flagBadges ? PP.flagBadges(game.flags, 'md', 'row') : null" in js
+    assert 'flags: g.flags || []' in js, 'the DLC flatten carries the group flags onto each pack'
+    assert 'rmg-flag-shovel' not in js and 'is_shovelware' not in js
+    markup = _markup()
+    assert 'id="rmg-flags"' in markup and 'rmg-flag-shovel' not in markup
+    css = (ROOT / 'static' / 'css' / 'components' / 'rate-wizard.css').read_text(encoding='utf-8')
+    assert '.rmg__flags:not(:has(.rmg__flag:not(.hidden), .pp-gflags)) { display: none; }' in css, (
+        'a row holding only badges would hide itself')

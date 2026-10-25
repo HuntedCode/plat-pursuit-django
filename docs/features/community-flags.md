@@ -126,8 +126,52 @@ plus `"game_ids": [12, 34]` on the versions endpoint.
 - **Django admin**: GameFlagAdmin with approve/dismiss bulk actions
 - **Shovelware system**: Approving `is_shovelware`/`not_shovelware` flags sets `shovelware_lock=True`, preventing auto-detection from overwriting the manual decision
 
+## Where Flags Show (badges)
+
+Since 2026-10-24 (owner) a game's flags show **everywhere the game is displayed**, as a badge: a small tinted
+plate with one Lucide glyph, stacked on a cover's corner or at the end of a row. Four flags are everywhere:
+**Unobtainable** (red, a struck-out trophy), **Delisted** (amber, a struck-out store), **Online trophies** (blue,
+wifi) and **Shovelware** (amber, a shovel). **Buggy trophies** (amber, a bug) keeps only the places it already
+showed: the Game pages, the browse cards and a franchise's version rows.
+
+| Piece | Where |
+|-------|-------|
+| The rule (which keys a card shows) | `trophies/services/flag_badges.py` |
+| The glyphs, once per page | `templates/partials/icons/_game_flag_sprite.html`, mounted in `base.html` |
+| Drawing them in a template | `{% load flag_badges %}`, `{% flag_badges keys 'md'/'sm' 'stack'/'strip'/'row' %}`, `game\|flag_keys` |
+| Drawing them from JSON | `PlatPursuit.flagBadges(keys, size, layout)` in `static/js/utils.js` |
+| The Game pages' labelled chips | `templates/trophies/partials/_game_flags.html`, same glyphs plus a word |
+| A contract's flags | `challenges/services/contract_flags.py` |
+| Styles | `static/css/components/game-flags.css` |
+
+**Three rules, decided by what the card stands for:**
+
+| The card is | It shows | Function |
+|-------------|----------|----------|
+| One trophy list (a hunter's own game, a day's platinum, a Trophy Lists card, a version row) | that list's own flags | `own_keys`, `game\|flag_keys` |
+| A whole game (a Game List entry, a rating, a search result, a condensed browse card, a family row on the About tab) | a flag only when EVERY list on its Game page has it | `work_keys_for_games`, `work_keys_for_concepts` |
+| A contract (the Career board, a job, the new-contracts modal, a challenge square, the picker) | a flag only when no way to finish the contract avoids it, and none once its trophies are earned (Ready to Claim, Claimed, Banked, a finished square) | `contract_flags.contract_flag_keys` |
+
+"Every list on its Game page" is the page's own membership (`game_grouping_service.page_version_rows`, the same
+rule `GamePageView._resolve` uses), so a whole-game card agrees with the page it links. It answers "can I still do
+this game?": a PS3 list going unobtainable does not mark a game the PS4 list still plats. The browse **Delisted /
+Unobtainable / Online / Buggy** filters follow the badges: on a whole-game grid (Browse Games, a genre or theme) they
+match only games every list of which carries the flag (`no_page_version`), so a filtered card always wears its badge.
+
+**Not badged, on purpose:** tiny thumbnails (list mosaics, the Hall of Fame strips, trophy log thumbs, a franchise
+group's header cover, whose version rows carry the badges), share images, the Monthly Recap (stored snapshots),
+emails, the logged-out landing page and staff pages. A finished challenge square shows none: its trophies are earned.
+
 ## Gotchas and Pitfalls
 
+- **A badge inside a link with an `aria-label` is silent.** The label replaces the link's content, the badges'
+  screen-reader text included, so those cards say the flags in the label itself (a Game List entry, the shareables
+  card, the list search's rows). A challenge square hides its badges and says the flags in its one sentence.
+- **A whole-game card reads columns of OTHER games**, so it needs the page's rows (one bounded query). Pass
+  objects loaded with `select_related('concept', 'concept__igdb_match')` (or `igdb_match` on concepts):
+  `work_keys_for_*` reads the match off them, and an unloaded match is one query per row.
+- **Assert on the `<use>`, not the symbol id.** Every page carries the sprite, so `id="pp-gflag-online"` is in
+  every response; a test for a badge looks for `<use href="#pp-gflag-online"/>`.
 - **No unique constraint**: Duplicate prevention is in the service layer, not the database. This is intentional: the "allow re-flagging after approval/dismissal" requirement means a DB unique constraint would be too restrictive.
 - **`missing_vr`, `region_incorrect`, and `other` require manual action**: Approving these flags marks them as approved but does NOT automatically change any Game fields. Staff must manually handle the reported issue. The `other` flag type requires the user to provide details describing the issue.
 - **Shovelware lock**: Approving shovelware flags sets `shovelware_lock=True`, which prevents the automated shovelware detection service from overwriting the manual decision. This is the correct behavior.

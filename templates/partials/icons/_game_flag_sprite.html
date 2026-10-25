@@ -1,0 +1,29 @@
+{% comment %}THE GAME FLAG GLYPHS, once per page (mounted in base.html, like the Frame rarity sprite). A badge,
+a labelled chip and a JSON-built row are all a `<use href="#pp-gflag-KEY">`, so there is one copy of each icon
+to change (owner, 2026-10-24; keys and labels: `trophies/services/flag_badges.py`).
+
+LUCIDE, VERBATIM, except the two struck-out glyphs: Lucide has no store-off or trophy-off, so those are its
+`store` and `trophy` under Lucide's own `-off` slash. The slash is drawn twice: first a wider stroke in the
+surface colour (`--pp-gflag-cut`, set by the badge and inherited into the `<use>` copy), which cuts a gap
+through the glyph the way Lucide's `-off` icons are drawn, then the slash itself. A mask would do it too, but
+a page of badges would repeat its id.
+
+Stroke and caps are set on EACH SYMBOL, not on the outer `<svg>`: a `<use>` copy inherits from the symbol and
+the `<use>` that draws it, never from the sprite around the original, so attributes up there would reach
+nothing. Colour is `currentColor`, from the badge.
+Each symbol carries its label and tone (`data-label`, `data-tone`) from `FLAG_META`, so a script drawing a
+badge reads them here rather than keeping a second copy.{% endcomment %}{% load flag_badges %}
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+        {# online: Lucide `wifi` #}
+        <symbol id="pp-gflag-online" data-label="{{ 'online'|flag_label }}" data-tone="{{ 'online'|flag_tone }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h.01"/><path d="M2 8.82a15 15 0 0 1 20 0"/><path d="M5 12.859a10 10 0 0 1 14 0"/><path d="M8.5 16.429a5 5 0 0 1 7 0"/></symbol>
+        {# delisted: Lucide `store, struck out` #}
+        <symbol id="pp-gflag-delisted" data-label="{{ 'delisted'|flag_label }}" data-tone="{{ 'delisted'|flag_tone }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m2 7 4.41-4.41A2 2 0 0 1 7.83 2h8.34a2 2 0 0 1 1.42.59L22 7"/><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><path d="M15 22v-4a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2v4"/><path d="M2 7h20"/><path d="M22 7v3a2 2 0 0 1-2 2a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 16 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 12 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 8 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 4 12a2 2 0 0 1-2-2V7"/><path d="m2 2 20 20" style="stroke: var(--pp-gflag-cut, var(--pp-bg-1)); stroke-width: 5"/><path d="m2 2 20 20"/></symbol>
+        {# unobtainable: Lucide `trophy, struck out` #}
+        <symbol id="pp-gflag-unobtainable" data-label="{{ 'unobtainable'|flag_label }}" data-tone="{{ 'unobtainable'|flag_tone }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/><path d="m2 2 20 20" style="stroke: var(--pp-gflag-cut, var(--pp-bg-1)); stroke-width: 5"/><path d="m2 2 20 20"/></symbol>
+        {# buggy: Lucide `bug` #}
+        <symbol id="pp-gflag-buggy" data-label="{{ 'buggy'|flag_label }}" data-tone="{{ 'buggy'|flag_tone }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m8 2 1.88 1.88"/><path d="M14.12 3.88 16 2"/><path d="M9 7.13v-1a3.003 3.003 0 1 1 6 0v1"/><path d="M12 20c-3.3 0-6-2.7-6-6v-3a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v3c0 3.3-2.7 6-6 6"/><path d="M12 20v-9"/><path d="M6.53 9C4.6 8.8 3 7.1 3 5"/><path d="M6 13H2"/><path d="M3 21c0-2.1 1.7-3.9 3.8-4"/><path d="M20.97 5c0 2.1-1.6 3.8-3.5 4"/><path d="M22 13h-4"/><path d="M17.2 17c2.1.1 3.8 1.9 3.8 4"/></symbol>
+        {# shovelware: Lucide `shovel` #}
+        <symbol id="pp-gflag-shovelware" data-label="{{ 'shovelware'|flag_label }}" data-tone="{{ 'shovelware'|flag_tone }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 22v-5l5-5 5 5-5 5z"/><path d="M9.5 14.5 16 8"/><path d="m17 2 5 5-.5.5a3.53 3.53 0 0 1-5 0s0 0 0 0a3.53 3.53 0 0 1 0-5L17 2"/></symbol>
+    </defs>
+</svg>

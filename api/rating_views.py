@@ -24,6 +24,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from trophies.models import Concept, ConceptTrophyGroup
+from trophies.services.flag_badges import work_keys_for_concepts
 from api.utils import safe_bool, safe_int
 
 logger = logging.getLogger('psn_api')
@@ -306,10 +307,9 @@ class WizardQueueView(APIView):
                 return Response({'queue': [], 'count': 0, 'has_more': False})
 
             if queue_type == 'dlc':
-                return self._get_dlc_queue(
-                    profile, ratable_concept_ids, limit, offset,
-                    include_shovelware=include_shovelware,
-                )
+                # Shovelware is already in or out of `ratable_concept_ids` by the opt-in, so the DLC queue needs
+                # nothing more: its flag badges say which packs belong to a shovelware game.
+                return self._get_dlc_queue(profile, ratable_concept_ids, limit, offset)
 
             # ── Base game queue ──────────────────────────────────────── #
             # "Rated" means COMPLETE -- a row that carries a recommendation -- not merely a row that
@@ -408,7 +408,7 @@ class WizardQueueView(APIView):
                 if dt and (cid not in plat_dates or dt > plat_dates[cid]):
                     plat_dates[cid] = dt
 
-            from trophies.models import Trophy, Game
+            from trophies.models import Trophy
             concepts_with_plat = set(
                 Trophy.objects.filter(
                     game__concept_id__in=paginated_ids,
@@ -416,18 +416,10 @@ class WizardQueueView(APIView):
                 ).values_list('game__concept_id', flat=True).distinct()
             )
 
-            # Concepts that have at least one non-shovelware game. When the
-            # user opted into shovelware, anything NOT in this set only shows
-            # because of that opt-in, so we badge it. (Skip the query when the
-            # opt-in is off: nothing in the queue can be shovelware then.)
-            shovelware_concept_ids = set()
-            if include_shovelware:
-                clean_concept_ids = set(
-                    Game.objects.filter(concept_id__in=paginated_ids)
-                    .exclude_shovelware()
-                    .values_list('concept_id', flat=True).distinct()
-                )
-                shovelware_concept_ids = set(paginated_ids) - clean_concept_ids
+            # The card's flag badges (owner, 2026-10-24): a rating is about the whole GAME, so the ones every
+            # version carries. Shovelware among them is what the old `is_shovelware` badge said, and it can only
+            # appear when the hunter opted shovelware into the queue. One bounded query for the page.
+            flags = work_keys_for_concepts(paginated)
 
             queue = []
             for c in paginated:
@@ -448,7 +440,7 @@ class WizardQueueView(APIView):
                     # The recommendation's middle option names what was rough, so it follows the same
                     # has-platinum fact the hours label does.
                     **UserConceptRating.recommendation_copy(has_plat),
-                    'is_shovelware': cid in shovelware_concept_ids,
+                    'flags': list(flags.get(cid, ())),
                 }
                 # A re-served rating MUST arrive with its own scores. The form's defaults are 5/5/5/3.0,
                 # so a card that loads blank and is submitted for its recommendation silently overwrites a
@@ -486,12 +478,11 @@ class WizardQueueView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-    def _get_dlc_queue(self, profile, ratable_concept_ids, limit, offset,
-                       include_shovelware=False):
+    def _get_dlc_queue(self, profile, ratable_concept_ids, limit, offset):
         """Build the DLC rating queue grouped by parent concept (ratings-only)."""
         from collections import OrderedDict
         from django.db.models import Count
-        from trophies.models import Trophy, EarnedTrophy, UserConceptRating, Game
+        from trophies.models import Trophy, EarnedTrophy, UserConceptRating
         from trophies.services.review_hub_service import ReviewHubService
 
         # `raw_response` is the ~30 KB IGDB API blob and nothing here reads it. Without the defer it rides
@@ -568,17 +559,6 @@ class WizardQueueView(APIView):
         # Never-rated packs lead, the recommendation backlog follows -- see the base queue for why.
         dlc_groups.sort(key=lambda g: g.id in dlc_any_rated)
 
-        # Concepts that surface only because of the shovelware opt-in (no
-        # non-shovelware game). Skip the query when the opt-in is off.
-        shovelware_concept_ids = set()
-        if include_shovelware:
-            clean_concept_ids = set(
-                Game.objects.filter(concept_id__in=dlc_concept_ids)
-                .exclude_shovelware()
-                .values_list('concept_id', flat=True).distinct()
-            )
-            shovelware_concept_ids = set(dlc_concept_ids) - clean_concept_ids
-
         groups_dict = OrderedDict()
         total_items = 0
 
@@ -594,7 +574,6 @@ class WizardQueueView(APIView):
                     'unified_title': g.concept.unified_title,
                     'concept_icon_url': g.concept.cover_url or '',
                     'slug': g.concept.slug,
-                    'is_shovelware': cid in shovelware_concept_ids,
                     'items': [],
                     # Parallel to `items`: the CTG primary key behind each one, so the prefill can be
                     # attached AFTER the slice. It never leaves the server -- the item itself carries only
@@ -652,6 +631,13 @@ class WizardQueueView(APIView):
                 }
                 page_groups_dict[cid]['items'] = []
             page_groups_dict[cid]['items'].append(item)
+
+        # The page's flag badges, as the base queue's: every version agreeing, for THIS page's games only (a
+        # completed-DLC library runs to thousands of packs). One bounded query.
+        concept_of = {g.concept_id: g.concept for g in dlc_groups}
+        flags = work_keys_for_concepts(concept_of[cid] for cid in page_groups_dict)
+        for cid, grp in page_groups_dict.items():
+            grp['flags'] = list(flags.get(cid, ()))
 
         return Response({
             'groups': list(page_groups_dict.values()),

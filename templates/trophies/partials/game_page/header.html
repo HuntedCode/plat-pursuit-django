@@ -1,4 +1,4 @@
-{% load humanize %}
+{% load humanize flag_badges %}
 {% comment %}
 The Game page hero, rebuilt under the Page Principles (the Discovery fix plan's branch 4, DS-07; mock-ups the
 owner approved 2026-10-22). It answers, in order: what game is this, where do I stand on it, is there a
@@ -46,8 +46,8 @@ Platform chips are the UNION across the list set; the players count is the page'
                     {% endfor %}
                     {% comment %}Shovelware rides the platform row, as on the Trophy List page, and only when every
                     list is flagged (`list_flags`, the flags all of this game's lists share).{% endcomment %}
-                    {% if list_flags.is_shovelware %}
-                        <span class="gd-plat gd-plat--warn" title="Every trophy list for this game is flagged as shovelware">Shovelware</span>
+                    {% if 'shovelware' in list_flags %}
+                        <span class="gd-plat gd-plat--warn" title="Every trophy list for this game is flagged as shovelware">{% flag_icon 'shovelware' 'gd-plat__i' %}Shovelware</span>
                     {% endif %}
                 </div>
 
@@ -64,11 +64,9 @@ Platform chips are the UNION across the list set; the players count is the page'
                 </p>
                 {% endwith %}
 
-                {% comment %}The flags EVERY list shares (owner, 2026-10-10). Gated on `has_chips` so the partial's
-                "No Known Issues" chip never draws: an empty shared set does not mean no list has an issue.{% endcomment %}
-                {% if list_flags.has_chips %}
-                    {% include 'trophies/partials/_game_flags.html' with game=list_flags variant='full' hide_shovelware=True %}
-                {% endif %}
+                {% comment %}The flags EVERY list shares (owner, 2026-10-10). No `clean`: an empty shared set does
+                not mean no list has an issue, so this page never says "No known issues".{% endcomment %}
+                {% include 'trophies/partials/_game_flags.html' with flags=list_flags|flag_drop:'shovelware' %}
             </div>
 
             {% comment %}The hunter's status (rule 1); with no hunter to describe, the invitation (GL-09).{% endcomment %}

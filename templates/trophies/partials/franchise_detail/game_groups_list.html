@@ -1,5 +1,5 @@
 {% load humanize %}
-{% load custom_filters %}
+{% load custom_filters flag_badges %}
 {% comment %}
     Shared IGDB-grouped game list. Each group is one IGDB game entry which may have several PSN versions
     (PS4 / PS5 / EU / NA). Used by BOTH the Franchise detail page and the Company detail page (company's
@@ -55,7 +55,10 @@
                             {% endfor %}
                         </span>
                         {% include 'partials/region_badges.html' with game=game badge_size='badge-xs' %}
-                        {% include 'trophies/partials/_game_flags.html' with game=game %}
+                        {% comment %}Each version's OWN flags: a row is one trophy list. Buggy stays here, where it
+                        always showed (owner, 2026-10-24). The small header cover carries none: the rows under it
+                        already say which versions carry what.{% endcomment %}
+                        {% flag_badges game|flag_keys:True 'sm' 'row' %}
                     </span>
                     <span class="fgroup__meta-r">
                         {% if game.defined_trophies %}

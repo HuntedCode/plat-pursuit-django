@@ -21,12 +21,15 @@ other ~130 lines would start drifting immediately -- the same mistake this codeb
 three times over in one week (three hand-rolled FLIPs, a re-rolled filter chip, a re-rolled board row).
 The map branch stays the default and is what Career renders, untouched.
 {% endcomment %}
-{% load humanize custom_filters job_icons %}
+{% load humanize custom_filters job_icons flag_badges %}
 <div class="rp-row card group relative overflow-hidden bg-base-200/70 border-2 border-base-300 shadow-md shadow-neutral transition-all {% if p.status == 'claimable' %}rp-row--claimable{% elif p.status == 'accepted' %}rp-row--accepted{% endif %}" data-status="{{ p.status }}" data-slug="{{ p.slug }}" style="--rp-fam: {{ p.family_color }};">
     <span class="rp-row__accent" aria-hidden="true" style="background: {{ p.family_gradient }};"></span>
     {% comment %} Phone row's art: the PORTRAIT cover, which is what a game looks like at thumbnail size (the
-    banner's landscape art cropped to 64px is a smear). Hidden from 640px up; lazy, so a tile never fetches it. {% endcomment %}
-    <span class="rp-row__thumb" aria-hidden="true">{% if p.cover_game %}<img src="{{ p.cover_game.display_image_url }}" alt="" loading="lazy" class="{% if p.cover_game.has_cover_art %}object-cover object-top{% else %}object-contain p-1{% endif %}">{% endif %}</span>
+    banner's landscape art cropped to 64px is a smear). Hidden from 640px up; lazy, so a tile never fetches it.
+    It carries the contract's flag badges on a phone, where the banner below is hidden (owner, 2026-10-24), so it
+    is no longer `aria-hidden`: the image is `alt=""` and the badges' labels are the only words in it. The two
+    copies are never on screen together, so a screen reader hears one. {% endcomment %}
+    <span class="rp-row__thumb">{% if p.cover_game %}<img src="{{ p.cover_game.display_image_url }}" alt="" loading="lazy" class="{% if p.cover_game.has_cover_art %}object-cover object-top{% else %}object-contain p-1{% endif %}">{% endif %}{% flag_badges p.flag_keys 'sm' %}</span>
 
     {% comment %} Cover banner: the newest member game's landscape art. `landscape_urls` = PSN bg_url
     -> IGDB screenshots -> IGDB artworks (deduped, capped at 5); its first entry is the resting cover,
@@ -42,6 +45,9 @@ The map branch stays the default and is what Career renders, untouched.
             {% endwith %}
         {% endif %}
         <span class="rp-tile__art-fade" aria-hidden="true"></span>
+        {% comment %} The contract's flags (owner, 2026-10-24): the picker's "can it still be finished?" rule
+        (`flag_keys`), along the banner's foot, because the status badge and the New marker hold the top. {% endcomment %}
+        {% flag_badges p.flag_keys 'sm' 'strip' %}
         {% comment %} Recency marker: sits OPPOSITE the status badge so the two never collide -- a
         contract can be both new and ready to claim. Same window as the Latest chip (one cutoff in
         contracts_service), so the marker and the filter can never disagree. {% endcomment %}

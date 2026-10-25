@@ -568,7 +568,7 @@ def test_a_contract_is_flagged_only_when_every_stack_is():
     delisted_only.concept.games.update(is_delisted=True)
     _contract('Bravo Fine')
 
-    assert _flags_for(profile, challenge, 'Bravo Gone') == ['delisted', 'unobtainable']
+    assert _flags_for(profile, challenge, 'Bravo Gone') == ['unobtainable', 'delisted'], 'most severe first'
     assert _flags_for(profile, challenge, 'Bravo Mixed') == []
     assert _flags_for(profile, challenge, 'Bravo Delisted') == ['delisted']
     assert _flags_for(profile, challenge, 'Bravo Fine') == []
@@ -677,12 +677,27 @@ def test_the_flags_ride_the_catch_up_and_history_rows_too(client):
     assert [r['availability'] for r in history['rows']] == [['delisted']]
 
 
-def test_the_sheet_draws_each_flag_as_an_alert_chip():
+def test_the_sheet_draws_the_flags_as_the_sites_badges():
+    """The same glyph the game wears everywhere else (owner, 2026-10-24), feature-tested against a stale utils.js.
+    The words live in the sprite, so the sheet keeps no label table of its own."""
     tags = JS[JS.index('function rowTags(row) {'):]
     tags = tags[:tags.index('\n        }')]
-    assert "chip(AVAILABILITY_LABELS[flag], 'error')" in tags
-    assert "var AVAILABILITY_LABELS = { delisted: 'Delisted', unobtainable: 'Unobtainable' };" in JS
+    assert "flags.length && PP.flagBadges ? PP.flagBadges(flags, 'sm', 'row') : null" in tags
+    assert 'AVAILABILITY_LABELS' not in JS
     assert JS.count('rowTags(row)') >= 2, 'both the card rows and the search rows draw the tags'
+
+
+def test_online_and_shovelware_follow_the_same_can_it_be_finished_rule():
+    """Online holds when no way to finish avoids online trophies; shovelware when every way is shovelware. One
+    clean stack clears either, exactly as a listed stack clears Delisted."""
+    online = _contract('Bravo Online')
+    online.concept.games.update(has_online_trophies=True, shovelware_status='auto_flagged')
+    mixed = _contract('Bravo Online Mixed')
+    mixed.concept.games.update(has_online_trophies=True, shovelware_status='auto_flagged')
+    GameFactory(concept=mixed.concept)                  # an offline, clean stack
+    _, _, avail = picker._decorations([online, mixed])
+    assert avail[online.id] == ['online', 'shovelware']
+    assert avail[mixed.id] == []
 
 
 # ── the fresh-eyes review, 2026-10-24 (docs/design/reviews/challenges.md, CH-10) ───────────────────────

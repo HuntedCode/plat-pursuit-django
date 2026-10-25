@@ -15,6 +15,7 @@ from django_ratelimit.decorators import ratelimit
 from core.services.tracking import track_site_event
 from trophies.psn_manager import PSNManager
 from trophies.services.collection_service import badge_type_label
+from trophies.services.flag_badges import work_keys_for_concepts
 from trophies.services.game_grouping_service import representative_concept_icon_subquery
 from trophies.services.sync_service import RefreshOutcome, SyncService
 from trophies.util_modules.cache import redis_client
@@ -379,6 +380,10 @@ class SiteSuggestView(View):
             .defer('igdb_match__raw_response')
             .order_by('-pop', 'unified_title')[:self.PER_GROUP]
         )
+        concepts = list(concepts)
+        # A result is a whole GAME, so its badges are the ones every version carries (owner, 2026-10-24): one
+        # bounded query off the matches already joined, cached with the payload.
+        flags = work_keys_for_concepts(concepts)
         items = [
             {
                 'label': c.unified_title,
@@ -387,6 +392,7 @@ class SiteSuggestView(View):
                 # already dedupes to concepts, so the destination is the concept's own page.
                 # game_page_url reads igdb_match, select_related'd above (raw_response deferred).
                 'url': c.game_page_url(),
+                'flags': list(flags.get(c.pk, ())),
             }
             for c in concepts
         ]
