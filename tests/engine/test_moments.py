@@ -568,3 +568,69 @@ def test_the_moments_sparks_explode_and_escape_puts_the_medallion_down_first():
     # Escape answers the inspector first (capture phase) and stops the moment closing underneath it.
     assert "if (e.key !== 'Escape' || !peekEl || peekEl.hidden) { return; }" in moments
     assert "e.stopImmediatePropagation();\n        if (peek) { peek.close(); }\n    }, true);" in moments
+
+
+# --- phase 4: mastery and series rewards --------------------------------------------------------------------
+
+def _mastered_hold(profile, gb, linked=False):
+    # `is_linked` is the hold's own mirror of the profile's (the boards' predicate), stamped at award.
+    return UserGroupBadge.objects.create(profile=profile, group_badge=gb, earned_at=NOW(), is_holo=True,
+                                         mastered_at=NOW(), is_linked=linked)
+
+
+def test_a_mastery_plays_by_itself_with_its_crown_and_how_many_hold_it(rf):
+    profile = _hunter()
+    gb = GroupBadgeFactory()
+    _mastered_hold(profile, gb)
+    for _ in range(2):
+        _mastered_hold(ProfileFactory(is_linked=True), gb, linked=True)
+    moment_service.record_mastered(profile, gb, NOW() - timedelta(hours=1))
+
+    html = _render('{% moments_overlay %}', profile, rf)
+
+    assert 'data-kind="mastered"' in html and 'data-queue="auto"' in html
+    assert 'pp-med--mastered' in html and 'mastery-crown.svg' in html, 'the medallion wears the rim and crown'
+    assert 'One of</span> <b>2</b>' in html, 'the hunter is unlinked, so the verified count is the other two'
+
+
+def test_an_old_mastery_records_nothing_to_play():
+    profile = _hunter()
+    gb = GroupBadgeFactory()
+    _mastered_hold(profile, gb)
+    moment_service.record_mastered(profile, gb, NOW() - timedelta(days=40))
+    moment_service.record_mastered(profile, gb, None)
+    assert not Moment.objects.filter(kind=Moment.KIND_MASTERED).exists()
+
+
+def test_a_series_reward_shows_every_edition_and_plays_only_while_it_is_held(rf):
+    from trophies.models import SeriesAward
+
+    profile = _hunter()
+    series = BadgeSeriesFactory()
+    editions = [GroupBadgeFactory(series=series, is_live=True,
+                                  platform_group=PlatformGroupFactory(key=k, name=n, platforms=p))
+                for k, n, p in (('ultra-hd', 'Ultra HD', ['PS5']), ('legacy-hd', 'Legacy HD', ['PS3']))]
+    for gb in editions:
+        UserGroupBadge.objects.create(profile=profile, group_badge=gb, earned_at=NOW())
+    award = SeriesAward.objects.create(profile=profile, series=series, kind=SeriesAward.KIND_FULL_SET, since=NOW())
+    moment_service.record_series_reward(profile, series, Moment.KIND_FULL_SET, NOW() - timedelta(hours=1))
+
+    html = _render('{% moments_overlay %}', profile, rf)
+    assert 'data-kind="full_set"' in html and 'Every edition held: Ultra HD and Legacy HD' in html
+    for gb in editions:
+        assert f'data-moment-pick data-badge-id="{gb.id}"' in html
+    assert 'id="pp-moments-peek"' in html, 'each edition can be picked up'
+
+    award.delete()
+    assert not [m for m in moment_service.pending(profile) if m.kind == Moment.KIND_FULL_SET]
+
+
+def test_the_preview_samples_the_new_beats_too(rf):
+    profile = _team(_hunter())
+    gb = GroupBadgeFactory()
+    UserGroupBadge.objects.create(profile=profile, group_badge=gb, earned_at=NOW())
+
+    html = _preview_render('{% moments_overlay %}', profile, rf)
+    for kind in ('mastered', 'full_set', 'series_master'):
+        assert f'data-kind="{kind}"' in html
+    assert not Moment.objects.exists()

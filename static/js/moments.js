@@ -68,6 +68,10 @@
     // bottom of it, which is why the spark layer is the whole viewport, not the dialog.
     var BEATS = {
         badge: { sel: '.pp-moment__med .pp-med', at: 380, color: 'var(--pp-primary)', n: 70 },
+        // Phase 4: a mastery throws gold, and a set bursts from between its editions.
+        mastered: { sel: '.pp-moment__med .pp-med', at: 380, color: 'var(--med-tier-gold)', n: 80 },
+        full_set: { sel: '.pp-moment__set', at: 420, color: 'var(--pp-primary)', n: 80 },
+        series_master: { sel: '.pp-moment__set', at: 420, color: 'var(--med-tier-gold)', n: 100 },
         platinum: { sel: '.pp-moment__cover', at: 560, color: 'var(--color-trophy-platinum)', n: 60 },
         milestone: { sel: '.pp-moment__number', at: 520, color: 'var(--color-trophy-platinum)', n: 90 },
     };
@@ -95,10 +99,12 @@
         nextBtn.textContent = i === queue.length - 1 ? 'Done' : 'Next';
         skipBtn.hidden = queue.length - i <= 1;
 
-        var med = stage.querySelector('.pp-med');
-        if (med && !reduced()) {
-            // The medallion's own first-earn mint (badge-medallion.css), struck as it lands and the sparks fly.
-            window.setTimeout(function () { med.classList.add('is-minting'); }, 360);
+        if (!reduced()) {
+            // Each medallion's own first-earn mint (badge-medallion.css), struck as it lands and the sparks fly;
+            // a set's editions one after another. A mastered one has its crown set on in the same beat.
+            Array.prototype.forEach.call(stage.querySelectorAll('.pp-med'), function (med, n) {
+                window.setTimeout(function () { med.classList.add('is-minting'); }, 360 + n * 180);
+            });
         }
         if (PP.countUp) {
             Array.prototype.forEach.call(stage.querySelectorAll('[data-countup]'), function (el) { PP.countUp(el, 900); });

@@ -27,10 +27,10 @@ COST. `for_request` is the only read on the page path: one seek on the partial i
 on the request so the strip's pill and the overlay share it, and nothing at all off My Pursuit pages.
 """
 import logging
-from datetime import timedelta
+from datetime import datetime, time, timedelta
 
 from django.db import DatabaseError, IntegrityError, transaction
-from django.db.models import Exists, OuterRef, Q
+from django.db.models import Count, Exists, OuterRef, Q
 from django.utils import timezone
 
 from trophies.models import EarnedTrophy, Moment, Profile, SeriesAward, UserGroupBadge
@@ -46,6 +46,7 @@ PLATINUM_METRIC = 'lifetime_platinums'
 AUTO_KINDS = (Moment.KIND_WELCOME, Moment.KIND_BADGE, Moment.KIND_MASTERED, Moment.KIND_FULL_SET,
               Moment.KIND_SERIES_MASTER)
 SERIES_KINDS = (Moment.KIND_FULL_SET, Moment.KIND_SERIES_MASTER)
+PICKUP_KINDS = (Moment.KIND_BADGE, Moment.KIND_MASTERED) + SERIES_KINDS   # a medallion you can pick up
 REEL_KINDS = (Moment.KIND_PLATINUM, Moment.KIND_MILESTONE)
 
 
@@ -87,7 +88,11 @@ def record_badge(profile, group_badge, occurred_at=None):
 def is_recent_reward(finished_at) -> bool:
     """Whether a reward finished at `finished_at` is news. Undated is not: it is the deploy's veteran case
     (an old completion PSN never dated), and a ceremony for it would be a guess."""
-    return finished_at is not None and finished_at >= timezone.now() - REWARD_RECENCY
+    if finished_at is None:
+        return False
+    if not isinstance(finished_at, datetime):     # a bare date: its midnight, so the comparison cannot raise
+        finished_at = timezone.make_aware(datetime.combine(finished_at, time.min))
+    return finished_at >= timezone.now() - REWARD_RECENCY
 
 
 def record_mastered(profile, group_badge, finished_at):
@@ -186,6 +191,16 @@ def preview_moments(profile):
     badge = hold.group_badge if hold else GroupBadge.objects.filter(is_live=True).order_by('id').first()
     if badge:
         moments.append(Moment(id=-2, profile=profile, kind=Moment.KIND_BADGE, group_badge=badge, occurred_at=now))
+        moments.append(Moment(id=-6, profile=profile, kind=Moment.KIND_MASTERED, group_badge=badge, occurred_at=now))
+    # A series with 2+ live editions for the set beats: the viewer's latest badge's, else any, else (a catalogue
+    # with no such series, like a dev database) the latest badge's own series, so the beats can still be seen.
+    pair = (GroupBadge.objects.filter(is_live=True).values('series_id').annotate(n=Count('id')).filter(n__gte=2))
+    series_id = badge.series_id if badge and pair.filter(series_id=badge.series_id).exists() else \
+        pair.order_by('series_id').values_list('series_id', flat=True).first() or (badge.series_id if badge else None)
+    if series_id:
+        moments.append(Moment(id=-7, profile=profile, kind=Moment.KIND_FULL_SET, series_id=series_id, occurred_at=now))
+        moments.append(Moment(id=-8, profile=profile, kind=Moment.KIND_SERIES_MASTER, series_id=series_id,
+                              occurred_at=now))
     plats = EarnedTrophy.objects.filter(profile=profile, earned=True, trophy__trophy_type='platinum') \
         .order_by('-earned_date_time')[:2]
     for i, et in enumerate(plats):
@@ -215,7 +230,7 @@ def for_request(request):
             moments = list(pending(profile).select_related(
                 'group_badge__platform_group', 'group_badge__series__title', 'group_badge__series__artwork_source',
                 'group_badge__series__submitted_by', 'group_badge__series__franchise',
-                'group_badge__series__collection', 'group_badge__series__developer',
+                'group_badge__series__collection', 'group_badge__series__developer', 'series',
             ))
     request._pp_moments = moments
     return moments
@@ -228,18 +243,36 @@ def mark_played(profile, ids) -> int:
 
 # --- what each moment shows ---------------------------------------------------------------------------------
 
-def _badge_card(moment, holo, participants):
+def _badge_card(moment, holo, mastered, participants):
     from trophies.services.badge_xp import XP_BADGE_COMPLETION_BONUS
     from trophies.services.collection_service import badge_frame
 
     gb = moment.group_badge
-    frame = badge_frame(gb, {gb.id: holo}, {}, participants)
+    frame = badge_frame(gb, {gb.id: holo}, {}, participants, {gb.id} if mastered else frozenset())
     frame['dom_id'] = f'moment-{moment.id}'
     return {
         'frame': frame, 'series': gb.series, 'edition': gb.platform_group.name,
         'title': gb.series.title.name if gb.series.title_id else None,
         'bonus_xp': XP_BADGE_COMPLETION_BONUS,
     }
+
+
+def _set_card(moment, editions, holds, participants):
+    """A Full Set / Series Master moment: every edition's medallion side by side. A Series Master's are all
+    mastered by definition; a Full Set's wear what the hunter holds (each is held: that is the set)."""
+    from trophies.services.collection_service import badge_frame
+
+    master = moment.kind == Moment.KIND_SERIES_MASTER
+    frames = []
+    for gb in editions:
+        holo, mastered = holds.get(gb.id, (False, False))
+        frame = badge_frame(gb, {gb.id: holo or master}, {}, participants,
+                            {gb.id} if (mastered or master) else frozenset())
+        frame['dom_id'] = f'moment-{moment.id}-{gb.id}'
+        frames.append(frame)
+    names = [gb.platform_group.name for gb in editions]
+    label = names[0] if len(names) == 1 else ', '.join(names[:-1]) + ' and ' + names[-1]
+    return {'series': moment.series, 'frames': frames, 'editions_label': label}
 
 
 def _duration(delta) -> str:
@@ -290,17 +323,42 @@ def build_view(profile, moments, autoplay=True):
     item {'moment', 'kind', plus what it shows}. Only called when something is waiting."""
     from trophies.services.rarity import community_size
 
+    from trophies.models import GroupBadge
+    from trophies.services.badge_leaderboards import masters_counts
+
     participants = community_size()
-    # The holds behind the waiting badges, in ONE read (each is held: `pending` filtered the rest out).
-    holo = dict(UserGroupBadge.objects.filter(
-        profile=profile, group_badge_id__in=[m.group_badge_id for m in moments if m.kind == Moment.KIND_BADGE],
-    ).values_list('group_badge_id', 'is_holo'))
+    # The series' live editions for the set beats, then the holds behind EVERY medallion on screen in ONE read
+    # (each badge is held: `pending` filtered the rest out).
+    series_ids = {m.series_id for m in moments if m.kind in SERIES_KINDS}
+    editions = {}
+    if series_ids:
+        for gb in (GroupBadge.objects.filter(series_id__in=series_ids, is_live=True)
+                   .select_related('platform_group', 'series', 'series__artwork_source', 'series__submitted_by',
+                                   'series__franchise', 'series__collection', 'series__developer')
+                   .order_by('platform_group__sort_order', 'id')):
+            editions.setdefault(gb.series_id, []).append(gb)
+    badge_ids = {m.group_badge_id for m in moments if m.group_badge_id} | {
+        gb.id for gbs in editions.values() for gb in gbs}
+    holds = {gid: (holo, at is not None) for gid, holo, at in UserGroupBadge.objects.filter(
+        profile=profile, group_badge_id__in=badge_ids,
+    ).values_list('group_badge_id', 'is_holo', 'mastered_at')}
+    mastered_ids = [m.group_badge_id for m in moments if m.kind == Moment.KIND_MASTERED]
+    masters = masters_counts(mastered_ids) if mastered_ids else {}
     auto, plats, milestones = [], [], []
     for m in moments:
         if m.kind == Moment.KIND_WELCOME:
             auto.append({'moment': m, 'kind': m.kind, **m.data})
         elif m.kind == Moment.KIND_BADGE:
-            auto.append({'moment': m, 'kind': m.kind, **_badge_card(m, bool(holo.get(m.group_badge_id)), participants)})
+            holo, mastered = holds.get(m.group_badge_id, (False, False))
+            auto.append({'moment': m, 'kind': m.kind, **_badge_card(m, holo, mastered, participants)})
+        elif m.kind == Moment.KIND_MASTERED:
+            # Mastered by definition (`pending` dropped any lost since), holo with it.
+            auto.append({'moment': m, 'kind': m.kind, 'masters': masters.get(m.group_badge_id, 0),
+                         **_badge_card(m, True, True, participants)})
+        elif m.kind in SERIES_KINDS:
+            if editions.get(m.series_id):
+                auto.append({'moment': m, 'kind': m.kind,
+                             **_set_card(m, editions[m.series_id], holds, participants)})
         elif m.kind == Moment.KIND_PLATINUM:
             plats.append(m)
         elif m.kind == Moment.KIND_MILESTONE:
@@ -312,5 +370,5 @@ def build_view(profile, moments, autoplay=True):
     # The inspector a badge's medallion is picked up into: the hunter's own state of the badge (0 = the id slot).
     from django.urls import reverse
     peek_url = reverse('group_badge_progress_peek', args=[profile.psn_username, 0]) if any(
-        a['kind'] == Moment.KIND_BADGE for a in auto) else None
+        a['kind'] in PICKUP_KINDS for a in auto) else None
     return {'auto': auto, 'reel': reel, 'autoplay': autoplay, 'platinum_count': platinum_count, 'peek_url': peek_url}
