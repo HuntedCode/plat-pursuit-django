@@ -275,4 +275,8 @@ def build_view(profile, moments, autoplay=True):
     reel = [{'moment': m, 'kind': m.kind, **cards[m.id]} for m in plats if m.id in cards]
     platinum_count = len(reel)
     reel += milestones          # a round number is the reel's last beat
-    return {'auto': auto, 'reel': reel, 'autoplay': autoplay, 'platinum_count': platinum_count}
+    # The inspector a badge's medallion is picked up into: the hunter's own state of the badge (0 = the id slot).
+    from django.urls import reverse
+    peek_url = reverse('group_badge_progress_peek', args=[profile.psn_username, 0]) if any(
+        a['kind'] == Moment.KIND_BADGE for a in auto) else None
+    return {'auto': auto, 'reel': reel, 'autoplay': autoplay, 'platinum_count': platinum_count, 'peek_url': peek_url}

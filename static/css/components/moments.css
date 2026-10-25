@@ -50,6 +50,9 @@
 .pp-moment__med { margin: 14px auto 12px; }   /* room for the mint's pop */
 /* The medallion component sizes itself (--sz, badge-medallion.css): a moment is the one place it is big. */
 .pp-moment__med > .pp-med { --sz: min(190px, 52vw); }
+/* It can be picked up (the site's inspector): the pointer says so, and the keyboard ring sits on the disc. */
+.pp-moment__med[data-moment-pick] { cursor: pointer; border-radius: 50%; }
+.pp-moment__med[data-moment-pick]:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 6px; }
 /* The platinum: its cover (portrait, logo kept at the top) and which platinum it is. */
 .pp-moment__cover {
     width: 132px; aspect-ratio: 3 / 4; margin: 6px auto 4px; overflow: hidden;

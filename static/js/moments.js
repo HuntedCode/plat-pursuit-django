@@ -64,10 +64,12 @@
     // sweep), never confetti. The CSS carries the entrances (moments.css); this lands the sparks on the beat
     // the object arrives, from wherever it actually is on screen. Reduced motion: none of it (sparkBurst and
     // the CSS are both gated), the end state is what you see.
+    // EXPLODE (owner, 2026-10-25): the sparks are thrown across much of the screen and fall slowly off the
+    // bottom of it, which is why the spark layer is the whole viewport, not the dialog.
     var BEATS = {
-        badge: { sel: '.pp-moment__med', at: 380, color: 'var(--pp-primary)', n: 22 },
-        platinum: { sel: '.pp-moment__cover', at: 560, color: 'var(--color-trophy-platinum)', n: 26 },
-        milestone: { sel: '.pp-moment__number', at: 520, color: 'var(--color-trophy-platinum)', n: 28 },
+        badge: { sel: '.pp-moment__med .pp-med', at: 380, color: 'var(--pp-primary)', n: 70 },
+        platinum: { sel: '.pp-moment__cover', at: 560, color: 'var(--color-trophy-platinum)', n: 60 },
+        milestone: { sel: '.pp-moment__number', at: 520, color: 'var(--color-trophy-platinum)', n: 90 },
     };
     function flourish(kind) {
         var beat = BEATS[kind];
@@ -76,7 +78,7 @@
             var el = stage.querySelector(beat.sel);
             if (!el || root.hidden) { return; }
             var r = el.getBoundingClientRect();
-            PP.sparkBurst(sparks, r.left + r.width / 2, r.top + r.height / 2, beat.color, beat.n);
+            PP.sparkBurst(sparks, r.left + r.width / 2, r.top + r.height / 2, beat.color, beat.n, { explode: true });
         }, beat.at);
     }
 
@@ -137,6 +139,37 @@
         var pill = e.target.closest && e.target.closest('[data-moments-open]');
         if (pill) { e.preventDefault(); play(pill.getAttribute('data-moments-open'), pill); }
     });
+
+    // PICK IT UP (owner, 2026-10-25): the badge's medallion lifts into the site's own inspector, the same
+    // pick-up / put-down the Collection and Browse Badges use (PlatPursuit.Medallion.detailModal), showing the
+    // hunter's REAL state of that badge. It opens OVER the moment and puts the medallion back on close.
+    var peekEl = document.getElementById('pp-moments-peek');
+    var peek = (peekEl && PP.Medallion && PP.Medallion.detailModal)
+        ? PP.Medallion.detailModal({ modal: peekEl, bodySel: '[data-peek-body]', closeSel: '[data-peek-close]' })
+        : null;
+    function pickUp(wrap) {
+        var id = wrap.getAttribute('data-badge-id');
+        var tmpl = peekEl.getAttribute('data-peek-url') || '';
+        var url = tmpl.replace(/0\/$/, id + '/');
+        if (!peek || !id || url === tmpl) { return; }
+        peek.open(url, wrap.querySelector('.pp-med') || wrap);
+    }
+    stage.addEventListener('click', function (e) {
+        var wrap = e.target.closest && e.target.closest('[data-moment-pick]');
+        if (wrap && peek) { e.preventDefault(); pickUp(wrap); }
+    });
+    stage.addEventListener('keydown', function (e) {
+        if (e.key !== 'Enter' && e.key !== ' ') { return; }
+        var wrap = e.target.closest && e.target.closest('[data-moment-pick]');
+        if (wrap && peek) { e.preventDefault(); pickUp(wrap); }
+    });
+    // Escape while the inspector is up puts the medallion DOWN and leaves the moment open: both dialogs listen
+    // on the document, so this capture-phase listener answers first and stops the moment closing under it.
+    window.addEventListener('keydown', function (e) {
+        if (e.key !== 'Escape' || !peekEl || peekEl.hidden) { return; }
+        e.stopImmediatePropagation();
+        if (peek) { peek.close(); }
+    }, true);
 
     // Auto-play waits for a clear stage: no other modal open and no claim ceremony running. Whatever the page
     // opened first has its turn; this never stacks on top of it.

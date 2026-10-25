@@ -26,6 +26,19 @@ Particles stay the earn vocabulary: the medallion's own mint, never confetti.
     <div class="pp-moments__sparks" data-moments-sparks aria-hidden="true"></div>
 </div>
 
+{% comment %}The badge inspector the medallion is picked up into: the same quick-peek shell Browse Badges and the
+Collection use, fetching the hunter's own state of that badge (`group_badge_progress_peek`, 0 swapped for the id).
+After the player in the DOM, so it stacks over it.{% endcomment %}
+{% if view.peek_url %}
+<div class="pp-detail-modal" id="pp-moments-peek" data-peek-url="{{ view.peek_url }}" hidden>
+    <div class="pp-detail-modal__scrim" data-peek-close></div>
+    <div class="pp-detail-modal__dialog" role="dialog" aria-modal="true" aria-label="Badge detail" tabindex="-1">
+        <button type="button" class="pp-detail-modal__close" data-peek-close aria-label="Close badge detail">&times;</button>
+        <div class="pp-detail-modal__body" data-peek-body></div>
+    </div>
+</div>
+{% endif %}
+
 {% for item in view.auto %}
 <template data-moment="{{ item.moment.id }}" data-queue="auto" data-kind="{{ item.kind }}"
           {% if item.kind == 'badge' %}data-badge-id="{{ item.frame.badge_id }}" data-link-href="{% url 'badge_detail' item.series.series_slug %}" data-link-label="See the badge"{% else %}data-link-href="{% url 'badge_collection' %}" data-link-label="See your Collection"{% endif %}>
@@ -48,7 +61,8 @@ Particles stay the earn vocabulary: the medallion's own mint, never confetti.
         <span class="pp-moment__eyebrow">Badge earned</span>
         {% comment %}The rays wear the badge's tier (data-tier), iridescent when it is holographic. Phase 4's
         mastered badge turns them gold with its rim and crown.{% endcomment %}
-        <div class="pp-moment__obj pp-moment__med" data-tier="{{ item.frame.tier }}"{% if item.frame.is_holographic %} data-holo{% endif %}>
+        <div class="pp-moment__obj pp-moment__med" data-tier="{{ item.frame.tier }}"{% if item.frame.is_holographic %} data-holo{% endif %}
+             data-moment-pick data-badge-id="{{ item.frame.badge_id }}" role="button" tabindex="0" aria-label="Pick up {{ item.series.name }}">
             <span class="pp-moment__rays" aria-hidden="true"></span>
             {% include 'components/badge_medallion.html' with frame=item.frame no_id=True %}
         </div>
