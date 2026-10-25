@@ -144,11 +144,11 @@ the stage's SAVED members, as the bundle-vs-standalone check always has, so a ch
 checked against the other's previous state. `generate_badge_stages --append` never writes onto a stage that
 holds a list through a group; it reports the addition for a hand edit, as it does for bundles.
 
-**On the badge page** trophy groups sit in their own panel UNDER the stage's full lists (owner, 2026-10-25),
-in the bundle panel's shape: "Trophy group(s)", then "Only this group counts, not the rest of its list" (or the
-plural). So a group card never sits in a row of full lists looking like one, and groups from several different
-lists share the one panel, each card naming its list. A stage held only by groups opens straight onto the panel,
-and its collapsed header counts "N trophy groups" (one per card, as it counts versions of games). The card's
+**On the badge page** trophy groups sit on their own row UNDER the stage's full lists (owner, 2026-10-25), so
+a group card never sits among full lists looking like one. The row leads with a banner, one sentence per group
+scoped to its list ("In Y, only the trophies in X count here"), so groups from two different lists each name
+theirs, and the stage's full lists still read as counting in full. A stage held only by groups opens straight
+onto the row, and its collapsed header counts "N trophy groups" (one per card, as it counts versions of games). The card's
 art also carries a "Trophy group" label, which stays in view on a phone after the panel's head scrolls away.
 A group whose list is unobtainable on the edition goes in the stage's unobtainable list like any version,
 named "X · in Y".

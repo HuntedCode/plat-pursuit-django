@@ -158,16 +158,19 @@
     color: var(--pp-secondary); background: linear-gradient(to top, oklch(0 0 0 / 0.82), transparent);
 }
 .bd-gcard__group svg { width: 12px; height: 12px; flex-shrink: 0; }
-/* The stage's trophy-group panel (`.bd-qual--groups`, the bundle panel's shape): under the full lists,
-   tinted with the label's colour so the two read as one thing. `--lead` when the stage has no full lists
-   above it, so it does not sit flush against the stage header. */
-.bd-qual--groups {
-    margin-bottom: 14px;
-    border-color: color-mix(in oklch, var(--pp-secondary) 30%, var(--pp-border));
-    background: color-mix(in oklch, var(--pp-secondary) 5%, color-mix(in oklch, var(--pp-bg-1) 55%, transparent));
+/* The stage's trophy-group row, under its full lists: a banner (one sentence per group, in the label's
+   colour), then the group cards in the stage's own grid. The full-list grid above already ends in its
+   padding, so the row adds none on top; `--lead` (no full lists above) gives the banner its own. */
+.bd-groups--lead { padding-top: 14px; }
+.bd-gnote {
+    display: flex; align-items: flex-start; gap: 8px; margin: 0 14px; padding: 9px 11px;
+    border-radius: var(--pp-radius-md); font-size: 0.76rem; line-height: 1.45; color: var(--pp-text-dim);
+    background: color-mix(in oklch, var(--pp-secondary) 9%, transparent);
+    border: 1px solid color-mix(in oklch, var(--pp-secondary) 28%, transparent);
 }
-.bd-qual--groups .bd-qual__mark { color: var(--pp-secondary); }
-.bd-qual--lead { margin-top: 14px; }
+.bd-gnote svg { width: 15px; height: 15px; flex-shrink: 0; margin-top: 1px; color: var(--pp-secondary); }
+.bd-gnote strong { color: var(--pp-text); font-weight: 700; }
+.bd-gnote + .bd-gnote { margin-top: 6px; }
 .bd-gcard__from { margin-top: -2px; font-size: 0.62rem; line-height: 1.2; color: var(--pp-text-mute); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bd-gcard__badges { display: flex; flex-wrap: wrap; gap: 3px; }
 .bd-gcard__facts { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 9px; margin-top: auto; font-size: 0.64rem; font-weight: 600; color: var(--pp-text-mute); }

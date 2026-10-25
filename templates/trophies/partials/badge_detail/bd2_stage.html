@@ -118,17 +118,15 @@ badge" and they are explicitly not steps -- the section they sit in says so once
         {% endif %}
 
         {% comment %}Trophy groups: one group inside another list counts on its own (the Kingdom Hearts PS5
-        collections). Their own panel UNDER the full lists, so a group card never sits in a row of full lists
-        looking like one, and groups from several lists share one panel, each card naming its list (owner,
-        2026-10-25). The rule is said once, in the panel's head.{% endcomment %}
+        collections). Their own row UNDER the full lists, so a group card never sits among full lists looking
+        like one, led by a banner that says it in words, one sentence per group, scoped to its list so groups from
+        two different lists each name theirs (owner, 2026-10-25).{% endcomment %}
         {% if s.group_games %}
-        <div class="bd-qual bd-qual--groups{% if not s.list_games %} bd-qual--lead{% endif %}">
-            <div class="bd-qual__head">
-                <span class="bd-qual__mark" aria-hidden="true">{% include 'partials/icons/trophy_group.html' %}</span>
-                <span class="bd-qual__label">Trophy group{{ s.group_games|length|pluralize }}</span>
-                <span class="bd-qual__req">Only {% if s.group_games|length == 1 %}this group counts, not the rest of its list{% else %}these groups count, not the rest of their lists{% endif %}</span>
-            </div>
-            <div class="bd-qual__grid">
+        <div class="bd-groups{% if not s.list_games %} bd-groups--lead{% endif %}">
+            {% for group_name, list_name in s.group_notes %}
+            <p class="bd-gnote">{% include 'partials/icons/trophy_group.html' %}<span>In <strong>{{ list_name }}</strong>, only the trophies in <strong>{{ group_name }}</strong> count here.</span></p>
+            {% endfor %}
+            <div class="bd-stage__grid">
                 {% for e in s.group_games %}
                 {% include 'trophies/partials/badge_detail/badge_detail_items.html' with game=e.game pgame=e.pgame ratings=e.ratings has_guide=e.has_guide contract=e.contract group=e.group group_name=e.group_name profile=target_profile %}
                 {% endfor %}

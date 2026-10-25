@@ -499,6 +499,7 @@ def _group_journey(gb, result, catalog, games_map, profile_games, ratings_map, c
             bucket = obtainable if _display_playable(game, platforms, exclude_delisted) else delisted
             bucket.append(_group_entry(ctg, game, tg, group_progress, group_ratings))
         bundles = _stage_bundles(st, games_map, profile_games, ratings_map, contract_map)
+        group_games = [e for e in obtainable if e['group']]
         sr = stage_results.get(st.stage_number)
         any_progress = any(e['pgame'] and e['pgame'].progress for e in (obtainable + delisted))
         state = 'complete' if (sr and sr.base_satisfied) else ('partial' if any_progress else 'todo')
@@ -506,11 +507,14 @@ def _group_journey(gb, result, catalog, games_map, profile_games, ratings_map, c
             'stage': st, 'obtainable_games': obtainable, 'delisted_games': delisted,
             'bundles': bundles,
             # DISPLAY split of `obtainable_games` (which every count above and below still reads whole): the full
-            # lists keep the stage's grid, and trophy groups get their own panel under it, so a group never sits
-            # in a row of full lists looking like one (owner, 2026-10-25). Several groups from several lists
-            # share the one panel; each card names its list.
+            # lists keep the stage's grid, and trophy groups get their own row under it, so a group never sits in
+            # a row of full lists looking like one (owner, 2026-10-25).
             'list_games': [e for e in obtainable if not e['group']],
-            'group_games': [e for e in obtainable if e['group']],
+            'group_games': group_games,
+            # The row's banner: one plain sentence per group, scoped to its LIST, so groups from two different
+            # lists each say which list they come from. Several versions of one list carry the same group, so
+            # it is said once.
+            'group_notes': list(dict.fromkeys((e['group_name'], e['game'].title_name) for e in group_games)),
             'icon_url': _stage_icon_url(obtainable, delisted, bundles, platforms, exclude_delisted),
             'completion_state': state, 'is_next': False,
             'display_number': None,

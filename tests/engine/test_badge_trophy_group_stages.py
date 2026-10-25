@@ -630,26 +630,32 @@ def test_the_lists_own_platinum_and_contract_are_not_the_stages():
     assert Concept.objects.filter(in_series_q(['kh-badge'])).get() == concept
 
 
-def test_a_group_only_stage_says_so_on_its_header_and_panel():
+def test_a_group_only_stage_says_so_on_its_header_and_banner():
     """Owner, 2026-10-25: a group card alone reads as the whole game. A stage held only by groups counts
-    "trophy groups" on its collapsed header and shows them in their own panel, which leads the stage."""
+    "trophy groups" on its collapsed header and opens onto the banner, said once per group even when several
+    versions of the list carry it."""
     concept, game, ctgs = _collection()
     second = GameFactory(concept=concept, title_name='Kingdom Hearts Collection', title_platform=['PS5'])
     TrophyGroupFactory(game=second, trophy_group_id='001')
+    ctgs['001'].display_name = 'Re:Chain of Memories'
+    ctgs['001'].save()
     gb = _series(lambda st: st.trophy_groups.add(ctgs['001']))
     stage = _ultra_view(gb.series, None).stages[0]
 
     assert (stage['list_games'], len(stage['group_games'])) == ([], 2)
+    assert stage['group_notes'] == [('Re:Chain of Memories', 'Kingdom Hearts Collection')]
     html = render_to_string('trophies/partials/badge_detail/bd2_stage.html', {'s': stage})
     assert '2 trophy groups</span>' in html, 'one card per version, as the header counts games'
-    assert 'bd-qual bd-qual--groups bd-qual--lead' in html
-    assert 'class="bd-stage__grid"' not in html, 'no empty full-list grid above it'
-    assert 'Only these groups count, not the rest of their lists' in html
+    assert 'class="bd-groups bd-groups--lead"' in html
+    assert html.count('class="bd-gnote"') == 1
+    assert ('In <strong>Kingdom Hearts Collection</strong>, only the trophies in '
+            '<strong>Re:Chain of Memories</strong> count here.') in html
+    assert html.count('class="bd-stage__grid"') == 1, 'no empty full-list grid above it'
 
 
-def test_a_mixed_stage_keeps_full_lists_in_the_grid_and_groups_in_a_panel_under_them():
-    """The Kingdom Hearts shape: an older version's full list, plus a group from the PS5 collection. Groups
-    from two different lists share the one panel, each card naming its own list."""
+def test_a_mixed_stage_keeps_full_lists_first_and_groups_on_their_own_row_under_them():
+    """The Kingdom Hearts shape: an older version's full list, plus groups from two different collections.
+    Each group gets its own banner sentence naming its own list."""
     older, older_game, _ = _collection(title='KH Re:Chain of Memories (PS4)', platforms=('PS4',))
     _, _, collection = _collection(title='Kingdom Hearts Collection')
     _, _, other_set = _collection(title='Kingdom Hearts 2.8')
@@ -657,30 +663,23 @@ def test_a_mixed_stage_keeps_full_lists_in_the_grid_and_groups_in_a_panel_under_
     def fill(st):
         st.concepts.add(older)
         st.trophy_groups.add(collection['001'], other_set['001'])
-    gb = _series(fill)
-    stage = _ultra_view(gb.series, None).stages[0]
+    stage = _ultra_view(_series(fill).series, None).stages[0]
 
     assert [e['game'] for e in stage['list_games']] == [older_game]
-    assert sorted(e['game'].title_name for e in stage['group_games']) == ['Kingdom Hearts 2.8',
+    assert sorted(list_name for _, list_name in stage['group_notes']) == ['Kingdom Hearts 2.8',
                                                                           'Kingdom Hearts Collection']
     html = render_to_string('trophies/partials/badge_detail/bd2_stage.html', {'s': stage})
     assert '3 games</span>' in html
-    assert html.index('class="bd-stage__grid"') < html.index('bd-qual--groups'), 'the panel sits under the lists'
-    assert 'bd-qual--lead' not in html
-    assert 'Only these groups count, not the rest of their lists' in html
+    assert html.index(older_game.title_name) < html.index('class="bd-groups"') < html.index('class="bd-gnote"'),         'full lists first, then the group row and its banner'
+    assert html.count('class="bd-gnote"') == 2
     assert html.count('class="bd-gcard__from"') == 2, 'each group card names its own list'
 
 
-def test_one_group_is_worded_in_the_singular():
-    _, _, ctgs = _collection()
+def test_a_stage_without_groups_has_no_group_row():
     other, _, _ = _collection(title='Kingdom Hearts III')
-
-    def fill(st):
-        st.concepts.add(other)
-        st.trophy_groups.add(ctgs['001'])
-    stage = _ultra_view(_series(fill).series, None).stages[0]
+    stage = _ultra_view(_series(lambda st: st.concepts.add(other)).series, None).stages[0]
 
     html = render_to_string('trophies/partials/badge_detail/bd2_stage.html', {'s': stage})
-    assert '>Trophy group</span>' in html
-    assert 'Only this group counts, not the rest of its list' in html
-    assert '2 games</span>' in html
+    assert (stage['group_games'], stage['group_notes']) == ([], [])
+    assert 'bd-groups' not in html and 'bd-gnote' not in html
+    assert '1 game</span>' in html
