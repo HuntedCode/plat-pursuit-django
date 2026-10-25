@@ -91,6 +91,7 @@ Currently handled by `absorb()`:
 - Profile.selected_background
 - Badge.most_recent_concept
 - Stage.concepts (M2M)
+- Stage.trophy_groups (M2M to ConceptTrophyGroup). A CTG that moves to the survivor carries its stage rows; a doomed DUPLICATE CTG's stage rows are moved onto the survivor's CTG for the same trophy_group_id first (right after the CTG merge), or the cascade silently drops the group from its badge stage
 - ConceptBundle.concepts (M2M, per-bundle membership; skips duplicates so target's existing bundle membership isn't disturbed)
 - ContractBundle.concepts (M2M episodic-satisfier membership, same dedup pattern as ConceptBundle). NOTE: Contract HOME membership needs NO absorb handling — Contracts are keyed on the raw IGDB id, so a concept's contract is DERIVED from its IGDBMatch (which migrates gated on `inherit_match`); ContractMembership was removed in the igdb-keyed rework.
 - StageCompletionEvent.concept (FK, SET_NULL)

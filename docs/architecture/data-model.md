@@ -188,7 +188,11 @@ slug no series owns, and renaming a slug orphans its stages.
 Key relationships:
 - `concepts` M2M to `Concept`
 - `concept_bundles` reverse FK to `ConceptBundle` (a concept is in EITHER `concepts` OR a bundle on that
-  stage, never both -- any "which series is this game in" query must check both paths)
+  stage, never both)
+- `trophy_groups` M2M to `ConceptTrophyGroup`: one group inside a list counts on its own (a game shipped as
+  DLC in a collection)
+- Any "which series is this game in" query must follow all three paths: use
+  `trophies/services/stage_membership.py`
 
 ### Retained tier models (no writer)
 
