@@ -149,8 +149,9 @@ quick-peek (`PlatPursuit.Medallion.detailModal`), `.pp-tally`, `.pp-head-cascade
             </div>
         </li>
 
-        {% comment %} The payoff. Beat 4 is the SAME medallion as beat 3, holographic. The transformation
-        is the teaching, and showing it beats describing it.
+        {% comment %} The payoff. Beat 4 is the SAME medallion as beat 3, holographic, and beat 5 the same again,
+        mastered (phase 4: holo plus a gold rim and a crown). The transformation is the teaching, and showing it
+        beats describing it.
 
         A toggle was built here and removed: letting the reader flip it between states sounded better
         than it read. The two beats sitting next to each other already make the comparison, and a control
@@ -159,16 +160,33 @@ quick-peek (`PlatPursuit.Medallion.detailModal`), `.pp-tally`, `.pp-head-cascade
             <span class="pp-hiw__art pp-hiw__art--med">
                 <span class="pp-hiw__medwrap{% if forge_meds.source_id %} pp-forge-peek{% endif %}"
                       {% if forge_meds.source_id %}data-badge-id="{{ forge_meds.source_id }}" role="button" tabindex="0" aria-label="Inspect this badge"{% endif %}>
-                    {% include 'components/badge_medallion.html' with frame=forge_meds.mastered no_id=True %}
+                    {% include 'components/badge_medallion.html' with frame=forge_meds.holo no_id=True %}
                 </span>
             </span>
             <div class="pp-hiw__body">
                 <span class="pp-hiw__n" aria-hidden="true">04</span>
-                <h2 class="pp-hiw__cap">Master it</h2>
+                <h2 class="pp-hiw__cap">Make it shine</h2>
                 <p class="pp-hiw__desc">
                     Not finished yet. Push every game to a true 100%, DLC and all, and the same medallion
-                    turns <strong class="pp-forge__holo">holographic</strong>. It is the rarest thing you
-                    can put in a Collection.
+                    turns <strong class="pp-forge__holo">holographic</strong>.
+                </p>
+            </div>
+        </li>
+        <li class="pp-hiw__step pp-hiw__step--master">
+            <span class="pp-hiw__art pp-hiw__art--med">
+                <span class="pp-hiw__medwrap{% if forge_meds.source_id %} pp-forge-peek{% endif %}"
+                      {% if forge_meds.source_id %}data-badge-id="{{ forge_meds.source_id }}" role="button" tabindex="0" aria-label="Inspect this badge"{% endif %}>
+                    {% include 'components/badge_medallion.html' with frame=forge_meds.mastered no_id=True %}
+                </span>
+            </span>
+            <div class="pp-hiw__body">
+                <span class="pp-hiw__n" aria-hidden="true">05</span>
+                <h2 class="pp-hiw__cap">Master it</h2>
+                <p class="pp-hiw__desc">
+                    Then every stage at 100%: the bonus stage, and the ones you can&rsquo;t buy any more,
+                    too. That is <strong class="pp-hiw__mastered">Mastery</strong>, a gold rim and a crown,
+                    the rarest thing you can put in a Collection. Hold every edition of a series and it is a
+                    Full Set.
                 </p>
             </div>
         </li>

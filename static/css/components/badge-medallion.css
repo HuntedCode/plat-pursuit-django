@@ -195,10 +195,11 @@
                 0 0 0 1px var(--mast-deep), 0 0 calc(var(--sz) * 0.06) color-mix(in oklab, var(--mast-gold) 35%, transparent);
 }
 .pp-med--mastered .pp-med__stage::before { opacity: 0.3; background: radial-gradient(circle, var(--mast-gold), transparent 62%); }
-/* The crown sits on the top edge and rides the art (hover lift, tilt). `translate` (not transform) centres it,
-   so the inspector's translateZ and the mint's drop can own `transform`. */
+/* The crown sits on the top edge and rides the art (hover lift, tilt). Seated low (6% above the mount) so a
+   grid cell holds it without a mastered card standing taller than its row. `translate` (not transform)
+   centres it, so the inspector's translateZ and the mint's drop can own `transform`. */
 .pp-med__crown {
-    position: absolute; left: 50%; top: -15%; width: 32%; height: auto; z-index: 5; pointer-events: none;
+    position: absolute; left: 50%; top: -10%; width: 30%; height: auto; z-index: 5; pointer-events: none;
     translate: -50% 0; -webkit-user-drag: none; user-select: none;
     filter: drop-shadow(0 calc(var(--sz) * 0.012) calc(var(--sz) * 0.02) rgba(0, 0, 0, 0.55));
 }

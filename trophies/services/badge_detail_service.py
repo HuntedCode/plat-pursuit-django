@@ -12,10 +12,12 @@ from typing import Optional
 
 from django.urls import NoReverseMatch, reverse
 
-from trophies.models import Company, UserGroupBadge, SeriesBadgeStanding, Game, ProfileGame, ProfileTrophyGroup
-from trophies.services.badge_engine import GroupInput, _gates as engine_gates, _qualifies as engine_qualifies
+from trophies.models import Company, UserGroupBadge, SeriesAward, SeriesBadgeStanding, Game, ProfileGame, ProfileTrophyGroup
+from trophies.services.badge_engine import (
+    GroupInput, evaluate_series_rewards, _gates as engine_gates, _qualifies as engine_qualifies,
+)
 from trophies.services.badge_orchestrator import (
-    build_catalog, catalog_stage_units, evaluate_with_catalog, group_members, unit_obtainable,
+    build_catalog, catalog_results, catalog_stage_units, evaluate_with_catalog, group_members, unit_obtainable,
 )
 from trophies.services.excused_trophies import ExcusedProgress, candidates
 from trophies.services.badge_xp import compute_series_standings, edition_display_state, XP_PER_STAGE, XP_BADGE_COMPLETION_BONUS
@@ -83,6 +85,15 @@ class GroupView:
     is_unearnable: bool
     user_stats: Optional[dict]   # the viewer's per-group My Stats (haul/play/games/stages); None for anon
     frame: dict                  # medallion frame dict for components/badge_medallion.html
+    #: MASTERY (phase 4): every stage the edition covers at 100% with DLC. `mastered_at` is "Mastered since"
+    #: (None = not mastered); `mastery_done` of `mastery_total` stages is the viewer's progress (0 of 0 for anon).
+    mastered_at: object = None
+    mastery_done: int = 0
+    mastery_total: int = 0
+    #: The edition's current masters: how many, and the first few holds (`badge_leaderboards.badge_masters`).
+    masters_count: int = 0
+    masters: list = field(default_factory=list)
+    masters_more: int = 0        # how many masters the list leaves out ("+N")
 
 
 @dataclass
@@ -97,6 +108,9 @@ class BadgeDetail:
     series_size: Optional[int]   # total profiles with a standing in this series (the rank's denominator)
     community_max_earned: int    # max earned_count across groups (scales the community band's earners bars)
     target_profile: object       # whose state is shown (may be None for anon)
+    #: The series' Full Set / Series Master for the viewer (phase 4), or None when fewer than two editions can
+    #: be earned (no set to collect): see `_series_rewards`.
+    rewards: Optional[dict] = None
 
 
 def _contract_map(concept_ids) -> dict:
@@ -199,6 +213,7 @@ def _medallion_frame(gv: GroupView, series, target_profile) -> dict:
         'art_layers': layers,
         'is_avatar': is_avatar,
         'is_holographic': gv.is_holo,
+        'is_mastered': gv.mastered_at is not None,
         'series_name': series.name,
         'franchise': series.franchise.name if series.franchise_id else None,
         'collection': series.collection.name if series.collection_id else None,
@@ -791,16 +806,20 @@ def _group_view(gb, result, hold, target_profile, series, catalog, games_map, pr
         # them out would reproduce the same "panel disagrees with the page" bug one level down.
         user_stats=_group_user_stats(profile_games, journey + retired, target_profile),
         frame={},
+        mastered_at=(hold.mastered_at if hold else None),
+        mastery_done=result.mastery_done if result else 0,
+        mastery_total=result.mastery_total if result else 0,
     )
     gv.frame = _medallion_frame(gv, series, target_profile)
     return gv
 
 
-def get_badge_detail(series, target_profile, *, studio_sections=False) -> BadgeDetail:
+def get_badge_detail(series, target_profile, *, studio_sections=False, with_masters=False) -> BadgeDetail:
     """Build the detail context for `series` (a BadgeSeries) as seen by `target_profile` (or None for anon).
 
     `studio_sections`: split a developer badge's ladders by studio (see `_group_journey`). Only the badge
     page renders them, so the medallion peek and the collection modal leave it off and skip the family walk.
+    `with_masters`: each edition's current masters (count + the first few), for the badge page alone.
     """
     group_badges = list(
         series.group_badges.filter(is_live=True)
@@ -873,6 +892,11 @@ def get_badge_detail(series, target_profile, *, studio_sections=False) -> BadgeD
                           group_progress, group_ratings, excused)
               for gb in group_badges]
     viewer_state = max((g.state for g in groups), key=lambda s: _STATE_ORDER[s], default='none')
+    if with_masters and groups:
+        masters = lb.badge_masters([g.group_badge.id for g in groups])
+        for g in groups:
+            g.masters_count, g.masters = masters[g.group_badge.id]['count'], masters[g.group_badge.id]['rows']
+            g.masters_more = g.masters_count - len(g.masters)
 
     # Series XP + progress LIVE from this pass (matches the per-group numbers); rank is stored (relative).
     series_xp, series_progress_pct, series_rank = 0, 0, None
@@ -896,4 +920,29 @@ def get_badge_detail(series, target_profile, *, studio_sections=False) -> BadgeD
         series_rank=series_rank, series_size=participants,
         community_max_earned=max((g.earned_count for g in groups), default=0),
         target_profile=target_profile,
+        rewards=_series_rewards(series, group_badges, catalog, desired, target_profile) if catalog else None,
     )
+
+
+def _series_rewards(series, group_badges, catalog, desired, target_profile):
+    """The viewer's Full Set and Series Master for this series, by the engine's own rule
+    (`evaluate_series_rewards`) over this pass's results, or catalogue facts for a visitor (nothing held, but
+    whether a Series Master is offered at all is the same for everyone). None with fewer than two editions
+    that can be earned. `*_since` comes from the stored hold, the date its current run began."""
+    static = catalog_results(catalog) if not desired else {}
+    results = [desired.get(gb.id) or static.get(gb.id) for gb in group_badges]
+    results = [r for r in results if r is not None]
+    earnable = [r for r in results if r.gating_count > 0]
+    if len(earnable) < 2:
+        return None
+    r = evaluate_series_rewards(results)
+    since = dict(SeriesAward.objects.filter(profile=target_profile, series=series).values_list('kind', 'since')) \
+        if target_profile else {}
+    return {
+        'editions': len(earnable),
+        'held': sum(1 for e in earnable if e.base_earned),
+        'mastered': sum(1 for e in earnable if e.mastered),
+        'full_set': r.full_set, 'full_set_since': since.get(SeriesAward.KIND_FULL_SET) if r.full_set else None,
+        'master_offered': r.master_offered, 'series_master': r.series_master,
+        'series_master_since': since.get(SeriesAward.KIND_SERIES_MASTER) if r.series_master else None,
+    }

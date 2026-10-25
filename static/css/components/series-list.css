@@ -222,6 +222,8 @@
     background: linear-gradient(92deg, #8fd2ea, #c9a7ff 42%, #ffd36e 74%, #8fd2ea);
     -webkit-background-clip: text; background-clip: text; color: transparent;
 }
+/* "Mastery" in the medallion's own mastered gold (its rim and crown, badge-medallion.css). */
+.pp-hiw__mastered { font-weight: 800; color: var(--med-tier-gold); }
 
 /* Series toolbar: the Series view uses the Gallery's compact toolbar verbatim -- .pp-bgal__bar + a Filters
  * toggle + a collapsible .pp-bgal__advanced panel (all styled in browse-gallery.css). No Series-specific

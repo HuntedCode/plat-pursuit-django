@@ -36,6 +36,36 @@ takes #1.
 **`is_holo`** is a live cosmetic flag (100% including DLC on every gating stage). It flips both ways and
 is worth no XP.
 
+### Mastery, Full Set, Series Master (phase 4)
+
+Three rewards on top of the badge (owner, 2026-10-25). All are **binary and live** like a hold: you have
+one or you do not, they come and go as stages are added or cleared, and the ceremony plays every time one is
+earned. **No points, no titles.** Their reward is that they show.
+
+| Reward | Rule | Stored |
+|---|---|---|
+| **Mastery** (per badge) | every stage IN SCOPE for the edition, **stage 0 and stages that no longer gate included**, at the full bar (100% with DLC, flagged trophies excused) on any one version. Needs the hold, so it always implies holo | `UserGroupBadge.mastered_at` (null = not mastered) |
+| **Full Set** (per series) | every live edition **that can be earned** (`gating_count > 0`) held; needs 2+ of them. A dead edition never blocks it, as an unobtainable game never makes a badge harder | `SeriesAward` (`full_set`) |
+| **Series Master** (per series) | every such edition mastered. **Offered only when no single edition's stage scope covers every stage**: when one does, mastering it masters the others too (satisfaction is cross-platform), so it would say nothing | `SeriesAward` (`series_master`) |
+
+The rules are pure, in `badge_engine` beside holo (`GroupBadgeResult.mastered` / `mastery_done` /
+`mastery_total` / `mastered_date` / `scope`, and `evaluate_series_rewards`). They read no more than holo
+does, so the engine sends no new per-profile query. `badge_apply` writes them: mastery in `diff` /
+`apply_changes`, series rewards in `apply_series_rewards` after the badges.
+
+**Celebrated only when recent.** A mastery or series reward gets its moment and its Discord line only when it
+was finished within `moment_service.REWARD_RECENCY` (14 days). That is the deploy backfill (owner: silent): the
+first nightly after deploy marks every existing master, dated by their real finish, and plays nothing.
+
+**Discord, once ever** per hunter and reward (`RewardAnnouncement`, like `GroupBadgeAnnouncement`), and in the
+SAME embed as the run's badge earns, so finishing a series is one ping.
+
+**On the page.** The badge hero says "Mastered · since <date>" in place of the holo line (or, on a held badge
+short of it, "Mastery: N of M stages at 100%") and tallies the edition's masters beside its earners; the
+Rarity & Community band lists the first few masters (`badge_leaderboards.badge_masters`, verified hunters, no
+rank number: "Master #3" breaks the day a game is added) and carries the series' Full Set / Series Master
+line. The "No longer obtainable" section says those stages count toward Mastery.
+
 ### Scope, gating, satisfaction
 
 Three different questions, three different answers — this is the part of the engine most often misread.
@@ -368,6 +398,19 @@ to the total and per-edition trophy counts do not.
 indistinguishable from a first earn. `GroupBadgeAnnouncement` records every (hunter, badge) ever
 announced and is never deleted. A Redis cooldown is not a substitute: any TTL short enough to be a
 cooldown has expired by the time year-later PSN flux re-triggers the earn.
+
+**Mastery's date never re-stamps while it holds.** `diff` changes mastery on the TRANSITION only. Comparing
+the date as `earned_at` is compared would re-stamp every master whose stage dates are missing on every run
+(the undated-earn churn above).
+
+**Series rewards are scoped by series too.** `apply_series_rewards` reads every live edition's result from
+`desired`, as `recompute_standing` does: hand it one edition of a two-edition series and the Full Set reads as
+lost. It never raises (a reward must not cost a badge its announcement or the XP recompute) and creates with
+`get_or_create`, so a sync and the nightly racing one hunter cannot abort each other. The nightly batch reads
+the catalogue's awards once, not once per profile.
+
+**A `SeriesAward` outlives a series that goes dormant.** A series whose every edition leaves the catalogue is
+never evaluated again, so its awards stay, as its dormant holds do. Readers go through live editions.
 
 **Every award records a celebration moment** (`moment_service.record_badge`, inside `apply_changes`), on
 every path including the nightly run: a badge earned is news however it was noticed. It never raises, so a

@@ -682,6 +682,31 @@ a.bd-studio__ico:hover { box-shadow: 0 0 0 2px color-mix(in oklab, var(--pp-prim
 .bd2-comm__earners b { color: var(--pp-text-dim); }
 .bd2-comm__bar { margin-top: 5px; }   /* the shared Horizon primitive provides the track/fill; this is spacing only */
 .bd2-comm__bar .pp-horizon__fill { transition: width 0.7s cubic-bezier(0.22, 1, 0.36, 1); }   /* fill-from-0 on reveal */
+/* MASTERY (phase 4): the crown glyph (the medallion's own SVG) and the mastered gold, wherever the page names it. */
+.bd2-crown { display: inline-block; width: auto; height: 0.95em; vertical-align: -0.12em; margin-right: 0.2em; }
+.bd2-mastered { color: var(--med-tier-gold); }
+/* The hero's one medallion: room for its crown under the card's top edge (a phone stacks it first). */
+.bd2-med .pp-med--mastered { margin-top: calc(var(--sz) * 0.08); }
+/* The edition's current masters: a count and a row of faces, the first few in the order they mastered it. */
+.bd2-comm__masters { margin-top: 12px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.bd2-comm__masters-label { display: inline-flex; align-items: center; font-size: 0.74rem; color: var(--pp-text-mute); white-space: nowrap; }
+.bd2-comm__masters-label b { color: var(--med-tier-gold); margin-right: 0.25em; }
+.bd2-comm__masters-list { display: flex; flex-wrap: wrap; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.bd2-comm__master {
+    display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; overflow: hidden;
+    border: 1px solid color-mix(in oklab, var(--med-tier-gold) 55%, transparent); background: var(--pp-bg-2);
+    font-size: 0.62rem; font-weight: 800; color: var(--pp-text-dim); text-decoration: none;
+    transition: border-color var(--pp-dur) var(--pp-ease), box-shadow var(--pp-dur) var(--pp-ease);
+}
+.bd2-comm__master img { width: 100%; height: 100%; object-fit: cover; }
+a.bd2-comm__master:hover { border-color: var(--med-tier-gold); box-shadow: 0 0 0 2px color-mix(in oklab, var(--med-tier-gold) 25%, transparent); }
+a.bd2-comm__master:focus-visible { outline: 2px solid var(--med-tier-gold); outline-offset: 2px; }
+.bd2-comm__master--more { width: auto; padding: 0 7px; border-radius: 999px; }
+/* The series' set reward line. Gold once it is a Series Master, the primary once the set is held. */
+.bd2-comm__set { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--pp-divider); display: flex; align-items: center; gap: 4px; font-size: 0.82rem; color: var(--pp-text-dim); }
+.bd2-comm__set b { color: var(--pp-text); font-weight: 800; }
+.bd2-comm__set.is-held b { color: var(--pp-primary); }
+.bd2-comm__set.is-master b { color: var(--med-tier-gold); }
 .bd2-comm__standing { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--pp-divider); display: flex; align-items: center; gap: 7px; font-size: 0.82rem; color: var(--pp-text-dim); }
 .bd2-comm__standing svg { width: 15px; height: 15px; color: var(--pp-primary); flex-shrink: 0; }
 .bd2-comm__standing b { font-family: var(--pp-font-display); color: var(--pp-text); }

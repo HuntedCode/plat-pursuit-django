@@ -192,6 +192,8 @@
        room clears the swing with ~12px to spare (owner, 2026-10-25), in --sz terms so the phone's smaller
        hero keeps the same proportion. Tilt-only, like the swing. */
     .pp-bdetail__stage .pp-med { margin: calc(var(--sz) * 0.13); }
+    /* A crowned medallion: the crown stands ~15% above it before it turns, so more room on top. */
+    .pp-bdetail__stage .pp-med--mastered { margin-top: calc(var(--sz) * 0.3); }
     .pp-bdetail__stage .pp-med__meter { margin-top: calc(var(--sz) * 0.24); }
     /* A meter's own gap already holds the bottom swing; nothing turns below it, so no room is added twice. */
     .pp-bdetail__stage .pp-med:has(> .pp-med__meter) { margin-bottom: 0; }

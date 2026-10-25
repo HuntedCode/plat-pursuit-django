@@ -206,17 +206,7 @@ def recompute_required_stages(catalog) -> int:
     games are delisted (and the group excludes delisted) or unobtainable. Counting `Stage` rows would
     over-report on exactly the editions where the difference is visible.
     """
-    counts = {}
-    stages_by_series = defaultdict(list)
-    for st in catalog['stages']:
-        units = catalog_stage_units(st, catalog)
-        stages_by_series[st.series_slug].append(StageInput(st.stage_number, tuple(units)))
-
-    for gb in catalog['group_badges']:
-        group_input = GroupInput(frozenset(gb.platform_group.platforms), gb.platform_group.exclude_delisted)
-        stages = stages_by_series.get(gb.series.series_slug, [])
-        results = [evaluate_stage(s, group_input) for s in stages if s.stage_number > 0]
-        counts[gb.id] = sum(1 for r in results if r.gates)
+    counts = {gb_id: r.gating_count for gb_id, r in catalog_results(catalog).items()}
 
     stale = [gb for gb in catalog['group_badges'] if gb.required_stages != counts[gb.id]]
     for gb in stale:
@@ -227,6 +217,24 @@ def recompute_required_stages(catalog) -> int:
         with transaction.atomic():
             GroupBadge.objects.bulk_update(stale, ['required_stages'], batch_size=500)
     return len(stale)
+
+
+def catalog_results(catalog) -> dict:
+    """Every badge in the catalogue evaluated on catalogue facts alone, with no hunter: {group_badge_id:
+    GroupBadgeResult}. Nothing is complete, so only what every hunter shares is meaningful in it: the gating
+    count (`recompute_required_stages`) and each edition's stage scope (the badge page's Series Master offer
+    for a visitor who is not signed in). No queries."""
+    stages_by_series = defaultdict(list)
+    for st in catalog['stages']:
+        stages_by_series[st.series_slug].append(StageInput(st.stage_number, tuple(catalog_stage_units(st, catalog))))
+    return {
+        gb.id: evaluate_group_badge(
+            SeriesInput(gb.series.completion_policy, gb.series.min_required),
+            GroupInput(frozenset(gb.platform_group.platforms), gb.platform_group.exclude_delisted),
+            stages_by_series.get(gb.series.series_slug, []),
+        )
+        for gb in catalog['group_badges']
+    }
 
 
 def _catalog_game_state(g, obtainable=None):

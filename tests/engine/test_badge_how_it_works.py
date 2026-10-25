@@ -83,9 +83,10 @@ def test_the_platform_codes_are_rendered_as_labels(client):
     assert 'PSVITA' not in body, 'the raw PSN code is being printed at the reader'
 
 
-def test_the_page_teaches_all_four_beats(client):
-    """The modal has FOUR beats and the first draft of this page had three -- it dropped mastery/holo,
-    which would have made the permanent home teach LESS than the sheet it replaced.
+def test_the_page_teaches_all_five_beats(client):
+    """The modal had FOUR beats and the first draft of this page had three -- it dropped mastery/holo,
+    which would have made the permanent home teach LESS than the sheet it replaced. Phase 4 (owner,
+    2026-10-25) made holo and Mastery two different finishes, so the journey has FIVE: holo, then Mastery.
 
     Step 2's wording is checked against `badge_engine.py` rather than the modal's shorter caption: the
     engine's bars are `base_complete` (the DEFAULT trophy group at 100% -- the platinum on a plat game,
@@ -95,12 +96,12 @@ def test_the_page_teaches_all_four_beats(client):
     body = client.get(reverse('badge_how_it_works')).content.decode()
 
     # Structure, not copy. The captions are wording and get revised; what must not change is that there
-    # are FOUR beats and that each still teaches its own thing. Pinning exact caption text made this fail
+    # are FIVE beats and that each still teaches its own thing. Pinning exact caption text made this fail
     # on a pure copy edit while a genuinely dropped beat would look identical to a rename.
     # Matched on the <li>, not the class prefix: the wrapping <ol class="pp-hiw__steps"> shares it, so a
     # prefix count reads 5 and would have to be "corrected" to a number that means nothing.
     beats = len(re.findall(r'<li class="pp-hiw__step', body))
-    assert beats == 4, f'the journey has {beats} beats, not four'
+    assert beats == 5, f'the journey has {beats} beats, not five'
 
     for concept, missing in (
         ('pick a set', 'step 1 no longer names choosing a set'),
@@ -108,12 +109,14 @@ def test_the_page_teaches_all_four_beats(client):
         # Not "forged": that vocabulary is retired and another test in this file now forbids it. Beat 3
         # is the moment the badge becomes YOURS, which is what it always meant.
         ('medallion is yours', 'step 3 no longer names the badge becoming yours'),
-        ('holographic', 'step 4 no longer names the mastery payoff'),
+        ('holographic', 'step 4 no longer names the holo payoff'),
+        ('mastery', 'step 5 no longer names Mastery'),
+        ('full set', 'step 5 no longer names the Full Set'),
     ):
         assert concept in body.lower(), missing
 
     assert 'no platinum' in body, 'the page does not say how a game without a platinum counts'
-    assert 'DLC' in body, 'the page does not say that mastery includes DLC'
+    assert 'DLC' in body, 'the page does not say that holo includes DLC'
 
 
 @pytest.mark.parametrize('surface', [

@@ -34,6 +34,14 @@ double-framing a round object. The decision was validated at `/design/badge-pres
 | `unearned` | Dark grayscale mount + ghosted subject silhouette (a named, waiting slot), **no fill** (and no meter unless the surface passes `always_meter`) |
 | `maintenance` | Tarnished base + **rising-colour (restored) subject** + **warm** multi-bar meter + "Lapsed" chip |
 
+**Mastered** (`frame.is_mastered`, earned only; badge rewards phase 4) is an UPGRADE on holo, never a
+replacement: the foil stays, and `pp-med--mastered` adds a **gold rim** tracing the backdrop's own outline
+(`--mast-rim`, drop-shadows on that leaf: a dark keyline under a gold line so it reads on the gold Legacy HD
+metal), a **gold mount edge**, a gold aura, and a **crown** (`static/images/badges/mastery-crown.svg`, an `<img>`
+so a page of medallions never repeats inline gradient ids). The crown is seated 6% above the mount so a grid
+cell holds it; the badge page hero, the inspector and the moments give it extra room above. It is set on during
+the mint (`ppCrownSet`).
+
 **Earned is the only fully-bright state.** In-progress deliberately wears the *same* dark mount as
 unearned so "done vs not done" reads instantly across a shelf; the two are told apart by the **meter and
 the rising-colour fill**, not by brighter base art. On a surface passing **`always_meter`** both draw a
@@ -138,6 +146,11 @@ feed back into its own bbox, and the rotation is applied as an **inline** transf
 The companion **flip** (to a back face) is still a planned follow-up.
 
 ## Gotchas and Pitfalls
+
+- **The mastered rim rides the backdrop's filter, which the inspector animates.** Its `--mast-rim` list is
+  prepended to the inspector's grounding shadow in EVERY state (`badge-inspect.css`: rest, is-opening,
+  is-closing) so the function lists match and the pick-up still interpolates. A mastered rule that drops the
+  cast, or a cast rule that drops the rim, makes the put-down snap instead of fade.
 
 - **`art_layers` are full URLs and a *filtered* list.** Render raw (`{{ layer }}`, never `{% static %}`
   — double-prefix) and **loop** rather than hardcode 3 `<img>`s (no-custom-art badges have 2 layers).

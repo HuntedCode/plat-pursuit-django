@@ -168,7 +168,7 @@ def build_collection_context(profile, sort=DEFAULT_SORT):
         sort = DEFAULT_SORT
     context = {
         'list_badges': [], 'themes': [],
-        'summary': {'total': 0, 'catalog_total': 0, 'earned': 0, 'in_progress': 0, 'holo': 0,
+        'summary': {'total': 0, 'catalog_total': 0, 'earned': 0, 'in_progress': 0, 'holo': 0, 'mastered': 0,
                     'pct': 0, 'recent': 0, 'editions': []},
         # sort_options was dropped from the context 2026-08-23 (audit): the gallery template
         # hardcodes its <option>s, so the key had no consumer and could silently drift from
@@ -205,7 +205,7 @@ def build_collection_context(profile, sort=DEFAULT_SORT):
         catalog_total = GroupBadge.objects.filter(is_live=True).count()   # the whole earnable catalog (denominator)
 
         list_badges, edition_counts = [], {}
-        earned = in_progress = recent = holo = 0
+        earned = in_progress = recent = holo = mastered_count = 0
         for gb in group_badges:
             fr = badge_frame(gb, holds, standings, participants, mastered)
             btype = gb.series.badge_type
@@ -231,8 +231,10 @@ def build_collection_context(profile, sort=DEFAULT_SORT):
                 ec['count'] += 1
                 if fr['is_new']:
                     recent += 1
-                if fr['is_holographic']:
-                    holo += 1
+                if fr['is_mastered']:
+                    mastered_count += 1
+                elif fr['is_holographic']:
+                    holo += 1       # holo short of mastery: a mastered badge is counted once, as mastered
             elif fr['state'] == 'in_progress':
                 in_progress += 1
 
@@ -275,6 +277,7 @@ def build_collection_context(profile, sort=DEFAULT_SORT):
                 'earned': earned,
                 'in_progress': in_progress,
                 'holo': holo,
+                'mastered': mastered_count,
                 'pct': round(earned / catalog_total * 100) if catalog_total else 0,
                 'recent': recent,
                 # Held-badge composition by EDITION (Legacy HD / Ultra HD); every engaged edition present.

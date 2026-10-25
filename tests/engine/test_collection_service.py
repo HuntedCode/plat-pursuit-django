@@ -232,14 +232,32 @@ def test_summary_counts_and_pct_use_the_full_catalog():
     assert summary['pct'] == 17           # 1 / 6 -> catalog completion, not engaged completion
 
 
-def test_summary_holo_counts_mastered_holds():
-    """summary.holo counts held editions flagged holo (mastered 100%); plain holds and unheld don't count."""
+def test_summary_holo_counts_holo_holds():
+    """summary.holo counts held editions flagged holo (100% on the gating stages); plain holds and unheld don't."""
     profile = ProfileFactory()
     _, groups = _series('rs-holo')
     _hold(profile, groups['ultra-hd'], is_holo=True)
     _hold(profile, groups['legacy-hd'], is_holo=False)
 
     assert build_collection_context(profile)['summary']['holo'] == 1
+
+
+def test_a_mastered_badge_is_counted_once_as_mastered_and_wears_it():
+    """Phase 4: Mastery includes holo, so a mastered hold is counted as MASTERED, not also as holographic, and
+    its card is the mastered medallion."""
+    from django.utils import timezone
+
+    profile = ProfileFactory()
+    _, groups = _series('rs-mastered')
+    _hold(profile, groups['ultra-hd'], is_holo=True)
+    mastered = _hold(profile, groups['legacy-hd'], is_holo=True)
+    UserGroupBadge.objects.filter(pk=mastered.pk).update(mastered_at=timezone.now())
+
+    ctx = build_collection_context(profile)
+    assert (ctx['summary']['holo'], ctx['summary']['mastered']) == (1, 1)
+    frames = {f['badge_id']: f for f in ctx['list_badges']}
+    assert frames[groups['legacy-hd'].id]['is_mastered'] is True
+    assert frames[groups['ultra-hd'].id]['is_mastered'] is False
 
 
 def test_summary_editions_composition():
