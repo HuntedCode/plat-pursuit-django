@@ -13,6 +13,9 @@ Completion signals (both denormalized + indexed):
 A TROPHY-GROUP member (`Stage.trophy_groups`) reads its own group's ProfileTrophyGroup for both bars instead.
 The group read is driven from the small catalog side (pre-resolved trophy-group ids) so it's a bounded index
 seek even for a whale with 250k ProfileTrophyGroups.
+EXCUSED TROPHIES (`Trophy.is_unobtainable`) can also meet either bar: every trophy NOT excused earned counts as
+finishing the list, read by trophies/services/excused_trophies.py only for flagged lists the hunter has not
+already finished.
 """
 from collections import defaultdict
 
@@ -26,6 +29,7 @@ from trophies.models import (
 from trophies.services.badge_engine import (
     GameState, StageInput, GroupInput, SeriesInput, evaluate_group_badge, evaluate_stage,
 )
+from trophies.services.excused_trophies import BASE_GROUP, ExcusedProgress, candidates, excused_lists
 from trophies.services.stage_membership import in_series_q
 
 _GAME_FIELDS = ('id', 'title_platform', 'is_obtainable', 'is_delisted', 'concept_id')
@@ -173,9 +177,11 @@ def build_catalog(group_badges, *, whole_catalogue=False):
 
     # `game_ids` (the Python set) stays regardless: it is catalogue-bounded, built once, and both the
     # in-memory game_state lookups and badge_detail_service read it. `group_tg_ids` is always the explicit
-    # list: the group read below and the badge page's group cards both use it.
+    # list: the group read below and the badge page's group cards both use it. `excused` is the catalogue's
+    # lists with a flagged trophy, empty until staff flag one (a seek on a partial index, once per catalogue).
     return {'group_badges': group_badges, 'stages': stages, 'game_ids': game_ids, 'group_tg_ids': group_tg_ids,
-            'game_filter': game_filter, 'tg_filter': tg_filter, 'uses_subquery': whole_catalogue}
+            'game_filter': game_filter, 'tg_filter': tg_filter, 'uses_subquery': whole_catalogue,
+            'excused': excused_lists(game_ids)}
 
 
 def recompute_required_stages(catalog) -> int:
@@ -203,7 +209,7 @@ def recompute_required_stages(catalog) -> int:
     counts = {}
     stages_by_series = defaultdict(list)
     for st in catalog['stages']:
-        units = stage_units(st, _catalog_game_state, catalog_group_state)
+        units = catalog_stage_units(st, catalog)
         stages_by_series[st.series_slug].append(StageInput(st.stage_number, tuple(units)))
 
     for gb in catalog['group_badges']:
@@ -223,13 +229,14 @@ def recompute_required_stages(catalog) -> int:
     return len(stale)
 
 
-def _catalog_game_state(g):
+def _catalog_game_state(g, obtainable=None):
     """A GameState carrying only the catalog facts gating reads. Completion is stubbed False because
-    `_gates`/`_qualifies` never look at it -- see recompute_required_stages."""
+    `_gates`/`_qualifies` never look at it -- see recompute_required_stages. `obtainable` overrides the
+    list's own flag (`unit_obtainable`)."""
     return GameState(
         game_id=g.id,
         platforms=frozenset(g.title_platform or []),
-        is_obtainable=g.is_obtainable,
+        is_obtainable=g.is_obtainable if obtainable is None else obtainable,
         is_delisted=g.is_delisted,
         base_complete=False,
         full_complete=False,
@@ -237,25 +244,40 @@ def _catalog_game_state(g):
     )
 
 
-def catalog_group_state(g, tg):
-    """`_catalog_game_state` for a trophy-group member: gating reads only the version's catalog facts."""
-    return _catalog_game_state(g)
+def unit_obtainable(g, excused, group_id=BASE_GROUP):
+    """Can this unit still be finished? The list must be obtainable, AND the bar it is judged on (its base
+    group, or a trophy-group member's own group) must hold a trophy that is not excused: a bar with every
+    trophy excused has nothing left to earn, so it must not gate (see excused_trophies)."""
+    return g.is_obtainable and not excused.dead(g.id, group_id)
 
 
-def evaluate_with_catalog(profile, catalog):
+def catalog_stage_units(st, catalog):
+    """`stage_units` with catalog facts only, for every gating question asked without a hunter (the required
+    stage count, the badge page's anonymous ladder). Reads the catalogue's excused lists, no queries."""
+    excused = ExcusedProgress.read(None, catalog['excused'], [])
+    return stage_units(
+        st,
+        lambda g: _catalog_game_state(g, unit_obtainable(g, excused)),
+        lambda g, tg: _catalog_game_state(g, unit_obtainable(g, excused, tg.trophy_group_id)),
+    )
+
+
+def evaluate_with_catalog(profile, catalog, excused=None):
     """Evaluate one profile against a PRE-BUILT catalog. The ONLY per-profile DB work is the two completion
     reads, both bounded to catalog games (whale-safe), plus a third tiny one when a stage has a trophy-group
-    member. Returns {group_badge_id: GroupBadgeResult}."""
+    member. Returns {group_badge_id: GroupBadgeResult}. `excused`: an `ExcusedProgress` the caller already read
+    for this profile and catalogue (the badge page shares its own), else it is read here."""
     # `game_filter` / `tg_filter` are either the precomputed id collections or subqueries selecting the
     # same rows, chosen by the caller's regime in build_catalog -- see the note there. Only the query SHAPE
     # differs; both select identically. (On the games side "identically" means every game that can reach a
     # unit: the subquery's version list for a group member is the explicit one the small regime uses.)
-    full_map = {
-        gid: (prog, last)
-        for gid, prog, last in ProfileGame.objects.filter(
-            profile=profile, game_id__in=catalog['game_filter'],
-        ).values_list('game_id', 'progress', 'most_recent_trophy_date')
-    }
+    full_rows = ProfileGame.objects.filter(
+        profile=profile, game_id__in=catalog['game_filter'],
+    ).values_list('game_id', 'progress', 'most_recent_trophy_date', 'earned_trophies_count')
+    full_map, standing = {}, {}
+    for gid, prog, last, earned in full_rows:
+        full_map[gid] = (prog, last)
+        standing[gid] = (prog, earned)
     # Small-side-first either way: the filter resolves the DEFAULT trophy groups, so the outer read
     # stays a bounded seek on PTG (profile, trophy_group) even for a 250k-row whale.
     base_map = {
@@ -272,19 +294,38 @@ def evaluate_with_catalog(profile, catalog):
             profile=profile, trophy_group_id__in=catalog['group_tg_ids'],
         ).values_list('trophy_group_id', 'progress', 'last_trophy_at')
     }
+    # Excused trophies: only a flagged list this hunter has started, not finished, and earned enough of to
+    # finish can change anything, so nearly every hunter sends no query at all.
+    if excused is None:
+        excused = ExcusedProgress.read(profile, catalog['excused'], candidates(catalog['excused'], standing))
 
     def game_state(g):
         base_prog, base_date = base_map.get(g.id, (0, None))
         full_prog, full_date = full_map.get(g.id, (0, None))
-        full_complete = full_prog == 100
+        full_excused, full_excused_date = excused.full(g.id)
+        base_excused, base_excused_date = excused.base(g.id)
+        full_complete = full_prog == 100 or full_excused
         # Invariant: 100% of the whole game implies the base list is done -- enforced here so the engine stays
         # bar-agnostic and a missing/stale default ProfileTrophyGroup row can't yield "holo without base".
-        base_complete = base_prog == 100 or full_complete
-        completion_date = base_date if base_prog == 100 else (full_date if full_complete else None)
+        # An excused full bar usually implies an excused base bar, but not when every base trophy is excused
+        # (a dead base group): then the full bar alone carries it, and the date below must too.
+        base_complete = base_prog == 100 or full_complete or base_excused
+        if base_prog == 100:
+            completion_date = base_date
+        elif full_prog == 100:
+            completion_date = full_date
+        elif base_excused:
+            # PSN dates every earned trophy in practice; the list's own latest is the fallback, so an excused
+            # clear is never undated (an undated clear re-stamps the badge on every run).
+            completion_date = base_excused_date or full_date
+        elif full_excused:
+            completion_date = full_excused_date or full_date
+        else:
+            completion_date = None
         return GameState(
             game_id=g.id,
             platforms=frozenset(g.title_platform or []),
-            is_obtainable=g.is_obtainable,
+            is_obtainable=unit_obtainable(g, excused),
             is_delisted=g.is_delisted,
             base_complete=base_complete,
             full_complete=full_complete,
@@ -296,14 +337,22 @@ def evaluate_with_catalog(profile, catalog):
         for. The rest of its list (the collection's other games, its platinum) never counts here."""
         group_prog, group_date = group_map.get(tg.id, (0, None))
         full_prog, full_date = full_map.get(g.id, (0, None))
+        group_excused, group_excused_date = excused.group(g.id, tg.trophy_group_id)
         # game_state's invariant, one level down: the whole list at 100% means every group in it is too, so a
         # stale group row cannot deny credit for a finished list.
-        complete = group_prog == 100 or full_prog == 100
-        completion_date = group_date if group_prog == 100 else (full_date if complete else None)
+        complete = group_prog == 100 or full_prog == 100 or group_excused
+        if group_prog == 100:
+            completion_date = group_date
+        elif full_prog == 100:
+            completion_date = full_date
+        elif group_excused:
+            completion_date = group_excused_date or group_date or full_date
+        else:
+            completion_date = None
         return GameState(
             game_id=g.id,
             platforms=frozenset(g.title_platform or []),
-            is_obtainable=g.is_obtainable,
+            is_obtainable=unit_obtainable(g, excused, tg.trophy_group_id),
             is_delisted=g.is_delisted,
             base_complete=complete,
             full_complete=complete,

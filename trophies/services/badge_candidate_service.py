@@ -113,6 +113,9 @@ def _game_states_by_concept(concept_ids):
         'id', 'concept_id', 'title_platform', 'is_obtainable', 'is_delisted',
     )
     for game in games:
+        # Catalogue facts WITHOUT excused trophies: a list whose base group is entirely staff-flagged still
+        # counts here. Fine for an authoring suggestion (such a list is rare, and staff usually mark the whole
+        # game unobtainable instead); the engine itself gates through `catalog_stage_units`.
         states[game.concept_id].append(_catalog_game_state(game))
     return states
 
