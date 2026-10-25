@@ -921,30 +921,29 @@ def get_badge_detail(series, target_profile, *, studio_sections=False, with_rewa
         series_rank=series_rank, series_size=participants,
         community_max_earned=max((g.earned_count for g in groups), default=0),
         target_profile=target_profile,
-        rewards=(_series_rewards(series, group_badges, catalog, desired, target_profile)
+        rewards=(_series_rewards(series, group_badges, catalog, desired, holds, target_profile)
                  if catalog and with_rewards else None),
     )
 
 
-def _series_rewards(series, group_badges, catalog, desired, target_profile):
-    """The viewer's Full Set and Series Master for this series, by the engine's own rule
-    (`evaluate_series_rewards`) over this pass's results, or catalogue facts for a visitor (nothing held, but
-    whether a Series Master is offered at all is the same for everyone). None with fewer than two editions
-    that can be earned. `*_since` comes from the stored hold, the date its current run began."""
+def _series_rewards(series, group_badges, catalog, desired, holds, target_profile):
+    """The viewer's Full Set and Series Master for this series, or None with fewer than two editions that can be
+    earned. What is HELD is read from the stored holds and `SeriesAward`s, exactly as the hero's Earned / Mastered
+    line reads its hold, so the page never says "Mastered" above "hold both editions" while the stores and this
+    pass disagree (they agree again after the next evaluation). Which editions can be earned and whether a Series
+    Master is offered at all are the same for everyone: this pass's results, or catalogue facts for a visitor."""
     static = catalog_results(catalog) if not desired else {}
-    results = [desired.get(gb.id) or static.get(gb.id) for gb in group_badges]
-    results = [r for r in results if r is not None]
-    earnable = [r for r in results if r.gating_count > 0]
+    results = {gb.id: desired.get(gb.id) or static.get(gb.id) for gb in group_badges}
+    earnable = [gid for gid, r in results.items() if r is not None and r.gating_count > 0]
     if len(earnable) < 2:
         return None
-    r = evaluate_series_rewards(results)
-    since = dict(SeriesAward.objects.filter(profile=target_profile, series=series).values_list('kind', 'since')) \
-        if target_profile else {}
+    offered = evaluate_series_rewards([r for r in results.values() if r is not None]).master_offered
+    awards = dict(SeriesAward.objects.filter(profile=target_profile, series=series).values_list('kind', 'since'))         if target_profile else {}
     return {
         'editions': len(earnable),
-        'held': sum(1 for e in earnable if e.base_earned),
-        'mastered': sum(1 for e in earnable if e.mastered),
-        'full_set': r.full_set, 'full_set_since': since.get(SeriesAward.KIND_FULL_SET) if r.full_set else None,
-        'master_offered': r.master_offered, 'series_master': r.series_master,
-        'series_master_since': since.get(SeriesAward.KIND_SERIES_MASTER) if r.series_master else None,
+        'held': sum(1 for gid in earnable if gid in holds),
+        'mastered': sum(1 for gid in earnable if gid in holds and holds[gid].mastered_at is not None),
+        'full_set': SeriesAward.KIND_FULL_SET in awards, 'full_set_since': awards.get(SeriesAward.KIND_FULL_SET),
+        'master_offered': offered, 'series_master': SeriesAward.KIND_SERIES_MASTER in awards,
+        'series_master_since': awards.get(SeriesAward.KIND_SERIES_MASTER),
     }

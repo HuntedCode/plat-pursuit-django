@@ -162,3 +162,18 @@ def test_the_inspector_keeps_rim_and_cast_together_in_every_state():
     assert 'is-opening' in selectors and 'is-closing' in selectors and len(rules) >= 2
     for _, body in rules:
         assert 'var(--mast-rim)' in body and 'drop-shadow(var(--med-cast)' in body, body
+
+
+def test_the_set_line_reads_the_stored_rewards_like_the_hero_reads_its_hold(client):
+    """The hero's Mastered line reads the stored hold; the set line must read the stored award, or between
+    evaluations the page says "Mastered" above "hold both editions"."""
+    series, badges, games = _series((1, [CROSS]), (2, [ULTRA]), (3, [LEGACY]))
+    hunter = _hunter()                                   # no progress at all: only the stores say otherwise
+    for gb in badges.values():
+        UserGroupBadge.objects.create(profile=hunter, group_badge=gb, is_holo=True, is_linked=True,
+                                      mastered_at=timezone.now())
+    for kind in (SeriesAward.KIND_FULL_SET, SeriesAward.KIND_SERIES_MASTER):
+        SeriesAward.objects.create(profile=hunter, series=series, kind=kind, since=timezone.now())
+
+    body = _page(client, series, hunter)
+    assert '<b>Series Master</b> &middot; every edition mastered, since' in body
