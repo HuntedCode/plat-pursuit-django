@@ -2182,11 +2182,22 @@ class Trophy(models.Model):
     )
     earned_count = models.PositiveIntegerField(default=0, help_text="Denormalized count of profiles that have earned this trophy (PP-specific).")
     earn_rate = models.FloatField(default=0.0)
+    # Staff-set, per list version (a trophy can be dead on one platform's list and alive on another's). Badges
+    # count a list as finished once every trophy NOT flagged is earned; see trophies/services/excused_trophies.py.
+    # Never written by sync: it is not PSN data.
+    is_unobtainable = models.BooleanField(
+        default=False,
+        help_text="Can no longer be earned (servers closed, removed content). Badges excuse it: earning every "
+                  "other trophy counts as finishing the list. A flag in the base list also excuses the platinum.",
+    )
 
     class Meta:
         unique_together = ["trophy_id", "game"]
         indexes = [
             models.Index(fields=["trophy_name", "trophy_type"], name="trophy_idx"),
+            # PARTIAL: a handful of flagged rows in a multi-million-row table, so "which of these lists have an
+            # excused trophy?" (every badge catalogue build) is a seek on a tiny index.
+            models.Index(fields=['game'], condition=Q(is_unobtainable=True), name='trophy_unobtainable_idx'),
             models.Index(fields=["earned_count"], name="trophy_earned_count_idx"),
             models.Index(fields=['trophy_earn_rate'], name="trophy_psn_rate_idx"),
             models.Index(fields=['earn_rate'], name='trophy_pp_rate_idx'),
