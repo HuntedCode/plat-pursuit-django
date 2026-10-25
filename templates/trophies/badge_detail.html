@@ -82,7 +82,7 @@ Collection. No extra wrapper container: a nested one would double the horizontal
                             {% if g.masters_count %}
                             <a href="#bd2-masters-{{ g.platform_group.key }}" class="text-center sm:text-right group/mast">
                                 <div class="leading-none"><span class="pp-tally text-2xl md:text-3xl bd2-mastered">{{ g.masters_count|intcomma }}</span></div>
-                                <div class="text-[0.6rem] md:text-xs uppercase tracking-wider text-base-content/40 mt-1 group-hover/mast:text-warning transition-colors">Masters &rsaquo;</div>
+                                <div class="text-[0.6rem] md:text-xs uppercase tracking-wider text-base-content/40 mt-1 bd2-mastered-hover transition-colors">Masters &rsaquo;</div>
                             </a>
                             {% endif %}
                         </div>
@@ -100,7 +100,10 @@ Collection. No extra wrapper container: a nested one would double the horizontal
                             {% elif g.state == 'in_progress' %}<span class="text-primary">In progress</span>
                             {% elif g.is_unearnable %}<span class="text-base-content/50 font-medium">No longer earnable</span>
                             {% else %}<span class="text-base-content/50 font-medium">Not yet earned</span>{% endif %}
-                            {% if g.earned_at and not g.mastered_at and g.mastery_total %}
+                            {% comment %} `mastery_done` is this pass's; `mastered_at` the stored hold. At N of N
+                            the hold has not caught up yet (it does on the next evaluation): say nothing rather
+                            than "3 of 3" under a line that is not "Mastered". {% endcomment %}
+                            {% if g.earned_at and not g.mastered_at and g.mastery_total and g.mastery_done < g.mastery_total %}
                             <span class="block mt-0.5 text-xs font-medium text-base-content/50">Mastery: {{ g.mastery_done }} of {{ g.mastery_total }} stage{{ g.mastery_total|pluralize }} at 100%</span>
                             {% endif %}
                         </div>

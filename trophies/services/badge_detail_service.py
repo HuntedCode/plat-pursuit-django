@@ -814,12 +814,13 @@ def _group_view(gb, result, hold, target_profile, series, catalog, games_map, pr
     return gv
 
 
-def get_badge_detail(series, target_profile, *, studio_sections=False, with_masters=False) -> BadgeDetail:
+def get_badge_detail(series, target_profile, *, studio_sections=False, with_rewards=False) -> BadgeDetail:
     """Build the detail context for `series` (a BadgeSeries) as seen by `target_profile` (or None for anon).
 
     `studio_sections`: split a developer badge's ladders by studio (see `_group_journey`). Only the badge
     page renders them, so the medallion peek and the collection modal leave it off and skip the family walk.
-    `with_masters`: each edition's current masters (count + the first few), for the badge page alone.
+    `with_rewards`: each edition's current masters (count + the first few) and the series' Full Set / Series
+    Master, for the badge page alone: the peeks show neither.
     """
     group_badges = list(
         series.group_badges.filter(is_live=True)
@@ -892,7 +893,7 @@ def get_badge_detail(series, target_profile, *, studio_sections=False, with_mast
                           group_progress, group_ratings, excused)
               for gb in group_badges]
     viewer_state = max((g.state for g in groups), key=lambda s: _STATE_ORDER[s], default='none')
-    if with_masters and groups:
+    if with_rewards and groups:
         masters = lb.badge_masters([g.group_badge.id for g in groups])
         for g in groups:
             g.masters_count, g.masters = masters[g.group_badge.id]['count'], masters[g.group_badge.id]['rows']
@@ -920,7 +921,8 @@ def get_badge_detail(series, target_profile, *, studio_sections=False, with_mast
         series_rank=series_rank, series_size=participants,
         community_max_earned=max((g.earned_count for g in groups), default=0),
         target_profile=target_profile,
-        rewards=_series_rewards(series, group_badges, catalog, desired, target_profile) if catalog else None,
+        rewards=(_series_rewards(series, group_badges, catalog, desired, target_profile)
+                 if catalog and with_rewards else None),
     )
 
 

@@ -55,7 +55,9 @@ does, so the engine sends no new per-profile query. `badge_apply` writes them: m
 
 **Celebrated only when recent.** A mastery or series reward gets its moment and its Discord line only when it
 was finished within `moment_service.REWARD_RECENCY` (14 days). That is the deploy backfill (owner: silent): the
-first nightly after deploy marks every existing master, dated by their real finish, and plays nothing.
+first evaluation after deploy marks every existing master, dated by when they finished (the evaluation's own time
+when PSN gave no date), and celebrates only the ones finished in the last 14 days. A badge EARNED already
+mastered plays one moment, its badge moment, crowned ("Badge earned and mastered").
 
 **Discord, once ever** per hunter and reward (`RewardAnnouncement`, like `GroupBadgeAnnouncement`), and in the
 SAME embed as the run's badge earns, so finishing a series is one ping.

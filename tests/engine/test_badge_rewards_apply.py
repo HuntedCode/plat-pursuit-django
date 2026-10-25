@@ -142,11 +142,25 @@ def test_an_old_mastery_seen_for_the_first_time_is_marked_but_not_celebrated():
     assert not Moment.objects.filter(profile=hunter, kind=Moment.KIND_MASTERED).exists()
 
 
-def test_a_mastery_lost_before_it_played_has_nothing_left_to_celebrate():
-    series, badges, games = _series((1, [ULTRA]), legacy=False)
+def test_a_badge_earned_already_mastered_plays_one_moment_not_two():
+    """Audit: the badge moment and a mastery moment of the same medallion back to back said one thing twice.
+    The badge moment wears the crown instead."""
+    _, badges, games = _series((1, [ULTRA]), legacy=False)
     hunter = _hunter()
     _finish(hunter, games[1][0])
-    evaluate_and_apply(hunter)
+    result = evaluate_and_apply(hunter)
+    assert result['mastered'] == [badges['ultra-hd'].id], 'still reported, for the announcement'
+    assert [m.kind for m in Moment.objects.filter(profile=hunter)] == [Moment.KIND_BADGE]
+
+
+def test_a_mastery_lost_before_it_played_has_nothing_left_to_celebrate():
+    series, badges, games = _series((0, [ULTRA]), (1, [ULTRA]), legacy=False)
+    hunter = _hunter()
+    _finish(hunter, games[1][0])
+    _finish(hunter, games[0][0], full=False)
+    evaluate_and_apply(hunter)                       # the badge, short of mastery
+    _finish(hunter, games[0][0])
+    evaluate_and_apply(hunter)                       # mastered: its own moment
     assert any(m.kind == Moment.KIND_MASTERED for m in moment_service.pending(hunter))
 
     ProfileGame.objects.filter(profile=hunter, game=games[1][0]).update(progress=90)   # a DLC drop

@@ -401,7 +401,7 @@
     .pp-hiw__t .pp-tally { font-size: 1.8rem; }
 }
 
-/* ---- The forge: four beats ------------------------------------------------------------------------- */
+/* ---- The forge: five beats ------------------------------------------------------------------------- */
 .pp-hiw__steps { list-style: none; margin: 0 0 30px; padding: 0; display: flex; flex-direction: column; gap: 12px; }
 .pp-hiw__step {
     display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 16px;
@@ -409,7 +409,7 @@
     background: var(--pp-bg-1); border: 1px solid var(--pp-border);
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 4px 14px rgba(0, 0, 0, 0.22);
 }
-/* Fixed square wells so all four beats align down the page whatever sits in them -- a cover fan, three
+/* Fixed square wells so all five beats align down the page whatever sits in them -- a cover fan, three
    platinums, or a medallion. */
 .pp-hiw__art { display: grid; place-items: center; width: 84px; height: 84px; }
 .pp-hiw__art--med .pp-med { --sz: 78px; }
@@ -452,12 +452,16 @@
 .pp-hiw__desc { margin-top: 5px; font-size: 0.85rem; line-height: 1.5; color: var(--pp-text-dim); }
 @media (min-width: 768px) { .pp-hiw__cap { font-size: 1.12rem; } .pp-hiw__desc { font-size: 0.92rem; } }
 
-/* The two payoff beats earn a warmer edge -- claim in the primary, mastery in the holo spectrum. Border
-   and a low outer glow only: the medallion inside is the subject and must not be competed with. */
+/* The payoff beats earn a warmer edge -- claim in the primary, holo in the holo spectrum, Mastery in its gold.
+   Border and a low outer glow only: the medallion inside is the subject and must not be competed with. */
 .pp-hiw__step--claim { border-color: color-mix(in oklab, var(--pp-primary) 30%, var(--pp-border)); }
 .pp-hiw__step--master {
     border-color: color-mix(in oklab, #c9a7ff 34%, var(--pp-border));
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 4px 18px -6px color-mix(in oklab, #8fd2ea 26%, transparent);
+}
+.pp-hiw__step--mastery {
+    border-color: color-mix(in oklab, var(--med-tier-gold) 40%, var(--pp-border));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 4px 18px -6px color-mix(in oklab, var(--med-tier-gold) 30%, transparent);
 }
 
 /* ---- Editions ------------------------------------------------------------------------------------- */

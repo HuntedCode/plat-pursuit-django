@@ -579,9 +579,9 @@ def _mastered_hold(profile, gb, linked=False):
 
 
 def test_a_mastery_plays_by_itself_with_its_crown_and_how_many_hold_it(rf):
-    profile = _hunter()
+    profile = _hunter(is_linked=True)
     gb = GroupBadgeFactory()
-    _mastered_hold(profile, gb)
+    _mastered_hold(profile, gb, linked=True)
     for _ in range(2):
         _mastered_hold(ProfileFactory(is_linked=True), gb, linked=True)
     moment_service.record_mastered(profile, gb, NOW() - timedelta(hours=1))
@@ -590,7 +590,18 @@ def test_a_mastery_plays_by_itself_with_its_crown_and_how_many_hold_it(rf):
 
     assert 'data-kind="mastered"' in html and 'data-queue="auto"' in html
     assert 'pp-med--mastered' in html and 'mastery-crown.svg' in html, 'the medallion wears the rim and crown'
-    assert 'One of</span> <b>2</b>' in html, 'the hunter is unlinked, so the verified count is the other two'
+    assert 'One of</span> <b>3</b>' in html
+
+
+def test_an_unverified_master_is_not_told_they_are_one_of_the_verified_count(rf):
+    profile = _hunter(is_linked=False)
+    gb = GroupBadgeFactory()
+    _mastered_hold(profile, gb)
+    for _ in range(2):
+        _mastered_hold(ProfileFactory(is_linked=True), gb, linked=True)
+    moment_service.record_mastered(profile, gb, NOW() - timedelta(hours=1))
+
+    assert 'One of' not in _render('{% moments_overlay %}', profile, rf)
 
 
 def test_an_old_mastery_records_nothing_to_play():

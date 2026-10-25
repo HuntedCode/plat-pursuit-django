@@ -68,7 +68,7 @@ def test_the_page_counts_and_names_the_current_masters_and_only_when_there_are_a
 
 def test_the_set_band_reads_where_the_hunter_is_and_what_it_takes(client):
     series, badges, games = _series((1, [CROSS]), (2, [ULTRA]), (3, [LEGACY]))
-    assert 'hold all 2 editions, master them all for Series Master' in _page(client, series)
+    assert 'hold both editions, master them all for Series Master' in _page(client, series)
 
     hunter = _hunter()
     _finish(hunter, games[1][0])
@@ -106,3 +106,59 @@ def test_mastered_means_mastery_and_holo_says_holographic():
         src = (ROOT / rel).read_text(encoding='utf-8')
         assert 'Mastered (holographic)' not in src, rel
         assert "{% if card.is_mastered %}Mastered{% elif card.is_holo %}Holographic" in src, rel
+
+
+def test_the_masters_list_names_the_first_few_in_order_and_counts_the_rest(client):
+    from trophies.services.badge_leaderboards import MASTERS_SHOWN
+
+    series, badges, _ = _series((1, [ULTRA]), legacy=False)
+    base = timezone.now() - timedelta(days=60)
+    masters = [ProfileFactory(is_linked=True, psn_username=f'm{i:02d}') for i in range(MASTERS_SHOWN + 2)]
+    for i, m in enumerate(masters):
+        UserGroupBadge.objects.create(profile=m, group_badge=badges['ultra-hd'], is_holo=True, is_linked=True,
+                                      mastered_at=base + timedelta(days=i))
+    body = _page(client, series)
+    shown = [m for m in masters if reverse('profile_detail', args=[m.psn_username]) in body]
+    assert shown == masters[:MASTERS_SHOWN], 'the first to master it, in order'
+    assert '>+2</li>' in body
+
+
+def test_another_hunters_page_shows_their_mastery_and_set(client):
+    series, badges, games = _series((1, [CROSS]))
+    other = _hunter(psn_username='Other')
+    _finish(other, games[1][0], ago=timedelta(days=2))
+    evaluate_and_apply(other)
+
+    client.force_login(ProfileFactory(is_linked=True, psn_username='Viewer').user)
+    resp = client.get(reverse('badge_detail_with_profile', args=[series.series_slug, other.psn_username]),
+                      HTTP_CF_RAY='8f0000000000abcd-LHR')
+    body = resp.content.decode()
+    assert resp.status_code == 200
+    assert 'Mastered &middot; since' in body and '<b>Full Set</b> &middot; every edition held' in body
+
+
+def test_a_badge_earned_already_mastered_says_so_in_its_one_moment(rf):
+    from django.template import Context, Template
+
+    _, badges, games = _series((1, [ULTRA]), legacy=False)
+    hunter = _hunter()
+    _finish(hunter, games[1][0])
+    evaluate_and_apply(hunter)
+    request = rf.get('/career/')
+    request.user = hunter.user
+    html = Template('{% load moments %}{% moments_overlay %}').render(Context({'request': request}))
+    assert html.count('<template data-moment') == 1
+    assert 'Badge earned and mastered' in html and 'pp-med--mastered' in html
+
+
+def test_the_inspector_keeps_rim_and_cast_together_in_every_state():
+    """The documented gotcha: the inspector animates the backdrop's filter, so its mastered rules must carry the
+    rim AND the grounding cast in rest, is-opening and is-closing, or the pick-up snaps instead of fading."""
+    import re
+
+    css = re.sub(r'/\*[\s\S]*?\*/', '', (ROOT / 'static/css/components/badge-inspect.css').read_text(encoding='utf-8'))
+    rules = re.findall(r'([^{}]*pp-med--mastered[^{}]*nth-child\(1\)[^{}]*)\{([^}]*)\}', css)
+    selectors = ' '.join(sel for sel, _ in rules)
+    assert 'is-opening' in selectors and 'is-closing' in selectors and len(rules) >= 2
+    for _, body in rules:
+        assert 'var(--mast-rim)' in body and 'drop-shadow(var(--med-cast)' in body, body

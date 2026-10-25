@@ -685,6 +685,7 @@ a.bd-studio__ico:hover { box-shadow: 0 0 0 2px color-mix(in oklab, var(--pp-prim
 /* MASTERY (phase 4): the crown glyph (the medallion's own SVG) and the mastered gold, wherever the page names it. */
 .bd2-crown { display: inline-block; width: auto; height: 0.95em; vertical-align: -0.12em; margin-right: 0.2em; }
 .bd2-mastered { color: var(--med-tier-gold); }
+.group\/mast:hover .bd2-mastered-hover { color: var(--med-tier-gold); }
 /* The hero's one medallion: room for its crown under the card's top edge (a phone stacks it first). */
 .bd2-med .pp-med--mastered { margin-top: calc(var(--sz) * 0.08); }
 /* The edition's current masters: a count and a row of faces, the first few in the order they mastered it. */

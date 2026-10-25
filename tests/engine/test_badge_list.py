@@ -67,7 +67,8 @@ def test_build_list_cards_marks_the_viewers_holds():
     UserGroupBadge.objects.create(profile=profile, group_badge=gb, is_holo=True)
     card = build_list_cards(GroupBadge.objects.filter(id=gb.id).select_related(*_SR), profile)[0]
     assert card['earned'] is True and card['is_holo'] is True
-    assert card['frame']['is_holographic'] is True   # a mastered hold shimmers on the wall
+    assert card['frame']['is_holographic'] is True   # a holo hold shimmers on the wall
+    assert card['is_mastered'] is False and card['frame']['is_mastered'] is False
 
 
 def test_build_list_cards_query_count_is_flat():

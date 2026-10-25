@@ -93,8 +93,11 @@ def apply_changes(profile, changes, gb_map: dict) -> dict:
     for ch in changes:
         gb = gb_map[ch.group_badge_id]
         if ch.mastery == 'gained':
-            # Celebrated (when finished recently) and reported for the announcement, on either path below.
-            moment_service.record_mastered(profile, gb, ch.mastered_date)
+            # Celebrated (when finished recently) and reported for the announcement. A badge EARNED already
+            # mastered gets one ceremony, not two of the same medallion back to back: its badge moment below
+            # wears the crown and says so.
+            if ch.action != 'award':
+                moment_service.record_mastered(profile, gb, ch.mastered_date)
             result['mastered'].append(gb.id)
         if ch.action == 'award':
             UserGroupBadge.objects.create(

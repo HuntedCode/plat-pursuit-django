@@ -58,7 +58,7 @@
 /* A set (Full Set, Series Master): every edition side by side over one set of rays, each its own pick-up. The
    template sets --n (how many), so three editions still fit a phone. */
 .pp-moment__set { grid-auto-flow: column; justify-content: center; gap: clamp(14px, 4vw, 28px); margin: 24px auto 12px; }
-.pp-moment__set .pp-med { --sz: min(132px, calc(76vw / var(--n, 2) - 14px)); }
+.pp-moment__set .pp-med { --sz: min(132px, calc(76vw / var(--n, 2) - 14px), calc(360px / var(--n, 2) - 14px)); }
 .pp-moment__set .pp-moment__rays { width: max(160%, 300px); }
 .pp-moment__setmed { cursor: pointer; border-radius: 50%; }
 .pp-moment__setmed:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 6px; }

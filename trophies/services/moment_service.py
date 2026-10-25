@@ -263,14 +263,17 @@ def _set_card(moment, editions, holds, participants):
     from trophies.services.collection_service import badge_frame
 
     master = moment.kind == Moment.KIND_SERIES_MASTER
+    # The editions the reward is MADE of: held (a Full Set) or mastered (a Series Master). An edition that
+    # cannot be earned is not part of it and is not drawn as if it were. None held is the team's preview.
+    shown = [gb for gb in editions if gb.id in holds and (holds[gb.id][1] or not master)] or editions
     frames = []
-    for gb in editions:
+    for gb in shown:
         holo, mastered = holds.get(gb.id, (False, False))
         frame = badge_frame(gb, {gb.id: holo or master}, {}, participants,
                             {gb.id} if (mastered or master) else frozenset())
         frame['dom_id'] = f'moment-{moment.id}-{gb.id}'
         frames.append(frame)
-    names = [gb.platform_group.name for gb in editions]
+    names = [gb.platform_group.name for gb in shown]
     label = names[0] if len(names) == 1 else ', '.join(names[:-1]) + ' and ' + names[-1]
     return {'series': moment.series, 'frames': frames, 'editions_label': label}
 
@@ -324,7 +327,7 @@ def build_view(profile, moments, autoplay=True):
     from trophies.services.rarity import community_size
 
     from trophies.models import GroupBadge
-    from trophies.services.badge_leaderboards import masters_counts
+    from trophies.services.badge_leaderboards import masters_counts   # (local: badge_leaderboards imports models)
 
     participants = community_size()
     # The series' live editions for the set beats, then the holds behind EVERY medallion on screen in ONE read
@@ -343,7 +346,8 @@ def build_view(profile, moments, autoplay=True):
         profile=profile, group_badge_id__in=badge_ids,
     ).values_list('group_badge_id', 'is_holo', 'mastered_at')}
     mastered_ids = [m.group_badge_id for m in moments if m.kind == Moment.KIND_MASTERED]
-    masters = masters_counts(mastered_ids) if mastered_ids else {}
+    # The count is of VERIFIED masters (the boards' population), so "One of N" is said only to one of them.
+    masters = masters_counts(mastered_ids) if mastered_ids and profile.is_linked else {}
     auto, plats, milestones = [], [], []
     for m in moments:
         if m.kind == Moment.KIND_WELCOME:

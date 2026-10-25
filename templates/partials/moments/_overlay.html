@@ -90,11 +90,11 @@ After the player in the DOM, so it stacks over it.{% endcomment %}
         <p class="pp-moment__sub">{% if item.kind == 'series_master' %}Every edition mastered{% else %}Every edition held{% endif %}: {{ item.editions_label }}</p>
     </div>
     {% else %}
-    <div class="pp-moment pp-moment--badge">
-        <span class="pp-moment__eyebrow">Badge earned</span>
+    <div class="pp-moment pp-moment--badge{% if item.frame.is_mastered %} pp-moment--mastered{% endif %}">
+        <span class="pp-moment__eyebrow">{% if item.frame.is_mastered %}Badge earned and mastered{% else %}Badge earned{% endif %}</span>
         {% comment %}The rays wear the badge's edition metal (data-tier), iridescent when it is holographic,
-        gold when it is mastered (the mastered moment above).{% endcomment %}
-        <div class="pp-moment__obj pp-moment__med" data-tier="{{ item.frame.tier }}"{% if item.frame.is_holographic %} data-holo{% endif %}
+        gold when it is mastered: a badge earned already mastered plays this ONE moment, crowned.{% endcomment %}
+        <div class="pp-moment__obj pp-moment__med" data-tier="{{ item.frame.tier }}"{% if item.frame.is_holographic %} data-holo{% endif %}{% if item.frame.is_mastered %} data-mastered{% endif %}
              data-moment-pick data-badge-id="{{ item.frame.badge_id }}" role="button" tabindex="0" aria-label="Pick up {{ item.series.name }}">
             <span class="pp-moment__rays" aria-hidden="true"></span>
             {% include 'components/badge_medallion.html' with frame=item.frame no_id=True %}

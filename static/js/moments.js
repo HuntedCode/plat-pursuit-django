@@ -4,7 +4,7 @@
  * One .pp-detail-modal (PlatPursuit.DetailModal owns open, close, Escape and the focus trap) and a <template>
  * per waiting moment. Moments play ONE AT A TIME with "1 of 3", Next and Skip all (owner, 2026-10-25):
  *
- *   auto  welcome + badges: auto-play on a My Pursuit page when the hunter has celebrations on, after any
+ *   auto  welcome, badges, masteries and series rewards: auto-play on a My Pursuit page when the hunter has celebrations on, after any
  *         other modal on the page has had its turn (they open at 450ms and win; this waits for a clear stage)
  *   reel  platinums, then a milestone: NEVER auto-play. Only the strip's pill opens them.
  *
