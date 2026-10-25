@@ -65,9 +65,10 @@ badge" and they are explicitly not steps -- the section they sit in says so once
     <div class="bd-stage__collapse" data-stage-games style="grid-template-rows: {% if s.is_next %}1fr{% else %}0fr{% endif %};">
     <div class="bd-stage__collapse-inner">
         {% comment %}A trophy-group member counts ONE group of its list, and its card alone is easy to read as the
-        whole game, so the stage says it in words, first (owner, 2026-10-25).{% endcomment %}
+        whole game, so the stage says it in words, first (owner, 2026-10-25). Scoped to its LIST: a stage can also
+        hold whole lists, and "Only X counts here" on its own read as if they did not.{% endcomment %}
         {% for group_name, list_name in s.group_notes %}
-        <p class="bd-gnote">{% include 'partials/icons/trophy_group.html' %}<span>Only the trophies in <strong>{{ group_name }}</strong> count here, not the rest of <strong>{{ list_name }}</strong>.</span></p>
+        <p class="bd-gnote">{% include 'partials/icons/trophy_group.html' %}<span>In <strong>{{ list_name }}</strong>, only the trophies in <strong>{{ group_name }}</strong> count here.</span></p>
         {% endfor %}
         {% comment %} Delisted / unobtainable titles satisfy but don't gate -- native <details>, no JS needed. {% endcomment %}
         {% if s.delisted_games %}

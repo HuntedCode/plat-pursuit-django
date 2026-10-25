@@ -146,7 +146,8 @@ holds a list through a group; it reports the addition for a hand edit, as it doe
 
 **On the badge page** a group stage says what it is three times, because a group card on its own reads as the
 whole game (owner, 2026-10-25): the collapsed header counts "1 trophy group" when that is all the stage holds,
-the opened stage leads with one sentence per group ("Only the trophies in X count here, not the rest of Y"),
+the opened stage leads with one sentence per group ("In Y, only the trophies in X count here", scoped to the list
+because the stage may also hold whole lists that count in full),
 and the card's art carries a "Trophy group" label. A group card is named for the group, shows its icon, says
 which list it ships in ("Part of Y"), and
 reads the viewer's progress on the group (its `pgame` is the `ProfileTrophyGroup` row). It carries no contract

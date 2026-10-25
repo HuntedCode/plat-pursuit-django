@@ -647,8 +647,8 @@ def test_the_stage_says_in_words_that_only_the_group_counts():
 
     html = render_to_string('trophies/partials/badge_detail/bd2_stage.html', {'s': view.stages[0]})
     assert html.count('class="bd-gnote"') == 1
-    assert ('Only the trophies in <strong>Re:Chain of Memories</strong> count here, not the rest of '
-            '<strong>Kingdom Hearts Collection</strong>.') in html
+    assert ('In <strong>Kingdom Hearts Collection</strong>, only the trophies in '
+            '<strong>Re:Chain of Memories</strong> count here.') in html
     assert '2 trophy groups</span>' in html, 'the collapsed header says it too (one card per version, as for games)'
     other_html = render_to_string('trophies/partials/badge_detail/bd2_stage.html', {'s': view.stages[1]})
     assert '1 game</span>' in other_html and 'bd-gnote' not in other_html
