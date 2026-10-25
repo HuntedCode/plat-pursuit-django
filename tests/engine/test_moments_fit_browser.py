@@ -3,8 +3,9 @@
 A set moment (two editions side by side) gave the dialog a vertical scrollbar: its rays were sized from the
 whole row, so they hung below the dialog, and they SPIN, so a turning square's corners reach 1.41x as far at 45
 degrees and the scrollbar came and went as they turned. The rays are sized from one medallion now, and the spin
-is an inner layer their box clips. This renders the real overlay markup, parks the spin at its widest and asks
-the dialog whether it can scroll, on a short laptop and a phone. Skips where Playwright's browser is missing.
+is an inner layer their box clips; the set's bloom is sized from one medallion too (it swelled past the dialog
+mid-flare). This renders the real overlay markup, parks the spin at its widest, steps the entrance and mint
+through, and asks the dialog whether it can ever scroll, on a short laptop and a phone. Skips where Playwright's browser is missing.
 """
 from datetime import timedelta
 from pathlib import Path
@@ -23,18 +24,23 @@ CSS = ROOT / 'static' / 'css' / 'output.css'
 
 pytestmark = [pytest.mark.django_db, pytest.mark.skipif(_SKIP_REASON is not None, reason=_SKIP_REASON or '')]
 
-# Show the player with its one moment in the stage (what moments.js does), the spin parked at 45 degrees and every
-# other animation at its end state, then measure.
+# Show the player with its one moment in the stage (what moments.js does) and the spin parked at 45 degrees, then
+# step EVERY other animation through the whole entrance (50ms at a time) and keep the worst overflow: a scrollbar
+# that shows only mid-flare (the bloom swelling as the set landed) is still a scrollbar.
 MEASURE = """() => {
   const root = document.getElementById('pp-moments'); root.hidden = false;
   const t = document.querySelector('template[data-moment]');
   document.querySelector('[data-moments-stage]').appendChild(t.content.cloneNode(true));
-  for (const a of document.getAnimations()) {
-    if (a.animationName === 'ppRaysSpin') { a.pause(); a.currentTime = 6800; }   // 0.8s delay + an eighth of 48s
-    else { try { a.finish(); } catch (e) {} }
-  }
+  document.querySelectorAll('#pp-moments .pp-med').forEach(m => m.classList.add('is-minting'));   // the mint too
+  const anims = document.getAnimations();
+  anims.forEach(a => a.pause());
   const d = root.querySelector('.pp-moments__dialog');
-  return d.scrollHeight - d.clientHeight;
+  let worst = -Infinity;
+  for (let ms = 0; ms <= 2600; ms += 50) {
+    for (const a of anims) { a.currentTime = a.animationName === 'ppRaysSpin' ? 6800 : ms; }   // spin: 45 degrees
+    worst = Math.max(worst, d.scrollHeight - d.clientHeight);
+  }
+  return worst;
 }"""
 
 

@@ -65,6 +65,9 @@
 /* Sized from ONE medallion, as a badge's are (~2x its size each side), not from the row: rays as wide as two
    editions are as TALL as that too, and hung below the dialog, giving it a scrollbar. */
 .pp-moment__set .pp-moment__rays { width: calc(var(--set-sz) * 2.9); }
+/* Its bloom too (the flare swells it 1.12x as it lands): as wide as the row, it reached past the dialog mid-flare.
+   Two classes, so it outranks the shared bloom rule further down. */
+.pp-moment__obj.pp-moment__set::before { width: calc(var(--set-sz) * 2.3); }
 .pp-moment__setmed { cursor: pointer; border-radius: 50%; }
 .pp-moment__setmed:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 6px; }
 /* The platinum: its cover (portrait, logo kept at the top) and which platinum it is. */
