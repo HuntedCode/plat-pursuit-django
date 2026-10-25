@@ -15,8 +15,9 @@ from django.urls import NoReverseMatch, reverse
 from trophies.models import Company, UserGroupBadge, SeriesBadgeStanding, Game, ProfileGame, ProfileTrophyGroup
 from trophies.services.badge_engine import GroupInput, _gates as engine_gates, _qualifies as engine_qualifies
 from trophies.services.badge_orchestrator import (
-    build_catalog, catalog_group_state, evaluate_with_catalog, group_members, stage_units, _catalog_game_state,
+    build_catalog, catalog_stage_units, evaluate_with_catalog, group_members, unit_obtainable,
 )
+from trophies.services.excused_trophies import ExcusedProgress, candidates
 from trophies.services.badge_xp import compute_series_standings, edition_display_state, XP_PER_STAGE, XP_BADGE_COMPLETION_BONUS
 from trophies.services.badge_rarity import group_rarity
 from trophies.services.developer_family_service import (
@@ -212,19 +213,67 @@ def _medallion_frame(gv: GroupView, series, target_profile) -> dict:
     }
 
 
-def _game_entry(game, profile_games, ratings_map, contract_map) -> dict:
+def _game_entry(game, profile_games, ratings_map, contract_map, excused) -> dict:
     """A game card's data bundle: the game + the viewer's ProfileGame + community ratings + guide flag + its
-    home contract. Shared by the stage grid and bundle members."""
+    home contract. Shared by the stage grid and bundle members.
+
+    `excused_count` / `excused_done`: the list's unobtainable trophies (`excused_trophies`), and whether the
+    viewer has earned every other one. A list finished that way counts as finished for badges, so its card
+    reads done at PSN's own % and says how many trophies were excused."""
     return {
         'game': game, 'pgame': profile_games.get(game.id),
         'ratings': ratings_map.get(game.concept_id),
         'has_guide': bool(game.concept and game.concept.guide_slug),
         'contract': contract_map.get(game.concept_id),
-        'group': None,
+        'group': None, 'obtainable': unit_obtainable(game, excused),
+        'excused_count': excused.excused_count(game.id), 'excused_done': excused.full(game.id)[0],
+        'plat_excused': excused.plat_excused(game.id),
     }
 
 
-def _group_entry(ctg, game, tg, group_progress, group_ratings) -> dict:
+@dataclass(frozen=True)
+class ExcusedNote:
+    """One banner sentence for a list with excused trophies: "In <list> (<platforms>), <what> can no longer be
+    earned, so <it isn't / they aren't> needed here." `group` names a trophy-group member's group; `plat` adds that
+    the platinum is not needed either. Hashable, so several versions saying the same thing say it once."""
+    list_name: str
+    platforms: str
+    what: str
+    count: int
+    plat: bool = False
+    group: Optional[str] = None
+
+
+def _trophies(n) -> str:
+    return f'{n} troph{"y" if n == 1 else "ies"}'
+
+
+def _excused_note(e, excused) -> ExcusedNote:
+    """Where a card's excused trophies are, in words (owner, 2026-10-25): base game, DLC or both, and whether the
+    platinum went with them. A trophy-group card names its group instead, since it counts only that group."""
+    game = e['game']
+    platforms = ' / '.join(game.title_platform or [])
+    if e['group']:
+        return ExcusedNote(game.title_name, platforms, _trophies(e['excused_count']), e['excused_count'],
+                           group=e['group_name'])
+    base, dlc, plat = excused.split(game.id)
+    if base and dlc:
+        what = f'{base} base-game and {dlc} DLC trophies'     # two or more in all, so always plural
+    elif base:
+        what = _trophies(base).replace(' ', ' base-game ', 1)
+    elif dlc:
+        what = _trophies(dlc).replace(' ', ' DLC ', 1)
+    else:
+        return ExcusedNote(game.title_name, platforms, 'the platinum', 1)
+    return ExcusedNote(game.title_name, platforms, what, base + dlc, plat=plat)
+
+
+def _entry_finished(e) -> bool:
+    """The card's own bar met: 100% on PSN, or every trophy but the excused ones."""
+    return bool(e['pgame'] and e['pgame'].progress == 100) or e['excused_done']
+
+
+def _group_entry(ctg, game, tg, group_progress, group_ratings, excused) -> dict:
     """A trophy-group member's card: one version of the list that carries the group, shown AS the group,
     because the group is the game the stage asks for.
 
@@ -245,10 +294,13 @@ def _group_entry(ctg, game, tg, group_progress, group_ratings) -> dict:
     return {
         'game': game, 'pgame': group_progress.get(tg.id), 'ratings': group_ratings.get(ctg.id),
         'has_guide': False, 'contract': None, 'group': ctg, 'group_name': name,
+        'obtainable': unit_obtainable(game, excused, tg.trophy_group_id),
+        'excused_count': excused.excused_count(game.id, tg.trophy_group_id),
+        'excused_done': excused.group(game.id, tg.trophy_group_id)[0],
     }
 
 
-def _stage_bundles(st, games_map, profile_games, ratings_map, contract_map) -> list:
+def _stage_bundles(st, games_map, profile_games, ratings_map, contract_map, excused) -> list:
     """Episodic bundles on a stage: a grouped set of concepts that TOGETHER satisfy the stage. Each member is a
     concept + ALL of its games; member 'done' = a whole-game 100% on any of them.
 
@@ -258,20 +310,20 @@ def _stage_bundles(st, games_map, profile_games, ratings_map, contract_map) -> l
     unfinished. Showing every version is the honest picture; each card carries its own platform chips.
 
     Takes no `platforms`: nothing in here is platform-scoped any more. The GATING decision is the engine's
-    (`_stage_units` + `engine_gates`), not this function's.
+    (`catalog_stage_units` + `engine_gates`), not this function's.
     """
     bundles = []
     for b in st.concept_bundles.all():
         members, completed = [], 0
         for concept in b.concepts.all():
             entries = [
-                _game_entry(games_map[cg.id], profile_games, ratings_map, contract_map)
+                _game_entry(games_map[cg.id], profile_games, ratings_map, contract_map, excused)
                 for cg in concept.games.all()
                 if cg.id in games_map
             ]
             if not entries:
                 continue
-            done = any(e['pgame'] and e['pgame'].progress == 100 for e in entries)
+            done = any(_entry_finished(e) for e in entries)
             completed += 1 if done else 0
             members.append({'concept': concept, 'games': entries, 'done': done})
         if members:
@@ -315,7 +367,7 @@ def _stage_icon_url(obtainable, delisted, bundles, platforms, exclude_delisted) 
     for bundle in bundles:
         for member in bundle['members']:
             for e in member['games']:
-                versions.append((e['game'], _display_playable(e['game'], platforms, exclude_delisted)))
+                versions.append((e['game'], _display_playable(e, platforms, exclude_delisted)))
 
     with_art = [(game, playable) for game, playable in versions if game.has_cover_art]
     if not with_art:
@@ -330,7 +382,7 @@ def _stage_icon_url(obtainable, delisted, bundles, platforms, exclude_delisted) 
     return max(with_art, key=rank)[0].display_image_url or None
 
 
-def _display_playable(game, platforms, exclude_delisted) -> bool:
+def _display_playable(entry, platforms, exclude_delisted) -> bool:
     """Does this game go in the stage's main grid, or in the collapsed "unobtainable / delisted" list?
 
     A DISPLAY question, not the gating one. The delisted policy belongs to an EDITION, so it is applied
@@ -339,28 +391,15 @@ def _display_playable(game, platforms, exclude_delisted) -> bool:
     game that satisfied a stage cross-platform inside a collapsed <details> while the grid above it showed
     only untouched cards -- the exact "ticked stage, nothing done" "bug this change set out to fix, one
     bucket deeper.
+
+    Obtainable is the ENTRY's (`unit_obtainable`), not the list's flag alone: a version whose bar has every
+    trophy excused cannot be finished, so it files with the unobtainable ones, as the engine gates it.
     """
-    if not game.is_obtainable:
+    game = entry['game']
+    if not entry['obtainable']:
         return False
     on_edition = bool(set(game.title_platform or []) & platforms)
     return not (game.is_delisted and exclude_delisted and on_edition)
-
-
-def _stage_units(st) -> list:
-    """The exact `GameState` list the ENGINE evaluates for this stage, built by the orchestrator's own
-    `stage_units` (plain games, one synthetic unit per ConceptBundle, every version of a trophy-group member).
-
-    This exists so the page can answer "is this stage in scope / does it gate" by calling the engine's own
-    predicates instead of re-deriving them. A signed-in viewer gets a `StageResult` and needs none of this;
-    an ANONYMOUS visitor gets no evaluation at all, and the first attempt at filling that gap was a
-    hand-written mirror of `_gates` + `_qualifies` + `_bundle_state`. It drifted on three separate bundle
-    shapes -- a member with a delisted sibling, a member with no games, and members sharing no platform --
-    and its own pinning test used no bundles at all, so nothing saw it. Two implementations of one rule is
-    the bug; this removes the second one rather than testing it harder.
-
-    Costs no queries: everything it walks is prefetched once by `build_catalog`.
-    """
-    return stage_units(st, _catalog_game_state, catalog_group_state)
 
 
 def _stage_concept_ids(st) -> set:
@@ -442,7 +481,7 @@ def _studio_sections(stages, stage_studios) -> list:
 
 
 def _group_journey(gb, result, catalog, games_map, profile_games, ratings_map, contract_map,
-                   stage_studios, group_progress, group_ratings) -> tuple:
+                   stage_studios, group_progress, group_ratings, excused) -> tuple:
     """The stage spine for THIS group, as `(required, retired, studio_sections, retired_studio_sections)`.
 
     IN SCOPE (the stage appears at all) is platform-based: a stage with no game on this group's platforms
@@ -479,7 +518,11 @@ def _group_journey(gb, result, catalog, games_map, profile_games, ratings_map, c
         # and the evaluation can never disagree -- including on bundles, whose synthetic platforms are the
         # INTERSECTION of their members' (a bundle needs every member, so it is completable only where all
         # of them run).
-        units = _stage_units(st)
+        # The exact units the ENGINE evaluates (`catalog_stage_units`), so "in scope / does it gate" is the
+        # engine's own predicates, never a re-derivation. An anonymous visitor gets no evaluation, and the first
+        # attempt at filling that gap was a hand-written mirror of `_gates` + `_qualifies` + `_bundle_state`
+        # that drifted on three bundle shapes. Two implementations of one rule is the bug. No queries.
+        units = catalog_stage_units(st, catalog)
         qualifying = [u for u in units if engine_qualifies(u, group_input)]
         if not qualifying:
             continue                          # nothing on this group's platforms -> credits it nothing
@@ -491,18 +534,20 @@ def _group_journey(gb, result, catalog, games_map, profile_games, ratings_map, c
                 game = games_map.get(cg.id)
                 if not game:
                     continue
-                entry = _game_entry(game, profile_games, ratings_map, contract_map)
-                bucket = obtainable if _display_playable(game, platforms, exclude_delisted) else delisted
+                entry = _game_entry(game, profile_games, ratings_map, contract_map, excused)
+                bucket = obtainable if _display_playable(entry, platforms, exclude_delisted) else delisted
                 bucket.append(entry)
         # A trophy-group member is filed like any other version of the stage: by its list's own status.
         for ctg, cg, tg in group_members(st):
             game = games_map.get(cg.id)
             if not game:
                 continue
-            bucket = obtainable if _display_playable(game, platforms, exclude_delisted) else delisted
-            bucket.append(_group_entry(ctg, game, tg, group_progress, group_ratings))
-        bundles = _stage_bundles(st, games_map, profile_games, ratings_map, contract_map)
+            entry = _group_entry(ctg, game, tg, group_progress, group_ratings, excused)
+            bucket = obtainable if _display_playable(entry, platforms, exclude_delisted) else delisted
+            bucket.append(entry)
+        bundles = _stage_bundles(st, games_map, profile_games, ratings_map, contract_map, excused)
         group_games = [e for e in obtainable if e['group']]
+        excused_games = [e for e in obtainable if not e['group'] and e['excused_count']]
         sr = stage_results.get(st.stage_number)
         any_progress = any(e['pgame'] and e['pgame'].progress for e in (obtainable + delisted))
         state = 'complete' if (sr and sr.base_satisfied) else ('partial' if any_progress else 'todo')
@@ -510,10 +555,15 @@ def _group_journey(gb, result, catalog, games_map, profile_games, ratings_map, c
             'stage': st, 'obtainable_games': obtainable, 'delisted_games': delisted,
             'bundles': bundles,
             # DISPLAY split of `obtainable_games` (which every count above and below still reads whole): the full
-            # lists keep the stage's grid, and trophy groups get their own row under it, so a group never sits in
-            # a row of full lists looking like one (owner, 2026-10-25).
-            'list_games': [e for e in obtainable if not e['group']],
+            # lists keep the stage's grid; lists with excused trophies, then trophy groups, each get their own row
+            # under it with a banner, so neither sits in a row of full lists looking like one (owner, 2026-10-25).
+            'list_games': [e for e in obtainable if not e['group'] and not e['excused_count']],
+            'excused_games': excused_games,
+            'excused_notes': list(dict.fromkeys(_excused_note(e, excused) for e in excused_games)),
             'group_games': group_games,
+            'group_excused_notes': list(dict.fromkeys(
+                _excused_note(e, excused) for e in group_games if e['excused_count']
+            )),
             # The row's banner: one plain sentence per group, scoped to its LIST, so groups from two different
             # lists each say which list they come from. Several versions of one list carry the same group, so
             # it is said once.
@@ -679,7 +729,7 @@ def _group_user_stats(profile_games, journey, target_profile) -> Optional[dict]:
 
 def _group_view(gb, result, hold, target_profile, series, catalog, games_map, profile_games,
                 ratings_map, contract_map, participants, stage_studios, group_progress,
-                group_ratings) -> GroupView:
+                group_ratings, excused) -> GroupView:
     is_holo = bool(hold and hold.is_holo)
     # `gb.required_stages` straight, with NO `or stage_count`. That fallback treated a correctly-computed
     # ZERO as "not computed yet" and substituted the full stage count, so an unearnable badge advertised a
@@ -688,7 +738,7 @@ def _group_view(gb, result, hold, target_profile, series, catalog, games_map, pr
     # is zero.
     journey, retired, studio_sections, retired_studio_sections = _group_journey(
         gb, result, catalog, games_map, profile_games, ratings_map, contract_map, stage_studios, group_progress,
-        group_ratings,
+        group_ratings, excused,
     )
     # ANON reads the LADDER, not the `required_stages` denorm. That column is written only by
     # `evaluate_badges`, so a freshly-authored badge sits at its `default=0` until the nightly -- and with
@@ -762,6 +812,7 @@ def get_badge_detail(series, target_profile, *, studio_sections=False) -> BadgeD
     desired, holds = {}, {}
     games_map, profile_games, ratings_map, contract_map, group_progress, group_ratings = {}, {}, {}, {}, {}, {}
     stage_studios = {}
+    excused = ExcusedProgress.read(None, {}, [])
     if catalog:
         if studio_sections:
             # Once per series, shared by every edition's panel: filing a stage reads its games, not its edition.
@@ -781,14 +832,20 @@ def get_badge_detail(series, target_profile, *, studio_sections=False) -> BadgeD
             for st in catalog['stages'] for ctg in st.trophy_groups.all()
         }
         if target_profile:
-            desired = evaluate_with_catalog(target_profile, catalog)
-            holds = {
-                u.group_badge_id: u
-                for u in UserGroupBadge.objects.filter(profile=target_profile, group_badge__in=group_badges)
-            }
             profile_games = {
                 pg.game_id: pg
                 for pg in ProfileGame.objects.filter(profile=target_profile, game_id__in=catalog['game_ids'])
+            }
+            # Excused trophies, read ONCE and shared with the evaluation below, by the engine's own rule (lists
+            # started, short of 100%, with enough earned to finish), so a card reads done exactly when the engine
+            # counts it. No query unless a flagged list is in play.
+            excused = ExcusedProgress.read(target_profile, catalog['excused'], candidates(catalog['excused'], {
+                gid: (pg.progress, pg.earned_trophies_count) for gid, pg in profile_games.items()
+            }))
+            desired = evaluate_with_catalog(target_profile, catalog, excused=excused)
+            holds = {
+                u.group_badge_id: u
+                for u in UserGroupBadge.objects.filter(profile=target_profile, group_badge__in=group_badges)
             }
             if catalog['group_tg_ids']:
                 # Only when a stage has a trophy-group member, so every other badge page pays nothing.
@@ -798,6 +855,9 @@ def get_badge_detail(series, target_profile, *, studio_sections=False) -> BadgeD
                         profile=target_profile, trophy_group_id__in=catalog['group_tg_ids'],
                     ).only('trophy_group_id', 'progress', 'earned_trophies', 'first_trophy_at', 'last_trophy_at')
                 }
+        else:
+            # Anonymous: the catalogue's facts only (excused counts, dead bars), no standing to read.
+            excused = ExcusedProgress.read(None, catalog['excused'], [])
 
     # The series' PURSUER base: profiles with a SeriesBadgeStanding (recompute_standing keeps only xp>0
     # rows, so this is "made real progress", not "synced once"). One bounded indexed count, driving
@@ -810,7 +870,7 @@ def get_badge_detail(series, target_profile, *, studio_sections=False) -> BadgeD
 
     groups = [_group_view(gb, desired.get(gb.id), holds.get(gb.id), target_profile, series, catalog,
                           games_map, profile_games, ratings_map, contract_map, participants, stage_studios,
-                          group_progress, group_ratings)
+                          group_progress, group_ratings, excused)
               for gb in group_badges]
     viewer_state = max((g.state for g in groups), key=lambda s: _STATE_ORDER[s], default='none')
 

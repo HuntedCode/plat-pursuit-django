@@ -591,7 +591,13 @@ class PsnApiService:
             trophy.reward_img_url = trophy_data.trophy_reward_img_url
             trophy.trophy_rarity = trophy_data.trophy_rarity.value if trophy_data.trophy_rarity else None
             trophy.trophy_earn_rate = trophy_data.trophy_earn_rate if trophy_data.trophy_earn_rate else 0.0
-            trophy.save()
+            # PSN's fields only. A full save writes back every column as it was read, so a staff flag set
+            # between the read above and this write (`is_unobtainable`) would be silently undone.
+            trophy.save(update_fields=[
+                'trophy_set_version', 'trophy_type', 'trophy_name', 'trophy_detail', 'trophy_icon_url',
+                'trophy_group_id', 'progress_target_value', 'reward_name', 'reward_img_url', 'trophy_rarity',
+                'trophy_earn_rate',
+            ])
         
         if trophy.trophy_type == 'platinum':
             from trophies.services.shovelware_detection_service import ShovelwareDetectionService

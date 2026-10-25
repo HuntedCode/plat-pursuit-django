@@ -9,14 +9,19 @@ container, not one big <a>.
 `group` (a ConceptTrophyGroup, named `group_name`) makes this a TROPHY-GROUP card: a game shipped inside another list (the Kingdom
 Hearts PS5 collections). It shows the group's name and icon, names the list it ships in, and `pgame` is the
 viewer's progress on that group, not on the list. The list's platinum chip is left off: it is not this
-game's. {% endcomment %}
+game's.
+
+`excused_count` (the list's unobtainable trophies, `excused_trophies`) shows on every card that has some, for
+every viewer; `excused_done` (the viewer earned every other trophy) reads the card as done, because badges count
+that as finishing the list. The % stays PSN's own. `plat_excused`: the platinum can no longer be earned, so the
+card stops offering it. {% endcomment %}
 {% with prog=pgame.progress|default:0 %}
-<div class="bd-gcard{% if pgame.progress == 100 %} is-done{% elif pgame.earned_trophies.platinum == 1 %} is-plat{% endif %}">
+<div class="bd-gcard{% if pgame.progress == 100 or excused_done %} is-done{% elif pgame.earned_trophies.platinum == 1 %} is-plat{% endif %}">
     <a class="bd-gcard__main" href="{% if profile %}{% url 'game_detail_with_profile' game.np_communication_id profile.psn_username %}{% else %}{% url 'game_detail' game.np_communication_id %}{% endif %}">
         <div class="bd-gcard__cover{% if not pgame or pgame.progress == 0 %} is-dim{% endif %}">
             <img src="{% if group.icon_url %}{{ group.icon_url }}{% else %}{{ game.display_image_url }}{% endif %}" alt="" loading="lazy" />
             {% comment %} State flags are decorative (aria-hidden): the same done/plat state is text in .bd-gcard__facts. {% endcomment %}
-            {% if pgame.progress == 100 %}
+            {% if pgame.progress == 100 or excused_done %}
             <span class="bd-gcard__flag bd-gcard__flag--done" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
             {% elif pgame.earned_trophies.platinum == 1 %}
             <span class="bd-gcard__flag bd-gcard__flag--plat" aria-hidden="true">{% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-platinum)' size='w-3.5 h-3.5' %}</span>
@@ -44,8 +49,10 @@ game's. {% endcomment %}
                 {% include 'partials/region_badges.html' with game=game badge_size='badge-xs' %}
             </div>
             <div class="bd-gcard__facts">
-                {% if pgame %}<span class="bd-gcard__pct{% if pgame.progress == 100 %} is-done{% endif %}">{{ prog }}%</span>{% endif %}
+                {% if pgame %}<span class="bd-gcard__pct{% if pgame.progress == 100 or excused_done %} is-done{% endif %}">{{ prog }}%</span>{% endif %}
+                {% if excused_count %}<span class="bd-gcard__excused" title="{{ excused_count }} unobtainable troph{{ excused_count|pluralize:'y,ies' }}, not needed for this badge">{% flag_icon 'unobtainable' '' %}{{ excused_count }} excused<span class="sr-only">: unobtainable, not needed for this badge</span></span>{% endif %}
                 {% if group %}
+                {% elif plat_excused and not pgame.earned_trophies.platinum %}<span class="bd-gcard__plat is-none">Plat unobtainable</span>
                 {% elif game.defined_trophies.platinum %}
                     {% if pgame.earned_trophies.platinum == 1 %}<span class="bd-gcard__plat is-earned">{% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-platinum)' size='w-3 h-3' %}Plat</span>
                     {% else %}<span class="bd-gcard__plat">Has plat</span>{% endif %}

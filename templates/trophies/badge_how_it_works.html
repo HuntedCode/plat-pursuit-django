@@ -91,7 +91,8 @@ quick-peek (`PlatPursuit.Medallion.detailModal`), `.pp-tally`, `.pp-head-cascade
     bars are `base_complete` (the game's DEFAULT trophy group at 100%, which is the platinum on a plat
     game and the main list on one without) and `full_complete` (the whole game at 100%, DLC included),
     and those are beats 2 and 4. "Platinum every game" alone leaves a reader holding a non-plat game
-    unable to tell whether it counts. {% endcomment %}
+    unable to tell whether it counts. Both bars excuse a staff-flagged unobtainable trophy (and the platinum a
+    flagged base trophy takes with it): trophies/services/excused_trophies.py. {% endcomment %}
     <ol class="pp-hiw__steps" data-hiw-steps>
 
         <li class="pp-hiw__step">
@@ -125,7 +126,8 @@ quick-peek (`PlatPursuit.Medallion.detailModal`), `.pp-tally`, `.pp-head-cascade
                 <h2 class="pp-hiw__cap">Earn the platinum in each</h2>
                 <p class="pp-hiw__desc">
                     Earn the platinum in every game in the set. A game with no platinum counts the moment
-                    its base trophy list hits 100%, so nothing in a set is unwinnable.
+                    its base trophy list hits 100%, so nothing in a set is unwinnable. A trophy we have
+                    marked unobtainable is never needed: earn the rest and the game counts as finished.
                 </p>
             </div>
         </li>

@@ -23,6 +23,7 @@ from ..models import SHOVELWARE_FLAGGED_STATUSES, Game, Trophy, Profile, EarnedT
 from ..forms import GameSearchForm, GameDetailForm, GuideSearchForm
 from trophies.util_modules.constants import ALL_PLATFORMS
 from trophies.util_modules.trophy_progress import psn_progress
+from trophies.services.excused_trophies import excused_trophy_ids
 from trophies.views.hero_context import has_platinum, list_status, plat_rarity
 from .browse_helpers import (
     annotate_ascii_name, annotate_community_ratings,
@@ -555,7 +556,11 @@ def build_trophy_rows(game):
     if not has_trophies:
         return [], False
     try:
-        trophies_qs = Trophy.objects.filter(game=game).order_by('trophy_id')
+        trophies_qs = list(Trophy.objects.filter(game=game).order_by('trophy_id'))
+        # Staff-flagged, plus the platinum a flagged base trophy takes with it (badges excuse both).
+        excused = excused_trophy_ids(
+            (t.trophy_id, t.trophy_group_id, t.trophy_type, t.is_unobtainable) for t in trophies_qs
+        )
         rows = [
             {
                 'trophy_id': t.trophy_id,
@@ -569,7 +574,8 @@ def build_trophy_rows(game):
                 'trophy_earn_rate': t.trophy_earn_rate,
                 'earned_count': t.earned_count,
                 'earn_rate': t.earn_rate,
-                'pp_rarity': t.get_pp_rarity_tier()
+                'pp_rarity': t.get_pp_rarity_tier(),
+                'is_unobtainable': t.trophy_id in excused,
             } for t in trophies_qs
         ]
     except Exception:

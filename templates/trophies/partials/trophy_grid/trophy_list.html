@@ -1,4 +1,4 @@
-{% load custom_filters static humanize %}
+{% load custom_filters static humanize flag_badges %}
 {% comment %}
 The trophy rows for one group. Contract: trophies (list of trophy DICTS, not model instances --
 the ORM-decoupled rows the host builds), earned (trophy_id -> state mapping), profile, id_prefix.
@@ -18,6 +18,9 @@ Article ids are namespaced ({{ id_prefix }}trophy-{{ id }}); the predecessor's b
                     <div class="gd-trophy__head">
                         <span class="gd-trophy__name">{{ trophy.trophy_name }}</span>
                         <span class="gd-trophy__type" style="--tc: {{ trophy|trophy_css_color }};">{{ trophy.trophy_type|title }}</span>
+                        {% comment %}Staff-flagged unobtainable (or the platinum a flagged base trophy takes with it):
+                        badges count the list as finished without it, so the row says so.{% endcomment %}
+                        {% if trophy.is_unobtainable %}<span class="gd-trophy__unob" title="Can no longer be earned. Badges don't need it.">{% flag_icon 'unobtainable' '' %}Unobtainable<span class="sr-only">. Badges don't need it.</span></span>{% endif %}
                     </div>
                     <p class="gd-trophy__detail">{{ trophy.trophy_detail }}</p>
 

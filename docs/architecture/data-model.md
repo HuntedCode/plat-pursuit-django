@@ -32,7 +32,7 @@ Key relationships:
 - Reverse: `games` (Game.concept), `comments`, `checklists`, `reviews`, `user_ratings`, `concept_trophy_groups`, `featured_entries`, `stages` (M2M via Stage), `list_entries` (gamelists.GameListItem.concept)
 
 ### Trophy
-An individual trophy within a Game. Identified by `trophy_id` (integer, positional within the game) and linked to its Game. Tracks both PSN-global rarity (`trophy_earn_rate`) and platform-specific rarity (`earn_rate`). `earned_count` is the denormalized count of PP users who have earned it.
+An individual trophy within a Game. Identified by `trophy_id` (integer, positional within the game) and linked to its Game. Tracks both PSN-global rarity (`trophy_earn_rate`) and platform-specific rarity (`earn_rate`). `earned_count` is the denormalized count of PP users who have earned it. `is_unobtainable` is a staff flag (never written by sync): badges excuse the trophy, see [badge-system.md](badge-system.md) "Excused (unobtainable) trophies".
 
 Key relationships:
 - `game` FK to `Game`

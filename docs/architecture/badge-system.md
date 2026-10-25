@@ -62,8 +62,11 @@ platinum** — the engine never asks.
 
 | Bar | Source | Meaning |
 |---|---|---|
-| `base_complete` | `ProfileTrophyGroup.progress == 100` on the game's **`default`** trophy group, **or** `full_complete` (see the invariant below) | The **platinum** on a plat game; the **base trophy list at 100%** on a game without one. **DLC-independent** |
-| `full_complete` | `ProfileGame.progress == 100` | The whole game at 100%, **DLC included** |
+| `base_complete` | `ProfileTrophyGroup.progress == 100` on the game's **`default`** trophy group, **or** `full_complete` (see the invariant below), **or** every non-excused base trophy earned | The **platinum** on a plat game; the **base trophy list at 100%** on a game without one. **DLC-independent** |
+| `full_complete` | `ProfileGame.progress == 100`, **or** every non-excused trophy earned | The whole game at 100%, **DLC included** |
+
+"Excused" is a staff-flagged unobtainable trophy (and the platinum a flagged base trophy takes with it): see
+[Excused (unobtainable) trophies](#excused-unobtainable-trophies).
 
 `base_complete` is what earns the badge. The only thing `full_complete` earns is `is_holo`, which is
 cosmetic, flips both ways and pays no XP. It is not inert otherwise, though: it also back-fills
@@ -73,10 +76,14 @@ The date rule reads its branch off **progress, not off date presence**, and the 
 stating because it is easy to describe backwards:
 
 ```python
-completion_date = base_date if base_prog == 100 else (full_date if full_complete else None)
+if base_prog == 100:   completion_date = base_date
+elif full_prog == 100: completion_date = full_date
+elif base_excused:     completion_date = base_excused_date or full_date   # see "Excused trophies" below
+else:                  completion_date = None
 ```
 
-(The line lives in the `game_state` closure in `evaluate_with_catalog`.)
+(It lives in the `game_state` closure in `evaluate_with_catalog`. Before excused trophies it was the one-liner
+`base_date if base_prog == 100 else (full_date if full_complete else None)`, which selects the same dates.)
 
 So `full_date` is used only when the default group is SHORT of 100% **and** the game is fully complete —
 the same case in which `full_complete` is what made `base_complete` true. When the default group IS at
@@ -102,7 +109,8 @@ platinum requirement, measured on the list that actually exists. This is also wh
 `templates/trophies/badge_how_it_works.html`: *"A game with no platinum counts the moment its base trophy
 list hits 100%, so nothing in a set is unwinnable."*
 
-One invariant is enforced in the orchestrator rather than the engine: `base_complete = base_prog == 100 or
+One invariant is enforced in the orchestrator rather than the engine (shown without the excused terms):
+`base_complete = base_prog == 100 or
 full_complete`. A missing or stale default `ProfileTrophyGroup` row must never be able to produce "holo
 without base".
 
@@ -121,7 +129,7 @@ count ONE group on its own. The owner's rules (2026-10-24):
 | The group at 100% clears the stage **and** counts for holo | `group_state` in `evaluate_with_catalog`: both bars read the group's own `ProfileTrophyGroup`, because the group is the whole game it stands for |
 | The list at 100% counts too | the same invariant as `game_state`: `ProfileGame.progress == 100` means every group in it is done, so a stale group row cannot deny credit |
 | No cross-credit, either way | the list's platinum (its `default` group) never clears a group's stage, and a group never clears a stage that lists the whole list |
-| Gating is the list's | each version carrying the group is a unit with that version's platforms, obtainable and delisted status, like any game |
+| Gating is the list's | each version carrying the group is a unit with that version's platforms, obtainable and delisted status, like any game (a group whose every trophy is excused counts as unobtainable, see below) |
 | A version without the group cannot clear it | a CTG is concept-level; `group_members` pairs it with each version's own `TrophyGroup`, and a version lacking it is not a unit |
 
 One unit per version, built in ONE place, `badge_orchestrator.stage_units`, which the required-stage count,
@@ -178,6 +186,46 @@ filter.
 
 `completion_policy` is `all` (every gating stage) or `min_count` (megamix: `min_required` of them).
 
+### Excused (unobtainable) trophies
+
+Staff flag a single trophy that can no longer be earned (`Trophy.is_unobtainable`, in the Trophy admin). For
+**badges only** (owner, 2026-10-25), earning every trophy that is NOT excused counts as finishing the list:
+it meets the bars above, so it clears stages, counts for holo and pays stage XP. Contracts, challenges,
+leaderboards and profile stats keep PSN's own percentages. Everything lives in
+`trophies/services/excused_trophies.py`.
+
+| Rule | Detail |
+|---|---|
+| What is excused | every flagged trophy, plus the **platinum** when any trophy in the base (`default`) group is flagged, since it needs every base trophy. One helper, `excused_trophy_ids`, so the engine and the Game page cannot disagree |
+| Per list version | the flag is on `Trophy`, so a trophy dead on the PS3 list stays required on the PS4 one |
+| The bars | base = every required `default` trophy earned; full = every required trophy in every group; a trophy-group member = every required trophy in its group |
+| Nothing left to earn | a bar whose every trophy is excused is never met by excusal (nobody did anything, and an undated clear re-stamps the badge every run). The unit is **unobtainable** for gating instead (`unit_obtainable`), so it never makes a badge harder. A hunter who earned it before it died still clears it on PSN's 100% |
+| Dates | the last required trophy earned. Fallbacks: the list's own latest trophy for the base and full bars; the group's own row, then the list's, for a trophy-group member. A dead base group cleared through the DLC is dated by the full bar |
+| Unflagging | takes back what the flag gave on the next evaluation: holds are binary and live |
+
+**The reads.** `build_catalog` adds `catalog['excused']` (`excused_lists`): a seek on the partial index
+`trophy_unobtainable_idx`, then the trophies of just the flagged lists, once per catalogue. Per hunter,
+`candidates()` keeps only flagged lists they have started, not finished on PSN, and earned at least as many
+trophies as the smallest bar needs; only then does `ExcusedProgress.read` send ONE aggregate over EarnedTrophy
+(grouped by list and group in the database). With nothing flagged, or no candidate, it sends nothing.
+
+**On the page.** Lists with excused trophies get their own row under the stage's full lists, as trophy groups
+do (owner, 2026-10-25), led by a banner per list (`_excused_note.html`, deduped across versions) saying where
+the excused trophies are and whether the platinum went with them: "In Warhawk (PS5), 1 base-game and 1 DLC
+trophies can no longer be earned, so they aren't needed here. The platinum needs them, so it isn't needed
+either." A trophy-group card with excused trophies stays in the group row and adds the same sentence there,
+naming its group. Order: full lists, excused lists, trophy groups. A card on a list with excused trophies says
+"N excused" for every viewer (a group card counts only its group's). When the viewer has earned every other trophy, the card reads done at PSN's own %. A card
+whose platinum is excused says "Plat unobtainable" instead of "Has plat". The Game page's trophy list marks the
+excused trophies "Unobtainable", platinum included. My Stats keeps PSN's literal "platted" / "100%'d" counts.
+The How It Works page says it in one sentence.
+
+**Applying a change.** The admin actions do not re-run badges (a series can have thousands of hunters, past an
+admin request's time limit); their message names `evaluate_badges --series <slug>` for each series the trophy's
+game is in, or the nightly run picks it up. The roadmap editor's own "Unobtainable" tick is guide text, per
+game and set by writers: the Trophy admin shows it as a hint ("Roadmap says unobtainable" filter and column),
+never as the flag.
+
 ## File Map
 
 | File | Responsibility |
@@ -185,6 +233,7 @@ filter.
 | `trophies/services/badge_engine.py` | PURE evaluation. No ORM. Stage/group inputs -> `GroupBadgeResult` |
 | `trophies/services/badge_apply.py` | The ORM seam: plan, diff, apply, announce, recompute. Owns `earned_count` |
 | `trophies/services/badge_xp.py` | XP + progress model. Writes the three standing tables |
+| `trophies/services/excused_trophies.py` | Staff-flagged unobtainable trophies: what is excused, and whether a hunter has earned everything else |
 | `trophies/services/badge_adapters.py` | Side effects: titles, events, the Discord announcement |
 | `trophies/services/badge_leaderboards.py` | All board reads ("Lane B") |
 | `trophies/services/collection_service.py` | The hunter's Collection wall + `closest_badge` |
@@ -283,6 +332,10 @@ inline autocompleted against `Badge` and dropping the registration fails the ENT
 check with `admin.E039`, not just art_reveal; that inline points at `BadgeSeries` now, so the registration
 went too. Legacy `Badge` / `UserBadge` rows are still READ in several places (titles, job-board coverage,
 company pages) and are retained for rollback and audit.
+
+**A sync must never write `Trophy.is_unobtainable`.** It is staff data. `create_or_update_trophy_from_trophy_data`
+saves PSN's fields by name (`update_fields`); a full `save()` there writes back the flag as it was read, which
+undoes a staff flag set while the sync ran.
 
 **Scope by SERIES, never by badge.** `recompute_standing` REPLACES a series' standing from only the
 editions it is handed. Evaluate one edition of a two-edition series and the other's XP silently becomes
