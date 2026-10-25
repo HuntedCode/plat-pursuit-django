@@ -1,4 +1,4 @@
-{% load static seo_tags %}
+{% load static seo_tags moments %}
 {% static 'images/logo.png' as logo_path %}
 <!doctype html>
 <html lang="en" data-theme="plat-pursuit-dark">
@@ -87,6 +87,9 @@
     </div>
     </div>
     {% include 'partials/back_to_top.html' %}
+    {% comment %}Celebration moments (trophies/services/moment_service.py): My Pursuit pages only, so no other
+    page reads anything for them.{% endcomment %}
+    {% if hub_section == 'my_pursuit' %}{% moments_overlay %}{% endif %}
     {% block fixed_overlays %}{% endblock %}
     {% block mobile_tabbar %}{% include 'partials/mobile_tabbar.html' %}{% endblock %}
 

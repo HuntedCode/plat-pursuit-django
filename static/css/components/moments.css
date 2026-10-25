@@ -1,0 +1,91 @@
+/* Celebration moments (templates/partials/moments/_overlay.html, static/js/moments.js).
+   The .pp-detail-modal mold, narrowed to a single centred object per moment: a medallion, a cover, a
+   number. Restraint is the brief (visual-identity anti-reference #4): the medallion's own mint is the only
+   flourish, never confetti, and every entrance is motion-gated. */
+.pp-moments__dialog { width: min(440px, 100%); padding: 30px 24px 20px; text-align: center; }
+.pp-moments__count {
+    min-height: 1em; margin: 0 0 6px; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--pp-text-mute); font-variant-numeric: tabular-nums;
+}
+/* A steady floor so the dialog does not jump between a medallion and a line of text, without leaving a
+   text-only moment adrift in an empty box on a phone. */
+.pp-moments__stage { min-height: 240px; display: grid; place-items: center; }
+@media (min-width: 768px) { .pp-moments__stage { min-height: 300px; } }
+.pp-moments__foot {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px;
+    margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--pp-divider);
+}
+/* Skip all: a quiet text button in the corner opposite the close X, so the footer keeps two actions and
+   fits a 375px phone on one row. */
+.pp-moments__skip {
+    position: absolute; top: 14px; left: 16px; z-index: 2; padding: 4px 2px; background: none; border: none;
+    font: inherit; font-size: 0.75rem; font-weight: 600; color: var(--pp-text-mute); cursor: pointer;
+}
+.pp-moments__skip:hover { color: var(--pp-text); }
+.pp-moments__skip:focus-visible { color: var(--pp-text); outline: 2px solid var(--pp-primary); outline-offset: 2px; border-radius: var(--pp-radius-sm); }
+.pp-moments__skip[hidden] { display: none; }
+
+.pp-moment { display: grid; justify-items: center; gap: 6px; width: 100%; }
+.pp-moment__eyebrow {
+    font-size: 0.72rem; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
+    color: color-mix(in oklab, var(--pp-primary) 78%, var(--pp-text));
+}
+.pp-moment__title { margin: 2px 0 0; font-size: 1.35rem; font-weight: 800; line-height: 1.2; color: var(--pp-text); }
+.pp-moment__sub { margin: 0; font-size: 0.85rem; color: var(--pp-text-dim); }
+.pp-moment__say { margin: 4px 0 0; max-width: 34ch; font-size: 0.88rem; line-height: 1.5; color: var(--pp-text-dim); }
+.pp-moment__dim { color: var(--pp-text-mute); font-weight: 500; }
+.pp-moment__facts {
+    display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 16px; margin: 8px 0 0;
+    font-size: 0.85rem; color: var(--pp-text);
+}
+.pp-moment__facts b { font-weight: 800; font-variant-numeric: tabular-nums; }
+.pp-moment__xp { color: var(--pp-primary); }
+.pp-moment__unlock b { color: var(--pp-warning); }
+.pp-moment__tally { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 18px; margin: 8px 0 0; font-size: 0.85rem; color: var(--pp-text-dim); }
+.pp-moment__tally b { color: var(--pp-text); }
+
+/* The badge: the real medallion, at a size that is the moment. */
+.pp-moment__med { width: min(210px, 58vw); margin: 4px auto 6px; }
+/* The platinum: its cover (portrait, logo kept at the top) and which platinum it is. */
+.pp-moment__cover {
+    width: 132px; aspect-ratio: 3 / 4; margin: 6px auto 4px; overflow: hidden;
+    border-radius: var(--pp-radius-md); border: 1px solid color-mix(in oklab, var(--color-trophy-platinum) 40%, var(--pp-border));
+    box-shadow: 0 14px 40px rgba(0, 0, 0, 0.45);
+}
+.pp-moment__cover img { width: 100%; height: 100%; object-fit: cover; object-position: top; }
+.pp-moment__cover.is-placeholder img { object-fit: contain; padding: 12px; }
+.pp-moment__number { margin: 2px 0 0; color: var(--color-trophy-platinum); }
+
+@media (prefers-reduced-motion: no-preference) {
+    .pp-moment { animation: ppMomentIn 0.42s cubic-bezier(0.22, 1, 0.36, 1) both; }
+    .pp-moment__cover { animation: ppMomentCover 0.6s cubic-bezier(0.3, 1.35, 0.5, 1) 0.08s both; }
+}
+@keyframes ppMomentIn { from { opacity: 0; transform: translateY(8px); } }
+@keyframes ppMomentCover { from { opacity: 0; transform: scale(0.9) translateY(6px); } }
+
+/* The strip's button for moments that wait for a tap (the platinum reel). Platinum-tinted, a hover GLOW
+   not a scale, like every chip on the strip. */
+.pp-moments-pill {
+    display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; height: 30px; padding: 0 12px;
+    border-radius: 999px; font: inherit; font-size: 0.75rem; font-weight: 700; white-space: nowrap; cursor: pointer;
+    color: var(--pp-text);
+    background: color-mix(in oklab, var(--color-trophy-platinum) 12%, transparent);
+    border: 1px solid color-mix(in oklab, var(--color-trophy-platinum) 45%, transparent);
+    transition: box-shadow var(--pp-dur) var(--pp-ease), background var(--pp-dur) var(--pp-ease);
+}
+@media (hover: hover) {
+    .pp-moments-pill:hover {
+        background: color-mix(in oklab, var(--color-trophy-platinum) 18%, transparent);
+        box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-trophy-platinum) 16%, transparent);
+    }
+}
+.pp-moments-pill:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+.pp-moments-pill[hidden] { display: none; }
+.pp-moments-pill--mobile { height: 28px; padding: 0 10px; font-size: 0.7rem; }
+
+/* The strip's collapsed phone bar shares its row with the pill. Below `lg` only: the row is `lg:hidden`, and a
+   bare `display: flex` here would outrank that utility and put a second strip on desktop. */
+@media (max-width: 1023.98px) {
+    .pp-sub__mrow { display: flex; align-items: center; gap: 8px; }
+    .pp-sub__mrow .pp-sub__mbar { flex: 1 1 auto; min-width: 0; }
+}

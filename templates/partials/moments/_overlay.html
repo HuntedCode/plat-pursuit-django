@@ -1,0 +1,85 @@
+{% load static humanize %}{% if view %}
+{% comment %}
+The celebration player (trophies/services/moment_service.py, static/js/moments.js). One .pp-detail-modal;
+each waiting moment is a <template> the script swaps into the stage, ONE AT A TIME ("1 of 3", Next, Skip all;
+owner 2026-10-25). `data-queue="auto"` (welcome, badges) auto-plays when `data-autoplay`; `reel` (platinums,
+then a milestone) plays only from the strip's pill. A moment is marked played the moment it is on screen.
+Particles stay the earn vocabulary: the medallion's own mint, never confetti.
+{% endcomment %}
+<div class="pp-detail-modal pp-moments" id="pp-moments" data-autoplay="{% if view.autoplay %}1{% endif %}"
+     data-played-url="{% url 'api:moments-played' %}" hidden>
+    <div class="pp-detail-modal__scrim" data-moments-close></div>
+    <div class="pp-detail-modal__dialog pp-moments__dialog" role="dialog" aria-modal="true" aria-labelledby="pp-moments-title" tabindex="-1">
+        <button type="button" class="pp-moments__skip" data-moments-skip>Skip all</button>
+        <button type="button" class="pp-detail-modal__close" data-moments-close aria-label="Close">&times;</button>
+        <p class="pp-moments__count" data-moments-count aria-live="polite"></p>
+        {% comment %}Polite live region: each Next swaps the whole moment in, and a screen reader should hear the new
+        one (the "2 of 3" count alone said nothing about it).{% endcomment %}
+        <div class="pp-moments__stage" data-moments-stage aria-live="polite"></div>
+        <div class="pp-moments__foot">
+            <a class="pp-cta pp-cta--ghost" href="#" data-moments-link data-moments-close hidden></a>
+            <button type="button" class="pp-cta" data-moments-next>Next</button>
+        </div>
+    </div>
+</div>
+
+{% for item in view.auto %}
+<template data-moment="{{ item.moment.id }}" data-queue="auto" data-kind="{{ item.kind }}"
+          {% if item.kind == 'badge' %}data-badge-id="{{ item.frame.badge_id }}" data-link-href="{% url 'badge_detail' item.series.series_slug %}" data-link-label="See the badge"{% else %}data-link-href="{% url 'badge_collection' %}" data-link-label="See your Collection"{% endif %}>
+    {% if item.kind == 'welcome' %}
+    <div class="pp-moment pp-moment--welcome">
+        <span class="pp-moment__eyebrow">Welcome to Platinum Pursuit</span>
+        <h2 class="pp-moment__title" id="pp-moments-title">Your Pursuit begins</h2>
+        {% if item.badges or item.platinums %}
+        <p class="pp-moment__tally">
+            {% if item.badges %}<span><b class="pp-tally pp-tally--md" data-countup="{{ item.badges }}">{{ item.badges|intcomma }}</b> badge{{ item.badges|pluralize }}</span>{% endif %}
+            {% if item.platinums %}<span><b class="pp-tally pp-tally--md" data-countup="{{ item.platinums }}">{{ item.platinums|intcomma }}</b> platinum{{ item.platinums|pluralize }}</span>{% endif %}
+        </p>
+        <p class="pp-moment__say">That is what you arrived with. From here on, every badge you earn and every new platinum gets a moment of its own.</p>
+        {% else %}
+        <p class="pp-moment__say">From here on, every badge you earn and every new platinum gets a moment of its own.</p>
+        {% endif %}
+    </div>
+    {% else %}
+    <div class="pp-moment pp-moment--badge">
+        <span class="pp-moment__eyebrow">Badge earned</span>
+        <div class="pp-moment__med">{% include 'components/badge_medallion.html' with frame=item.frame no_id=True %}</div>
+        <h2 class="pp-moment__title" id="pp-moments-title">{{ item.series.name }}</h2>
+        <p class="pp-moment__sub">{{ item.edition }}</p>
+        <p class="pp-moment__facts">
+            <span class="pp-moment__xp">+<b data-countup="{{ item.bonus_xp }}">{{ item.bonus_xp|intcomma }}</b> Badge Points <span class="pp-moment__dim">for finishing it</span></span>
+            {% if item.title %}<span class="pp-moment__unlock">Title unlocked: <b>{{ item.title }}</b></span>{% endif %}
+        </p>
+    </div>
+    {% endif %}
+</template>
+{% endfor %}
+
+{% for item in view.reel %}
+<template data-moment="{{ item.moment.id }}" data-queue="reel" data-kind="{{ item.kind }}"
+          {% if item.kind == 'platinum' %}{% if item.share %}data-link-href="{{ item.share.url }}" data-link-label="Share card"{% endif %}{% else %}data-link-href="{% url 'milestones_list' %}" data-link-label="See milestones"{% endif %}>
+    {% if item.kind == 'platinum' %}
+    <div class="pp-moment pp-moment--plat">
+        <span class="pp-moment__eyebrow">New platinum</span>
+        <div class="pp-moment__cover{% if not item.game.has_cover_art %} is-placeholder{% endif %}">
+            <img src="{{ item.game.display_image_url }}" alt="" loading="lazy" />
+        </div>
+        {% if item.number %}<p class="pp-moment__number pp-tally pp-tally--xl pp-tally--glow">#<span data-countup="{{ item.number }}">{{ item.number|intcomma }}</span></p>{% endif %}
+        <h2 class="pp-moment__title" id="pp-moments-title">{{ item.game.title_name }}</h2>
+        <p class="pp-moment__facts">
+            {% if item.earn_rate %}<span><b>{{ item.earn_rate|floatformat:1 }}%</b> <span class="pp-moment__dim">of PSN players have it</span></span>{% endif %}
+            {% if item.took %}<span><b>{{ item.took }}</b> <span class="pp-moment__dim">start to platinum</span></span>{% endif %}
+        </p>
+    </div>
+    {% else %}
+    <div class="pp-moment pp-moment--milestone">
+        <span class="pp-moment__eyebrow">Milestone</span>
+        <p class="pp-moment__number pp-tally pp-tally--xl pp-tally--glow"><span data-countup="{{ item.threshold }}">{{ item.threshold|intcomma }}</span></p>
+        <h2 class="pp-moment__title" id="pp-moments-title">Platinums</h2>
+        {% if item.name %}<p class="pp-moment__sub">{{ item.name }}</p>{% endif %}
+    </div>
+    {% endif %}
+</template>
+{% endfor %}
+<script src="{% static 'js/moments.js' %}" defer></script>
+{% endif %}
