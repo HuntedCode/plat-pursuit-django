@@ -103,7 +103,7 @@ badge" and they are explicitly not steps -- the section they sit in says so once
             </div>
             <div class="bd-qual__grid">
                 {% for member in bundle.members %}{% for e in member.games %}
-                {% include 'trophies/partials/badge_detail/badge_detail_items.html' with game=e.game pgame=e.pgame ratings=e.ratings has_guide=e.has_guide contract=e.contract group=None profile=target_profile %}
+                {% include 'trophies/partials/badge_detail/badge_detail_items.html' with game=e.game pgame=e.pgame ratings=e.ratings has_guide=e.has_guide contract=e.contract excused_count=e.excused_count excused_done=e.excused_done plat_excused=e.plat_excused group=None profile=target_profile %}
                 {% endfor %}{% endfor %}
             </div>
         </div>
@@ -112,7 +112,7 @@ badge" and they are explicitly not steps -- the section they sit in says so once
         {% if s.list_games %}
         <div class="bd-stage__grid">
             {% for e in s.list_games %}
-            {% include 'trophies/partials/badge_detail/badge_detail_items.html' with game=e.game pgame=e.pgame ratings=e.ratings has_guide=e.has_guide contract=e.contract group=None profile=target_profile %}
+            {% include 'trophies/partials/badge_detail/badge_detail_items.html' with game=e.game pgame=e.pgame ratings=e.ratings has_guide=e.has_guide contract=e.contract excused_count=e.excused_count excused_done=e.excused_done plat_excused=e.plat_excused group=None profile=target_profile %}
             {% endfor %}
         </div>
         {% endif %}
@@ -128,7 +128,7 @@ badge" and they are explicitly not steps -- the section they sit in says so once
             {% endfor %}
             <div class="bd-stage__grid">
                 {% for e in s.group_games %}
-                {% include 'trophies/partials/badge_detail/badge_detail_items.html' with game=e.game pgame=e.pgame ratings=e.ratings has_guide=e.has_guide contract=e.contract group=e.group group_name=e.group_name profile=target_profile %}
+                {% include 'trophies/partials/badge_detail/badge_detail_items.html' with game=e.game pgame=e.pgame ratings=e.ratings has_guide=e.has_guide contract=e.contract excused_count=e.excused_count excused_done=e.excused_done group=e.group group_name=e.group_name profile=target_profile %}
                 {% endfor %}
             </div>
         </div>

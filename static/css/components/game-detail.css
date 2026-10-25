@@ -704,6 +704,9 @@
 .gd-trophy__head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .gd-trophy__name { font-weight: 600; font-size: 0.92rem; color: var(--pp-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
 .gd-trophy__type { --tc: var(--pp-text-mute); font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; padding: 1px 7px; border-radius: 999px; color: var(--tc); border: 1px solid color-mix(in oklab, var(--tc) 45%, transparent); flex-shrink: 0; }
+/* Staff-flagged unobtainable (badges excuse it): the flag sprite's glyph and the unobtainable flag's tone. */
+.gd-trophy__unob { display: inline-flex; align-items: center; gap: 4px; font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; padding: 1px 7px; border-radius: 999px; flex-shrink: 0; color: var(--pp-error); border: 1px solid color-mix(in oklab, var(--pp-error) 45%, transparent); }
+.gd-trophy__unob svg { width: 11px; height: 11px; }
 .gd-trophy__detail { font-size: 0.76rem; color: var(--pp-text-mute); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
 .gd-trophy__earned { font-size: 0.68rem; font-weight: 600; color: color-mix(in oklab, var(--pp-success) 80%, var(--pp-text)); }
 .gd-trophy__prog { display: flex; align-items: center; gap: 8px; margin-top: 3px; max-width: 260px; }

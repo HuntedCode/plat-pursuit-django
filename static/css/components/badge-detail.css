@@ -182,6 +182,9 @@
    SHORTER HUE ARC, and error (h 22) to text-mute (h 256) takes it backwards through magenta: this
    rendered rgb(219,112,177), a clear pink, where oklab gives rgb(230,114,117). */
 .bd-gcard__plat.is-none { color: color-mix(in oklab, var(--pp-error) 70%, var(--pp-text-mute)); }
+/* Unobtainable trophies the badge excuses (`excused_count`): the Game page's unobtainable glyph, in its tone. */
+.bd-gcard__excused { display: inline-flex; align-items: center; gap: 3px; }
+.bd-gcard__excused svg { width: 11px; height: 11px; flex-shrink: 0; color: color-mix(in oklab, var(--pp-error) 70%, var(--pp-text-mute)); }
 .bd-gcard__rt { display: inline-flex; align-items: center; gap: 2px; font-weight: 700; }
 .bd-gcard__rt--good { color: var(--pp-success); }
 .bd-gcard__rt--mid { color: var(--pp-warning); }
