@@ -25,6 +25,9 @@ game's. {% endcomment %}
             {% comment %}This list's own flags (owner, 2026-10-24): a stage card is one trophy list. Under the guide
             flag when there is one, which holds the same corner.{% endcomment %}
             {% flag_badges game|flag_keys 'sm' %}
+            {% comment %}A trophy-group card says so ON the art, where the eye lands first: the cover is easy to
+            read as the whole game otherwise (owner, 2026-10-25). The stage's note says what that means.{% endcomment %}
+            {% if group %}<span class="bd-gcard__group">{% include 'partials/icons/trophy_group.html' %}Trophy group</span>{% endif %}
             {% if pgame and prog > 0 %}
             <span class="bd-gcard__cbar"><span class="{% if prog < 33 %}bd-gcard__cbar--low{% elif prog < 66 %}bd-gcard__cbar--mid{% elif prog < 100 %}bd-gcard__cbar--high{% else %}bd-gcard__cbar--max{% endif %}" style="width: {{ prog }}%"></span></span>
             {% endif %}
@@ -32,7 +35,7 @@ game's. {% endcomment %}
         <div class="bd-gcard__body">
             {% if group %}
             <p class="bd-gcard__name">{{ group_name }}</p>
-            <p class="bd-gcard__from">In {{ game.title_name }}</p>
+            <p class="bd-gcard__from">Part of {{ game.title_name }}</p>
             {% else %}
             <p class="bd-gcard__name">{{ game.title_name }}</p>
             {% endif %}

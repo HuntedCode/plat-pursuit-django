@@ -387,8 +387,9 @@ def test_the_group_card_names_the_group_and_its_list_and_drops_the_lists_plat_ch
                              'group_name': 'KINGDOM HEARTS Re:Chain of Memories', 'profile': None})
 
     assert '<p class="bd-gcard__name">KINGDOM HEARTS Re:Chain of Memories</p>' in html
-    assert '<p class="bd-gcard__from">In Kingdom Hearts Collection</p>' in html
+    assert '<p class="bd-gcard__from">Part of Kingdom Hearts Collection</p>' in html
     assert 'Has plat' not in html, "the platinum is the collection's, not this game's"
+    assert 'class="bd-gcard__group"' in html and 'Trophy group</span>' in html, 'the art says it is one group'
 
 
 def test_a_whole_list_card_is_unchanged():
@@ -397,7 +398,7 @@ def test_a_whole_list_card_is_unchanged():
                             {'game': game, 'pgame': None, 'profile': None})
 
     assert '<p class="bd-gcard__name">Kingdom Hearts III</p>' in html
-    assert 'bd-gcard__from' not in html
+    assert 'bd-gcard__from' not in html and 'bd-gcard__group' not in html
     assert 'Has plat' in html
 
 
@@ -627,3 +628,27 @@ def test_the_lists_own_platinum_and_contract_are_not_the_stages():
     assert concept.id not in set(_badge_concept_ids())
     assert not Concept.objects.filter(in_series_q(['kh-badge'], lists_only=True)).exists()
     assert Concept.objects.filter(in_series_q(['kh-badge'])).get() == concept
+
+
+def test_the_stage_says_in_words_that_only_the_group_counts():
+    """Owner, 2026-10-25: the card alone is easy to read as the whole game, so the stage says it, once per
+    group even when several versions of the list carry it."""
+    concept, game, ctgs = _collection()
+    second = GameFactory(concept=concept, title_name='Kingdom Hearts Collection', title_platform=['PS5'])
+    TrophyGroupFactory(game=second, trophy_group_id='001')
+    ctgs['001'].display_name = 'Re:Chain of Memories'
+    ctgs['001'].save()
+    other, _, _ = _collection(title='Kingdom Hearts III')
+    gb = _series(lambda st: st.trophy_groups.add(ctgs['001']), lambda st: st.concepts.add(other))
+    view = _ultra_view(gb.series, None)
+
+    assert view.stages[0]['group_notes'] == [('Re:Chain of Memories', 'Kingdom Hearts Collection')]
+    assert view.stages[1]['group_notes'] == []
+
+    html = render_to_string('trophies/partials/badge_detail/bd2_stage.html', {'s': view.stages[0]})
+    assert html.count('class="bd-gnote"') == 1
+    assert ('Only the trophies in <strong>Re:Chain of Memories</strong> count here, not the rest of '
+            '<strong>Kingdom Hearts Collection</strong>.') in html
+    assert '2 trophy groups</span>' in html, 'the collapsed header says it too (one card per version, as for games)'
+    other_html = render_to_string('trophies/partials/badge_detail/bd2_stage.html', {'s': view.stages[1]})
+    assert '1 game</span>' in other_html and 'bd-gnote' not in other_html

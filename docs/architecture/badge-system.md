@@ -144,7 +144,11 @@ the stage's SAVED members, as the bundle-vs-standalone check always has, so a ch
 checked against the other's previous state. `generate_badge_stages --append` never writes onto a stage that
 holds a list through a group; it reports the addition for a hand edit, as it does for bundles.
 
-**On the badge page** a group card is named for the group, shows its icon, says which list it ships in, and
+**On the badge page** a group stage says what it is three times, because a group card on its own reads as the
+whole game (owner, 2026-10-25): the collapsed header counts "1 trophy group" when that is all the stage holds,
+the opened stage leads with one sentence per group ("Only the trophies in X count here, not the rest of Y"),
+and the card's art carries a "Trophy group" label. A group card is named for the group, shows its icon, says
+which list it ships in ("Part of Y"), and
 reads the viewer's progress on the group (its `pgame` is the `ProfileTrophyGroup` row). It carries no contract
 band and no platinum chip, since both are the whole list's. Its ratings are the group's own. My Stats counts
 the group as a game of its own (as the hero's "N games" does) with the group's trophies, never the list's;

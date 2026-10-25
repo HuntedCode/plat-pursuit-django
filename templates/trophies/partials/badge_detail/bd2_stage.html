@@ -57,13 +57,18 @@ badge" and they are explicitly not steps -- the section they sit in says so once
             filtered); it raised internally, evaluated to the empty string, and rendered every stage on the
             page as "0 games". Counting in Python also keeps the number honest about what is listed: every
             version, not just the ones on this edition's platforms. {% endcomment %}
-            <span class="bd-stage__count">{{ s.games_shown }} game{{ s.games_shown|pluralize }}</span>
+            <span class="bd-stage__count">{{ s.games_shown }} {% if s.only_groups %}trophy group{% else %}game{% endif %}{{ s.games_shown|pluralize }}</span>
         </div>
         <svg class="bd-stage__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"{% if not s.is_next %} style="transform: rotate(-90deg);"{% endif %}><polyline points="6 9 12 15 18 9"></polyline></svg>
     </div>
 
     <div class="bd-stage__collapse" data-stage-games style="grid-template-rows: {% if s.is_next %}1fr{% else %}0fr{% endif %};">
     <div class="bd-stage__collapse-inner">
+        {% comment %}A trophy-group member counts ONE group of its list, and its card alone is easy to read as the
+        whole game, so the stage says it in words, first (owner, 2026-10-25).{% endcomment %}
+        {% for group_name, list_name in s.group_notes %}
+        <p class="bd-gnote">{% include 'partials/icons/trophy_group.html' %}<span>Only the trophies in <strong>{{ group_name }}</strong> count here, not the rest of <strong>{{ list_name }}</strong>.</span></p>
+        {% endfor %}
         {% comment %} Delisted / unobtainable titles satisfy but don't gate -- native <details>, no JS needed. {% endcomment %}
         {% if s.delisted_games %}
         <details class="bd-delisted">

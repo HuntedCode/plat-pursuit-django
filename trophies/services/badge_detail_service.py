@@ -499,12 +499,17 @@ def _group_journey(gb, result, catalog, games_map, profile_games, ratings_map, c
             bucket = obtainable if _display_playable(game, platforms, exclude_delisted) else delisted
             bucket.append(_group_entry(ctg, game, tg, group_progress, group_ratings))
         bundles = _stage_bundles(st, games_map, profile_games, ratings_map, contract_map)
+        # One plain sentence per trophy group on the stage, so nobody reads its card as the whole game (owner,
+        # 2026-10-25). Several versions of one list carry the same group, so it is said once.
+        group_notes = list(dict.fromkeys(
+            (e['group_name'], e['game'].title_name) for e in obtainable + delisted if e['group']
+        ))
         sr = stage_results.get(st.stage_number)
         any_progress = any(e['pgame'] and e['pgame'].progress for e in (obtainable + delisted))
         state = 'complete' if (sr and sr.base_satisfied) else ('partial' if any_progress else 'todo')
         entry = {
             'stage': st, 'obtainable_games': obtainable, 'delisted_games': delisted,
-            'bundles': bundles,
+            'bundles': bundles, 'group_notes': group_notes,
             'icon_url': _stage_icon_url(obtainable, delisted, bundles, platforms, exclude_delisted),
             'completion_state': state, 'is_next': False,
             'display_number': None,
@@ -513,6 +518,8 @@ def _group_journey(gb, result, catalog, games_map, profile_games, ratings_map, c
             # header on the page read "0 games". Template arithmetic that fails quietly is exactly the kind
             # this belongs out of.
             'games_shown': len(obtainable) + len(delisted),
+            # A stage held only by trophy groups says so on its collapsed header too, not just once opened.
+            'only_groups': bool(group_notes) and all(e['group'] for e in obtainable + delisted),
             # The stage's HOLO bar: a game in it at 100% including DLC, which is a real reward (it is what
             # makes the badge holographic) and was invisible here -- a platted stage and a 100%'d one
             # rendered identically, so the page asked for something it never acknowledged.
