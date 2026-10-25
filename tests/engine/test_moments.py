@@ -8,7 +8,6 @@ The owner's rules (2026-10-25):
   * platinums never ambush: they wait behind a pill, as a reel
   * the confetti this replaces fired from an inbox poll on any page; moments read nothing off My Pursuit pages
 """
-import inspect
 from datetime import timedelta
 from types import SimpleNamespace
 
@@ -173,10 +172,14 @@ def test_only_platinum_count_milestones_get_a_beat():
 def test_sync_complete_records_milestones_then_starts_moments_before_it_reports_synced():
     """The last steps of `_job_sync_complete`, in order: a first sync's own awards are already written when
     `start_moments` runs, so they are summarised, not recorded one by one."""
-    from trophies.token_keeper import TokenKeeper
+    from pathlib import Path
 
-    # Live statements only: each must START a source line, so a commented-out call cannot satisfy it.
-    lines = [line.strip() for line in inspect.getsource(TokenKeeper._job_sync_complete).splitlines()]
+    # Read as TEXT, never imported: importing trophies.token_keeper starts a TokenKeeper, which refuses to run
+    # (and fails the test) whenever a real worker holds its Redis key. The method is the text from its `def` to
+    # the next one. Live statements only: each must START a source line, so a commented-out call cannot satisfy it.
+    source = (Path(__file__).resolve().parents[2] / 'trophies' / 'token_keeper.py').read_text(encoding='utf-8')
+    body = source.split('    def _job_sync_complete(', 1)[1].split('\n    def ', 1)[0]
+    lines = [line.strip() for line in body.splitlines()]
 
     def at(statement, after=-1):
         return next(i for i, line in enumerate(lines) if i > after and line.startswith(statement))
@@ -474,3 +477,56 @@ def test_a_platinum_card_shows_which_platinum_it_is(rf):
     html = _render('{% moments_overlay %}', profile, rf)
 
     assert number and f'#<span data-countup="{number}">{number}</span>' in html
+
+
+# --- the team preview (?preview=moments) ----------------------------------------------------------------------
+
+def _team(profile, staff=True):
+    profile.user.is_staff = staff
+    profile.user.save()
+    return profile
+
+
+def _preview_render(tag, profile, rf):
+    request = rf.get('/career/', {'preview': 'moments'})
+    request.user = profile.user
+    return Template('{% load moments %}' + tag).render(Context({'request': request}))
+
+
+def test_the_team_preview_plays_a_sample_from_their_own_data_and_writes_nothing(rf):
+    profile = _team(_hunter())
+    et = _plat(profile)
+    gb = GroupBadgeFactory()
+    UserGroupBadge.objects.create(profile=profile, group_badge=gb, earned_at=NOW())
+
+    with CaptureQueriesContext(connection) as ctx:
+        html = _preview_render('{% moments_overlay %}{% moments_pill %}', profile, rf)
+
+    assert 'data-preview="1"' in html and 'data-autoplay="1"' in html
+    assert 'Your Pursuit begins' in html and f'data-badge-id="{gb.id}"' in html
+    assert et.trophy.game.title_name in html and '<span>1 new platinum</span>' in html
+    assert not Moment.objects.exists()
+    assert not [q for q in ctx.captured_queries if q['sql'].lstrip().upper().startswith(('INSERT', 'UPDATE', 'DELETE'))]
+
+
+def test_the_preview_is_the_teams_alone(rf):
+    profile = _team(_hunter(), staff=False)
+
+    assert 'data-preview' not in _preview_render('{% moments_overlay %}', profile, rf)
+
+
+def test_the_preview_never_posts_and_the_sparks_are_shared():
+    """Source pins (no JS runner): the preview's sample ids must never reach the played endpoint, and both
+    ceremonies spark through ONE helper, feature-tested against a cached older utils.js."""
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2] / 'static' / 'js'
+    moments = (root / 'moments.js').read_text(encoding='utf-8')
+    ceremony = (root / 'claim-ceremony.js').read_text(encoding='utf-8')
+    utils = (root / 'utils.js').read_text(encoding='utf-8')
+
+    assert "if (preview || !ids.length || !PP.API) { return; }" in moments
+    assert 'window.PlatPursuit.sparkBurst = sparkBurst;' in utils
+    assert 'if (PP.sparkBurst) { PP.sparkBurst(layer, cx, cy, color, n); }' in ceremony
+    assert "if (!beat || reduced() || !PP.sparkBurst) { return; }" in moments
+    assert "s.className = 'ccx__spark'" not in ceremony, 'one spark, styled once (.pp-spark, motion.css)'

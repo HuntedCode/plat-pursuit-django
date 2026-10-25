@@ -95,6 +95,33 @@ no branch.
 - [Onboarding](onboarding.md): the welcome moment is the first thing a new hunter sees on a My Pursuit page.
 - [Notification System](../architecture/notification-system.md): the parked inbox's platinum confetti is replaced by this.
 
+## The flourish, and how to see it
+
+One beat per moment, in the earn vocabulary (visual-identity.md), never confetti. The CSS carries the entrances
+(`moments.css`), and `moments.js` lands the sparks (`PlatPursuit.sparkBurst`) on the beat the object arrives:
+
+| Moment | Beat |
+|---|---|
+| welcome | the lines cascade in, the tallies count up |
+| badge | the medallion is struck (drops in small, settles), its bloom flares, sparks fly and its own mint pops |
+| platinum | the cover is dealt in (a turn and a settle), a platinum glow flares, sparks fly, a light sweeps across it, the number counts up |
+| milestone | the number swells in, a platinum ring pulses out, the biggest burst of sparks |
+
+**Sunlight** (owner, 2026-10-25): once the object has landed, slow rays rise behind it and turn (one turn in 48s)
+for as long as the moment is up. A badge's rays wear its TIER (the medallion's metals, shared as `--med-tier-*`
+tokens in `badge-medallion.css`), iridescent when the badge is holographic; platinum and milestone rays are
+platinum. Phase 4's mastered badge turns them gold with its rim and crown. The rays are a mask (repeating wedges
+intersected with a radial fade) over a colour fill, so the fill alone decides the colour, gradient included.
+They outgrow the dialog, so the stage clips them sideways (`overflow-x: clip`, which makes no scroll box).
+
+Reduced motion gets the end state: no sparks, no movement, the rays still. Every waiting moment's art is preloaded at page load,
+because a `<template>`'s images only start loading when it is cloned in.
+
+**`?preview=moments`** on any My Pursuit page (staff or moderator, `core/previews.py`) plays a sample queue
+built from the viewer's own data: the welcome, their latest badge, their two latest platinums and a platinum
+milestone. The moments are unsaved with negative ids, nothing is posted and the Collection's minted set is
+untouched, so it replays on every reload, on dev or on the live site.
+
 ## Gotchas and Pitfalls
 
 - **Recording never raises.** `record_badge` and `record_platinum` run inside `apply_changes`' transaction and a
