@@ -33,6 +33,7 @@ from django.db.models.functions import Cast, Concat, RowNumber
 
 from gamelists.services.covers import cover_games_for
 from trophies.models import Concept, IGDBMatch
+from trophies.services.flag_badges import work_keys_for_concepts
 
 #: The two shapes a page key takes. Named because `page_key_expression` BUILDS them and
 #: `page_key_filter` PARSES them back, and a literal in one place and not the other is how those two
@@ -249,13 +250,19 @@ def search_concepts(query):
     fetched = {
         concept.pk: concept
         for concept in Concept.objects.filter(pk__in=[pk for pk, _ in elected])
-        .only('pk', 'unified_title')
+        # The match's id and status ride along for the flag badges' page membership (`work_keys_for_concepts`),
+        # which would otherwise read the match once per row.
+        .select_related('igdb_match')
+        .only('pk', 'unified_title', 'igdb_match__igdb_id', 'igdb_match__status')
     }
     # Re-ordered from `elected`, which carries the ranking. `pk__in` returns rows in whatever order
     # the plan produces, so the sort above would otherwise be thrown away here.
     ranked = [(fetched[pk], key) for pk, key in elected if pk in fetched]
 
     covers = cover_games_for([concept.pk for concept, _ in ranked])
+    # Each result is a whole GAME, so its badges are the ones every version carries (owner, 2026-10-24). Cached
+    # with the rest: a flag is a staff edit, and a minute's lag on a search row is harmless.
+    flags = work_keys_for_concepts(concept for concept, _ in ranked)
     results = [
         {
             'concept_id': concept.pk,
@@ -263,6 +270,7 @@ def search_concepts(query):
             # A concept with no trophy list is simply absent from the mapping -- that is
             # `cover_games_for`'s stated contract, so this is a miss rather than a None to guard.
             'cover': covers[concept.pk].display_image_url if concept.pk in covers else '',
+            'flags': list(flags.get(concept.pk, ())),
             # CARRIED OUT TO THE CALLER so its membership check can ask the identity question this
             # row was elected by. It is a catalogue fact, so it caches with the rest; it is internal,
             # so callers strip it before serializing.

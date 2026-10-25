@@ -30,6 +30,7 @@ from django.utils import timezone
 from django.utils.formats import date_format
 
 from trophies.constants import CACHE_TIMEOUT_IMAGES
+from trophies.services.flag_badges import work_keys_for_games
 from trophies.services.game_grouping_service import version_peer_qs
 from trophies.models import Game, Stage
 from trophies.util_modules.constants import ALL_PLATFORMS
@@ -453,6 +454,11 @@ class ConceptContextMixin:
             rep = sib.rep_list[0] if getattr(sib, 'rep_list', None) else None
             if rep:
                 out.append({'concept': sib, 'game': rep})
+        # A family row is titled with the sibling's NAME and links its whole game, so its flag badges are the
+        # ones every list of that game carries (owner, 2026-10-24), not its most-played list's own. One query.
+        flags = work_keys_for_games([row['game'] for row in out])
+        for row in out:
+            row['flag_keys'] = flags.get(row['game'].pk, ())
         return out
 
     _CONTRACT_STATE_TAG = {

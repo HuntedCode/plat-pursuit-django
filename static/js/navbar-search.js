@@ -321,6 +321,13 @@ document.addEventListener('DOMContentLoaded', () => {
         name.textContent = item.label;          // textContent: safe
         a.appendChild(name);
 
+        // A game's flag badges (owner, 2026-10-24), the ones every version carries, after its name. Feature-tested:
+        // a cached utils.js can predate the helper, and the row is complete without them.
+        if (item.flags && item.flags.length && window.PlatPursuit && PlatPursuit.flagBadges) {
+            const badges = PlatPursuit.flagBadges(item.flags, 'sm', 'row');
+            if (badges) { a.appendChild(badges); }
+        }
+
         // Trailing metadata: platinum count for hunters, a type tag for franchises and badges.
         if (type === 'profile') {
             const plats = document.createElement('span');

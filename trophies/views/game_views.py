@@ -289,7 +289,7 @@ class GamesListView(HtmxListMixin, ListView):
 
         if form.is_valid():
             sort_val = form.cleaned_data.get('sort') or self.DEFAULT_SORT
-            qs, annotations = apply_game_browse_filters(qs, form, sort_val)
+            qs, annotations = apply_game_browse_filters(qs, form, sort_val, by_page=True)
             qs, order = apply_game_browse_sort(qs, sort_val, annotations, by_page=True)
         else:
             qs = annotate_ascii_name(qs)

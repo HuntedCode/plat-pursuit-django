@@ -881,6 +881,10 @@ lets `currentColor`/token colours flow). The Lucide signature to match:
   `briefcase` for Job Coverage, `calendar-days` for the Plat Calendar, the generic flag for anything else.
   Every surface that names a type uses it, so a type looks the same on My Challenges, the hub and its run
   page.
+- **Game flag glyphs** are a sprite (`partials/icons/_game_flag_sprite.html`, mounted once in `base.html`) drawn
+  with `<use>` by `{% flag_badges %}` and `PlatPursuit.flagBadges`: Lucide `wifi`, `bug` and `shovel` verbatim, and
+  `store` / `trophy` under Lucide's own `-off` slash (Lucide has no store-off or trophy-off). See
+  [community flags](../features/community-flags.md#where-flags-show-badges) for which card shows which.
 - **Brand-mark exceptions** (NOT Lucide, deliberately): `partials/icons/ps_logo.html` (the PlayStation
   wordmark) and `partials/icons/pp_logo.html` (the PlatPursuit logo image). Use these for their brands;
   Lucide has no equivalent and shouldn't.

@@ -62,7 +62,7 @@ def slot_cards(challenge):
     version of this docstring gave only "four and five" -- the common case presented as the only one.
     """
     slots = list(challenge.slots.select_related('contract'))
-    covers, flags = _covers_and_flags([s.contract for s in slots if s.contract_id])
+    covers, flags = _covers_and_flags([s.contract for s in slots if s.contract_id], _open_ids(slots))
     atoms = key_atoms(challenge)
 
     cards = [_card(slot, covers, atoms, flags) for slot in slots]
@@ -121,7 +121,7 @@ def cards_for(slots):
     # flatness test rather than by review, which is the whole reason that test measures instead of asserting.
     covers, flags = _covers_and_flags(
         list(Contract.objects.filter(pk__in=contract_ids).only('igdb_id', 'is_live'))
-        if contract_ids else [])
+        if contract_ids else [], _open_ids(slots))
     atoms = key_atoms(slots[0].challenge)
     cards = []
     for slot in slots:
@@ -287,9 +287,10 @@ def card_for(slot):
     `partials/_square_body.html`, the same file the page uses -- and no reload.
 
     FIVE QUERIES for a filled square (its contract, then three for the cover and one for its flag badges),
-    one for a jobs run's catalogue, and one for an empty square. It is a single slot, so nothing here scales with the run.
+    one for a jobs run's catalogue, and one for an empty square. It is a single slot, so nothing here scales with
+    the run.
     """
-    covers, flags = _covers_and_flags([slot.contract] if slot.contract_id else [])
+    covers, flags = _covers_and_flags([slot.contract] if slot.contract_id else [], _open_ids([slot]))
     atoms = key_atoms(slot.challenge)
     card = _card(slot, covers, atoms, flags)
     # Position zero: one image arriving on its own is never lazy, and the partial no longer
@@ -433,17 +434,24 @@ def _with_dom_ids(groups):
     return groups
 
 
-def _covers_and_flags(contracts):
+def _open_ids(slots):
+    """The contracts of the slots still in play: a finished square wears no flag badges (see `_card`)."""
+    return {s.contract_id for s in slots if s.contract_id and not s.is_completed}
+
+
+def _covers_and_flags(contracts, open_ids):
     """(covers, flag keys), each by contract id, for a board's contracts. ONE membership read serves both, so the
-    square's flag badges (owner, 2026-10-24) cost the board one query, the flags' own game read."""
+    squares' flag badges (owner, 2026-10-24) cost the board one query, the flags' own game read, and none at all
+    when every square is finished (a Claim-all reply re-renders only finished ones)."""
     if not contracts:
         return {}, {}
     membership = contract_membership(contracts)
     concepts = {cid: m['anchored'].union(*m['bundles']) for cid, m in membership.items()}
-    return covers_by_contract(contracts, concepts), contract_flag_keys(contracts, membership)
+    flags = contract_flag_keys([c for c in contracts if c.pk in open_ids], membership)
+    return covers_by_contract(contracts, concepts), flags
 
 
-def _card(slot, covers, atoms, flags=None):
+def _card(slot, covers, atoms, flags):
     """One square.
 
     THE NAME COMES FROM THE SNAPSHOT, never from `slot.contract.name`, and that is the whole reason the
@@ -480,7 +488,7 @@ def _card(slot, covers, atoms, flags=None):
         'cover': covers.get(slot.contract_id),
         # The picked game's flags, by the picker's "can it still be finished?" rule, so a square says what the
         # picker said when it was chosen. A FINISHED square shows none: the trophies are already earned.
-        'flag_keys': [] if slot.is_completed else (flags or {}).get(slot.contract_id, []),
+        'flag_keys': [] if slot.is_completed else flags.get(slot.contract_id, []),
         'xp_pending': bool(slot.is_completed and slot.xp_redeemed_at is None and atom is not None),
     }
 

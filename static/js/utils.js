@@ -4255,20 +4255,30 @@ function GameAdder(root, opts) {
         name.className = prefix + '__name';
         name.textContent = result.title;
 
+        // The game's flag badges (owner, 2026-10-24), every version agreeing. The button's `aria-label` replaces
+        // what is inside it, so their words are added to it as well.
+        var badges = flagBadges(result.flags, 'sm', 'row');
+        var said = (result.flags || []).map(function (key) {
+            var symbol = document.getElementById('pp-gflag-' + key);
+            return symbol ? (symbol.getAttribute('data-label') || '').toLowerCase() : '';
+        }).filter(Boolean);
+        var flagged = said.length ? ', ' + said.join(', ') : '';
+
         var state = document.createElement('span');
         state.className = prefix + '__state';
         if (result.already_added) {
             btn.disabled = true;
             state.textContent = addedLabel;
             // Without this the disabled row's only distinction is colour.
-            btn.setAttribute('aria-label', addedAria(result.title));
+            btn.setAttribute('aria-label', addedAria(result.title) + flagged);
         } else {
             state.textContent = addLabel;
-            btn.setAttribute('aria-label', addAria(result.title));
+            btn.setAttribute('aria-label', addAria(result.title) + flagged);
         }
 
         btn.appendChild(thumb);
         btn.appendChild(name);
+        if (badges) { btn.appendChild(badges); }
         btn.appendChild(state);
         return btn;
     }
@@ -4454,15 +4464,15 @@ window.PlatPursuit.GameAdder = GameAdder;
  * the sprite does not know is skipped rather than drawn blank.
  *
  * Returns the container element, or null when there is nothing to show (an empty box would still take space).
- * `size` is 'md' (a cover) or 'sm' (a row or a small card); `layout` is 'stack' (a cover's corner), 'strip' (the
- * same corner as a row, for short art) or 'row' (inline).
+ * `size` is 'md' (a cover) or 'sm' (a row or a small card); `layout` is 'stack' (a cover's corner) or 'row'
+ * (inline). The template tag's third layout, 'strip', has no caller here yet.
  *
  * CALLERS FEATURE-TEST IT (`PP.flagBadges && ...`): a page script can be newer than a cached utils.js.
  */
 function flagBadges(keys, size, layout) {
     var SVG = 'http://www.w3.org/2000/svg';
     var wrap = document.createElement('span');
-    wrap.className = 'pp-gflags pp-gflags--' + (layout === 'row' || layout === 'strip' ? layout : 'stack')
+    wrap.className = 'pp-gflags pp-gflags--' + (layout === 'row' ? 'row' : 'stack')
         + ' pp-gflags--' + (size === 'sm' ? 'sm' : 'md');
     (keys || []).forEach(function (key) {
         var symbol = document.getElementById('pp-gflag-' + key);

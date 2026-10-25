@@ -20,7 +20,7 @@ from __future__ import annotations
 from collections import OrderedDict
 from typing import Iterable, Mapping
 
-from django.db.models import F, OuterRef, Q, Subquery
+from django.db.models import Exists, F, OuterRef, Q, Subquery
 
 from trophies.models import Game, IGDBMatch, ProfileGame
 
@@ -481,3 +481,25 @@ def page_version_rows(anchors, fields):
     out = {anchor: by_igdb.get(igdb, []) for anchor, igdb in igdb_of.items()}
     out.update({anchor: by_concept.get(cid, []) for anchor, cid in concept_of.items()})
     return out
+
+
+def no_page_version(lacking):
+    """A `Q` for Game rows whose GAME PAGE has no list matching `lacking`: the database-side twin of
+    `page_version_rows`, for a filter that must agree with the badges.
+
+    "Delisted" on a whole-game grid means every list on the page is delisted (owner, 2026-10-24), which is
+    "no list on the page is NOT delisted", so a caller passes `lacking=Q(is_delisted=False)` beside its own
+    `is_delisted=True`. Same membership as `page_version_rows`: a trusted match's page is every game sharing
+    its IGDB id (ungated), any other concept's is its own games, and the np floor applies. A row with no
+    concept has no page and passes, leaving its own column to decide.
+
+    Correlated `EXISTS`, served by the concept and IGDB id indexes, and only ever beside a flag filter that has
+    already cut the population to the flagged rows.
+    """
+    listed = Q(np_communication_id__isnull=False) & ~Q(np_communication_id='')
+    by_igdb = Game.objects.filter(listed, lacking,
+                                  concept__igdb_match__igdb_id=OuterRef('concept__igdb_match__igdb_id'))
+    by_concept = Game.objects.filter(listed, lacking, concept_id=OuterRef('concept_id'))
+    trusted = Q(concept__igdb_match__status__in=IGDBMatch.TRUSTED_STATUSES,
+                concept__igdb_match__igdb_id__isnull=False)
+    return (trusted & ~Exists(by_igdb)) | (~trusted & ~Exists(by_concept))

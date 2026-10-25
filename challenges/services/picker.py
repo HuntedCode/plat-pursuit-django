@@ -521,17 +521,9 @@ def _decorations(contracts):
     the same union Browse Games' cards and the game page show), each with the colour tone the platform tags
     elsewhere use.
 
-    AVAILABILITY ASKS "CAN THIS STILL BE FINISHED?" (owner, 2026-10-10): `delisted` when no way to finish the
-    contract has a listed game, `unobtainable` when none has an obtainable one. Since 2026-10-24 the same question
-    carries the site's other everywhere flags, which is the badges' every-version rule applied to a contract:
-    `online` when no way to finish it avoids online trophies, `shovelware` when every way is shovelware. Keys in
-    `FLAG_ORDER`, drawn as the site's flag badges. A contract is done through ANY
-    one of its own (anchored) concepts' stacks, so one listed stack there clears the flag; or through a bundle,
-    which counts only as a WHOLE (`_detect_tiers`), so a bundle clears it only when every one of its concepts has
-    a listed stack. Pooling bundle games with the rest under-warned: a bundle of one delisted and one listed
-    episode looked available while it could not be finished. A contract with no member games on record says
-    nothing, rather than "all of none". A concept with no games on record yet is UNKNOWN, not unavailable: it
-    never makes a flag show (see `contract_flags.finishable`), because the flags name a fact about stacks that do exist.
+    AVAILABILITY IS "CAN THIS STILL BE FINISHED?" for each of the site's flag badges (owner, 2026-10-10 and
+    2026-10-24), in `FLAG_ORDER`. The rule, with why a bundle only counts whole, lives in `contract_flags`, which
+    the Career board and the squares ask too.
 
     One `Game` query for the page, however many contracts: bounded by the page, never by a hunter's library.
     """
@@ -557,9 +549,9 @@ UNOBTAINABLE_CACHE_SECONDS = 60 * 60
 
 
 def unobtainable_contract_ids():
-    """Every live contract the picker would flag `unobtainable` (`_decorations`' rule, `contract_flags.finishable` on each
-    game's obtainable flag), for the Challenge Optimizer, which never SUGGESTS one (owner, 2026-10-17; delisted is
-    fine). A hunter may still pick one by hand, where the chip says so.
+    """Every live contract the picker would flag `unobtainable` (`_decorations`' rule, `contract_flags.finishable`
+    on each game's obtainable flag), for the Challenge Optimizer, which never SUGGESTS one (owner, 2026-10-17;
+    delisted is fine). A hunter may still pick one by hand, where the chip says so.
 
     Only a concept with an unobtainable game can make a contract unfinishable (a concept with no games, or only
     obtainable ones, counts as fine), so the game read is ONE query for those concepts' games alone; the membership

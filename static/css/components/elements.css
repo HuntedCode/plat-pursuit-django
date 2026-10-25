@@ -931,8 +931,9 @@
 @media (prefers-reduced-motion: reduce) { .rp-tile__img--fx { transition: none; } }
 .rp-tile__art-fade { position: absolute; inset: 0; background: linear-gradient(to top, color-mix(in oklab, var(--pp-bg-2) 92%, transparent), transparent 55%); pointer-events: none; z-index: 3; }
 .rp-tile__badge { position: absolute; top: 8px; left: 8px; z-index: 4; }
-/* The contract's flag badges run along the banner's foot: the status badge and the New marker hold its top. */
-.rp-tile__art .pp-gflags--strip { top: auto; bottom: 8px; left: 8px; z-index: 4; }
+/* The contract's flag badges run along the banner's foot: the status badge and the New marker hold its top. Clear of
+   the gallery's progress bar (`.rp-progress`, 3px at 7px), which shows on hover. */
+.rp-tile__art .pp-gflags--strip { top: auto; bottom: 14px; left: 8px; z-index: 4; }
 /* Recency marker. Pinned to the RIGHT so it never collides with the status badge on its left --
    a contract can legitimately be both new and ready to claim. Accent-tinted rather than a
    semantic colour: "new" is not a state of the hunter's progress. */

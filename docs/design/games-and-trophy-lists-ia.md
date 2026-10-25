@@ -99,8 +99,8 @@ model) around ONE list viewport tab:
   is its only host. Released is `concept.release_date` (the work's date, not the host list's platform date).
 - **Flags come back for the WHOLE game only** (owner, 2026-10-10). The hero shows a game flag (Shovelware,
   Delisted, Unobtainable, Online Trophies, Buggy Trophies) only when EVERY list in the set carries it
-  (`game_page_views.shared_list_flags`; Unobtainable means no list is obtainable). It reuses List detail's
-  `_game_flags.html` (fed a `SharedListFlags`, which has the five attributes the partial reads), Shovelware in
+  (`flag_badges.every_version_keys` since 2026-10-24, the rule every whole-game badge uses; Unobtainable means no
+  list is obtainable). It reuses List detail's `_game_flags.html` (fed the shared keys), Shovelware in
   the platform row as there. A flag only some lists have stays on those lists' own pages: naming it for the
   game would tell a hunter on the good list that their game is broken. For the same reason there is no "No
   Known Issues" chip here: the flags row renders only when a real flag is shared (`has_chips`), so the partial's
@@ -280,7 +280,8 @@ Page-by-page during the rebuild, never a big-bang rename:
   List-detail links (pinned). Interims recorded in the card's comments: flags overlay +
   played_count were the ELECTED row's own columns (election ~= partition max; never sum) until
   2026-10-22, when the card's player count became the page's distinct players (`players_map`, DS-08)
-  so card and page agree; the flags overlay is still the elected row's;
+  so card and page agree; the flags overlay followed on 2026-10-24 (the page's lists must all agree, from the same
+  membership read, `page_version_rows`);
   rating/badge/DLC maps stay elected-row/host-concept keyed; alpha sort AND text search operate
   on the elected row's title_name while the card displays unified_title (they rarely diverge; a
   stack-specific search can return a card whose visible title omits the query). Window cost at

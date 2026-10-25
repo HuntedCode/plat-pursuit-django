@@ -480,8 +480,8 @@ def build_profile_ratings_page(profile, sort='recent', page=1, per_page=RATINGS_
 
     Five queries flat on the base wall, four on the DLC one: the ratings themselves, the community scores
     for the concepts on it, the games behind those concepts, (base only) which of those concepts define
-    a platinum, for the verdict wording, and every version's flags for the badges (owner, 2026-10-24). Nothing here scales with the size
-    of the account -- only with `per_page`.
+    a platinum, for the verdict wording, and every version's flags for the badges (owner, 2026-10-24). Nothing
+    here scales with the size of the account -- only with `per_page`.
 
     Sliced rather than paginated. `Paginator` runs a `COUNT(*)` over the whole set on every page, and the
     header already knows the total from `profile_rating_summary`, so paying for it again per page buys

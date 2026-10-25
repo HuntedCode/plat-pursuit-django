@@ -19,8 +19,9 @@ Expects: trophy_group (TrophyGroup with select_related game, game__concept). {% 
             DLC
         </span>
         {% comment %}The parent list's own flags (owner, 2026-10-24): a pack is earned on that list, so an
-        unobtainable or online list is the pack's problem too. Top-RIGHT, because the DLC tag holds the corner.{% endcomment %}
-        {% flag_badges trophy_group.game|flag_keys:True %}
+        unobtainable or online list is the pack's problem too. Not Buggy, which names particular trophies and may not
+        be the pack's. Top-RIGHT, because the DLC tag holds the corner.{% endcomment %}
+        {% flag_badges trophy_group.game|flag_keys %}
     </div>
 
     <div class="pp-gcard__body">

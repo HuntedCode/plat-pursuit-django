@@ -4722,3 +4722,43 @@ def test_the_repaint_tells_the_card_which_section_it_is_in_now():
     # Only where the server rendered one: a list that cannot be filed has no `data-current`, and
     # adding one would make a menu offer destinations on a page that has none.
     assert "hasAttribute('data-current')" in fn, 'the repaint invents the attribute where there is none'
+
+
+# ── flag badges (owner, 2026-10-24) ──────────────────────────────────────────────────────────────────
+
+def test_an_entry_wears_what_every_version_carries_and_says_it(client):
+    """An entry is a whole game, so its badges are the every-version ones. The card's link has an `aria-label`,
+    which replaces anything inside it, so the flags are said there as well; on a ranked list the badges start
+    under the rank plate, which holds the same corner."""
+    from trophies.models import Game
+
+    owner = _staff(client)
+    game_list = _ranked(owner, 2)
+    first = game_list.items.order_by('position').first()
+    Game.objects.filter(concept=first.concept).update(has_online_trophies=True, is_delisted=True)
+
+    body = client.get(_url(game_list)).content.decode()
+
+    assert f'{first.concept.unified_title}, delisted, online trophies"' in body
+    assert body.count('<use href="#pp-gflag-online"/>') == 1, 'one entry flagged, the other not'
+    css = _read('static/css/components/gamelists.css')
+    assert '.gl-rank ~ .pp-gflags--stack { top: 37px; left: 7px; }' in css
+
+
+def test_the_add_a_game_search_sends_each_results_flags():
+    """The search a list adds from shows the same badges (`GameAdder` in utils.js draws them, and adds their
+    words to the row's `aria-label`)."""
+    from django.core.cache import cache
+    from gamelists.services.game_search import search_concepts
+
+    cache.clear()
+    concept = ConceptFactory(unified_title='Zebrafish Online')
+    GameFactory(concept=concept, has_online_trophies=True)
+    results = search_concepts('Zebrafish')
+
+    assert [r['flags'] for r in results] == [['online']]
+    js = _read('static/js/utils.js')
+    adder = js[js.index('function buildRow(result) {'):]
+    adder = adder[:adder.index('\n    }\n')]
+    assert "var badges = flagBadges(result.flags, 'sm', 'row');" in adder
+    assert "btn.setAttribute('aria-label', addAria(result.title) + flagged);" in adder

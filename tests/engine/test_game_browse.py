@@ -794,3 +794,66 @@ def test_the_letter_row_cannot_widen_the_page():
     assert len(md) == 1 and 'contain: none' in md[0], (
         'size containment survives into the band where the row wraps, which collapses its height'
     )
+
+
+# ── flag badges and the filters that must match them (owner, 2026-10-24) ─────────────────────────────────────
+
+def _work(title, *lists):
+    """One game page: a trusted match over a concept with one list per kwargs dict."""
+    from tests.factories import ConceptFactory, IGDBMatchFactory
+    concept = ConceptFactory(unified_title=title)
+    IGDBMatchFactory(concept=concept, status='accepted')
+    return [GameFactory(concept=concept, title_name=f'{title} {i}', title_platform=['PS5'], **kw)
+            for i, kw in enumerate(lists)]
+
+
+def test_a_card_wears_a_flag_only_when_every_list_on_its_page_has_it(client):
+    _work('Pulled Everywhere', {'is_delisted': True}, {'is_delisted': True})
+    _work('Pulled On One', {'is_delisted': True}, {'is_delisted': False})
+
+    content = client.get(reverse('games_list')).content.decode()
+
+    assert content.count('<use href="#pp-gflag-delisted"/>') == 1
+
+
+def test_the_delisted_filter_matches_the_badge_on_browse_games_and_the_list_on_trophy_lists(client):
+    """Browse Games is one card per Game page, so "Delisted" there means every list on the page; Trophy Lists
+    is one card per list, so it still means that list. A filtered card must always wear the badge it was
+    filtered for."""
+    _work('Pulled Everywhere', {'is_delisted': True}, {'is_delisted': True})
+    _work('Pulled On One', {'is_delisted': True}, {'is_delisted': False})
+
+    games = client.get(reverse('games_list'), {'show_delisted': 'on'}).content.decode()
+    lists = client.get(reverse('trophy_lists'), {'show_delisted': 'on'}).content.decode()
+
+    assert 'Pulled Everywhere' in games and 'Pulled On One' not in games
+    assert 'Pulled On One 0' in lists, "the delisted list is still that list's own result"
+
+
+def test_no_page_version_follows_the_game_pages_membership():
+    """The database twin of `page_version_rows`: trusted matches group by IGDB id across concepts, anything else
+    by concept, and a list with no np id is not on the page."""
+    from django.db.models import Q
+    from tests.factories import ConceptFactory, IGDBMatchFactory
+    from trophies.models import Game
+    from trophies.services.game_grouping_service import no_page_version
+
+    def matches():
+        return set(Game.objects.filter(is_delisted=True).filter(no_page_version(Q(is_delisted=False)))
+                   .values_list('title_name', flat=True))
+
+    trusted_a = ConceptFactory()
+    match = IGDBMatchFactory(concept=trusted_a, status='accepted')
+    trusted_b = ConceptFactory()
+    IGDBMatchFactory(concept=trusted_b, igdb_id=match.igdb_id, status='auto_accepted')
+    GameFactory(concept=trusted_a, title_name='T delisted', is_delisted=True)
+    GameFactory(concept=trusted_b, title_name='T sibling listed')            # another concept, same page
+    untrusted = ConceptFactory()
+    IGDBMatchFactory(concept=untrusted, status='pending_review')
+    GameFactory(concept=untrusted, title_name='U delisted', is_delisted=True)
+    lone = ConceptFactory()
+    GameFactory(concept=lone, title_name='L delisted', is_delisted=True)
+    GameFactory(concept=lone, title_name='L unlisted np', np_communication_id='')  # not a list on the page
+    GameFactory(concept=None, title_name='N delisted', is_delisted=True)
+
+    assert matches() == {'U delisted', 'L delisted', 'N delisted'}

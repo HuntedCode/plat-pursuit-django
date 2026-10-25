@@ -19,7 +19,7 @@ from the `plat_defined` annotation -- so the grid costs one query no matter how 
             data-card-open
             data-trophy-group-id="{{ c.trophy_group_id }}"
             data-game-name="{{ game.title_name }}"
-            aria-label="Make a card for {{ game.title_name }}">
+            aria-label="Make a card for {{ game.title_name }}{% for key in game|flag_keys %}, {{ key|flag_label|lower }}{% endfor %}">
 
         <span class="pcard__art">
             {% if game.has_cover_art %}

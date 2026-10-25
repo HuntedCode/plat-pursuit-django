@@ -1103,7 +1103,7 @@ def test_a_game_with_no_art_at_all_gets_the_band_without_an_image(client):
 
 def test_a_games_tab_card_wears_its_own_lists_flags(client):
     """The card is the hunter's copy of ONE list, so it shows that list's own flags (owner, 2026-10-24), along the
-    band's corner. Buggy is not an everywhere flag, so it stays off."""
+    footer, which a phone keeps (it hides the band). Buggy is not an everywhere flag, so it stays off."""
     profile = ProfileFactory(is_linked=True)
     flagged, _g, _s = _completed_game(profile, with_platinum=True)
     clean, _g, _s = _completed_game(profile, with_platinum=True)
@@ -1111,7 +1111,10 @@ def test_a_games_tab_card_wears_its_own_lists_flags(client):
 
     body = client.get(f'/hunters/{profile.psn_username}/?tab=games', **CF).content.decode()
 
-    assert body.count('pp-gflags pp-gflags--strip pp-gflags--sm') == 1, 'one card flagged, the other not'
+    assert body.count('pp-gflags pp-gflags--row pp-gflags--sm') == 1, 'one card flagged, the other not'
+    # In the footer's platform group, which both layouts keep (a phone hides the band, `.pp-gcard__cover`).
+    footers = [chunk.split('</a>')[0] for chunk in body.split('class="pp-gcard__plats"')[1:]]
+    assert sum('pp-gflags--row' in chunk for chunk in footers) == 1
     assert '<use href="#pp-gflag-unobtainable"/>' in body
     # The `<use>`, not the symbol id: every page carries the sprite, so the id is always on it.
     assert '<use href="#pp-gflag-buggy"/>' not in body

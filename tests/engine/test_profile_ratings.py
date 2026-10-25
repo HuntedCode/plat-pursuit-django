@@ -186,8 +186,8 @@ def test_the_platinumed_version_is_the_one_linked():
 
 def test_query_count_does_not_follow_the_size_of_the_wall():
     """Five queries flat: the ratings, the community scores, the games, which of those concepts define a
-    platinum (for the verdict wording), and every version's flags (the badges). The wall is the one place an N+1 is invisible in review and
-    obvious in production."""
+    platinum (for the verdict wording), and every version's flags (the badges). The wall is the one place an N+1
+    is invisible in review and obvious in production."""
     profile = ProfileFactory(is_linked=True)
     for i in range(20):
         _rated(profile, title=f'Game {i}')

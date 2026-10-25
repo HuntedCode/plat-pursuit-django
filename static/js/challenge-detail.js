@@ -868,7 +868,7 @@
             // row then simply carries no badges.
             var badges = flags.length && PP.flagBadges ? PP.flagBadges(flags, 'sm', 'row') : null;
             if (badges) { wrap.appendChild(badges); }
-            return wrap;
+            return wrap.childNodes.length ? wrap : null;
         }
 
         // ── paging ────────────────────────────────────────────────────────────────────────────────

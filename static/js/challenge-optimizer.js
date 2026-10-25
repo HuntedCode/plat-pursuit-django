@@ -2131,7 +2131,7 @@
             plats.forEach(function (p) { wrap.appendChild(platformTag(p)); });
             var badges = flagBadges(flags);
             if (badges) { wrap.appendChild(badges); }
-            return wrap;
+            return wrap.childNodes.length ? wrap : null;
         }
 
         /** A job glyph out of the page's sprite, as `challenge-detail.js` builds it (`createElementNS`: an SVG

@@ -413,13 +413,14 @@ def test_site_suggest_empty_groups_omitted(client):
 
 def test_site_suggest_games_no_n_plus_one(django_assert_num_queries):
     # _games fetches Concept instances + calls get_cover_url() per row; prove the
-    # igdb_match is served from select_related (ONE query for 5 rows, not 1+5).
+    # igdb_match is served from select_related (ONE query for 5 rows, not 1+5), plus ONE for every row's flag
+    # badges (owner, 2026-10-24), read off the same matches: two, flat, however many rows.
     from trophies.views.sync_views import SiteSuggestView
     for i in range(5):
         c = ConceptFactory(unified_title=f'Nplus Game {i}')
         IGDBMatchFactory(concept=c, igdb_cover_image_id=f'co{i}', status='auto_accepted')
         GameFactory(concept=c, played_count=i, np_communication_id=f'NPWR_NP{i}_00')
-    with django_assert_num_queries(1):
+    with django_assert_num_queries(2):
         result = SiteSuggestView()._games('nplus game')
     assert len(result['items']) == 5
     assert all(it['image'].startswith('https://images.igdb.com') for it in result['items'])
@@ -601,3 +602,22 @@ def test_light_mode_stays_removed_until_rebuilt(client):
     assert 'theme-toggle-item' not in body
     assert 'data-theme="plat-pursuit-dark"' in body
 
+
+
+def test_site_suggest_sends_each_games_every_version_flags(client):
+    """A result is a whole game, so it carries the flags every version has (owner, 2026-10-24), and the nav
+    search draws them as the site's badges, feature-tested against a cached utils.js."""
+    from django.core.cache import cache
+    from pathlib import Path
+
+    cache.clear()
+    concept = ConceptFactory(unified_title='Quokka Racing')
+    GameFactory(concept=concept, has_online_trophies=True, is_delisted=True)
+    GameFactory(concept=concept, has_online_trophies=True)                    # still on sale
+
+    groups = client.get(reverse('site_suggest'), {'q': 'quokka'}).json()['groups']
+    game = next(g for g in groups if g['type'] == 'game')['items'][0]
+
+    assert game['flags'] == ['online']
+    js = (Path(__file__).resolve().parents[2] / 'static' / 'js' / 'navbar-search.js').read_text(encoding='utf-8')
+    assert "if (item.flags && item.flags.length && window.PlatPursuit && PlatPursuit.flagBadges) {" in js

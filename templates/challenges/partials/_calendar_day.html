@@ -108,8 +108,9 @@ THIRD PERSON, because a run page is public. A reader is usually looking at someb
                 <span class="pp-cday__veil" aria-hidden="true"></span>
                 {% endif %}
                 {% comment %}The list's own flags (owner, 2026-10-24), less shovelware: the card says that one in
-                words below, with why it matters here.{% endcomment %}
-                {% flag_badges plat.game|flag_keys|flag_drop:'shovelware' 'sm' %}
+                words below, with why it matters here. Hidden here and said after the title instead, so the link's
+                name still starts with the game and its year.{% endcomment %}
+                {% with flags=plat.game|flag_keys|flag_drop:'shovelware' %}{% if flags %}<span aria-hidden="true">{% flag_badges flags 'sm' %}</span>{% endif %}{% endwith %}
             </span>
 
             {% comment %}THE YEAR IS STRUCK, as an engraving: uppercase,
@@ -119,6 +120,7 @@ THIRD PERSON, because a run page is public. A reader is usually looking at someb
             cannot.{% endcomment %}
             <span class="pp-cday__year">{{ plat.on|date:"Y" }}</span>
             <span class="pp-cday__title">{{ plat.game.title_name }}</span>
+            {% with flags=plat.game|flag_keys|flag_drop:'shovelware' %}{% if flags %}<span class="sr-only">{% for key in flags %}, {{ key|flag_label|lower }}{% endfor %}</span>{% endif %}{% endwith %}
             </a>
 
             {% if not plat.clean %}

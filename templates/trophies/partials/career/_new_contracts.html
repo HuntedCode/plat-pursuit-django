@@ -54,8 +54,9 @@ been shown, and the server's monotonic clamp makes that unrecoverable. {% endcom
                                 </span>
                             {% endif %}
                             {% comment %} The contract's flags (owner, 2026-10-24), top-left: the status chip runs along the
-                            cover's foot. {% endcomment %}
-                            {% flag_badges c.flag_keys 'sm' %}
+                            cover's foot. Hidden from screen readers here because the list below is every contract,
+                            heroes included, and says them in its row. {% endcomment %}
+                            {% if c.flag_keys %}<span aria-hidden="true">{% flag_badges c.flag_keys 'sm' %}</span>{% endif %}
                             {% if c.status == 'claimable' %}
                                 {% comment %} "Ready", not "Ready to claim": the full phrase wrapped to two lines across the
                             bottom of the cover. The row below says it in full. {% endcomment %}<span class="nc__hero-chip nc__chip--claim">Ready</span>

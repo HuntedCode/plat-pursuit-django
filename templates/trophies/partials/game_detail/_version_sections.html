@@ -4,8 +4,8 @@ render identical rows. Expects other_versions / family_versions / url_psn_userna
     not one of its trophy lists.
   - Other platforms: Games whose Concept shares this game's exact IGDB id (spans Concepts).
   - In the same family: other Concepts in the GameFamily (different IGDB id) -- remasters/remakes/collections.
-  Each row carries the flag badges of the ONE list it describes (owner, 2026-10-24): its platforms and trophy dots
-  are that list's too.
+  Flag badges (owner, 2026-10-24): an "Other platforms" row is ONE list, so it carries that list's own; a family row
+  is titled with the sibling's name and links its whole game, so it carries what every list of that game has.
 {% endcomment %}{% load flag_badges %}
 {% if other_versions %}
     <section class="gd-vsec">
@@ -40,7 +40,7 @@ render identical rows. Expects other_versions / family_versions / url_psn_userna
                         <span class="gd-vrow__meta">{% for p in fv.game.title_platform %}<span class="gd-vrow__plat">{{ p }}</span>{% endfor %}{% if fv.game.is_regional %}{% for r in fv.game.region %}<span class="gd-vrow__plat gd-vrow__plat--region">{{ r }}</span>{% endfor %}{% endif %}</span>
                         {% include 'trophies/partials/game_detail/_version_trophy_dots.html' with game=fv.game %}
                     </span>
-                    {% flag_badges fv.game|flag_keys 'sm' 'row' %}
+                    {% flag_badges fv.flag_keys 'sm' 'row' %}
                     <svg class="gd-vrow__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
                 </a>
             {% endfor %}

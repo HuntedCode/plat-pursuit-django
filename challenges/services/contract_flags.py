@@ -19,7 +19,7 @@ from trophies.services.flag_badges import FLAG_ORDER
 
 def contract_flag_keys(contracts, membership=None):
     """`{contract id: flag keys}`, for every surface a contract shows on: the picker and optimizer rows, the Career
-    board and a job's contracts, the contract modal, the new-contracts modal and a challenge's squares, so a
+    board and a job's contracts, the new-contracts modal and a challenge's squares, so a
     contract wears the same badges wherever it is (owner, 2026-10-24). Three queries for the page, or one when the
     caller already read `membership` (`eligibility.contract_membership`) for something else, as a board does for
     its covers."""
@@ -27,10 +27,14 @@ def contract_flag_keys(contracts, membership=None):
         return {}
     if membership is None:
         membership = eligibility.contract_membership(contracts)
-    concepts = {cid: m['anchored'].union(*m['bundles']) for cid, m in membership.items()}
+    else:
+        # A shared read can hold more contracts than were asked about (a board's covers read every square's).
+        asked = {c.id for c in contracts}
+        membership = {cid: m for cid, m in membership.items() if cid in asked}
+    concepts = {contract_id: m['anchored'].union(*m['bundles']) for contract_id, m in membership.items()}
     by_concept = flag_rows(concepts)
     return {contract_id: availability(membership[contract_id], by_concept,
-                                       [g for cid in concept_ids for g in by_concept.get(cid, [])])
+                                       [g for concept_id in concept_ids for g in by_concept.get(concept_id, [])])
             for contract_id, concept_ids in concepts.items()}
 
 

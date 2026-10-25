@@ -417,6 +417,8 @@
     /* Lifts the plate off busy art so its edge stays findable without needing a border. */
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
 }
+/* The flag badges share the rank plate's corner, so on a ranked list they start under it (26px at 7px). */
+.gl-rank ~ .pp-gflags--stack { top: 37px; left: 7px; }
 /* Larger where there is room. The plate is what the eye is chasing down the grid, and at `md` the
    cards are wide enough that 26px starts to read as timid. */
 @media (min-width: 768px) {

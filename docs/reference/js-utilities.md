@@ -711,6 +711,15 @@ inline beside a trophy list.
 prompt where the secondary button means "skip, just download" -- so a dismiss must never fire it, or the
 universal get-me-out-of-here affordance hands you a file.
 
+### PlatPursuit.flagBadges
+
+`flagBadges(keys, size, layout)` draws a game's flag badges for a row built from JSON, the same markup
+`{% flag_badges %}` renders. `keys` are flag keys the server already decided (`trophies/services/flag_badges.py`),
+`size` is `'md'` or `'sm'`, `layout` is `'stack'` or `'row'` (the tag's `'strip'` has no script caller yet). Glyph, label and tone come from the sprite
+`base.html` mounts (`#pp-gflag-KEY`, `data-label`, `data-tone`), so there is no copy of them in JavaScript. Returns
+the element, or null for no badges. Callers in other files feature-test it (`PP.flagBadges && ...`), because a
+cached `utils.js` can predate it.
+
 ## Namespace Pattern
 
 All utilities are declared as `const` or `class` at module scope, then exported at the bottom:

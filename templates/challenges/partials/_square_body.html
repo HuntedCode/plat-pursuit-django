@@ -64,10 +64,11 @@ Params: card (from `slot_render.slot_cards`).{% endcomment %}
     <span class="pp-csq__key{% if card.job %} pp-csq__key--job{% endif %}" aria-hidden="true">
         {% if card.job %}{% job_icon_use card.job.icon '' %}{% else %}{{ card.label }}{% endif %}
     </span>
-    {% comment %}THE PICKED GAME'S FLAGS (owner, 2026-10-24), under the key chip, by the picker's "can it still be
+    {% comment %}THE PICKED GAME'S FLAGS (owner, 2026-10-24), in a row under the key chip (a column of three ran
+    into the game's name on a phone square), by the picker's "can it still be
     finished?" rule (`card.flag_keys`; none on a finished square). Hidden here and said in the square's one
     sentence below instead, where they read after the game's name rather than before the square's.{% endcomment %}
-    {% if card.flag_keys %}<span aria-hidden="true">{% flag_badges card.flag_keys 'sm' %}</span>{% endif %}
+    {% if card.flag_keys %}<span aria-hidden="true">{% flag_badges card.flag_keys 'sm' 'strip' %}</span>{% endif %}
 {% else %}
     {% comment %}An empty square shows its own key: a hunter scanning for gaps is asking "which letters
     are left", and a generic `+` answers a different question.{% endcomment %}

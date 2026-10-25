@@ -35,6 +35,7 @@ from gamelists.models import (DESCRIPTION_MAX_LENGTH, LIST_TYPE_COLLECTION, LIST
                               list_type_options)
 from gamelists.services import game_list_service as svc
 from gamelists.services.covers import attach_cover_games, cover_games_for
+from trophies.services.flag_badges import work_keys_for_concepts
 from gamelists.services.game_search import (SearchRefused, page_key_expression, page_key_filter,
                                             search_concepts)
 from trophies.mixins import HtmxListMixin
@@ -743,8 +744,12 @@ class GameListDetailView(DetailView):
         # One batched query for every cover on the page, not one per row -- the same helper the
         # browse tiles use, for the same reason.
         covers = cover_games_for([item.concept_id for item in items])
+        # An entry is a whole GAME, so its flag badges are the ones every version carries (owner, 2026-10-24):
+        # one more bounded query, the concepts' matches already joined above.
+        flags = work_keys_for_concepts(item.concept for item in items)
         for item in items:
             item.cover = covers.get(item.concept_id)
+            item.flag_keys = flags.get(item.concept_id, ())
 
         # ── sections ────────────────────────────────────────────────────────────────────────────
         #
