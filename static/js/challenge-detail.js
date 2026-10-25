@@ -680,9 +680,6 @@
         //: history panel can return one (a window of games all finished before you joined); the button
         //: stays, so a hunter can keep looking, but scrolling alone cannot walk an unbounded history.
         var AUTO_EMPTY_PAGES = 3;
-        //: What each availability flag reads as. A lookup rather than the raw value, so a flag this build does not
-        //: know draws nothing instead of an unlabelled chip.
-        var AVAILABILITY_LABELS = { delisted: 'Delisted', unobtainable: 'Unobtainable' };
         //: How close (px) the sentinel must be to the bottom of the sheet before the next page is fetched.
         var MORE_MARGIN = 240;
 
@@ -848,7 +845,7 @@
             return item;
         }
 
-        /** A row's platforms as the site's flat platform tags, then its availability flags, or null for a game
+        /** A row's platforms as the site's flat platform tags, then its flag badges, or null for a game
          *  with neither. The
          *  TONE comes from the server (`platform_color_str`, the same rule every other platform tag uses), so
          *  the colour rule is not copied into JavaScript; it is checked as a bare word before it becomes a
@@ -865,12 +862,12 @@
                 tag.textContent = p.name;
                 wrap.appendChild(tag);
             });
-            // DELISTED / UNOBTAINABLE, sent only when the contract can no longer be finished (owner, 2026-10-10), as the house
-            // alert chip -- the error tone the game page's own flags use. A fact worth stopping on before you
-            // pick, so it is a chip and not a flat tag like the platforms beside it.
-            flags.forEach(function (flag) {
-                if (AVAILABILITY_LABELS[flag]) { wrap.appendChild(chip(AVAILABILITY_LABELS[flag], 'error')); }
-            });
+            // THE GAME'S FLAGS, sent only when no way to finish the contract avoids them (owner, 2026-10-10;
+            // `picker._decorations`), as the site's flag badges (owner, 2026-10-24): the same glyph a hunter
+            // sees on that game everywhere else. Feature-tested, because a cached utils.js may predate it; the
+            // row then simply carries no badges.
+            var badges = flags.length && PP.flagBadges ? PP.flagBadges(flags, 'sm', 'row') : null;
+            if (badges) { wrap.appendChild(badges); }
             return wrap;
         }
 

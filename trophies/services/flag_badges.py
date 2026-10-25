@@ -9,7 +9,7 @@ TWO RULES, and which one a surface uses is a fact about what the card stands for
 - A card for ONE trophy list (a hunter's own game, a calendar day's platinum, a Trophy Lists browse card) shows that
   list's own flags: `own_keys`.
 - A card for a whole GAME (a Game List entry, a condensed browse card, a nav search result) shows a flag only when
-  EVERY version has it: `work_keys_by_game` / `work_keys_by_concept`. It answers "can I still do this game?": a PS3
+  EVERY version has it: `work_keys_for_games` / `work_keys_for_concepts`. It answers "can I still do this game?": a PS3
   version going unobtainable does not mark a game the PS4 version still plats. The Game page's own chips, the
   picker's availability (owner, 2026-10-10) and these badges are the same rule, and the versions are the trophy
   lists on the Game page the card links (`game_grouping_service.page_version_rows`).
@@ -19,7 +19,7 @@ nowhere new. Callers that keep it pass `buggy=True`.
 """
 from types import SimpleNamespace
 
-from trophies.models import Concept, Game, SHOVELWARE_FLAGGED_STATUSES
+from trophies.models import Concept, SHOVELWARE_FLAGGED_STATUSES
 from trophies.services.game_grouping_service import page_version_rows
 
 #: Display order, most severe first: a card that can carry three shows the one that stops a hunter at the top.
@@ -83,29 +83,38 @@ def _rows_to_keys(rows_by_anchor, buggy):
     return {anchor: keys_from_rows(rows, buggy=buggy) for anchor, rows in rows_by_anchor.items()}
 
 
-def work_keys_by_game(games, buggy=False):
-    """`{game.pk: keys}` for a page of games, each standing for its whole work (every version must agree).
+def _match_of(concept):
+    """A concept's IGDB match, or None. Reads the select_related row; it never queries for a concept loaded with
+    `igdb_match`, which is why every caller below must pass objects loaded that way."""
+    try:
+        return concept.igdb_match
+    except Concept.igdb_match.RelatedObjectDoesNotExist:
+        return None
 
-    Two queries for the page: the anchors' own concept and IGDB id, then every version's flags. A game with no
-    concept has no Game page and falls back to its own columns. An anchor whose own np id is blank is not a list on
-    its page, so it reads its page's lists only, as the page does. Pass the games already on the page."""
+
+def _anchor(key, concept):
+    match = _match_of(concept) if concept is not None else None
+    return (key, getattr(concept, 'pk', None), getattr(match, 'igdb_id', None), getattr(match, 'status', None))
+
+
+def work_keys_for_games(games, buggy=False):
+    """`{game.pk: keys}` for a page of games, each standing for its whole work (every list on its Game page).
+
+    ONE query for the page: the games must come with `select_related('concept', 'concept__igdb_match')` (and the
+    house `.defer('concept__igdb_match__raw_response')`), which every cover-rendering queryset already has, so the
+    anchors are read off them. A game with no concept has no Game page and falls back to its own columns. A game
+    whose own np id is blank is not a list on its page, so it reads its page's lists only, as the page does."""
     games = [g for g in games if g is not None]
-    if not games:
-        return {}
-    anchors = Game.objects.filter(pk__in={g.pk for g in games}).values_list(
-        'pk', 'concept_id', 'concept__igdb_match__igdb_id', 'concept__igdb_match__status')
-    out = _rows_to_keys(page_version_rows(anchors, FLAG_FIELDS), buggy)
+    out = _rows_to_keys(page_version_rows(
+        [_anchor(g.pk, g.concept if g.concept_id else None) for g in games], FLAG_FIELDS), buggy)
     for g in games:
         out.setdefault(g.pk, own_keys(g, buggy=buggy))
     return out
 
 
-def work_keys_by_concept(concept_ids, buggy=False):
-    """`{concept_id: keys}` for concept-keyed surfaces (a Game List entry, a rating, a search result): every
-    version of the concept's work must agree. Two queries for the page. A concept with no games yet says nothing."""
-    concept_ids = {cid for cid in concept_ids if cid is not None}
-    if not concept_ids:
-        return {}
-    anchors = Concept.objects.filter(pk__in=concept_ids).values_list(
-        'pk', 'pk', 'igdb_match__igdb_id', 'igdb_match__status')
-    return _rows_to_keys(page_version_rows(anchors, FLAG_FIELDS), buggy)
+def work_keys_for_concepts(concepts, buggy=False):
+    """`{concept.pk: keys}` for concept-keyed surfaces (a Game List entry, a rating, a search result), every list
+    on the concept's Game page agreeing. ONE query: pass concepts loaded with `select_related('igdb_match')` (or
+    reached through a row that selected `concept__igdb_match`). A concept with no games yet says nothing."""
+    concepts = {c.pk: c for c in concepts if c is not None}
+    return _rows_to_keys(page_version_rows([_anchor(pk, c) for pk, c in concepts.items()], FLAG_FIELDS), buggy)

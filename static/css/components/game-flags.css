@@ -8,10 +8,11 @@
    the tone mixed into the page's own surface, so it reads the same on any art, and its shadow lifts it off a
    light cover. */
 .pp-gflags { display: flex; gap: 4px; pointer-events: none; }
-.pp-gflags--stack { position: absolute; top: 6px; left: 6px; z-index: 2; flex-direction: column; }
+.pp-gflags--stack, .pp-gflags--strip { position: absolute; top: 6px; left: 6px; z-index: 2; }
+.pp-gflags--stack { flex-direction: column; }
 .pp-gflags--row { flex-shrink: 0; align-items: center; }
 .pp-gflags--sm { gap: 3px; }
-.pp-gflags--stack.pp-gflags--sm { top: 4px; left: 4px; }
+:is(.pp-gflags--stack, .pp-gflags--strip).pp-gflags--sm { top: 4px; left: 4px; }
 
 .pp-gflag {
     --c: var(--pp-text-dim);

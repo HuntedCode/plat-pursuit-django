@@ -591,6 +591,16 @@ def project_card(c, member_games=None, new_cutoff=None):
     }
 
 
+def _attach_flags(cards, page_contracts):
+    """Each card's game flag badges (owner, 2026-10-24): the challenge picker's "can this still be finished?"
+    rule, so a contract wears the same badges on the board, in its modal and in a challenge's picker. Three
+    bounded queries for the page. Imported where used: the rule lives in the challenges app (`contract_flags`)."""
+    from challenges.services.contract_flags import contract_flag_keys
+    flags = contract_flag_keys(page_contracts)
+    for card, c in zip(cards, page_contracts):
+        card['flag_keys'] = flags.get(c.pk, [])
+
+
 # History sorts: recently-banked (the 100%-accept moment) + most-XP. `_history_order` picks the XP key
 # per-job when exactly one job filter is active (the precise "biggest contributors to job X" answer),
 # else the contract's total banked XP.
@@ -682,6 +692,7 @@ def contracts_page(profile, disc_levels=None, page=1, q='', status='', disciplin
     cutoff = new_contract_cutoff()   # ONE clock read shared by the whole page of cards
     cards = [project_card(c, games_by_contract.get(c.pk, []), new_cutoff=cutoff)
              for c in page_contracts]
+    _attach_flags(cards, page_contracts)
     if scope == 'history':
         _attach_banked(cards, page_contracts, profile)
     return {
@@ -829,6 +840,7 @@ def build_contract_modal(profile, slug):
     if profile is not None and games:
         pg_by_game = {pg.game_id: pg for pg in ProfileGame.objects.filter(profile=profile, game__in=games)}
     p = project_card(c, member_games=games)
+    _attach_flags([p], [c])
     p['games'] = [{
         'game': g, 'profile_game': pg_by_game.get(g.id), 'has_guide': bool(g.concept.guide_slug),
     } for g in games]

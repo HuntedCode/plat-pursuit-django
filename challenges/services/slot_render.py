@@ -36,7 +36,8 @@ comforting claim is worse than none.
 from gamelists.services.covers import cover_games_for, sort_key
 
 from challenges.models import CHALLENGE_TYPE_AZ, CHALLENGE_TYPE_JOBS, ChallengeSlot
-from challenges.services.eligibility import member_concepts_by_contract
+from challenges.services.contract_flags import contract_flag_keys
+from challenges.services.eligibility import contract_membership, member_concepts_by_contract
 from trophies.models import Contract, Job
 from trophies.services.job_render import DISCIPLINE_ICON, DISCIPLINE_LABELS, job_atom
 
@@ -48,22 +49,23 @@ def slot_cards(challenge):
 
     - an EMPTY run is 1 (the slots; with no contracts no cover work is attempted at all), or 2 for a Job
       Coverage run, which also needs its catalogue;
-    - a FILLED run is 4, or 5 for Job Coverage: the slots, two to resolve contract membership, one for
-      every cover on the page, and the catalogue;
-    - 3 (or 4) in the all-episodic case, where no contract carries an `igdb_id` and
-      `member_concepts_by_contract` skips its first query;
-    - 3 (or 4) again by a different route, when membership resolves to no concepts at all (every contract
-      unmatched or untrusted) so `cover_games_for` is never called;
+    - a FILLED run is 5, or 6 for Job Coverage: the slots, two to resolve contract membership, one for
+      every cover on the page, one for the squares' flag badges (`contract_flag_keys`, sharing that
+      membership), and the catalogue;
+    - 4 (or 5) in the all-episodic case, where no contract carries an `igdb_id` and
+      `contract_membership` skips its first query;
+    - 3 (or 4) by a different route, when membership resolves to no concepts at all (every contract
+      unmatched or untrusted), so neither the covers nor the flags read any games;
     - 2 (or 3) for an all-episodic run whose bundles are empty, which is both of those at once.
 
     None of those numbers moves with the square count, which is the property worth having. An earlier
     version of this docstring gave only "four and five" -- the common case presented as the only one.
     """
     slots = list(challenge.slots.select_related('contract'))
-    covers = covers_by_contract([s.contract for s in slots if s.contract_id])
+    covers, flags = _covers_and_flags([s.contract for s in slots if s.contract_id])
     atoms = key_atoms(challenge)
 
-    cards = [_card(slot, covers, atoms) for slot in slots]
+    cards = [_card(slot, covers, atoms, flags) for slot in slots]
     # POSITION IN THE WHOLE RUN, stamped here rather than read from `forloop` in the template.
     #
     # The template used `forloop.counter0` for two things: the entrance stagger and the lazy-image
@@ -117,13 +119,13 @@ def cards_for(slots):
     # without that column pays a deferred single-row SELECT to satisfy the model's own hook. Omitting it
     # turned this batch straight back into the per-slot N+1 the function exists to remove -- caught by the
     # flatness test rather than by review, which is the whole reason that test measures instead of asserting.
-    covers = covers_by_contract(
+    covers, flags = _covers_and_flags(
         list(Contract.objects.filter(pk__in=contract_ids).only('igdb_id', 'is_live'))
         if contract_ids else [])
     atoms = key_atoms(slots[0].challenge)
     cards = []
     for slot in slots:
-        card = _card(slot, covers, atoms)
+        card = _card(slot, covers, atoms, flags)
         card['index'] = 0
         cards.append(card)
     return cards
@@ -284,12 +286,12 @@ def card_for(slot):
     So the server re-renders the one square it just changed and hands back the markup. Still ONE renderer --
     `partials/_square_body.html`, the same file the page uses -- and no reload.
 
-    FOUR QUERIES for a filled square (its contract, then three for the cover), one for a jobs run's
-    catalogue, and one for an empty square. It is a single slot, so nothing here scales with the run.
+    FIVE QUERIES for a filled square (its contract, then three for the cover and one for its flag badges),
+    one for a jobs run's catalogue, and one for an empty square. It is a single slot, so nothing here scales with the run.
     """
-    covers = covers_by_contract([slot.contract] if slot.contract_id else [])
+    covers, flags = _covers_and_flags([slot.contract] if slot.contract_id else [])
     atoms = key_atoms(slot.challenge)
-    card = _card(slot, covers, atoms)
+    card = _card(slot, covers, atoms, flags)
     # Position zero: one image arriving on its own is never lazy, and the partial no longer
     # depends on a `forloop` being absent to get that answer.
     card['index'] = 0
@@ -431,7 +433,17 @@ def _with_dom_ids(groups):
     return groups
 
 
-def _card(slot, covers, atoms):
+def _covers_and_flags(contracts):
+    """(covers, flag keys), each by contract id, for a board's contracts. ONE membership read serves both, so the
+    square's flag badges (owner, 2026-10-24) cost the board one query, the flags' own game read."""
+    if not contracts:
+        return {}, {}
+    membership = contract_membership(contracts)
+    concepts = {cid: m['anchored'].union(*m['bundles']) for cid, m in membership.items()}
+    return covers_by_contract(contracts, concepts), contract_flag_keys(contracts, membership)
+
+
+def _card(slot, covers, atoms, flags=None):
     """One square.
 
     THE NAME COMES FROM THE SNAPSHOT, never from `slot.contract.name`, and that is the whole reason the
@@ -466,6 +478,9 @@ def _card(slot, covers, atoms):
         'is_completed': slot.is_completed,
         'game_name': slot.contract_name,
         'cover': covers.get(slot.contract_id),
+        # The picked game's flags, by the picker's "can it still be finished?" rule, so a square says what the
+        # picker said when it was chosen. A FINISHED square shows none: the trophies are already earned.
+        'flag_keys': [] if slot.is_completed else (flags or {}).get(slot.contract_id, []),
         'xp_pending': bool(slot.is_completed and slot.xp_redeemed_at is None and atom is not None),
     }
 

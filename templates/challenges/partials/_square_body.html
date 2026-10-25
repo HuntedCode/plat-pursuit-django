@@ -1,4 +1,4 @@
-{% load job_icons %}
+{% load job_icons flag_badges %}
 {% comment %}One square's CONTENTS, without the element that holds them.
 
 EXTRACTED so the editable and read-only squares can differ in their TAG without duplicating 25 lines of
@@ -64,6 +64,10 @@ Params: card (from `slot_render.slot_cards`).{% endcomment %}
     <span class="pp-csq__key{% if card.job %} pp-csq__key--job{% endif %}" aria-hidden="true">
         {% if card.job %}{% job_icon_use card.job.icon '' %}{% else %}{{ card.label }}{% endif %}
     </span>
+    {% comment %}THE PICKED GAME'S FLAGS (owner, 2026-10-24), under the key chip, by the picker's "can it still be
+    finished?" rule (`card.flag_keys`; none on a finished square). Hidden here and said in the square's one
+    sentence below instead, where they read after the game's name rather than before the square's.{% endcomment %}
+    {% if card.flag_keys %}<span aria-hidden="true">{% flag_badges card.flag_keys 'sm' %}</span>{% endif %}
 {% else %}
     {% comment %}An empty square shows its own key: a hunter scanning for gaps is asking "which letters
     are left", and a generic `+` answers a different question.{% endcomment %}
@@ -126,4 +130,4 @@ name, which is why it names the action too: "empty" alone would give 26 buttons 
 
 `|default:` on the name because the completed-slot constraint requires a `contract_slug`, not a
 `contract_name`, so a row written around the service could otherwise announce "A: , finished".{% endcomment %}
-<span class="sr-only">{{ card.label }}: {% if card.is_completed %}{{ card.game_name|default:'a game' }}, finished{% if card.xp_pending and is_owner %}, job XP to claim{% endif %}{% elif card.is_filled %}{{ card.game_name|default:'a game' }}, in progress{% if can_edit %}. Change it{% endif %}{% else %}empty{% if can_edit %}. Choose a game{% endif %}{% endif %}</span>
+<span class="sr-only">{{ card.label }}: {% if card.is_completed %}{{ card.game_name|default:'a game' }}, finished{% if card.xp_pending and is_owner %}, job XP to claim{% endif %}{% elif card.is_filled %}{{ card.game_name|default:'a game' }}, in progress{% for key in card.flag_keys %}, {{ key|flag_label|lower }}{% endfor %}{% if can_edit %}. Change it{% endif %}{% else %}empty{% if can_edit %}. Choose a game{% endif %}{% endif %}</span>

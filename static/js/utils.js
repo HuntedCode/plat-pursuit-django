@@ -4454,14 +4454,15 @@ window.PlatPursuit.GameAdder = GameAdder;
  * the sprite does not know is skipped rather than drawn blank.
  *
  * Returns the container element, or null when there is nothing to show (an empty box would still take space).
- * `size` is 'md' (a cover) or 'sm' (a row or a small card); `layout` is 'stack' (a cover's corner) or 'row'.
+ * `size` is 'md' (a cover) or 'sm' (a row or a small card); `layout` is 'stack' (a cover's corner), 'strip' (the
+ * same corner as a row, for short art) or 'row' (inline).
  *
  * CALLERS FEATURE-TEST IT (`PP.flagBadges && ...`): a page script can be newer than a cached utils.js.
  */
 function flagBadges(keys, size, layout) {
     var SVG = 'http://www.w3.org/2000/svg';
     var wrap = document.createElement('span');
-    wrap.className = 'pp-gflags pp-gflags--' + (layout === 'row' ? 'row' : 'stack')
+    wrap.className = 'pp-gflags pp-gflags--' + (layout === 'row' || layout === 'strip' ? layout : 'stack')
         + ' pp-gflags--' + (size === 'sm' ? 'sm' : 'md');
     (keys || []).forEach(function (key) {
         var symbol = document.getElementById('pp-gflag-' + key);

@@ -39,7 +39,6 @@
     };
     //: The collapsed summary's word on the picks, when they are planned (step 1, owner 2026-10-18).
     var PICKS_TAGS = { replan: 'Planning around your picks', fresh: 'Starting fresh on your picks' };
-    var AVAILABILITY_LABELS = { delisted: 'Delisted', unobtainable: 'Unobtainable' };
     //: Mirrors the server's ceiling on "Different games" (`optimizer_views.MAX_EXCLUDED`).
     var MAX_PENALIZED = 200;
 
@@ -1653,10 +1652,8 @@
             if (item.progress > 0) { wrap.appendChild(metaNote("You're " + item.progress + '% in', 'progress')); }
             if (item.pinned) { wrap.appendChild(metaNote('Your pick', 'pin')); }
             if (item.outside_filters) { wrap.appendChild(metaNote('Outside your filters', 'warn')); }
-            (item.availability || []).forEach(function (flag) {
-                var alertChip = availabilityChip(flag);
-                if (alertChip) { wrap.appendChild(alertChip); }
-            });
+            var badges = flagBadges(item.availability);
+            if (badges) { wrap.appendChild(badges); }
             (item.platforms || []).forEach(function (p) { wrap.appendChild(platformTag(p)); });
             return wrap.childNodes.length ? wrap : null;
         }
@@ -1670,14 +1667,11 @@
             return tag;
         }
 
-        /** DELISTED / UNOBTAINABLE as the house alert chip, the picker's own treatment for the same facts; null for
-         *  a flag this page has no words for. */
-        function availabilityChip(flag) {
-            if (!AVAILABILITY_LABELS[flag]) { return null; }
-            var alertChip = document.createElement('span');
-            alertChip.className = 'bd-chip bd-chip--error';
-            alertChip.textContent = AVAILABILITY_LABELS[flag];
-            return alertChip;
+        /** The game's flags (`picker._decorations`: no way to finish it avoids them) as the site's flag badges
+         *  (owner, 2026-10-24), the picker's own treatment for the same facts; null for none. Feature-tested,
+         *  because a cached utils.js may predate the helper. */
+        function flagBadges(flags) {
+            return flags && flags.length && PP.flagBadges ? PP.flagBadges(flags, 'sm', 'row') : null;
         }
 
         /** The badge stages a game advances, ONE ROW PER BADGE (owner, 2026-10-17): the badge and its editions once,
@@ -2126,7 +2120,7 @@
             return item;
         }
 
-        /** A card's platforms, then its availability flags, in the run page picker's own `.pp-cpick__row-plats` row
+        /** A card's platforms, then its flag badges, in the run page picker's own `.pp-cpick__row-plats` row
          *  (`challenge-detail.js`'s `rowTags`), so the two sheets' cards read alike; null for a game with neither. */
         function rowTags(row) {
             var plats = row.platforms || [];
@@ -2135,10 +2129,8 @@
             var wrap = document.createElement('span');
             wrap.className = 'pp-cpick__row-plats';
             plats.forEach(function (p) { wrap.appendChild(platformTag(p)); });
-            flags.forEach(function (flag) {
-                var alertChip = availabilityChip(flag);
-                if (alertChip) { wrap.appendChild(alertChip); }
-            });
+            var badges = flagBadges(flags);
+            if (badges) { wrap.appendChild(badges); }
             return wrap;
         }
 

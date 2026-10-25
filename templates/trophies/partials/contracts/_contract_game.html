@@ -2,7 +2,8 @@
 From-scratch contract game card -- lives only inside the Contract modal (no bd-* DNA). Each card is
 a route to completing the Contract, so the emphasis is YOUR progress on it. Built on --pp tokens and
 family-tinted via --rp-fam. Expects: game, pgame (profile_game), has_guide, fam, profile.
-{% endcomment %}
+Each card is one trophy list, so it wears that list's own flag badges (owner, 2026-10-24).
+{% endcomment %}{% load flag_badges %}
 <a href="{% if profile %}{% url 'game_detail_with_profile' game.np_communication_id profile.psn_username %}{% else %}{% url 'game_detail' game.np_communication_id %}{% endif %}"
    class="rpg{% if pgame.progress == 100 %} rpg--done{% endif %}" style="--rp-fam: {{ fam }};">
     <div class="rpg__cover">
@@ -10,6 +11,7 @@ family-tinted via --rp-fam. Expects: game, pgame (profile_game), has_guide, fam,
         {% else %}<img src="{{ game.display_image_url }}" alt="" loading="lazy" class="object-contain">{% endif %}
         {% if pgame.progress == 100 %}<span class="rpg__flag rpg__flag--done" title="Completed 100%"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg></span>
         {% elif pgame.earned_trophies.platinum == 1 %}<span class="rpg__flag rpg__flag--plat" title="Platinum earned">{% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-platinum)' size='w-4 h-4' %}</span>{% endif %}
+        {% flag_badges game|flag_keys 'sm' %}
     </div>
     <div class="rpg__body">
         <p class="rpg__title" title="{{ game.title_name }}">{{ game.title_name }}</p>

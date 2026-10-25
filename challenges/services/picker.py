@@ -52,7 +52,7 @@ from django.db.models.functions import Lower
 
 from challenges.models import CHALLENGE_TYPE_AZ
 from challenges.services import challenge_service as svc
-from challenges.services import eligibility
+from challenges.services import contract_flags, eligibility
 from challenges.services.slot_render import covers_by_contract, key_atoms, label_for_key
 from core.templatetags.custom_filters import platform_color_str
 from trophies.models import Contract, Game, Job
@@ -522,13 +522,16 @@ def _decorations(contracts):
     elsewhere use.
 
     AVAILABILITY ASKS "CAN THIS STILL BE FINISHED?" (owner, 2026-10-10): `delisted` when no way to finish the
-    contract has a listed game, `unobtainable` when none has an obtainable one. A contract is done through ANY
+    contract has a listed game, `unobtainable` when none has an obtainable one. Since 2026-10-24 the same question
+    carries the site's other everywhere flags, which is the badges' every-version rule applied to a contract:
+    `online` when no way to finish it avoids online trophies, `shovelware` when every way is shovelware. Keys in
+    `FLAG_ORDER`, drawn as the site's flag badges. A contract is done through ANY
     one of its own (anchored) concepts' stacks, so one listed stack there clears the flag; or through a bundle,
     which counts only as a WHOLE (`_detect_tiers`), so a bundle clears it only when every one of its concepts has
     a listed stack. Pooling bundle games with the rest under-warned: a bundle of one delisted and one listed
     episode looked available while it could not be finished. A contract with no member games on record says
     nothing, rather than "all of none". A concept with no games on record yet is UNKNOWN, not unavailable: it
-    never makes a flag show (see `_finishable`), because the flags name a fact about stacks that do exist.
+    never makes a flag show (see `contract_flags.finishable`), because the flags name a fact about stacks that do exist.
 
     One `Game` query for the page, however many contracts: bounded by the page, never by a hunter's library.
     """
@@ -537,26 +540,13 @@ def _decorations(contracts):
     membership = eligibility.contract_membership(contracts)
     concepts = {cid: m['anchored'].union(*m['bundles']) for cid, m in membership.items()}
     covers = covers_by_contract(contracts, concepts)
-    every_concept = {cid for ids in concepts.values() for cid in ids}
-    by_concept = {}
-    if every_concept:
-        for concept_id, platforms, delisted, obtainable in (
-                Game.objects.filter(concept_id__in=every_concept)
-                .values_list('concept_id', 'title_platform', 'is_delisted', 'is_obtainable')):
-            by_concept.setdefault(concept_id, []).append((platforms, delisted, obtainable))
+    by_concept = contract_flags.flag_rows(concepts)
     plats, availability = {}, {}
     for contract_id, concept_ids in concepts.items():
         games = [g for cid in concept_ids for g in by_concept.get(cid, [])]
-        union = ordered_platform_union(platforms for platforms, _, _ in games)
+        union = ordered_platform_union(g[0] for g in games)
         plats[contract_id] = [{'name': _PLATFORM_LABELS.get(p, p), 'tone': platform_color_str(p)} for p in union]
-        flags = []
-        if games:
-            m = membership[contract_id]
-            if not _finishable(m, by_concept, lambda g: not g[1]):
-                flags.append('delisted')
-            if not _finishable(m, by_concept, lambda g: g[2]):
-                flags.append('unobtainable')
-        availability[contract_id] = flags
+        availability[contract_id] = contract_flags.availability(membership[contract_id], by_concept, games)
     return covers, plats, availability
 
 
@@ -567,7 +557,7 @@ UNOBTAINABLE_CACHE_SECONDS = 60 * 60
 
 
 def unobtainable_contract_ids():
-    """Every live contract the picker would flag `unobtainable` (`_decorations`' rule, `_finishable` on each
+    """Every live contract the picker would flag `unobtainable` (`_decorations`' rule, `contract_flags.finishable` on each
     game's obtainable flag), for the Challenge Optimizer, which never SUGGESTS one (owner, 2026-10-17; delisted is
     fine). A hunter may still pick one by hand, where the chip says so.
 
@@ -589,25 +579,10 @@ def unobtainable_contract_ids():
         contracts = list(eligibility.live_contracts().only('id', 'igdb_id'))
         for contract_id, m in eligibility.contract_membership(contracts).items():
             members = m['anchored'].union(*m['bundles'])
-            if members & bad_concepts and not _finishable(m, by_concept, lambda g: g[2]):
+            if members & bad_concepts and not contract_flags.finishable(m, by_concept, lambda g: g[2]):
                 blocked.append(contract_id)
     cache.set(UNOBTAINABLE_CACHE_KEY, blocked, UNOBTAINABLE_CACHE_SECONDS)
     return set(blocked)
-
-
-def _finishable(membership, games_by_concept, ok):
-    """Whether some way to finish a contract has a game `ok` accepts: any anchored concept with one, or a bundle
-    whose every concept has one. See `_decorations` for why a bundle only counts whole.
-
-    A CONCEPT WITH NO GAMES ON RECORD COUNTS AS OK. Nothing about it is delisted or unobtainable; it simply has not
-    synced. Counting it as a failure labelled a bundle of one listed episode and one not-yet-synced one
-    "Delisted", which names a fact that is not true."""
-    def has(concept_id):
-        games = games_by_concept.get(concept_id)
-        return not games or any(ok(g) for g in games)
-
-    return (any(has(cid) for cid in membership['anchored'])
-            or any(all(has(cid) for cid in bundle) for bundle in membership['bundles']))
 
 
 def _after(pool, cursor):

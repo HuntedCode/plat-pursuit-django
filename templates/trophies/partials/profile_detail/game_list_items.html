@@ -1,4 +1,4 @@
-{% load custom_filters humanize %}{% comment %} A game on someone's profile -- reshaped 2026-08.
+{% load custom_filters humanize flag_badges %}{% comment %} A game on someone's profile -- reshaped 2026-08.
 
 Still `.pp-gcard`, now with a `--lib` modifier. Feedback said the cover art was large and the record
 hard to read, and the measurement agreed: at 2xl the wall was 6 columns of ~240px cards whose 3/4
@@ -67,6 +67,9 @@ is not on the view's join re-opens the N+1.
         <img class="pp-gcard__art pp-gcard__art--wash" src="{{ game.display_image_url }}"
              alt="" loading="lazy" decoding="async">
         {% endif %}
+        {% comment %}This list's OWN flags (owner, 2026-10-24): the card is the hunter's copy of one trophy list.
+        A row along the band, not a column, because the band is too short to stack four.{% endcomment %}
+        {% flag_badges game|flag_keys 'sm' 'strip' %}
     </div>
     {% endwith %}
 

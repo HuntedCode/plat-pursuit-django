@@ -1,4 +1,4 @@
-{% load static %}
+{% load static flag_badges %}
 {% comment %}
 Stage-journey node (rebuild, per platform group). Reuses the bd-stage / bd-node / bd-gcard visual language;
 fed by badge_detail_service._group_journey. `s` = a stage dict (stage, obtainable_games, delisted_games,
@@ -75,6 +75,9 @@ badge" and they are explicitly not steps -- the section they sit in says so once
                 <a href="{% if target_profile %}{% url 'game_detail_with_profile' e.game.np_communication_id target_profile.psn_username %}{% else %}{% url 'game_detail' e.game.np_communication_id %}{% endif %}" class="bd-delisted__row">
                     <span class="bd-delisted__thumb{% if not e.pgame or not e.pgame.progress %} is-dim{% endif %}"><img src="{{ e.game.display_image_url }}" alt="" loading="lazy" /></span>
                     <span class="bd-delisted__name">{{ e.game.title_name }}</span>
+                    {% comment %}Which one it is (owner, 2026-10-24): the summary lumps "unobtainable / delisted"
+                    together, and the badge says which this list is.{% endcomment %}
+                    {% flag_badges e.game|flag_keys 'sm' 'row' %}
                     {% if e.pgame and e.pgame.progress %}<span class="bd-delisted__pct">{{ e.pgame.progress }}%</span>{% endif %}
                 </a>
                 {% endfor %}

@@ -931,6 +931,8 @@
 @media (prefers-reduced-motion: reduce) { .rp-tile__img--fx { transition: none; } }
 .rp-tile__art-fade { position: absolute; inset: 0; background: linear-gradient(to top, color-mix(in oklab, var(--pp-bg-2) 92%, transparent), transparent 55%); pointer-events: none; z-index: 3; }
 .rp-tile__badge { position: absolute; top: 8px; left: 8px; z-index: 4; }
+/* The contract's flag badges run along the banner's foot: the status badge and the New marker hold its top. */
+.rp-tile__art .pp-gflags--strip { top: auto; bottom: 8px; left: 8px; z-index: 4; }
 /* Recency marker. Pinned to the RIGHT so it never collides with the status badge on its left --
    a contract can legitimately be both new and ready to claim. Accent-tinted rather than a
    semantic colour: "new" is not a state of the hunter's progress. */
@@ -1091,7 +1093,7 @@
        platform filter, which an unscoped hide would take off phones. */
     .rp-row .rp-tile__art, .rp-row .rp-plats, .rp-row .rp-div, .rp-row .rp-jobgrid, .rp-row .rp-jobtiles,
     .rp-row .rp-vdiv, .rp-row .rp-ring-wrap, .rp-row .rp-tiers, .rp-row .rp-contribs { display: none; }
-    .rp-row__thumb { display: block; width: 64px; aspect-ratio: 3 / 4; border-radius: 7px; overflow: hidden; background: var(--pp-bg-3, var(--pp-bg-1)); }
+    .rp-row__thumb { position: relative; display: block; width: 64px; aspect-ratio: 3 / 4; border-radius: 7px; overflow: hidden; background: var(--pp-bg-3, var(--pp-bg-1)); }
     .rp-row__thumb img { width: 100%; height: 100%; }
     .rp-row__content { padding: 0; gap: 6px; min-width: 0; }
     .rp-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }

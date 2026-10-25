@@ -1222,7 +1222,9 @@ def test_the_contracts_tab_does_no_work_its_own_settings_discard(client):
     assert 'trophies_job"."display_order' not in sql or 'GROUP BY' in sql, (
         'the 25-job roster is still being fetched for a branch this page never renders'
     )
-    assert len(ctx.captured_queries) <= 6, (
+    # 6 plus the cards' flag badges (owner, 2026-10-24): `contract_flag_keys` reads membership (two) and the
+    # member games' flags (one), bounded by the page.
+    assert len(ctx.captured_queries) <= 9, (
         f'the results endpoint runs {len(ctx.captured_queries)} queries: '
         + '; '.join(q['sql'][:80] for q in ctx.captured_queries)
     )

@@ -9,6 +9,7 @@ from django.template import Context, Template
 from django.test.utils import CaptureQueriesContext
 
 from tests.factories import ConceptFactory, GameFactory, IGDBMatchFactory
+from trophies.models import Concept, Game
 from trophies.services import flag_badges as fb
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -45,7 +46,7 @@ def test_a_work_shows_a_flag_only_when_every_version_has_it():
     ps4, igdb = _matched(is_delisted=True, has_online_trophies=True)
     ps5, _ = _matched(igdb_id=igdb, has_online_trophies=True)
 
-    keys = fb.work_keys_by_game([ps4, ps5])
+    keys = fb.work_keys_for_games([ps4, ps5])
 
     assert keys[ps4.pk] == ('online',) and keys[ps5.pk] == ('online',)
 
@@ -57,12 +58,12 @@ def test_versions_are_the_lists_on_the_game_page_the_card_links():
     a, igdb = _matched(is_delisted=True)
     b, _ = _matched(igdb_id=igdb, is_delisted=True)
     _matched(is_delisted=False)                                          # another work entirely
-    keys = fb.work_keys_by_game([a])
+    keys = fb.work_keys_for_games([a])
     assert keys[a.pk] == ('delisted',)
 
     # The np floor: a row with no np id is not a list on the page, so it cannot hold a flag back.
     GameFactory(concept=b.concept, np_communication_id='', is_delisted=False)
-    assert fb.work_keys_by_game([a])[a.pk] == ('delisted',)
+    assert fb.work_keys_for_games([a])[a.pk] == ('delisted',)
 
     # An UNTRUSTED match is the asymmetric case. Its own card lives on its concept's `c/` page, so only its own
     # concept's games count for it. But the IGDB page's membership is UNGATED, so it IS one of that page's lists,
@@ -70,29 +71,29 @@ def test_versions_are_the_lists_on_the_game_page_the_card_links():
     concept = ConceptFactory()
     IGDBMatchFactory(concept=concept, igdb_id=igdb, status='pending_review')
     stray = GameFactory(concept=concept, is_delisted=True)
-    assert fb.work_keys_by_game([a, stray]) == {a.pk: ('delisted',), stray.pk: ('delisted',)}
+    assert fb.work_keys_for_games([a, stray]) == {a.pk: ('delisted',), stray.pk: ('delisted',)}
     GameFactory(concept=concept, is_delisted=False)
-    assert fb.work_keys_by_game([a, stray]) == {a.pk: (), stray.pk: ()}
+    assert fb.work_keys_for_games([a, stray]) == {a.pk: (), stray.pk: ()}
     b.is_delisted = False
     b.save(update_fields=['is_delisted'])
     other = ConceptFactory()
     IGDBMatchFactory(concept=other, igdb_id=igdb, status='pending_review')
     lone = GameFactory(concept=other, is_delisted=True)
-    assert fb.work_keys_by_game([lone])[lone.pk] == ('delisted',), 'its c/ page is its own concept, not the IGDB one'
+    assert fb.work_keys_for_games([lone])[lone.pk] == ('delisted',), 'its c/ page is its own concept, not the IGDB one'
 
 
 def test_an_unmatched_concept_is_its_own_games():
     lone = GameFactory(is_delisted=True)
     sibling = GameFactory(concept=lone.concept, is_delisted=True)
-    assert fb.work_keys_by_game([lone])[lone.pk] == ('delisted',)
+    assert fb.work_keys_for_games([lone])[lone.pk] == ('delisted',)
     sibling.is_delisted = False
     sibling.save(update_fields=['is_delisted'])
-    assert fb.work_keys_by_game([lone])[lone.pk] == (), 'one listed sibling clears it'
+    assert fb.work_keys_for_games([lone])[lone.pk] == (), 'one listed sibling clears it'
 
 
 def test_a_game_with_no_concept_is_a_work_of_one():
     game = GameFactory(concept=None, has_online_trophies=True)
-    assert fb.work_keys_by_game([game]) == {game.pk: ('online',)}
+    assert fb.work_keys_for_games([game]) == {game.pk: ('online',)}
 
 
 def test_concept_keyed_surfaces_use_the_same_rule():
@@ -100,21 +101,31 @@ def test_concept_keyed_surfaces_use_the_same_rule():
     b, _ = _matched(igdb_id=igdb, is_obtainable=False)
     empty = ConceptFactory()
 
-    keys = fb.work_keys_by_concept([a.concept_id, b.concept_id, empty.pk, None])
+    keys = fb.work_keys_for_concepts(Concept.objects.select_related('igdb_match').filter(
+        pk__in=[a.concept_id, b.concept_id, empty.pk]))
 
     assert keys[a.concept_id] == ('unobtainable',) and keys[b.concept_id] == ('unobtainable',)
     assert keys[empty.pk] == (), 'a concept with no games yet says nothing'
 
 
-def test_a_page_costs_two_queries_however_many_games():
-    """Bounded by the page, never by its size: the anchors' ids, then every version's flags."""
-    games = [_matched(is_delisted=True)[0] for _ in range(6)] + [GameFactory() for _ in range(4)]
+def test_a_page_costs_one_query_however_many_games():
+    """Bounded by the page, never by its size: the anchors are read off the rows the page already loaded (its
+    `concept__igdb_match` join), so the only query is every version's flags."""
+    for _ in range(6):
+        _matched(is_delisted=True)
+    for _ in range(4):
+        GameFactory()
+    games = list(Game.objects.select_related('concept', 'concept__igdb_match')
+                 .defer('concept__igdb_match__raw_response'))
+    concepts = [g.concept for g in games]
 
     with CaptureQueriesContext(connection) as ctx:
-        fb.work_keys_by_game(games)
+        fb.work_keys_for_games(games)
+        fb.work_keys_for_concepts(concepts)
 
-    assert len(ctx.captured_queries) == 2
-    assert fb.work_keys_by_game([]) == {} and fb.work_keys_by_concept([]) == {}
+    assert len(ctx.captured_queries) == 2, 'one each'
+    assert not any('raw_response' in q['sql'] for q in ctx.captured_queries)
+    assert fb.work_keys_for_games([]) == {} and fb.work_keys_for_concepts([]) == {}
 
 
 # ── the tag ──────────────────────────────────────────────────────────────────────────────────────────────────

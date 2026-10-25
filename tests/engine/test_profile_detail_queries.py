@@ -1099,3 +1099,19 @@ def test_a_game_with_no_art_at_all_gets_the_band_without_an_image(client):
 
     assert 'pp-gcard__cover' in band, 'the band must still render to keep the card height'
     assert 'pp-gcard__art--wash' not in band, 'a placeholder icon must not be blown up into a wash'
+
+
+def test_a_games_tab_card_wears_its_own_lists_flags(client):
+    """The card is the hunter's copy of ONE list, so it shows that list's own flags (owner, 2026-10-24), along the
+    band's corner. Buggy is not an everywhere flag, so it stays off."""
+    profile = ProfileFactory(is_linked=True)
+    flagged, _g, _s = _completed_game(profile, with_platinum=True)
+    clean, _g, _s = _completed_game(profile, with_platinum=True)
+    type(flagged).objects.filter(pk=flagged.pk).update(is_obtainable=False, has_buggy_trophies=True)
+
+    body = client.get(f'/hunters/{profile.psn_username}/?tab=games', **CF).content.decode()
+
+    assert body.count('pp-gflags pp-gflags--strip pp-gflags--sm') == 1, 'one card flagged, the other not'
+    assert '<use href="#pp-gflag-unobtainable"/>' in body
+    # The `<use>`, not the symbol id: every page carries the sprite, so the id is always on it.
+    assert '<use href="#pp-gflag-buggy"/>' not in body

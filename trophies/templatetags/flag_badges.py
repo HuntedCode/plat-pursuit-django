@@ -13,9 +13,10 @@ register = template.Library()
 
 #: `md` sits on a full card's cover; `sm` on a row, a challenge square or a small card.
 SIZES = ('md', 'sm')
-#: `stack` is a column in the cover's top-left corner (the caller's container is `position: relative`); `row` is
-#: inline, for the end of a list row.
-LAYOUTS = ('stack', 'row')
+#: `stack` is a column in the cover's top-left corner (the caller's container is `position: relative`); `strip` is
+#: the same corner as a row, for art too short for a column (a profile card's band); `row` is inline, for the end
+#: of a list row.
+LAYOUTS = ('stack', 'strip', 'row')
 
 
 def flag_icon_markup(key, css_class='pp-gflag__i'):

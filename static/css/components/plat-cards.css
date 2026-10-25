@@ -69,6 +69,8 @@
     border: 1px solid color-mix(in oklab, var(--pcard-accent) 55%, transparent);
     backdrop-filter: blur(3px);
 }
+/* The list's flag badges take the top-right corner: the mark above holds the top-left. */
+.pcard__art .pp-gflags--stack { left: auto; top: 7px; right: 7px; }
 .pcard__mark svg { width: 14px; height: 14px; }
 
 /* The affordance. Rests hidden and rises on hover/focus -- the card is already legible without it,

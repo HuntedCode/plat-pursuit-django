@@ -210,6 +210,8 @@
     box-shadow: 0 2px 8px -2px rgba(0, 0, 0, 0.6);
 }
 .pp-gcard--dlc .pp-gcard__tag svg { width: 10px; height: 10px; }
+/* The DLC tag owns the top-left corner, so the parent list's flag badges stack top-right. */
+.pp-gcard--dlc .pp-gflags--stack { left: auto; right: 6px; }
 
 /* Parent-game subtitle: which game this pack belongs to. One quiet line under the pack title. */
 .pp-gcard--dlc .pp-gcard__sub {

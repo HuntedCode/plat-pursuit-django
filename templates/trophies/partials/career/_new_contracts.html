@@ -22,7 +22,7 @@ are built from the rows the list renders.
 Behaviour is PlatPursuit.DetailModal; the page's motion gate is armed separately and synchronously by
 _career_modal_gate.html, so nothing waits on this script to run.
 {% endcomment %}
-{% load job_icons %}
+{% load job_icons flag_badges %}
 {% comment %} `data-auto` is the DISMISSAL arm, not the open (that is `autoOpenDelay` below), so
 a preview renders without it: looking at the modal must not record the looker as having seen a
 wave. A preview also ignores the marker and the 14-day floor, which makes its stamp the newest
@@ -53,6 +53,9 @@ been shown, and the server's monotonic clamp makes that unrecoverable. {% endcom
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="m9 14 2 2 4-4"/></svg>
                                 </span>
                             {% endif %}
+                            {% comment %} The contract's flags (owner, 2026-10-24), top-left: the status chip runs along the
+                            cover's foot. {% endcomment %}
+                            {% flag_badges c.flag_keys 'sm' %}
                             {% if c.status == 'claimable' %}
                                 {% comment %} "Ready", not "Ready to claim": the full phrase wrapped to two lines across the
                             bottom of the cover. The row below says it in full. {% endcomment %}<span class="nc__hero-chip nc__chip--claim">Ready</span>
@@ -130,6 +133,7 @@ been shown, and the server's monotonic clamp makes that unrecoverable. {% endcom
                 {% for c in nc.rows %}
                     <li class="nc__row nc__row--{{ c.status }}" data-nc-i="{{ forloop.counter0 }}" data-nc-name="{{ c.name|lower }}" data-nc-jobs="{% for job in c.jobs.all %}{{ job.slug }} {% endfor %}" data-nc-discs="{% for job in c.jobs.all %}{{ job.discipline }} {% endfor %}">
                         <span class="nc__name">{{ c.name }}</span>
+                        {% flag_badges c.flag_keys 'sm' 'row' %}
                         <span class="nc__jobs" aria-hidden="true">
                             {% for job in c.jobs.all %}
                                 <span class="nc__job" style="--disc: var(--disc-{{ job.discipline }});" title="{{ job.name }}">{% job_icon_use job.icon 'nc__job-ic' %}</span>

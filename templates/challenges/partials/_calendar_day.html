@@ -1,4 +1,4 @@
-{% comment %}One Calendar square, opened: the platinums its owner earned on that date.
+{% load flag_badges %}{% comment %}One Calendar square, opened: the platinums its owner earned on that date.
 
 A FRAGMENT, fetched on click. The sheet owns the dialog chrome, so this file is contents only.
 
@@ -107,6 +107,9 @@ THIRD PERSON, because a run page is public. A reader is usually looking at someb
                 {% endcomment %}
                 <span class="pp-cday__veil" aria-hidden="true"></span>
                 {% endif %}
+                {% comment %}The list's own flags (owner, 2026-10-24), less shovelware: the card says that one in
+                words below, with why it matters here.{% endcomment %}
+                {% flag_badges plat.game|flag_keys|flag_drop:'shovelware' 'sm' %}
             </span>
 
             {% comment %}THE YEAR IS STRUCK, as an engraving: uppercase,

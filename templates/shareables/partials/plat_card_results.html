@@ -10,7 +10,7 @@ unhidden. (rebuild-playbook gotcha.)
 Every row's data comes from the queryset -- cover via the select_related concept/igdb_match, variant
 from the `plat_defined` annotation -- so the grid costs one query no matter how many cards it draws.
 {% endcomment %}
-{% load humanize %}
+{% load humanize flag_badges %}
 <div id="items-grid" class="pcard-grid{% if request.htmx %} pp-reveal{% endif %}"
      data-result-count="{{ paginator.count }}" data-active-variant="{{ current_variant }}">
     {% for c in completions %}
@@ -36,6 +36,9 @@ from the `plat_defined` annotation -- so the grid costs one query no matter how 
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
                 {% endif %}
             </span>
+
+            {% comment %}The finished list's own flags (owner, 2026-10-24), top-right: the mark holds the other corner.{% endcomment %}
+            {% flag_badges game|flag_keys 'sm' %}
 
             <span class="pcard__cta" aria-hidden="true">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 10h20"/></svg>
