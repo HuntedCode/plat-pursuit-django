@@ -152,6 +152,10 @@ untouched, so it replays on every reload, on dev or on the live site.
   `KIND_SERIES_MASTER` are defined FROM `RewardAnnouncement` / `SeriesAward`, because `pending` joins on them.
 - **The Collection's mint and this ceremony are one celebration.** `moments.js` (deferred, so it runs before
   collection.js's DOMContentLoaded `initMint`) adds waiting badges to the Collection's per-device minted set.
+- **The rays must never make the dialog scroll.** A transformed box counts as scrollable overflow, and a turning
+  square reaches 1.41x as far at 45 degrees, so the spin is an inner layer (`::before`) the rays' box clips, and
+  a set's rays are sized from ONE medallion, not the row. `test_moments_fit_browser.py` parks the spin at its
+  widest and checks.
 - **The phone row of the strip is `lg:hidden`.** Any `display` rule on `.pp-sub__mrow` outside a below-`lg`
   media query outranks that utility and puts a second strip on desktop.
 - **Not a `ui_flags` shape.** Played state is a server column per moment, not a per-user flag
