@@ -1,11 +1,12 @@
-{% load custom_filters job_icons humanize %}
+{% load custom_filters job_icons humanize flag_badges %}
 {% for game in object_list %}
 {% with user_pg=user_game_map|dict_get:game.id ratings=rating_map|dict_get:game.concept_id dlc_n=dlc_map|dict_get:game.id %}
     {% comment %}Condensed grids (Browse Games, tag detail -- condensed_cards set) link the
     concept GAME page and title by the concept; Recently Added and conceptless rows keep the
     List-detail link + list title (a new list is that page's point; a conceptless row has no
-    Game page). The flags overlay below stays the ELECTED row's own columns on purpose. The player
-    count does not: a condensed card shows the PAGE's distinct players (`players_map`, from
+    Game page). The flag badges on the cover are the PAGE's on a condensed card: a flag shows only when every
+    list on that page has it (owner, 2026-10-24; `flag_map`, built with the same membership as the lists). So is the player
+    count: a condensed card shows the PAGE's distinct players (`players_map`, from
     Concept.page_player_count) so it agrees with the Game page -- never a sum of siblings, which
     double-counts a hunter who owns two versions. rating/badge/DLC maps stay elected-row /
     host-concept keyed (the Game page's recorded split-concept interim). Search matches
@@ -33,14 +34,14 @@
     {% if quick_add and request.user.is_authenticated and request.user.profile.is_linked %}<div class="pp-gcard-wrap">{% endif %}
     <a href="{% if condensed_cards and game.concept_id %}{{ game.concept.game_page_url }}{% else %}{% url 'game_detail' game.np_communication_id %}{% endif %}" class="pp-gcard" data-gcard draggable="false">
         {% comment %} Cover: IGDB-first via display_image_url (helper owns the fallback chain). Community flag
-        icons overlay top-left; the viewer's progress rides the bottom edge (platinum-tinted once
+        badges stack top-left (`flag_map`); the viewer's progress rides the bottom edge (platinum-tinted once
         earned). The quick-add button also sits top-right but is NOT in here -- it is a sibling of the
         anchor, for the invalid-HTML reason the wrapper above explains. {% endcomment %}
         <div class="pp-gcard__cover">
             <img draggable="false" src="{{ game.display_image_url }}" alt="{% if list_identity_cards %}{{ list_name_map|dict_get:game.np_communication_id|default:game.title_name }}{% elif condensed_cards and game.concept_id %}{{ game.concept.unified_title|default:game.title_name }}{% else %}{{ game.title_name }}{% endif %}" loading="lazy"
                  class="pp-gcard__art{% if not game.has_cover_art %} pp-gcard__art--placeholder{% endif %}" />
 
-            {% include 'trophies/partials/_game_flags.html' with game=game variant='overlay' %}
+            {% flag_badges flag_map|dict_get:game.id %}
 
             {% comment %} Progress fill colour encodes completion state (5 states): plat+100% = platinum;
             plat earned but <100% (post-plat DLC) = muted teal; 100% w/o a plat = green; a plat available but

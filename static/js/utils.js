@@ -4443,3 +4443,48 @@ function GameAdder(root, opts) {
 }
 
 window.PlatPursuit.GameAdder = GameAdder;
+
+/**
+ * Game flag badges for rows a script builds from JSON (the nav search, the challenge picker and optimizer, a
+ * Game List's "add a game" search): the same markup `{% flag_badges %}` renders (trophies/templatetags/flag_badges.py).
+ *
+ * `keys` are the flag keys the endpoint sent, already in display order and already decided by the server's rule
+ * (`trophies/services/flag_badges.py`), so this only draws. The glyph, label and tone all come from the sprite
+ * base.html mounts (`#pp-gflag-KEY`, with `data-label` / `data-tone`), so there is no copy of them here: a key
+ * the sprite does not know is skipped rather than drawn blank.
+ *
+ * Returns the container element, or null when there is nothing to show (an empty box would still take space).
+ * `size` is 'md' (a cover) or 'sm' (a row or a small card); `layout` is 'stack' (a cover's corner) or 'row'.
+ *
+ * CALLERS FEATURE-TEST IT (`PP.flagBadges && ...`): a page script can be newer than a cached utils.js.
+ */
+function flagBadges(keys, size, layout) {
+    var SVG = 'http://www.w3.org/2000/svg';
+    var wrap = document.createElement('span');
+    wrap.className = 'pp-gflags pp-gflags--' + (layout === 'row' ? 'row' : 'stack')
+        + ' pp-gflags--' + (size === 'sm' ? 'sm' : 'md');
+    (keys || []).forEach(function (key) {
+        var symbol = document.getElementById('pp-gflag-' + key);
+        if (!symbol) { return; }
+        var label = symbol.getAttribute('data-label') || '';
+        var badge = document.createElement('span');
+        badge.className = 'pp-gflag pp-gflag--' + (symbol.getAttribute('data-tone') || 'info');
+        badge.title = label;
+        var icon = document.createElementNS(SVG, 'svg');
+        icon.setAttribute('class', 'pp-gflag__i');
+        icon.setAttribute('viewBox', '0 0 24 24');
+        icon.setAttribute('aria-hidden', 'true');
+        var use = document.createElementNS(SVG, 'use');
+        use.setAttribute('href', '#pp-gflag-' + key);
+        icon.appendChild(use);
+        var sr = document.createElement('span');
+        sr.className = 'sr-only';
+        sr.textContent = label;
+        badge.appendChild(icon);
+        badge.appendChild(sr);
+        wrap.appendChild(badge);
+    });
+    return wrap.childNodes.length ? wrap : null;
+}
+
+window.PlatPursuit.flagBadges = flagBadges;

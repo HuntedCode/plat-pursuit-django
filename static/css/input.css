@@ -5,6 +5,7 @@
 /* Standalone design mockups (raw HTML/JS kept as a record) are not site templates; their inline CSS reads as junk utilities. */
 @source not "../../docs/design/pursuer-avatar/mockups";
 @import "./components/chips.css";
+@import "./components/game-flags.css";
 @import "./components/chrome.css";
 @import "./components/motion.css";
 @import "./components/switcher.css";

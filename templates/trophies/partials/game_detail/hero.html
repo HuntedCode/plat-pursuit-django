@@ -1,4 +1,4 @@
-{% load humanize %}
+{% load humanize flag_badges %}
 {% comment %}
 The Trophy List page hero (the trophy list pass, GL-01/GL-02; the owner's approved mock-ups, 2026-10-22). It is
 the Game page's hero asked of ONE list, built from the same parts and the same grid (game-page.css `gp-hero`),
@@ -60,7 +60,7 @@ moved behind the Ranks switch (GL-03).
                             </span>
                         {% endif %}
                         {% if game.is_shovelware %}
-                            <span class="gd-plat gd-plat--warn" title="Flagged as shovelware">Shovelware</span>
+                            <span class="gd-plat gd-plat--warn" title="Flagged as shovelware">{% flag_icon 'shovelware' 'gd-plat__i' %}Shovelware</span>
                         {% endif %}
                     </div>
                 </div>
@@ -79,7 +79,7 @@ moved behind the Ranks switch (GL-03).
                 </p>
                 {% endwith %}
 
-                {% include 'trophies/partials/_game_flags.html' with game=game variant='full' hide_shovelware=True %}
+                {% include 'trophies/partials/_game_flags.html' with flags=game|flag_keys:True|flag_drop:'shovelware' clean=True %}
             </div>
 
             {% if status %}

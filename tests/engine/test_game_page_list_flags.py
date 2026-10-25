@@ -2,15 +2,15 @@
 
 A flag one list has and another does not belongs to that list, and its own Trophy List page shows it. Naming it for
 the whole game would tell a hunter on the good list that their game is broken. The Game page reuses the Trophy List
-page's `_game_flags.html`, fed a `SharedListFlags`, and draws no "No Known Issues" chip, because an empty shared set
-does not mean no list has an issue: the row renders only when a real flag is shared (`has_chips`).
+page's `_game_flags.html`, fed the flag keys every list shares (`every_version_keys`), and draws no "No known issues"
+chip, because an empty shared set does not mean no list has an issue.
 """
 import pytest
 from django.template.loader import render_to_string
 
 from tests.factories import ConceptFactory, GameFactory
 from trophies.models import SHOVELWARE_FLAGGED_STATUSES, IGDBMatch
-from trophies.views.game_page_views import shared_list_flags
+from trophies.services.flag_badges import every_version_keys
 
 pytestmark = pytest.mark.django_db
 
@@ -35,32 +35,28 @@ def _header(client, url):
 # ── the rule ─────────────────────────────────────────────────────────────────────────────────────
 
 def test_a_flag_holds_only_when_every_list_has_it():
+    """The site's whole-game rule (`every_version_keys`), which this page has used since 2026-10-10."""
     a = GameFactory(is_delisted=True, has_online_trophies=True, has_buggy_trophies=True, shovelware_status=SHOVEL)
     b = GameFactory(is_delisted=True, has_online_trophies=False, has_buggy_trophies=True)
-    flags = shared_list_flags([a, b])
-    assert flags.is_delisted is True
-    assert flags.has_buggy_trophies is True
-    assert flags.has_online_trophies is False
-    assert flags.is_shovelware is False
+    assert every_version_keys([a, b], buggy=True) == ('delisted', 'buggy')
 
 
 def test_unobtainable_needs_every_list_unobtainable():
     gone = GameFactory(is_obtainable=False)
-    still = GameFactory(is_obtainable=True)
-    assert shared_list_flags([gone, still]).is_obtainable is True
-    assert shared_list_flags([gone, GameFactory(is_obtainable=False)]).is_obtainable is False
+    assert every_version_keys([gone, GameFactory(is_obtainable=True)]) == ()
+    assert every_version_keys([gone, GameFactory(is_obtainable=False)]) == ('unobtainable',)
 
 
 def test_nothing_shared_means_nothing_to_draw():
-    flags = shared_list_flags([GameFactory(is_delisted=True), GameFactory()])
-    assert flags.has_chips is False
-    assert shared_list_flags([]) is None
+    assert every_version_keys([GameFactory(is_delisted=True), GameFactory()]) == ()
+    assert every_version_keys([]) == ()
 
 
 def test_shovelware_alone_draws_no_flags_row():
     """It rides the platform row; the flags row must not render around nothing."""
-    shovel = shared_list_flags([GameFactory(shovelware_status=SHOVEL), GameFactory(shovelware_status=SHOVEL)])
-    assert shovel.is_shovelware is True and shovel.has_chips is False
+    keys = every_version_keys([GameFactory(shovelware_status=SHOVEL), GameFactory(shovelware_status=SHOVEL)])
+    assert keys == ('shovelware',)
+    assert render_to_string('trophies/partials/_game_flags.html', {'flags': ()}).strip() == ''
 
 
 # ── the page ─────────────────────────────────────────────────────────────────────────────────────
@@ -68,8 +64,8 @@ def test_shovelware_alone_draws_no_flags_row():
 @pytest.mark.parametrize('field, value, label', [
     ('is_delisted', True, 'Delisted'),
     ('is_obtainable', False, 'Unobtainable'),
-    ('has_online_trophies', True, 'Online Trophies'),
-    ('has_buggy_trophies', True, 'Buggy Trophies'),
+    ('has_online_trophies', True, 'Online trophies'),
+    ('has_buggy_trophies', True, 'Buggy trophies'),
 ])
 def test_each_flag_shows_when_every_list_has_it_and_not_when_one_does(client, field, value, label):
     shared, _ = _page({field: value, 'title_platform': ['PS4']}, {field: value, 'title_platform': ['PS5']},
@@ -83,15 +79,16 @@ def test_each_flag_shows_when_every_list_has_it_and_not_when_one_does(client, fi
 def test_every_list_delisted_shows_the_chip(client):
     url, _ = _page({'is_delisted': True, 'title_platform': ['PS4']}, {'is_delisted': True, 'title_platform': ['PS5']})
     header = _header(client, url)
-    assert 'Delisted' in header and 'bd-chip bd-chip--error' in header
-    assert 'No Known Issues' not in header
+    assert 'Delisted' in header and 'bd-chip bd-chip--warning pp-gflag-chip' in header
+    assert '<use href="#pp-gflag-delisted"/>' in header, 'the badge glyph, so the word teaches the icon'
+    assert 'No known issues' not in header
 
 
 def test_one_list_delisted_shows_nothing_and_never_claims_no_issues(client):
     url, _ = _page({'is_delisted': True, 'title_platform': ['PS4']}, {'title_platform': ['PS5']})
     header = _header(client, url)
     assert 'Delisted' not in header
-    assert 'No Known Issues' not in header
+    assert 'No known issues' not in header
 
 
 def test_every_list_shovelware_puts_the_chip_in_the_platform_row(client):
@@ -100,15 +97,16 @@ def test_every_list_shovelware_puts_the_chip_in_the_platform_row(client):
     header = _header(client, url)
     chips = header[:header.index('gd-hero__title')]
     assert 'gd-plat gd-plat--warn' in chips and 'Shovelware' in chips
+    assert '<use href="#pp-gflag-shovelware"/>' in chips
     # Shovelware is the only shared flag, so the flags row must not render at all: neither an empty row nor the
     # partial's "No Known Issues" beside a Shovelware chip.
-    assert 'No Known Issues' not in header and 'flex flex-row flex-wrap gap-1.5' not in header
+    assert 'No known issues' not in header and 'flex flex-row flex-wrap gap-1.5' not in header
 
 
-def test_the_shared_flags_render_through_the_list_pages_own_partial():
-    """`SharedListFlags` stands in for a Game in `_game_flags.html`, whose behaviour for the list page is unchanged."""
-    flags = shared_list_flags([GameFactory(is_delisted=True), GameFactory(is_delisted=True)])
-    html = render_to_string('trophies/partials/_game_flags.html', {'game': flags, 'variant': 'full'})
-    assert 'Delisted' in html and 'No Known Issues' not in html
-    clean = render_to_string('trophies/partials/_game_flags.html', {'game': GameFactory(), 'variant': 'full'})
-    assert 'No Known Issues' in clean
+def test_the_chips_partial_draws_keys_and_says_clean_only_when_asked():
+    """One partial for both Game pages: the Trophy List page (one list) may say "No known issues"; the Game page
+    never does, because an empty shared set does not mean no list has an issue."""
+    html = render_to_string('trophies/partials/_game_flags.html', {'flags': ('delisted',)})
+    assert 'Delisted' in html and 'No known issues' not in html
+    assert 'No known issues' in render_to_string('trophies/partials/_game_flags.html', {'flags': (), 'clean': True})
+    assert render_to_string('trophies/partials/_game_flags.html', {'flags': ()}).strip() == ''

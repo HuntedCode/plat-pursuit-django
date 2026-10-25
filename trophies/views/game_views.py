@@ -57,64 +57,47 @@ def build_game_card_context(page_games, request, condensed=False):
     is rolled up partition-BEST over the same siblings (still one query), so a
     PS4-progress hunter sees their fill on the PS5-elected card
     (game_grouping_service precedent). Net cost: +1 bounded query.
+
+    `flag_map` (every card): the cover's flag badge keys. A one-list card's own flags; a condensed card's are
+    the destination page's, every list agreeing, read off the same membership query (no extra one).
     """
     from collections import defaultdict
     from trophies.constants import badge_attribution_rank
     from trophies.models import BadgeSeries
     from trophies.services.contract_service import contract_by_concept_map
+    from trophies.services.flag_badges import FLAG_FIELDS, keys_from_rows, own_keys
+    from trophies.services.game_grouping_service import page_version_rows
     from trophies.util_modules.constants import CONTRACT_XP_TOTAL, ordered_platform_union
 
     ctx = {'show_game_hooks': True}
     game_ids = [g.id for g in page_games]
+    # The cover's flag badges. A one-list card shows its own list's flags (no query); a condensed card overwrites
+    # its entry below with the whole page's. Buggy stays on browse cards, as it always has.
+    flag_map = {g.id: own_keys(g, buggy=True) for g in page_games}
+    ctx['flag_map'] = flag_map
 
     sibling_ids_by_elected = {}
     if condensed:
         ctx['condensed_cards'] = True
-        # Destination-page grouping: elected rows whose concept holds a TRUSTED match with an
-        # igdb id group by that id (membership itself ungated, mirroring GamePageView._resolve);
-        # concept-bearing rows without one group by concept (the c/ page); conceptless rows
-        # stand alone and keep their list-detail link.
-        igdb_by_elected, concept_by_elected = {}, {}
+        # Destination-page grouping, the Game page's own membership (`page_version_rows`): a TRUSTED match
+        # groups by its igdb id (membership itself ungated), any other concept by concept (the c/ page), the
+        # np floor applies, and a conceptless row stands alone with its list-detail link. ONE query, shared
+        # with the flag badges below so the card's lists, platforms and flags are the same page's.
+        anchors = []
         for g in page_games:
             match = getattr(g.concept, 'igdb_match', None) if g.concept_id else None
-            if match is not None and match.is_trusted and match.igdb_id is not None:
-                igdb_by_elected[g.id] = match.igdb_id
-            elif g.concept_id:
-                concept_by_elected[g.id] = g.concept_id
-        sibling_filter = Q()
-        if igdb_by_elected:
-            sibling_filter |= Q(concept__igdb_match__igdb_id__in=set(igdb_by_elected.values()))
-        if concept_by_elected:
-            sibling_filter |= Q(concept_id__in=set(concept_by_elected.values()))
-        rows = []
-        if sibling_filter:
-            # GamePageView's np floor: a blank/null np row is not a linkable list there either.
-            rows = list(
-                Game.objects
-                .filter(sibling_filter, np_communication_id__isnull=False)
-                .exclude(np_communication_id='')
-                .values_list('id', 'concept_id', 'concept__igdb_match__igdb_id',
-                             'concept__igdb_match__status', 'title_platform')
-            )
-        by_igdb, by_concept = defaultdict(list), defaultdict(list)
-        for row in rows:
-            if row[2] is not None:
-                by_igdb[row[2]].append(row)
-            if row[1] is not None:
-                by_concept[row[1]].append(row)
+            anchors.append((g.id, g.concept_id, getattr(match, 'igdb_id', None), getattr(match, 'status', None)))
+        members_by_elected = page_version_rows(anchors, ('id', 'title_platform') + FLAG_FIELDS)
         list_count_map, platform_union_map = {}, {}
         for eid in game_ids:
-            if eid in igdb_by_elected:
-                members = by_igdb.get(igdb_by_elected[eid], [])
-            elif eid in concept_by_elected:
-                # The c/ page's set: same-concept rows only. (An untrusted match on the concept
-                # does NOT widen membership -- GamePageView's concept route filters by concept.)
-                members = by_concept.get(concept_by_elected[eid], [])
-            else:
+            members = members_by_elected.get(eid)
+            if members is None:
                 continue
             list_count_map[eid] = len(members)
-            platform_union_map[eid] = ordered_platform_union(m[4] for m in members)
-            sibling_ids_by_elected[eid] = [m[0] for m in members]
+            platform_union_map[eid] = ordered_platform_union(m['title_platform'] for m in members)
+            sibling_ids_by_elected[eid] = [m['id'] for m in members]
+            # The card stands for the page, so a flag shows only when every list on it has it (owner, 2026-10-24).
+            flag_map[eid] = keys_from_rows(members, buggy=True)
         ctx['list_count_map'] = list_count_map
         ctx['platform_union_map'] = platform_union_map
         # The card stands for the whole PAGE here, so it shows the page's players, each counted once,

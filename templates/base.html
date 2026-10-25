@@ -46,6 +46,7 @@
   </head>
   <body class="bg-base-100 text-base-content" {% if user.is_authenticated %}data-authenticated="true"{% endif %}>
     {% include "components/_frame_rarity_sprite.html" %}
+    {% include "partials/icons/_game_flag_sprite.html" %}
     <div id="zoom-container">
     <div id="zoom-wrapper" class="min-h-screen flex flex-col">
     <a href="#main-content" class="sr-only focus:not-sr-only focus:absolute focus:top-0 focus:left-0 focus:z-50 focus:p-4 focus:bg-primary focus:text-primary-content focus:outline-none focus:ring-2 focus:ring-primary-focus">
