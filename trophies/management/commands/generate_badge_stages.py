@@ -29,8 +29,8 @@ def format_plan(plan):
         studio = f"  [{planned.studio[1]}]" if planned.studio else ""
         if planned.bundled:
             head = (
-                f"Stage {planned.existing.stage_number} (existing, uses a bundle): ADD BY HAND, "
-                f"not written. Put these in the bundle or the stage yourself"
+                f"Stage {planned.existing.stage_number} (existing, uses a bundle or trophy group): ADD BY "
+                f"HAND, not written. Put these in the bundle or the stage yourself"
             )
         elif planned.existing is not None:
             head = f"Stage {planned.existing.stage_number} (existing): add to \"{planned.existing.title}\""

@@ -463,6 +463,8 @@ def _stages_for(profile, group_badges, *, whole_catalogue):
         for bundle in st.concept_bundles.all():
             for concept in bundle.concepts.all():
                 members.setdefault(concept.id, []).append((stage_key, True))
+        # Trophy-group members (`st.trophy_groups`) are skipped on purpose: their list's contract is the whole
+        # list, and finishing it is not what the stage asks for, so offering it here would over-promise.
 
     by_contract = {}
     for concept_id, contract in contract_by_concept_map(members, prefetch_jobs=False).items():

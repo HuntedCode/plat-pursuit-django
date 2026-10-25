@@ -202,14 +202,14 @@ def evaluate_for_touched_games(profile, profilegame_ids, notify=True) -> dict:
     (it goes through `evaluate_and_apply_batch`, which has no announcement path at all), and
     `evaluate_badges --series <slug>` is the targeted form.
 
-    BOTH qualifier paths are followed. A Stage reaches its games through `concepts` AND through
-    `concept_bundles -> concepts`, and `ConceptBundle`'s own membership rule is that a concept must NOT
-    appear in both -- so they are disjoint by construction and matching only `concepts` cannot merely miss
-    the occasional bundled game, it misses EVERY one of them. `build_catalog` walks both; so must this, or
-    a hunter who finishes a bundled game gets no evaluation at all and nothing errors.
+    EVERY membership path is followed (`stage_has_concept_q`). A Stage reaches its games through `concepts`,
+    through `concept_bundles -> concepts` and through `trophy_groups -> concept`, and matching only
+    `concepts` cannot merely miss the occasional bundled game, it misses EVERY one of them. `build_catalog`
+    walks them all; so must this, or a hunter who finishes a bundled game gets no evaluation at all and
+    nothing errors.
     """
-    from django.db.models import Q
     from trophies.models import ProfileGame, Stage
+    from trophies.services.stage_membership import stage_has_concept_q
 
     if not profilegame_ids:
         return {'awarded': [], 'revoked': [], 'updated': []}
@@ -220,9 +220,7 @@ def evaluate_for_touched_games(profile, profilegame_ids, notify=True) -> dict:
         .values_list('game__concept_id', flat=True).distinct()
     )
     series_slugs = list(
-        Stage.objects.filter(
-            Q(concepts__id__in=concept_ids) | Q(concept_bundles__concepts__id__in=concept_ids)
-        ).values_list('series_slug', flat=True).distinct()
+        Stage.objects.filter(stage_has_concept_q(concept_ids)).values_list('series_slug', flat=True).distinct()
     )
     if not series_slugs:
         return {'awarded': [], 'revoked': [], 'updated': []}

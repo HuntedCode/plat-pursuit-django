@@ -25,13 +25,14 @@ import logging
 from datetime import timedelta
 
 from django.core.management.base import BaseCommand, CommandError
-from django.db.models import F, Q, Value
+from django.db.models import F, Value
 from django.db.models.functions import Least, Round
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
-from trophies.models import Stage, TrophyGroup, Game, GroupBadge, Profile, ProfileGame
+from trophies.models import Concept, Stage, TrophyGroup, Game, GroupBadge, Profile, ProfileGame
 from trophies.services.badge_apply import evaluate_and_apply_batch
+from trophies.services.stage_membership import in_series_q, stage_has_concept_q
 from trophies.util_modules.cache import redis_client
 
 logger = logging.getLogger('psn_api')
@@ -81,12 +82,12 @@ class Command(BaseCommand):
                 continue
             dlc_groups += 1
             affected_game_ids.add(tg.game_id)   # its owners' completion % is now stale (denominator grew)
-            # BOTH qualifier paths. A concept is either a direct stage member OR a ConceptBundle member
-            # on that stage, never both -- so matching `concepts` alone misses every bundled game, and an
-            # episodic series would never be flagged as affected no matter how much DLC it gained.
+            # EVERY membership path (`stage_has_concept_q`): matching `concepts` alone misses every
+            # bundled game, and an episodic series would never be flagged as affected no matter how much
+            # DLC it gained.
             for slug in (
                 Stage.objects
-                .filter(Q(concepts=concept) | Q(concept_bundles__concepts=concept))
+                .filter(stage_has_concept_q([concept.id]))
                 .values_list('series_slug', flat=True).distinct()
             ):
                 if slug:
@@ -130,15 +131,18 @@ class Command(BaseCommand):
                 # QUALIFY someone as easily as it lapses someone, and a holders-only scan would only ever
                 # take badges away.
                 #
-                # Both qualifier paths again -- the legacy query matched `stages` only, so a hunter whose
+                # Every membership path again -- the legacy query matched `stages` only, so a hunter whose
                 # single game in the series was a bundle member was never re-evaluated. Inheriting that
                 # verbatim is not parity worth keeping.
                 #
                 # `.only('id')` because the batch uses nothing else: Profile is 48 fields including three
                 # JSONFields and a TextField, and a broad franchise series approaches the whole userbase.
+                #
+                # The series' concepts as ONE subquery, not the paths OR'd through `played_games`: those
+                # joins multiply every played game by its concept's trophy groups before the DISTINCT, on
+                # a query that can approach the whole userbase.
                 profiles = Profile.objects.filter(
-                    Q(played_games__game__concept__stages__series_slug=slug)
-                    | Q(played_games__game__concept__bundles__stage__series_slug=slug)
+                    played_games__game__concept_id__in=Concept.objects.filter(in_series_q([slug])).values('id'),
                 ).distinct().only('id', 'country_code')
 
                 # `evaluate_and_apply_batch` is silent by construction (no notify parameter), which is the

@@ -137,13 +137,16 @@ def _existing_stage_by_origin(series_slug):
 
     Preference when an origin sits in several stages: a gating stage over the optional stage 0 (which never
     counts), a DIRECT member over a bundled one, then the lowest stage number. `bundled` True means the
-    chosen stage holds the origin only inside a ConceptBundle.
+    chosen stage holds the origin only inside a ConceptBundle, or only as the list of a trophy-group member:
+    either way the addition is reported for a curator, never written (writing the concept whole onto a stage
+    that counts one of its groups would set two bars for one list, which StageAdminForm refuses).
     """
     stages = (
         Stage.objects.filter(series_slug=series_slug)
         .prefetch_related(
             Prefetch('concepts', queryset=_origin_queryset()),
             Prefetch('concept_bundles__concepts', queryset=_origin_queryset()),
+            Prefetch('trophy_groups__concept', queryset=_origin_queryset()),
         )
     )
     best = {}
@@ -151,6 +154,7 @@ def _existing_stage_by_origin(series_slug):
         members = [(concept, False) for concept in stage.concepts.all()]
         for bundle in stage.concept_bundles.all():
             members.extend((concept, True) for concept in bundle.concepts.all())
+        members.extend((ctg.concept, True) for ctg in stage.trophy_groups.all())
         for concept, bundled in members:
             rank = (stage.stage_number == 0, bundled, stage.stage_number)
             key = origin_key(concept)

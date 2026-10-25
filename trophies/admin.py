@@ -1313,8 +1313,12 @@ class StageInline(admin.TabularInline):
 
 class ConceptBundleInlineFormSet(BaseInlineFormSet):
     """Validates that no Concept appears in multiple bundles on the same Stage,
-    that no bundle Concept is also a standalone qualifier on the parent Stage,
-    and that no bundle is empty."""
+    that no bundle Concept is also a standalone qualifier or the list of a
+    trophy group on the parent Stage, and that no bundle is empty.
+
+    Like the standalone check, this reads the Stage's SAVED members: the admin
+    validates the inline separately from the Stage form, so a change to both
+    in one save is checked against the other's previous state."""
 
     def clean(self):
         super().clean()
@@ -1358,6 +1362,13 @@ class ConceptBundleInlineFormSet(BaseInlineFormSet):
                     f"Concept id(s) {sorted(overlap)} are both standalone qualifiers on this Stage "
                     f"and members of a bundle. Remove them from Stage.concepts first."
                 )
+            group_lists = set(stage.trophy_groups.values_list('concept_id', flat=True))
+            overlap = set(seen_by_concept.keys()) & group_lists
+            if overlap:
+                raise ValidationError(
+                    f"Concept id(s) {sorted(overlap)} already count on this Stage through one of their "
+                    f"trophy groups. Remove the trophy group first, or leave the list out of the bundle."
+                )
 
 
 class ConceptBundleInline(admin.TabularInline):
@@ -1371,7 +1382,8 @@ class ConceptBundleInline(admin.TabularInline):
 
 
 class StageAdminForm(forms.ModelForm):
-    """Rejects standalone Stage.concepts that overlap with existing bundle members."""
+    """Rejects standalone Stage.concepts that overlap with existing bundle members, and trophy groups whose
+    list is already on the stage another way."""
 
     class Meta:
         model = Stage
@@ -1393,13 +1405,36 @@ class StageAdminForm(forms.ModelForm):
                 )
         return concepts
 
+    def clean(self):
+        """A trophy group's list may not ALSO be on the stage as a whole list or a bundle member. The two would
+        set different bars for the same list (the whole list, or just the group), and the page could not say
+        which one the stage asks for. To make the game in a list's main group count on its own, add that
+        list's 'default' group here instead of the list."""
+        cleaned = super().clean()
+        groups = cleaned.get('trophy_groups') or []
+        if not groups:
+            return cleaned
+        on_stage = {c.id for c in cleaned.get('concepts') or []}
+        if self.instance and self.instance.pk:
+            on_stage.update(
+                cid for cid in ConceptBundle.objects.filter(stage=self.instance).values_list('concepts__id', flat=True)
+                if cid is not None
+            )
+        clash = sorted(str(g) for g in groups if g.concept_id in on_stage)
+        if clash:
+            self.add_error('trophy_groups', ValidationError(
+                f"{', '.join(clash)}: that list is already on this Stage as a whole list or a bundle member. "
+                f"Use one or the other."
+            ))
+        return cleaned
+
 
 @admin.register(Stage)
 class StageAdmin(admin.ModelAdmin):
     form = StageAdminForm
     list_display = (
         '__str__', 'series_slug', 'stage_number', 'title',
-        'concepts_display', 'bundle_concepts_display',
+        'concepts_display', 'bundle_concepts_display', 'trophy_groups_display',
     )
     list_filter = ('series_slug', 'stage_number')
     search_fields = (
@@ -1407,8 +1442,9 @@ class StageAdmin(admin.ModelAdmin):
         'concepts__concept_id', 'concepts__unified_title',
         'concept_bundles__concepts__concept_id',
         'concept_bundles__concepts__unified_title',
+        'trophy_groups__display_name', 'trophy_groups__concept__unified_title',
     )
-    autocomplete_fields = ['concepts']
+    autocomplete_fields = ['concepts', 'trophy_groups']
     inlines = [ConceptBundleInline]
     actions = ['duplicate_to_series', 'convert_to_contract']
 
@@ -1425,8 +1461,8 @@ class StageAdmin(admin.ModelAdmin):
         megamix that reuses another series' stage list) means re-entering the same concept picks one
         stage at a time. The stages themselves are identical; only the slug they join on differs.
 
-        Everything that makes a stage a stage travels: number, title, the standalone concepts, and
-        each ConceptBundle with its own members (the icon is derived from those on the badge page, so
+        Everything that makes a stage a stage travels: number, title, the standalone concepts, the
+        trophy groups, and each ConceptBundle with its own members (the icon is derived from those on the badge page, so
         it follows). Nothing is MOVED -- the originals are untouched.
 
         A stage whose `(new slug, stage_number)` already exists is SKIPPED and named in the message
@@ -1440,7 +1476,7 @@ class StageAdmin(admin.ModelAdmin):
 
         stages = list(
             queryset.order_by('series_slug', 'stage_number')
-            .prefetch_related('concepts', 'concept_bundles__concepts')
+            .prefetch_related('concepts', 'concept_bundles__concepts', 'trophy_groups')
         )
         raw_slug = (request.POST.get('new_series_slug') or '').strip()
         error = None
@@ -1508,6 +1544,7 @@ class StageAdmin(admin.ModelAdmin):
                     title=stage.title,
                 )
                 copy.concepts.set(stage.concepts.all())
+                copy.trophy_groups.set(stage.trophy_groups.all())
                 for bundle in stage.concept_bundles.all():
                     bundle_copy = ConceptBundle.objects.create(
                         stage=copy, label=bundle.label, sort_order=bundle.sort_order,
@@ -1614,6 +1651,7 @@ class StageAdmin(admin.ModelAdmin):
         return super().get_queryset(request).prefetch_related(
             'concepts',
             'concept_bundles__concepts',
+            'trophy_groups__concept',
         )
 
     @staticmethod
@@ -1663,6 +1701,16 @@ class StageAdmin(admin.ModelAdmin):
                 )
         return ' '.join(parts)
     bundle_concepts_display.short_description = 'Bundle Concepts'
+
+    def trophy_groups_display(self, obj):
+        """Trophy groups that count on their own (Stage.trophy_groups M2M), as "Group in List"."""
+        groups = [f'{g.display_name} in {g.concept.unified_title or "(no title)"}' for g in obj.trophy_groups.all()]
+        if not groups:
+            return '-'
+        if len(groups) <= self._LIST_CONCEPT_LIMIT:
+            return ', '.join(groups)
+        return f"{', '.join(groups[:self._LIST_CONCEPT_LIMIT])}, +{len(groups) - self._LIST_CONCEPT_LIMIT} more"
+    trophy_groups_display.short_description = 'Trophy Groups'
 
 @admin.register(FeaturedGuide)
 class FeaturedGuideAdmin(admin.ModelAdmin):
@@ -3108,6 +3156,11 @@ class ConceptTrophyGroupAdmin(admin.ModelAdmin):
     search_fields = ['concept__unified_title', 'display_name']
     raw_id_fields = ['concept']
     ordering = ['concept', 'sort_order']
+
+    def get_queryset(self, request):
+        # The Stage admin's trophy-group autocomplete labels each row with its list's title (__str__), which
+        # would otherwise be a query per result.
+        return super().get_queryset(request).select_related('concept')
 
 
 @admin.register(GameListItem)

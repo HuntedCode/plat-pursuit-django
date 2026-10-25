@@ -1409,6 +1409,16 @@ class Concept(models.Model):
             for ctg in self.concept_trophy_groups.all()
         }
 
+        # Stage trophy-group members (Stage.trophy_groups M2M). A CTG that moved above carries its
+        # stages with it; the ones still on 'other' are the doomed duplicates, and their stage rows
+        # would ride the cascade, silently dropping the group from its badge stage. Move each onto
+        # the surviving CTG for the same trophy_group_id (add() skips a stage that already has it).
+        for ctg in other.concept_trophy_groups.prefetch_related('stages'):
+            target_ctg = surviving_ctg_by_group_id[ctg.trophy_group_id]
+            for stage in ctg.stages.all():
+                stage.trophy_groups.add(target_ctg)
+                stage.trophy_groups.remove(ctg)
+
         # Ratings: re-point onto the surviving concept + equivalent CTG,
         # deduped by (profile, trophy_group_id). concept_trophy_group is
         # nullable here (null = base-game rating); null-CTG rows move safely
@@ -3276,6 +3286,13 @@ class Stage(models.Model):
     # No stored icon: the badge page derives it from the stage's newest version
     # (badge_detail_service._stage_icon_url).
     concepts = models.ManyToManyField(Concept, related_name='stages', blank=True, help_text='Concepts required for this stage.')
+    # One trophy group INSIDE a list, for a game that ships as part of another list (the Kingdom Hearts PS5
+    # collections carry whole games as DLC groups). The group at 100% clears the stage AND counts for holo;
+    # the rest of its list never does. See badge_orchestrator.stage_units and docs/architecture/badge-system.md.
+    trophy_groups = models.ManyToManyField(
+        ConceptTrophyGroup, related_name='stages', blank=True,
+        help_text='Trophy groups that count for this stage on their own (a game shipped inside another list).',
+    )
 
     class Meta:
         unique_together = ['series_slug', 'stage_number']

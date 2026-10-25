@@ -10,7 +10,7 @@ from django.views.generic import ListView, DetailView
 
 from trophies.mixins import HtmxListMixin
 from trophies.services import game_grouping_service as grouping
-from ..models import Company, ConceptCompany, Game, UserConceptRating, ProfileGame
+from ..models import Company, Concept, ConceptCompany, Game, UserConceptRating, ProfileGame
 from ..forms import CompanySearchForm
 
 logger = logging.getLogger("psn_api")
@@ -103,12 +103,13 @@ class CompanyListView(HtmxListMixin, ListView):
             badge_series = form.cleaned_data.get('badge_series')
             if badge_series:
                 # A company with a game on one of that series' stages. No live check here: the form's choices
-                # are the series with a live edition, so validation already refuses any other slug. Direct
-                # stage concepts, as the games browse "in a badge" filter reads them.
+                # are the series with a live edition, so validation already refuses any other slug. Every
+                # membership path, as the games browse "in a badge" filter reads them.
+                from trophies.services.stage_membership import in_series_q
                 qs = qs.filter(Exists(
                     ConceptCompany.objects.filter(
                         company=OuterRef('pk'),
-                        concept__stages__series_slug=badge_series,
+                        concept_id__in=Concept.objects.filter(in_series_q([badge_series])).values('id'),
                     )
                 ))
 

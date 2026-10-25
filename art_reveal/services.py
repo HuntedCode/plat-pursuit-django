@@ -11,8 +11,8 @@ from django.core.cache import cache
 from django.db import transaction
 from django.utils import timezone
 
-from django.db.models import Q
 from trophies.models import SHOVELWARE_FLAGGED_STATUSES, BadgeSeries, Concept, EarnedTrophy
+from trophies.services.stage_membership import in_series_q
 
 from .models import ArtRevealEvent
 
@@ -32,15 +32,16 @@ _BANNER_CACHE_TTL = 60
 def _badge_concept_ids():
     """All concept ids covered by at least one badge series' stages.
 
-    `BadgeSeries` and `Stage` are linked by `series_slug` (there is no FK). Both qualifier paths are
-    walked: a concept is either a direct `Stage.concepts` member OR a `ConceptBundle` member on that
-    stage, never both -- the legacy version matched only the first, so every bundled (episodic) game was
-    missing from the community platinum count this event's whole progress bar is built on.
+    `BadgeSeries` and `Stage` are linked by `series_slug` (there is no FK). The whole-list paths are walked
+    (`in_series_q(lists_only=True)`): the legacy version matched only `Stage.concepts`, so every bundled
+    (episodic) game was missing from the community platinum count this event's whole progress bar is built
+    on. Trophy-group members are left out on purpose: their list's platinum is a different game's (a whole
+    collection's), so it is not a badge platinum.
     """
     slugs = BadgeSeries.objects.values_list('series_slug', flat=True)
     return (
         Concept.objects
-        .filter(Q(stages__series_slug__in=slugs) | Q(bundles__stage__series_slug__in=slugs))
+        .filter(in_series_q(slugs, lists_only=True))
         .values_list('id', flat=True)
         .distinct()
     )

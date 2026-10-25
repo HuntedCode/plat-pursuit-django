@@ -499,18 +499,15 @@ class BadgeRevealView(StaffRequiredMixin, TemplateView):
         game_by_slug = {}
         slugs = [c.series_slug for c in pool_claims if c.series_slug]
         if slugs:
-            # TWO queries, one per qualifier path, because a single OR'd query cannot project both. The
+            # One query PER membership path, because a single OR'd query cannot project them all. The
             # OR forces a LEFT JOIN, so a bundle-only concept comes back with `stages__series_slug=None`
             # and is dropped -- or worse, carries the slug of an unrelated series it does have stages in,
-            # attributing the game to the wrong badge. Filtering through both paths is not the same as
-            # reading through both.
-            paths = (
-                ('stages__series_slug', Q(stages__series_slug__in=slugs)),
-                ('bundles__stage__series_slug', Q(bundles__stage__series_slug__in=slugs)),
-            )
-            for column, condition in paths:
+            # attributing the game to the wrong badge. Filtering through every path is not the same as
+            # reading through every path.
+            from trophies.services.stage_membership import concept_series_paths
+            for column in concept_series_paths():
                 for slug, title in (
-                    Concept.objects.filter(condition)
+                    Concept.objects.filter(**{f'{column}__in': slugs})
                     .values_list(column, 'unified_title')
                     .order_by(column, 'unified_title')      # deterministic: same tease line every render
                     .distinct()

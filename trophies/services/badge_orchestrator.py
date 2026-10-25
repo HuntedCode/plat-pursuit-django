@@ -10,8 +10,9 @@ catalog ONCE and only re-reads the two per-profile completion signals per profil
 Completion signals (both denormalized + indexed):
   base_complete <- ProfileTrophyGroup.progress == 100 on the game's DEFAULT trophy group.
   full_complete <- ProfileGame.progress == 100 (whole game incl DLC).
-The base read is driven from the small catalog side (pre-resolved default trophy-group ids) so it's a bounded
-index seek even for a whale with 250k ProfileTrophyGroups.
+A TROPHY-GROUP member (`Stage.trophy_groups`) reads its own group's ProfileTrophyGroup for both bars instead.
+The group read is driven from the small catalog side (pre-resolved trophy-group ids) so it's a bounded index
+seek even for a whale with 250k ProfileTrophyGroups.
 """
 from collections import defaultdict
 
@@ -19,11 +20,13 @@ from django.db import transaction
 from django.db.models import Prefetch, Q, QuerySet
 
 from trophies.models import (
-    Stage, Concept, Game, ConceptBundle, ProfileGame, ProfileTrophyGroup, GroupBadge, TrophyGroup,
+    Stage, Concept, ConceptTrophyGroup, Game, ConceptBundle, ProfileGame, ProfileTrophyGroup, GroupBadge,
+    TrophyGroup,
 )
 from trophies.services.badge_engine import (
     GameState, StageInput, GroupInput, SeriesInput, evaluate_group_badge, evaluate_stage,
 )
+from trophies.services.stage_membership import in_series_q
 
 _GAME_FIELDS = ('id', 'title_platform', 'is_obtainable', 'is_delisted', 'concept_id')
 
@@ -39,6 +42,48 @@ def _game_prefetch():
     return Prefetch('concepts', queryset=Concept.objects.only('id').prefetch_related(
         Prefetch('games', queryset=Game.objects.only(*_GAME_FIELDS)),
     ))
+
+
+def _group_prefetch():
+    """Prefetch a stage's trophy-group members -> their concept's games -> each game's trophy groups, as slim
+    rows. A ConceptTrophyGroup is concept-level, so the game-level TrophyGroup (what ProfileTrophyGroup keys
+    on) is found per version here; a version without that group is not a way to clear the stage. Costs one
+    query when no stage has a group member: the nested levels only run for rows that exist."""
+    games = Game.objects.only(*_GAME_FIELDS).prefetch_related(
+        Prefetch('trophy_groups', queryset=TrophyGroup.objects.only(
+            'id', 'game_id', 'trophy_group_id', 'trophy_group_name',
+        )),
+    )
+    return Prefetch('trophy_groups', queryset=ConceptTrophyGroup.objects.only(
+        'id', 'concept_id', 'trophy_group_id', 'display_name', 'icon_url',
+    ).prefetch_related(
+        Prefetch('concept', queryset=Concept.objects.only('id').prefetch_related(Prefetch('games', queryset=games))),
+    ))
+
+
+def group_members(st):
+    """(concept trophy group, game, trophy group) for each version that carries one of the stage's trophy-group
+    members. Reads `_group_prefetch`: no queries."""
+    for ctg in st.trophy_groups.all():
+        for g in ctg.concept.games.all():
+            for tg in g.trophy_groups.all():
+                if tg.trophy_group_id == ctg.trophy_group_id:
+                    yield ctg, g, tg
+
+
+def stage_units(st, game_state_fn, group_state_fn):
+    """The `GameState` list the engine evaluates for one stage: every version of a whole-list member, one
+    synthetic unit per ConceptBundle, and every version of a trophy-group member. The ONE place a stage is
+    turned into units, so required-stage counts, a hunter's evaluation and the badge page cannot disagree."""
+    units = []
+    for c in st.concepts.all():
+        units.extend(game_state_fn(g) for g in c.games.all())
+    for b in st.concept_bundles.all():
+        bundle = _bundle_state(b, game_state_fn)
+        if bundle is not None:
+            units.append(bundle)
+    units.extend(group_state_fn(g, tg) for _, g, tg in group_members(st))
+    return units
 
 
 def resolve_group_badges(group_badges):
@@ -60,20 +105,28 @@ def build_catalog(group_badges, *, whole_catalogue=False):
         Stage.objects.filter(series_slug__in=series_slugs).prefetch_related(
             _game_prefetch(),
             Prefetch('concept_bundles', queryset=ConceptBundle.objects.prefetch_related(_game_prefetch())),
+            _group_prefetch(),
         )
     )
     game_ids = set()
+    group_game_ids, group_tg_ids = set(), set()
     for st in stages:
         for c in st.concepts.all():
             game_ids.update(g.id for g in c.games.all())
         for b in st.concept_bundles.all():
             for c in b.concepts.all():
                 game_ids.update(g.id for g in c.games.all())
+        for _, g, tg in group_members(st):
+            group_game_ids.add(g.id)
+            group_tg_ids.add(tg.id)
+    group_tg_ids = sorted(group_tg_ids)
     # Pre-resolve the default trophy-group ids so the per-profile base read is a single-hop seek on the
-    # ProfileTrophyGroup unique index (small-side-first -> whale-safe regardless of the planner).
+    # ProfileTrophyGroup unique index (small-side-first -> whale-safe regardless of the planner). Over the
+    # WHOLE-LIST games only: a list that is on a stage just for one of its groups never reads its base bar.
     default_tg_ids = list(
         TrophyGroup.objects.filter(game_id__in=game_ids, trophy_group_id='default').values_list('id', flat=True)
     )
+    game_ids |= group_game_ids
 
     # HOW THE PER-PROFILE READS FILTER. `whole_catalogue` is the CALLER telling us which regime this
     # is, because the caller already knows and nothing else does as reliably:
@@ -103,19 +156,25 @@ def build_catalog(group_badges, *, whole_catalogue=False):
     # Optimising for `--all` alone slowed down every sync and every badge page view, which is how the
     # first version of this went in. The default is therefore the SMALL regime: a new caller that does
     # not think about this gets the shape that is safe on a request path.
+    #
+    # TROPHY-GROUP MEMBERS never enter the subquery. They are hand-authored, a handful at most, so their games
+    # join the game read as an explicit id list (empty, Django drops the branch, so the measured shape above
+    # is untouched until a group is authored), and their groups get a read of their own in
+    # evaluate_with_catalog. Routing them through the subquery instead joined every concept's trophy groups
+    # into a statement run once per profile, ~300,000 times a night.
     if whole_catalogue:
-        in_series = (Q(concept__stages__series_slug__in=series_slugs)
-                     | Q(concept__bundles__stage__series_slug__in=series_slugs))
-        game_filter = Game.objects.filter(in_series).values('id')
+        list_games = in_series_q(series_slugs, 'concept__', lists_only=True)
+        game_filter = Game.objects.filter(list_games | Q(id__in=sorted(group_game_ids))).values('id')
         tg_filter = TrophyGroup.objects.filter(
-            game_id__in=game_filter, trophy_group_id='default',
+            game_id__in=Game.objects.filter(list_games).values('id'), trophy_group_id='default',
         ).values('id')
     else:
         game_filter, tg_filter = game_ids, default_tg_ids
 
     # `game_ids` (the Python set) stays regardless: it is catalogue-bounded, built once, and both the
-    # in-memory game_state lookups and badge_detail_service read it.
-    return {'group_badges': group_badges, 'stages': stages, 'game_ids': game_ids,
+    # in-memory game_state lookups and badge_detail_service read it. `group_tg_ids` is always the explicit
+    # list: the group read below and the badge page's group cards both use it.
+    return {'group_badges': group_badges, 'stages': stages, 'game_ids': game_ids, 'group_tg_ids': group_tg_ids,
             'game_filter': game_filter, 'tg_filter': tg_filter, 'uses_subquery': whole_catalogue}
 
 
@@ -144,13 +203,7 @@ def recompute_required_stages(catalog) -> int:
     counts = {}
     stages_by_series = defaultdict(list)
     for st in catalog['stages']:
-        units = []
-        for c in st.concepts.all():
-            units.extend(_catalog_game_state(g) for g in c.games.all())
-        for b in st.concept_bundles.all():
-            bundle = _bundle_state(b, _catalog_game_state)
-            if bundle is not None:
-                units.append(bundle)
+        units = stage_units(st, _catalog_game_state, catalog_group_state)
         stages_by_series[st.series_slug].append(StageInput(st.stage_number, tuple(units)))
 
     for gb in catalog['group_badges']:
@@ -184,12 +237,19 @@ def _catalog_game_state(g):
     )
 
 
+def catalog_group_state(g, tg):
+    """`_catalog_game_state` for a trophy-group member: gating reads only the version's catalog facts."""
+    return _catalog_game_state(g)
+
+
 def evaluate_with_catalog(profile, catalog):
     """Evaluate one profile against a PRE-BUILT catalog. The ONLY per-profile DB work is the two completion
-    reads, both bounded to catalog games (whale-safe). Returns {group_badge_id: GroupBadgeResult}."""
+    reads, both bounded to catalog games (whale-safe), plus a third tiny one when a stage has a trophy-group
+    member. Returns {group_badge_id: GroupBadgeResult}."""
     # `game_filter` / `tg_filter` are either the precomputed id collections or subqueries selecting the
-    # same rows, chosen by catalogue size in build_catalog -- see the note there. Only the query SHAPE
-    # differs; both select identically.
+    # same rows, chosen by the caller's regime in build_catalog -- see the note there. Only the query SHAPE
+    # differs; both select identically. (On the games side "identically" means every game that can reach a
+    # unit: the subquery's version list for a group member is the explicit one the small regime uses.)
     full_map = {
         gid: (prog, last)
         for gid, prog, last in ProfileGame.objects.filter(
@@ -203,6 +263,14 @@ def evaluate_with_catalog(profile, catalog):
         for gid, prog, last in ProfileTrophyGroup.objects.filter(
             profile=profile, trophy_group_id__in=catalog['tg_filter'],
         ).values_list('trophy_group__game_id', 'progress', 'last_trophy_at')
+    }
+    # The trophy-group members' own rows, keyed by trophy group. An explicit id list in both regimes; with no
+    # group on any stage the list is empty and Django never sends the query.
+    group_map = {
+        tg_id: (prog, last)
+        for tg_id, prog, last in ProfileTrophyGroup.objects.filter(
+            profile=profile, trophy_group_id__in=catalog['group_tg_ids'],
+        ).values_list('trophy_group_id', 'progress', 'last_trophy_at')
     }
 
     def game_state(g):
@@ -223,15 +291,28 @@ def evaluate_with_catalog(profile, catalog):
             completion_date=completion_date,
         )
 
+    def group_state(g, tg):
+        """A trophy-group member: its group at 100% is BOTH bars, because the group is the whole game it stands
+        for. The rest of its list (the collection's other games, its platinum) never counts here."""
+        group_prog, group_date = group_map.get(tg.id, (0, None))
+        full_prog, full_date = full_map.get(g.id, (0, None))
+        # game_state's invariant, one level down: the whole list at 100% means every group in it is too, so a
+        # stale group row cannot deny credit for a finished list.
+        complete = group_prog == 100 or full_prog == 100
+        completion_date = group_date if group_prog == 100 else (full_date if complete else None)
+        return GameState(
+            game_id=g.id,
+            platforms=frozenset(g.title_platform or []),
+            is_obtainable=g.is_obtainable,
+            is_delisted=g.is_delisted,
+            base_complete=complete,
+            full_complete=complete,
+            completion_date=completion_date,
+        )
+
     stages_by_series = defaultdict(list)
     for st in catalog['stages']:
-        units = []
-        for c in st.concepts.all():
-            units.extend(game_state(g) for g in c.games.all())
-        for b in st.concept_bundles.all():
-            bundle = _bundle_state(b, game_state)
-            if bundle is not None:
-                units.append(bundle)
+        units = stage_units(st, game_state, group_state)
         stages_by_series[st.series_slug].append(StageInput(st.stage_number, tuple(units)))
 
     results = {}

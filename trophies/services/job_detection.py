@@ -181,6 +181,7 @@ def simulate_stage_jobs():
     from collections import defaultdict
     from django.db.models import Q
     from trophies.models import Badge, Concept, Stage
+    from trophies.services.stage_membership import stage_concept_paths
 
     xp_badge_types = ('series', 'developer')  # the only XP-granting badge types
     non_shovelware = ('clean', 'manually_cleared')
@@ -196,13 +197,13 @@ def simulate_stage_jobs():
     )
 
     stages = Stage.objects.filter(series_slug__in=xp_slugs)
+    # Whole-list members only: a trophy-group member's concept is its collection, whose tags describe other
+    # games.
     stage_concepts = defaultdict(set)
-    for sid, cid in stages.values_list('id', 'concepts__id'):
-        if cid in qualifying_ids:
-            stage_concepts[sid].add(cid)
-    for sid, cid in stages.values_list('id', 'concept_bundles__concepts__id'):
-        if cid in qualifying_ids:
-            stage_concepts[sid].add(cid)
+    for path in stage_concept_paths(lists_only=True):
+        for sid, cid in stages.values_list('id', f'{path}__id'):
+            if cid in qualifying_ids:
+                stage_concepts[sid].add(cid)
     stage_concepts = {s: cs for s, cs in stage_concepts.items() if cs}
     if not stage_concepts:
         return []

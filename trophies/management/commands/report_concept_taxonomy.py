@@ -36,6 +36,7 @@ from django.core.management.base import BaseCommand
 from django.db.models import Q
 
 from trophies.models import Concept, ConceptGenre, ConceptTheme, Stage
+from trophies.services.stage_membership import in_series_q, stage_concept_paths, stage_has_concept_q
 
 NON_SHOVELWARE_STATUSES = ('clean', 'manually_cleared')
 
@@ -97,7 +98,8 @@ class Command(BaseCommand):
             .filter(Q(concept_companies__is_developer=True) | Q(concept_companies__is_porting=True))
         )
         if badge_stages:
-            concepts = concepts.filter(Q(stages__isnull=False) | Q(bundles__isnull=False))
+            all_slugs = Stage.objects.values('series_slug')
+            concepts = concepts.filter(in_series_q(all_slugs, lists_only=True))
         concepts = concepts.distinct()
 
         # Identity rows + the two taxonomy maps, loaded once.
@@ -154,7 +156,7 @@ class Command(BaseCommand):
         w(f'  Total concepts:   {total:>7,}')
         if badge_stages:
             series_n = Stage.objects.filter(
-                Q(concepts__id__in=id_set) | Q(concept_bundles__concepts__id__in=id_set)
+                stage_has_concept_q(id_set, lists_only=True)
             ).values('series_slug').distinct().count()
             w(f'  Badge series:     {series_n:>7,}')
         w(f'  With >=1 genre:   {total - no_genre:>7,}   (no genre: {no_genre:,})')
@@ -188,14 +190,13 @@ class Command(BaseCommand):
         Badge stage's member concepts and ask how many *specialization* genres it
         spans (jobs-per-stage signal) and which genres/themes cover the most stages
         (job-catalog signal)."""
-        # stage -> set of qualifying concept ids (direct + bundle members).
+        # stage -> set of qualifying concept ids (whole-list members: this is a TAXONOMY report, and a
+        # trophy-group member's concept is a collection whose genres describe other games).
         stage_concepts = defaultdict(set)
-        for sid, cid in Stage.objects.values_list('id', 'concepts__id'):
-            if cid in id_set:
-                stage_concepts[sid].add(cid)
-        for sid, cid in Stage.objects.values_list('id', 'concept_bundles__concepts__id'):
-            if cid in id_set:
-                stage_concepts[sid].add(cid)
+        for path in stage_concept_paths(lists_only=True):
+            for sid, cid in Stage.objects.values_list('id', f'{path}__id'):
+                if cid in id_set:
+                    stage_concepts[sid].add(cid)
         stage_concepts = {s: cs for s, cs in stage_concepts.items() if cs}
 
         w = self.stdout.write
