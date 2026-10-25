@@ -111,6 +111,26 @@ One beat per moment, in the earn vocabulary (visual-identity.md), never confetti
 | mastered | the mastered medallion is struck, its crown set on as it mints, over GOLD rays, gold sparks; "One of N masters" |
 | full_set / series_master | every edition side by side over one set of rays (gold for a Series Master), minted one after another; each can be picked up |
 
+**The sparks climb a ladder and wear what the rays wear** (owner, 2026-10-25, after phase 4; `BEATS` in
+`moments.js`):
+
+| Moment | Sparks |
+|---|---|
+| badge | the edition's metal, read off the medallion (`--med-c`): platinum-blue Ultra HD, gold Legacy HD |
+| holo badge | the foil's four colours |
+| Full Set | each edition bursts as it mints, in its own metal |
+| mastered (and a badge earned already mastered) | gold, bigger, plus a second gold burst as the crown lands |
+| Series Master | each edition in gold as it mints, a burst per crown, then a finale from between them: the biggest |
+| platinum / milestone | platinum, as before |
+
+The bigger the reward, the bigger the burst (pinned by `test_the_sparks_climb_the_reward_ladder...`). A later
+moment in one sitting bursts at 60%, except a mastery, a Series Master and a milestone, which always get their full
+beat.
+
+**The spark is `.pp-spark.pp-spark--burst`** (`motion.css`). The legacy Frame styles its own `.pp-spark`
+(`frame.css`, loaded later) with a hard-coded orange and a CSS fly animation, and until 2026-10-25 that silently won:
+every burst, the claim ceremony's included, came out orange whatever colour it asked for.
+
 **The sparks explode** (owner, 2026-10-25): `sparkBurst(..., { explode: true })` throws them across much of the
 screen, mostly upward, then lets them fall (2 to 2.7s, owner-tuned: longer read as hanging) under gravity off the BOTTOM edge of the page.
 That is why the spark layer is the whole viewport, beside the dialog. About half as many on a phone.

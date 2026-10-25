@@ -81,3 +81,28 @@ def test_a_set_moment_never_gives_the_player_a_scrollbar(rf, tmp_path, kind, vie
         finally:
             b.close()
     assert overflow <= 0, f'the player scrolls by {overflow}px at {viewport}: the rays outgrow the dialog'
+
+
+def test_a_burst_spark_wears_the_colour_it_was_given(tmp_path):
+    """The legacy Frame's `.pp-spark` (frame.css, loaded after motion.css) won the cascade with a hard-coded orange
+    and a CSS fly animation, so every celebration burst came out orange whatever it asked for. The shared spark is
+    `.pp-spark.pp-spark--burst` (utils.js) and must paint its own `--sc`, animated by the script alone."""
+    from playwright.sync_api import sync_playwright
+
+    page = tmp_path / 'spark.html'
+    page.write_text(
+        '<!doctype html><html data-theme="plat-pursuit-dark"><head><meta charset="utf-8">'
+        f'<link rel="stylesheet" href="{CSS.as_uri()}"></head><body>'
+        '<span id="s" class="pp-spark pp-spark--burst" style="--sc: #8fd2ea; left: 20px; top: 20px"></span>'
+        '</body></html>', encoding='utf-8')
+    with sync_playwright() as p:
+        b = p.chromium.launch()
+        try:
+            pg = b.new_page()
+            pg.goto(page.as_uri())
+            bg, anims = pg.evaluate("""() => { const s = document.getElementById('s');
+                return [getComputedStyle(s).backgroundImage, s.getAnimations().length]; }""")
+        finally:
+            b.close()
+    assert 'rgb(143, 210, 234)' in bg, f'the spark is not its own colour: {bg}'
+    assert anims == 0, 'a CSS animation is fighting the script for the spark'

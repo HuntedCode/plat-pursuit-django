@@ -527,6 +527,7 @@ def test_the_preview_never_posts_and_the_sparks_are_shared():
 
     assert "if (preview || !ids.length || !PP.API) { return; }" in moments
     assert 'window.PlatPursuit.sparkBurst = sparkBurst;' in utils
+    assert utils.count("s.className = 'pp-spark pp-spark--burst';") == 2, 'both spark paths need the class that outranks frame.css'
     assert 'if (PP.sparkBurst) { PP.sparkBurst(layer, cx, cy, color, n); }' in ceremony
     assert "if (!beat || reduced() || !PP.sparkBurst) { return; }" in moments
     assert "s.className = 'ccx__spark'" not in ceremony, 'one spark, styled once (.pp-spark, motion.css)'
@@ -562,7 +563,7 @@ def test_the_moments_sparks_explode_and_escape_puts_the_medallion_down_first():
     moments = (root / 'moments.js').read_text(encoding='utf-8')
     utils = (root / 'utils.js').read_text(encoding='utf-8')
 
-    assert 'beat.color, beat.n, { explode: true });' in moments
+    assert 'PP.sparkBurst(sparks, c.x, c.y, color, share, { explode: true });' in moments
     assert "if (opts.explode) { explodeSparks(layer, cx, cy, color, n); return; }" in utils
     assert "const floor = (h - cy) + 40 + Math.random() * 120;" in utils, 'they fall OFF the bottom edge'
     # Escape answers the inspector first (capture phase) and stops the moment closing underneath it.
@@ -645,3 +646,27 @@ def test_the_preview_samples_the_new_beats_too(rf):
     for kind in ('mastered', 'full_set', 'series_master'):
         assert f'data-kind="{kind}"' in html
     assert not Moment.objects.exists()
+
+
+def test_the_sparks_climb_the_reward_ladder_and_wear_what_the_rays_wear():
+    """Source pins (no JS runner) for the spark ladder (owner, 2026-10-25): the bigger the reward the bigger the
+    burst, counted the way a two-edition series plays them; a mastery or a Series Master never shrinks later in a
+    queue; a badge's sparks read its edition metal off the medallion, a holo one the foil's colours."""
+    import re
+    from pathlib import Path
+
+    js = (Path(__file__).resolve().parents[2] / 'static' / 'js' / 'moments.js').read_text(encoding='utf-8')
+    beats = {k: dict(re.findall(r'(\w+): (\d+|true)', body))
+             for k, body in re.findall(r'^\s+(\w+): \{([^}]*)\},?$', js.split('var BEATS = {')[1].split('};')[0], re.M)}
+
+    def total(kind, editions=2):
+        b = beats[kind]
+        per = int(b.get('n', 0)) + int(b.get('crown', 0))
+        return per * (editions if 'each' in b else 1) + int(b.get('finale', 0))
+
+    ladder = ['badge', 'holo', 'full_set', 'mastered', 'series_master']
+    totals = [total(k) for k in ladder]
+    assert totals == sorted(totals) and len(set(totals)) == len(totals), dict(zip(ladder, totals))
+    assert beats['mastered'].get('always') == 'true' and beats['series_master'].get('always') == 'true'
+    assert "getPropertyValue('--med-c')" in js, 'a badge no longer throws its edition metal'
+    assert "querySelector('.pp-moment__med[data-holo]') ? BEATS.holo" in js

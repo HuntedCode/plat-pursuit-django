@@ -2703,7 +2703,7 @@ function sparkBurst(layer, cx, cy, color, n, opts = {}) {
     if (opts.explode) { explodeSparks(layer, cx, cy, color, n); return; }
     for (let i = 0; i < n; i++) {
         const s = document.createElement('span');
-        s.className = 'pp-spark';
+        s.className = 'pp-spark pp-spark--burst';   // two classes: see motion.css
         s.style.left = cx + 'px'; s.style.top = cy + 'px';
         s.style.setProperty('--sc', color);
         layer.appendChild(s);
@@ -2725,7 +2725,7 @@ function explodeSparks(layer, cx, cy, color, n) {
     const reach = Math.min(w, 1100) * 0.5;
     for (let i = 0; i < count; i++) {
         const s = document.createElement('span');
-        s.className = 'pp-spark';
+        s.className = 'pp-spark pp-spark--burst';   // two classes: see motion.css
         s.style.left = cx + 'px'; s.style.top = cy + 'px';
         s.style.setProperty('--sc', color);
         layer.appendChild(s);
