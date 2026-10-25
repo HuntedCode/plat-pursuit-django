@@ -231,6 +231,43 @@ def _game_entry(game, profile_games, ratings_map, contract_map, excused) -> dict
     }
 
 
+@dataclass(frozen=True)
+class ExcusedNote:
+    """One banner sentence for a list with excused trophies: "In <list> (<platforms>), <what> can no longer be
+    earned, so <it isn't / they aren't> needed here." `group` names a trophy-group member's group; `plat` adds that
+    the platinum is not needed either. Hashable, so several versions saying the same thing say it once."""
+    list_name: str
+    platforms: str
+    what: str
+    count: int
+    plat: bool = False
+    group: Optional[str] = None
+
+
+def _trophies(n) -> str:
+    return f'{n} troph{"y" if n == 1 else "ies"}'
+
+
+def _excused_note(e, excused) -> ExcusedNote:
+    """Where a card's excused trophies are, in words (owner, 2026-10-25): base game, DLC or both, and whether the
+    platinum went with them. A trophy-group card names its group instead, since it counts only that group."""
+    game = e['game']
+    platforms = ' / '.join(game.title_platform or [])
+    if e['group']:
+        return ExcusedNote(game.title_name, platforms, _trophies(e['excused_count']), e['excused_count'],
+                           group=e['group_name'])
+    base, dlc, plat = excused.split(game.id)
+    if base and dlc:
+        what = f'{base} base-game and {dlc} DLC trophies'     # two or more in all, so always plural
+    elif base:
+        what = _trophies(base).replace(' ', ' base-game ', 1)
+    elif dlc:
+        what = _trophies(dlc).replace(' ', ' DLC ', 1)
+    else:
+        return ExcusedNote(game.title_name, platforms, 'the platinum', 1)
+    return ExcusedNote(game.title_name, platforms, what, base + dlc, plat=plat)
+
+
 def _entry_finished(e) -> bool:
     """The card's own bar met: 100% on PSN, or every trophy but the excused ones."""
     return bool(e['pgame'] and e['pgame'].progress == 100) or e['excused_done']
@@ -510,6 +547,7 @@ def _group_journey(gb, result, catalog, games_map, profile_games, ratings_map, c
             bucket.append(entry)
         bundles = _stage_bundles(st, games_map, profile_games, ratings_map, contract_map, excused)
         group_games = [e for e in obtainable if e['group']]
+        excused_games = [e for e in obtainable if not e['group'] and e['excused_count']]
         sr = stage_results.get(st.stage_number)
         any_progress = any(e['pgame'] and e['pgame'].progress for e in (obtainable + delisted))
         state = 'complete' if (sr and sr.base_satisfied) else ('partial' if any_progress else 'todo')
@@ -517,10 +555,15 @@ def _group_journey(gb, result, catalog, games_map, profile_games, ratings_map, c
             'stage': st, 'obtainable_games': obtainable, 'delisted_games': delisted,
             'bundles': bundles,
             # DISPLAY split of `obtainable_games` (which every count above and below still reads whole): the full
-            # lists keep the stage's grid, and trophy groups get their own row under it, so a group never sits in
-            # a row of full lists looking like one (owner, 2026-10-25).
-            'list_games': [e for e in obtainable if not e['group']],
+            # lists keep the stage's grid; lists with excused trophies, then trophy groups, each get their own row
+            # under it with a banner, so neither sits in a row of full lists looking like one (owner, 2026-10-25).
+            'list_games': [e for e in obtainable if not e['group'] and not e['excused_count']],
+            'excused_games': excused_games,
+            'excused_notes': list(dict.fromkeys(_excused_note(e, excused) for e in excused_games)),
             'group_games': group_games,
+            'group_excused_notes': list(dict.fromkeys(
+                _excused_note(e, excused) for e in group_games if e['excused_count']
+            )),
             # The row's banner: one plain sentence per group, scoped to its LIST, so groups from two different
             # lists each say which list they come from. Several versions of one list carry the same group, so
             # it is said once.

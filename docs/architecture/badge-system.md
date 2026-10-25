@@ -209,8 +209,13 @@ leaderboards and profile stats keep PSN's own percentages. Everything lives in
 trophies as the smallest bar needs; only then does `ExcusedProgress.read` send ONE aggregate over EarnedTrophy
 (grouped by list and group in the database). With nothing flagged, or no candidate, it sends nothing.
 
-**On the page.** A card on a list with excused trophies says "N excused" for every viewer (a group card counts
-only its group's). When the viewer has earned every other trophy, the card reads done at PSN's own %. A card
+**On the page.** Lists with excused trophies get their own row under the stage's full lists, as trophy groups
+do (owner, 2026-10-25), led by a banner per list (`_excused_note.html`, deduped across versions) saying where
+the excused trophies are and whether the platinum went with them: "In Warhawk (PS5), 1 base-game and 1 DLC
+trophies can no longer be earned, so they aren't needed here. The platinum needs them, so it isn't needed
+either." A trophy-group card with excused trophies stays in the group row and adds the same sentence there,
+naming its group. Order: full lists, excused lists, trophy groups. A card on a list with excused trophies says
+"N excused" for every viewer (a group card counts only its group's). When the viewer has earned every other trophy, the card reads done at PSN's own %. A card
 whose platinum is excused says "Plat unobtainable" instead of "Has plat". The Game page's trophy list marks the
 excused trophies "Unobtainable", platinum included. My Stats keeps PSN's literal "platted" / "100%'d" counts.
 The How It Works page says it in one sentence.

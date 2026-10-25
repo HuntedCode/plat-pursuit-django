@@ -617,3 +617,76 @@ def test_the_badge_page_reads_a_viewers_excused_trophies_once():
     reads = [q['sql'] for q in ctx.captured_queries
              if 'MAX("trophies_earnedtrophy"."earned_date_time")' in q['sql'] and 'GROUP BY' in q['sql']]
     assert len(reads) == 1
+
+
+# --- the excused row and its banner (owner, 2026-10-25) ---------------------------------------------------
+
+def _stage_html(stage):
+    from django.template.loader import render_to_string
+    return render_to_string('trophies/partials/badge_detail/bd2_stage.html', {'s': stage})
+
+
+def test_lists_with_excused_trophies_get_their_own_row_under_the_full_lists():
+    game, t = _list(title='Warhawk')
+    full, _ = _list(title='Starhawk')
+    _flag(t['001'][1])
+
+    def fill(st):
+        st.concepts.add(full.concept, game.concept)
+    stage = _ultra_view(_badge(fill).series, None).stages[0]
+
+    assert [e['game'] for e in stage['list_games']] == [full]
+    assert [e['game'] for e in stage['excused_games']] == [game]
+    html = _stage_html(stage)
+    assert html.index('Starhawk') < html.index('class="bd-groups"') < html.index('bd-gnote--excused')
+    assert ('In <strong>Warhawk</strong> (PS5), 1 DLC trophy can no longer be earned, so it isn&rsquo;t needed '
+            'here.</span>') in html
+
+
+@pytest.mark.parametrize('flags, sentence', [
+    ({'default': [1]}, '1 base-game trophy can no longer be earned, so it isn&rsquo;t needed here. '
+                       'The platinum needs it, so it isn&rsquo;t needed either.'),
+    ({'001': [0, 1]}, '2 DLC trophies can no longer be earned, so they aren&rsquo;t needed here.</span>'),
+    ({'default': [1], '001': [0]}, '1 base-game and 1 DLC trophies can no longer be earned, so they aren&rsquo;t '
+                                   'needed here. The platinum needs them, so it isn&rsquo;t needed either.'),
+    ({'default': [0]}, 'the platinum can no longer be earned, so it isn&rsquo;t needed here.</span>'),
+])
+def test_the_banner_says_whether_the_excused_trophies_are_base_game_dlc_or_both(flags, sentence):
+    game, t = _list()
+    _flag(*[t[gid][i] for gid, idx in flags.items() for i in idx])
+    stage = _ultra_view(_badge(lambda st: st.concepts.add(game.concept)).series, None).stages[0]
+
+    html = _stage_html(stage)
+
+    assert f'In <strong>Warhawk</strong> (PS5), {sentence}' in html
+
+
+def test_two_versions_flagged_alike_say_it_once():
+    game, t = _list()
+    ps4, u = _version(game, 'PS5')
+    _flag(t['001'][1], u['001'][1])
+    stage = _ultra_view(_badge(lambda st: st.concepts.add(game.concept)).series, None).stages[0]
+
+    assert len(stage['excused_games']) == 2 and len(stage['excused_notes']) == 1
+
+
+def test_a_trophy_group_with_excused_trophies_says_so_in_the_group_row():
+    game, t = _list(title='Kingdom Hearts Collection')
+    _flag(t['001'][1])
+    ctg = game.concept.concept_trophy_groups.get(trophy_group_id='001')
+    stage = _ultra_view(_badge(lambda st: st.trophy_groups.add(ctg)).series, None).stages[0]
+
+    html = _stage_html(stage)
+
+    assert stage['excused_games'] == [] and len(stage['group_excused_notes']) == 1
+    assert ('In <strong>Kingdom Hearts Collection</strong> (PS5), 1 trophy in <strong>Kingdom Hearts Collection '
+            '001 (DLC)</strong> can no longer be earned') in html
+    assert 'class="bd-groups bd-groups--lead"' in html
+
+
+def test_a_stage_with_nothing_excused_has_no_excused_row():
+    game, _ = _list()
+    stage = _ultra_view(_badge(lambda st: st.concepts.add(game.concept)).series, None).stages[0]
+
+    assert (stage['excused_games'], stage['excused_notes']) == ([], [])
+    assert 'bd-gnote--excused' not in _stage_html(stage)

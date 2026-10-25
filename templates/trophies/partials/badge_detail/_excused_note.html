@@ -1,0 +1,4 @@
+{% load flag_badges %}{% comment %}
+One banner sentence for a list (or a trophy-group member) with excused trophies, from `n`, a
+badge_detail_service.ExcusedNote: where they are, and that the badge does not need them.
+{% endcomment %}<p class="bd-gnote bd-gnote--excused">{% flag_icon 'unobtainable' '' %}<span>In <strong>{{ n.list_name }}</strong>{% if n.platforms %} ({{ n.platforms }}){% endif %}, {{ n.what }}{% if n.group %} in <strong>{{ n.group }}</strong>{% endif %} can no longer be earned, so {% if n.count == 1 %}it isn&rsquo;t{% else %}they aren&rsquo;t{% endif %} needed here.{% if n.plat %} The platinum needs {% if n.count == 1 %}it{% else %}them{% endif %}, so it isn&rsquo;t needed either.{% endif %}</span></p>

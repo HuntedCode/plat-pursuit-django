@@ -171,6 +171,8 @@
 .bd-gnote svg { width: 15px; height: 15px; flex-shrink: 0; margin-top: 1px; color: var(--pp-secondary); }
 .bd-gnote strong { color: var(--pp-text); font-weight: 700; }
 .bd-gnote + .bd-gnote { margin-top: 6px; }
+/* The excused-trophies banner: the same banner, with the Game page's unobtainable glyph in its tone. */
+.bd-gnote--excused svg { color: color-mix(in oklab, var(--pp-error) 70%, var(--pp-text-mute)); }
 .bd-gcard__from { margin-top: -2px; font-size: 0.62rem; line-height: 1.2; color: var(--pp-text-mute); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bd-gcard__badges { display: flex; flex-wrap: wrap; gap: 3px; }
 .bd-gcard__facts { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 9px; margin-top: auto; font-size: 0.64rem; font-weight: 600; color: var(--pp-text-mute); }

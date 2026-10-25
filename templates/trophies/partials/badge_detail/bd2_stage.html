@@ -117,15 +117,31 @@ badge" and they are explicitly not steps -- the section they sit in says so once
         </div>
         {% endif %}
 
+        {% comment %}Lists with excused (staff-flagged unobtainable) trophies: their own row under the full lists,
+        as trophy groups get, led by a banner saying where the excused trophies are (base game, DLC or both) and
+        whether the platinum went with them (owner, 2026-10-25).{% endcomment %}
+        {% if s.excused_games %}
+        <div class="bd-groups{% if not s.list_games %} bd-groups--lead{% endif %}">
+            {% for n in s.excused_notes %}{% include 'trophies/partials/badge_detail/_excused_note.html' %}{% endfor %}
+            <div class="bd-stage__grid">
+                {% for e in s.excused_games %}
+                {% include 'trophies/partials/badge_detail/badge_detail_items.html' with game=e.game pgame=e.pgame ratings=e.ratings has_guide=e.has_guide contract=e.contract excused_count=e.excused_count excused_done=e.excused_done plat_excused=e.plat_excused group=None profile=target_profile %}
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
         {% comment %}Trophy groups: one group inside another list counts on its own (the Kingdom Hearts PS5
         collections). Their own row UNDER the full lists, so a group card never sits among full lists looking
         like one, led by a banner that says it in words, one sentence per group, scoped to its list so groups from
-        two different lists each name theirs (owner, 2026-10-25).{% endcomment %}
+        two different lists each name theirs (owner, 2026-10-25). A group with excused trophies adds that
+        sentence too.{% endcomment %}
         {% if s.group_games %}
-        <div class="bd-groups{% if not s.list_games %} bd-groups--lead{% endif %}">
+        <div class="bd-groups{% if not s.list_games and not s.excused_games %} bd-groups--lead{% endif %}">
             {% for group_name, list_name in s.group_notes %}
             <p class="bd-gnote">{% include 'partials/icons/trophy_group.html' %}<span>In <strong>{{ list_name }}</strong>, only the trophies in <strong>{{ group_name }}</strong> count here.</span></p>
             {% endfor %}
+            {% for n in s.group_excused_notes %}{% include 'trophies/partials/badge_detail/_excused_note.html' %}{% endfor %}
             <div class="bd-stage__grid">
                 {% for e in s.group_games %}
                 {% include 'trophies/partials/badge_detail/badge_detail_items.html' with game=e.game pgame=e.pgame ratings=e.ratings has_guide=e.has_guide contract=e.contract excused_count=e.excused_count excused_done=e.excused_done group=e.group group_name=e.group_name profile=target_profile %}

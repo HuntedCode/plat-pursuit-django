@@ -54,6 +54,13 @@ class ExcusedList:
             return sum(self.excused.values())
         return self.excused.get(group_id, 0)
 
+    def split(self):
+        """Where the excused trophies sit, for saying it in words: (base-game trophies, DLC trophies, platinum).
+        The base count leaves the platinum out; it is reported on its own."""
+        base = self.excused.get(BASE_GROUP, 0) - (1 if self.plat_excused else 0)
+        dlc = sum(n for gid, n in self.excused.items() if gid != BASE_GROUP)
+        return base, dlc, self.plat_excused
+
     def dead(self, group_id):
         """Every trophy in this bar's group is excused, so nothing is left to earn there."""
         return group_id in self.required and not self.required[group_id]
@@ -154,6 +161,10 @@ class ExcusedProgress:
     def plat_excused(self, game_id):
         xl = self._lists.get(game_id)
         return bool(xl and xl.plat_excused)
+
+    def split(self, game_id):
+        xl = self._lists.get(game_id)
+        return xl.split() if xl else (0, 0, False)
 
     def dead(self, game_id, group_id):
         xl = self._lists.get(game_id)
