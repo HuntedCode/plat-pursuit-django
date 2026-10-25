@@ -144,11 +144,15 @@ the stage's SAVED members, as the bundle-vs-standalone check always has, so a ch
 checked against the other's previous state. `generate_badge_stages --append` never writes onto a stage that
 holds a list through a group; it reports the addition for a hand edit, as it does for bundles.
 
-**On the badge page** a group stage says what it is three times, because a group card on its own reads as the
-whole game (owner, 2026-10-25): the collapsed header counts "1 trophy group" when that is all the stage holds,
-the opened stage leads with one sentence per group ("In Y, only the trophies in X count here", scoped to the list
-because the stage may also hold whole lists that count in full),
-and the card's art carries a "Trophy group" label. A group card is named for the group, shows its icon, says
+**On the badge page** trophy groups sit in their own panel UNDER the stage's full lists (owner, 2026-10-25),
+in the bundle panel's shape: "Trophy group(s)", then "Only this group counts, not the rest of its list" (or the
+plural). So a group card never sits in a row of full lists looking like one, and groups from several different
+lists share the one panel, each card naming its list. A stage held only by groups opens straight onto the panel,
+and its collapsed header counts "N trophy groups" (one per card, as it counts versions of games). The card's
+art also carries a "Trophy group" label, which stays in view on a phone after the panel's head scrolls away.
+A group whose list is unobtainable on the edition goes in the stage's unobtainable list like any version,
+named "X · in Y".
+A group card is named for the group, shows its icon, says
 which list it ships in ("Part of Y"), and
 reads the viewer's progress on the group (its `pgame` is the `ProfileTrophyGroup` row). It carries no contract
 band and no platinum chip, since both are the whole list's. Its ratings are the group's own. My Stats counts
