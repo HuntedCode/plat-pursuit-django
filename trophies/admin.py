@@ -4,7 +4,7 @@ from django.contrib import admin, messages
 from django.contrib.admin import SimpleListFilter
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.db.models import Count, F, IntegerField, Prefetch, Q, Value
+from django.db.models import Count, Exists, F, IntegerField, OuterRef, Prefetch, Q, Value
 from django.db.models.functions import Cast, Coalesce
 from django.forms.models import BaseInlineFormSet
 from django.urls import reverse
@@ -599,19 +599,80 @@ class ProfileGameAdmin(admin.ModelAdmin):
     game_played_count.admin_order_field = 'game__played_count'
 
 
+class RoadmapSaysUnobtainableFilter(SimpleListFilter):
+    """Trophies a roadmap writer ticked "Unobtainable" in the roadmap editor. A HINT for staff, never the flag
+    itself: the tick is guide text, per game (every version), and set by writers; `Trophy.is_unobtainable` is
+    per list version and changes badge earns, so staff confirm it here (owner, 2026-10-25)."""
+    title = 'roadmap says unobtainable'
+    parameter_name = 'roadmap_unobtainable'
+
+    def lookups(self, request, model_admin):
+        return (('yes', 'Yes'), ('unconfirmed', 'Yes, not flagged here'))
+
+    def queryset(self, request, queryset):
+        if self.value() == 'yes':
+            return queryset.filter(roadmap_unobtainable=True)
+        if self.value() == 'unconfirmed':
+            return queryset.filter(roadmap_unobtainable=True, is_unobtainable=False)
+        return queryset
+
+
 @admin.register(Trophy)
 class TrophyAdmin(admin.ModelAdmin):
     list_display = (
         "trophy_name",
         "game",
         "trophy_type",
+        "trophy_group_id",
+        "is_unobtainable",
+        "roadmap_hint",
         "trophy_rarity",
         "trophy_earn_rate",
         "earned_count",
         "earn_rate",
     )
     list_select_related = ('game',)
-    list_filter = ("trophy_type", "trophy_rarity", "game__title_platform")
+    list_filter = ("is_unobtainable", RoadmapSaysUnobtainableFilter, "trophy_type", "trophy_rarity", "game__title_platform")
+    actions = ['mark_trophies_unobtainable', 'mark_trophies_obtainable']
+
+    def get_queryset(self, request):
+        # One EXISTS per row for the roadmap hint column + filter, not a query per row.
+        return super().get_queryset(request).annotate(roadmap_unobtainable=Exists(
+            TrophyGuide.objects.filter(
+                roadmap__concept_id=OuterRef('game__concept_id'), trophy_id=OuterRef('trophy_id'),
+                is_unobtainable=True,
+            )
+        ))
+
+    @admin.display(description='Roadmap says unobtainable', boolean=True)
+    def roadmap_hint(self, obj):
+        return obj.roadmap_unobtainable
+
+    @admin.action(description="Mark unobtainable (badges excuse them)", permissions=['change'])
+    def mark_trophies_unobtainable(self, request, queryset):
+        self._set_unobtainable(request, queryset, True)
+
+    @admin.action(description="Mark obtainable again", permissions=['change'])
+    def mark_trophies_obtainable(self, request, queryset):
+        self._set_unobtainable(request, queryset, False)
+
+    def _set_unobtainable(self, request, queryset, value):
+        """Flip the flag, then say which badge series it touches. Badges are NOT re-run here: a series can have
+        thousands of hunters, far past an admin request's time limit, so the nightly run (or the command
+        named in the message) picks the change up."""
+        from trophies.services.stage_membership import stage_has_concept_q
+
+        changed = queryset.exclude(is_unobtainable=value)
+        concept_ids = set(changed.values_list('game__concept_id', flat=True))
+        updated = changed.update(is_unobtainable=value)
+        verb = 'unobtainable' if value else 'obtainable'
+        messages.success(request, f"Marked {updated} trophy(ies) {verb}.")
+        slugs = sorted(set(
+            Stage.objects.filter(stage_has_concept_q(concept_ids)).values_list('series_slug', flat=True)
+        )) if updated else []
+        if slugs:
+            commands = '; '.join(f'evaluate_badges --series {slug}' for slug in slugs)
+            messages.info(request, f"Badges pick this up in tonight's run. To apply it now: {commands}")
     search_fields = (
         "trophy_name",
         "trophy_detail",
@@ -625,6 +686,10 @@ class TrophyAdmin(admin.ModelAdmin):
         (
             "Core Info",
             {"fields": ("trophy_id", "trophy_name", "trophy_type", "game", "trophy_detail")},
+        ),
+        (
+            "Badges",
+            {"fields": ("is_unobtainable",)},
         ),
         (
             "Rewards",
