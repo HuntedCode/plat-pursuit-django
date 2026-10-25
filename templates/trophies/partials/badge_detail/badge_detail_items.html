@@ -2,14 +2,19 @@
 {% comment %} Stage game card, rebuilt from scratch (Variant A): cover-forward + a distinct CONTRACT footer
 band (the game's home Contract -- jobs + XP -- a hook into the gamification system). Curated to what a
 hunter needs at a glance: cover (state overlay + one progress bar), name, your % + plat status, community
-difficulty/hours. Expects: game, pgame (profile_game), ratings, has_guide, contract, profile.
+difficulty/hours. Expects: game, pgame (profile_game), ratings, has_guide, contract, profile, and optional `group`.
 The card body links to the GAME; the contract band is its OWN link (different target) -- so the card is a
-container, not one big <a>. {% endcomment %}
+container, not one big <a>.
+
+`group` (a ConceptTrophyGroup, named `group_name`) makes this a TROPHY-GROUP card: a game shipped inside another list (the Kingdom
+Hearts PS5 collections). It shows the group's name and icon, names the list it ships in, and `pgame` is the
+viewer's progress on that group, not on the list. The list's platinum chip is left off: it is not this
+game's. {% endcomment %}
 {% with prog=pgame.progress|default:0 %}
 <div class="bd-gcard{% if pgame.progress == 100 %} is-done{% elif pgame.earned_trophies.platinum == 1 %} is-plat{% endif %}">
     <a class="bd-gcard__main" href="{% if profile %}{% url 'game_detail_with_profile' game.np_communication_id profile.psn_username %}{% else %}{% url 'game_detail' game.np_communication_id %}{% endif %}">
         <div class="bd-gcard__cover{% if not pgame or pgame.progress == 0 %} is-dim{% endif %}">
-            <img src="{{ game.display_image_url }}" alt="" loading="lazy" />
+            <img src="{% if group.icon_url %}{{ group.icon_url }}{% else %}{{ game.display_image_url }}{% endif %}" alt="" loading="lazy" />
             {% comment %} State flags are decorative (aria-hidden): the same done/plat state is text in .bd-gcard__facts. {% endcomment %}
             {% if pgame.progress == 100 %}
             <span class="bd-gcard__flag bd-gcard__flag--done" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
@@ -25,14 +30,20 @@ container, not one big <a>. {% endcomment %}
             {% endif %}
         </div>
         <div class="bd-gcard__body">
+            {% if group %}
+            <p class="bd-gcard__name">{{ group_name }}</p>
+            <p class="bd-gcard__from">In {{ game.title_name }}</p>
+            {% else %}
             <p class="bd-gcard__name">{{ game.title_name }}</p>
+            {% endif %}
             <div class="bd-gcard__badges">
                 {% for platform in game.title_platform reversed %}<span class="bd-meta-tag bd-meta-tag--{{ platform|platform_color_str }}">{{ platform }}</span>{% endfor %}
                 {% include 'partials/region_badges.html' with game=game badge_size='badge-xs' %}
             </div>
             <div class="bd-gcard__facts">
                 {% if pgame %}<span class="bd-gcard__pct{% if pgame.progress == 100 %} is-done{% endif %}">{{ prog }}%</span>{% endif %}
-                {% if game.defined_trophies.platinum %}
+                {% if group %}
+                {% elif game.defined_trophies.platinum %}
                     {% if pgame.earned_trophies.platinum == 1 %}<span class="bd-gcard__plat is-earned">{% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-platinum)' size='w-3 h-3' %}Plat</span>
                     {% else %}<span class="bd-gcard__plat">Has plat</span>{% endif %}
                 {% else %}<span class="bd-gcard__plat is-none">No plat</span>{% endif %}
