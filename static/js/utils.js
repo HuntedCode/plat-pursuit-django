@@ -2691,11 +2691,16 @@ window.PlatPursuit.countUp = countUp;
  * ITS stacking context) at viewport point (cx, cy); each arcs up-and-out, falls under "gravity" and removes
  * itself. `color` is any CSS colour string. A no-op under reduced motion or without a layer.
  *
+ * `opts.explode` (the celebration moments, owner 2026-10-25): a burst that throws sparks across much of the
+ * screen, then lets them fall SLOWLY, under gravity, off the bottom edge, instead of the ceremony's tight
+ * local arc. Fewer on a narrow screen.
+ *
  * SHARED by the claim ceremony and the celebration moments (moments.js), which is why it lives here. Both call
  * it through a feature test, so a browser holding a cached older utils.js gets no sparks rather than an error.
  */
-function sparkBurst(layer, cx, cy, color, n) {
+function sparkBurst(layer, cx, cy, color, n, opts = {}) {
     if (!layer || (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches)) return;
+    if (opts.explode) { explodeSparks(layer, cx, cy, color, n); return; }
     for (let i = 0; i < n; i++) {
         const s = document.createElement('span');
         s.className = 'pp-spark';
@@ -2711,6 +2716,32 @@ function sparkBurst(layer, cx, cy, color, n) {
             { transform: 'translate(' + dx + 'px,' + dy + 'px) scale(0.9)', opacity: 1, offset: 0.35 },
             { transform: 'translate(' + (dx * 1.35) + 'px,' + fall + 'px) scale(0.25)', opacity: 0 },
         ], { duration: 560 + Math.random() * 320, easing: 'cubic-bezier(0.2, 0.55, 0.35, 1)' });
+        anim.onfinish = () => s.remove();
+    }
+}
+function explodeSparks(layer, cx, cy, color, n) {
+    const w = window.innerWidth, h = window.innerHeight;
+    const count = w < 640 ? Math.round(n * 0.55) : n;
+    const reach = Math.min(w, 1100) * 0.5;
+    for (let i = 0; i < count; i++) {
+        const s = document.createElement('span');
+        s.className = 'pp-spark';
+        s.style.left = cx + 'px'; s.style.top = cy + 'px';
+        s.style.setProperty('--sc', color);
+        layer.appendChild(s);
+        // Out in every direction but mostly UP, the way a struck spark flies, then down past the bottom edge.
+        const ang = (-90 + (Math.random() * 280 - 140)) * Math.PI / 180;
+        const dist = reach * (0.25 + Math.random() * 0.75);
+        const dx = Math.cos(ang) * dist, dy = Math.sin(ang) * dist * 0.8;
+        const drift = dx * (0.15 + Math.random() * 0.3);
+        const floor = (h - cy) + 40 + Math.random() * 120;          // below the viewport: it falls OFF the page
+        const size = 0.7 + Math.random() * 0.8;
+        const anim = s.animate([
+            { transform: `translate(0,0) scale(${size})`, opacity: 1, easing: 'cubic-bezier(0.15, 0.7, 0.35, 1)' },
+            { transform: `translate(${dx}px,${dy}px) scale(${size})`, opacity: 1, offset: 0.2,
+              easing: 'cubic-bezier(0.45, 0, 0.85, 0.55)' },     // the top of the arc, then gravity takes it
+            { transform: `translate(${dx + drift}px,${floor}px) scale(${size * 0.6})`, opacity: 0.85 },
+        ], { duration: 3000 + Math.random() * 1500 });
         anim.onfinish = () => s.remove();
     }
 }
