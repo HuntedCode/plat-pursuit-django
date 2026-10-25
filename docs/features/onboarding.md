@@ -138,6 +138,13 @@ achievement.
 - **Team preview**: `/?preview=launch-welcome` (staff/moderators), mirroring the landing and
   syncing preview doors.
 
+## After the first sync: the welcome moment
+
+A hunter's first finished sync records ONE welcome moment ("Your Pursuit begins", what they arrived with)
+in place of a moment per badge and platinum, and plays it on their first My Pursuit page. Every later earn
+gets a moment of its own. See [Celebration Moments](moments.md). Its played state is a server column per
+moment, NOT a `ui_flags` shape.
+
 ## The `ui_flags` pattern
 
 `CustomUser.ui_flags` (JSONField, mirrors `browse_defaults`) holds one-shot education flags:

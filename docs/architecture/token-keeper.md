@@ -278,6 +278,11 @@ every ladder and reconciles Discord roles **only** when a role-bearing tier was 
 sync never re-asserts roles against the bot. Community members only (site account OR verified Discord);
 scouts and unregistered synced profiles are skipped. Wrapped so a failure never breaks the sync.
 
+Right after it, still in `finishing`: the newly crossed platinum-count tiers become celebration moments, and
+a hunter's FIRST finished sync records its one welcome moment and stamps `Profile.moments_since`
+(`moment_service.record_milestones` / `start_moments`, wrapped the same way). Last, so nothing a first sync
+awarded is also recorded one by one. See [Celebration Moments](../features/moments.md).
+
 ### Deferred Notifications
 
 Platinum and badge notifications are not sent immediately during sync. Instead:

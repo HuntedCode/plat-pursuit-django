@@ -6,7 +6,7 @@
 >
 > **Why hidden rather than deleted.** The producers are wired into `psn_api_service` (sync), `token_keeper` (the worker), `donation_service` (Stripe) and `subscription_service` — and a rebuilt notification system still needs "badge earned", "platinum earned", "sync finished", "donation received". Deleting those call sites would mean writing them again later, in the four files least worth re-opening. Hiding throws away only the part being rebuilt.
 >
-> **What was actually removed:** the navbar bell, `static/js/notifications.js` (which fetched an unread count on *every* page load for every authed user), `CelebrationManager.celebratePlatinum` and the `.pp-navicon__badge` CSS. The platinum confetti went deliberately — it fired from an inbox poll rather than from earning anything, so it went off on whatever page you opened next.
+> **What was actually removed:** the navbar bell, `static/js/notifications.js` (which fetched an unread count on *every* page load for every authed user), `CelebrationManager.celebratePlatinum` and the `.pp-navicon__badge` CSS. The platinum confetti went deliberately — it fired from an inbox poll rather than from earning anything, so it went off on whatever page you opened next. Its replacement is [Celebration Moments](../features/moments.md) (2026-10), recorded at the earn and played on My Pursuit pages.
 >
 > **One deliberate exception:** the URL *names* are all preserved, because three unrelated staff pages reverse `admin_notification_center` and losing the name is a hard 500 on each. (`/api/v1/admin/notifications/user-search/` was a second exception until cutover 5b, kept only for the staff Badge Creation page's user picker. That page authored legacy tier badges and was deleted, so the endpoint went with it.)
 >
