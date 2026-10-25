@@ -19,9 +19,8 @@ from django.db.models import F
 from django.db.models.functions import Greatest
 from django.utils import timezone
 
-from trophies.models import GroupBadge, SeriesAward, UserGroupBadge
+from trophies.models import GroupBadge, RewardAnnouncement, SeriesAward, UserGroupBadge
 from trophies.services import moment_service
-from trophies.services.moment_service import record_badge as record_badge_moment
 from trophies.services.badge_engine import evaluate_series_rewards
 from trophies.services.badge_orchestrator import (
     resolve_group_badges, build_catalog, evaluate_with_catalog,
@@ -113,7 +112,7 @@ def apply_changes(profile, changes, gb_map: dict) -> dict:
             emit_badge_earned(profile.id, gb.id)
             # Its celebration, played on the hunter's next My Pursuit page (moment_service). Every award path
             # comes through here, nightly and rechecks included: a badge earned is news however it was noticed.
-            record_badge_moment(profile, gb, ch.earned_date)
+            moment_service.record_badge(profile, gb, ch.earned_date)
             result['awarded'].append(gb.id)
         elif ch.action == 'revoke':
             UserGroupBadge.objects.filter(profile=profile, group_badge=gb).delete()
@@ -139,44 +138,63 @@ def apply_changes(profile, changes, gb_map: dict) -> dict:
     return result
 
 
-@transaction.atomic
-def apply_series_rewards(profile, desired, group_badges) -> list:
+def apply_series_rewards(profile, desired, group_badges, held=None) -> list:
     """A series' Full Set and Series Master, from its editions' results (`badge_engine.evaluate_series_rewards`).
     Binary like a hold: gained creates the `SeriesAward`, lost deletes it. Returns what was GAINED, as
     [(kind, series, finished_at)], for the announcement.
 
     Needs EVERY live edition of a series in `desired`, which every entry point gives (they scope by series, see
-    `evaluate_for_touched_games`); a partial list would read a Full Set as lost. One read of the hunter's awards
-    for the run's series."""
-    editions, series = defaultdict(list), {}
-    for gb in group_badges:
-        if gb.id in desired:
-            editions[gb.series_id].append(desired[gb.id])
-            series[gb.series_id] = gb.series
-    if not editions:
+    `evaluate_for_touched_games`); a partial list would read a Full Set as lost.
+
+    `held`: the hunter's current awards as {(series_id, kind)}, when the caller already read them (the nightly
+    batch reads the catalogue's once, so 300,000 profiles do not each send a query); else one read here. A
+    transaction opens only when something changes.
+
+    NEVER RAISES. It runs after the badges are committed and before their announcement and the XP recompute:
+    a reward is not worth either. A sync and the nightly racing the same hunter both see "not held" and both
+    create; `get_or_create` lets the loser find the winner's row (and stay silent) instead of raising."""
+    try:
+        editions, series = defaultdict(list), {}
+        for gb in group_badges:
+            if gb.id in desired:
+                editions[gb.series_id].append(desired[gb.id])
+                series[gb.series_id] = gb.series
+        if not editions:
+            return []
+        if held is None:
+            held = set(SeriesAward.objects.filter(profile=profile, series_id__in=list(editions))
+                       .values_list('series_id', 'kind'))
+        gains, losses = [], []
+        for sid, results in editions.items():
+            r = evaluate_series_rewards(results)
+            for kind, has, when in ((SeriesAward.KIND_FULL_SET, r.full_set, r.full_set_date),
+                                    (SeriesAward.KIND_SERIES_MASTER, r.series_master, r.series_master_date)):
+                if has and (sid, kind) not in held:
+                    gains.append((sid, kind, when))
+                elif not has and (sid, kind) in held:
+                    losses.append((sid, kind))
+        if not gains and not losses:
+            return []
+        gained = []
+        with transaction.atomic():
+            for sid, kind, when in gains:
+                _, created = SeriesAward.objects.get_or_create(
+                    profile=profile, series_id=sid, kind=kind, defaults={'since': when or timezone.now()})
+                if created:
+                    moment_service.record_series_reward(profile, series[sid], kind, when)
+                    gained.append((kind, series[sid], when))
+            for sid, kind in losses:
+                SeriesAward.objects.filter(profile=profile, series_id=sid, kind=kind).delete()
+        return gained
+    except Exception:
+        logger.exception('series rewards failed for profile %s', getattr(profile, 'id', None))
         return []
-    held = set(SeriesAward.objects.filter(profile=profile, series_id__in=list(editions))
-               .values_list('series_id', 'kind'))
-    gained, lost = [], []
-    for sid, results in editions.items():
-        r = evaluate_series_rewards(results)
-        for kind, has, when in ((SeriesAward.KIND_FULL_SET, r.full_set, r.full_set_date),
-                                (SeriesAward.KIND_SERIES_MASTER, r.series_master, r.series_master_date)):
-            if has and (sid, kind) not in held:
-                SeriesAward.objects.create(profile=profile, series_id=sid, kind=kind, since=when or timezone.now())
-                moment_service.record_series_reward(profile, series[sid], kind, when)
-                gained.append((kind, series[sid], when))
-            elif not has and (sid, kind) in held:
-                lost.append((sid, kind))
-    for sid, kind in lost:
-        SeriesAward.objects.filter(profile=profile, series_id=sid, kind=kind).delete()
-    return gained
 
 
 def _news_rewards(result, desired, gained, gb_map) -> list:
     """The run's new rewards worth announcing: only the ones finished recently, the rule their moments use, so
     a veteran's old mastery noticed for the first time is not announced as news."""
-    rewards = [('mastered', gb_map[gb_id], gb_map[gb_id].series) for gb_id in result['mastered']
+    rewards = [(RewardAnnouncement.KIND_MASTERED, gb_map[gb_id], gb_map[gb_id].series) for gb_id in result['mastered']
                if moment_service.is_recent_reward(desired[gb_id].mastered_date)]
     return rewards + [(kind, None, series) for kind, series, when in gained if moment_service.is_recent_reward(when)]
 
@@ -324,6 +342,12 @@ def evaluate_and_apply_batch(profiles, group_badges=None, catalog=None) -> Count
         return totals
     catalog = catalog if catalog is not None else build_catalog(group_badges)
     gb_map = {gb.id: gb for gb in group_badges}
+    # Every series award in the catalogue, read ONCE: the table holds only hunters who have one, so this is
+    # small, and it spares each profile its own read (`apply_series_rewards`).
+    awards = defaultdict(set)
+    for pid, sid, kind in SeriesAward.objects.filter(
+            series_id__in={gb.series_id for gb in group_badges}).values_list('profile_id', 'series_id', 'kind'):
+        awards[pid].add((sid, kind))
 
     for profile in profiles:
         # Per-profile insulation. Without it the first raising profile aborts the WHOLE batch, and the
@@ -335,7 +359,7 @@ def evaluate_and_apply_batch(profiles, group_badges=None, catalog=None) -> Count
             if changes:
                 for key, ids in apply_changes(profile, changes, gb_map).items():
                     totals[key] += len(ids)
-            totals['series_rewards'] += len(apply_series_rewards(profile, desired, group_badges))
+            totals['series_rewards'] += len(apply_series_rewards(profile, desired, group_badges, awards[profile.id]))
             recompute_standing(profile.id, desired, group_badges)   # XP tracks progress, not just earns
         except Exception:
             totals['failed'] += 1

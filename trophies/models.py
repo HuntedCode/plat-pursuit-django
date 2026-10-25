@@ -3852,7 +3852,8 @@ class RewardAnnouncement(models.Model):
     binary, so PSN flux or a new stage would otherwise re-ping a hunter about one they have had for a year.
     Owner, 2026-10-25: once ever per hunter.
     """
-    KIND_CHOICES = [('mastered', 'Mastered'), ('full_set', 'Full Set'), ('series_master', 'Series Master')]
+    KIND_MASTERED = 'mastered'
+    KIND_CHOICES = [(KIND_MASTERED, 'Mastered')] + SeriesAward.KIND_CHOICES
 
     profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='reward_announcements')
     kind = models.CharField(max_length=16, choices=KIND_CHOICES)
@@ -3888,9 +3889,10 @@ class Moment(models.Model):
     """
     KIND_WELCOME = 'welcome'
     KIND_BADGE = 'badge'
-    KIND_MASTERED = 'mastered'
-    KIND_FULL_SET = 'full_set'
-    KIND_SERIES_MASTER = 'series_master'
+    # The reward kinds are the SAME strings as the reward tables' own (moment_service.pending joins on them).
+    KIND_MASTERED = RewardAnnouncement.KIND_MASTERED
+    KIND_FULL_SET = SeriesAward.KIND_FULL_SET
+    KIND_SERIES_MASTER = SeriesAward.KIND_SERIES_MASTER
     KIND_PLATINUM = 'platinum'
     KIND_MILESTONE = 'milestone'
     KIND_CHOICES = [

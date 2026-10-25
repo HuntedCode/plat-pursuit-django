@@ -161,7 +161,8 @@ class Command(BaseCommand):
 
         verb = "Would" if dry else "Did"
         self.stdout.write(self.style.SUCCESS(
-            f"\n{verb}: {totals['awarded']} awarded, {totals['revoked']} revoked, {totals['updated']} updated."
+            f"\n{verb}: {totals['awarded']} awarded, {totals['revoked']} revoked, {totals['updated']} updated, "
+            f"{totals['mastered']} newly mastered, {totals['series_rewards']} series rewards gained."
         ))
 
     @staticmethod

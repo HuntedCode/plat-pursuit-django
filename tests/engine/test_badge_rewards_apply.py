@@ -252,3 +252,91 @@ def test_an_old_reward_is_not_announced(mock_send):
     evaluate_and_apply(hunter, notify=True)
     body = str(mock_send.call_args)
     assert 'Mastered' not in body, 'a veteran\'s old mastery is not news'
+
+
+# -- the seam's guarantees (audit, 2026-10-25) -------------------------------------------------------------------
+
+def test_a_full_set_both_runs_create_is_found_not_raised():
+    """A sync and the nightly racing the same hunter both read "not held". The loser finds the winner's row,
+    stays silent, and raises nothing (a raise here would cost the badges' announcement and the XP recompute)."""
+    from trophies.services.badge_apply import apply_series_rewards
+    from trophies.services.badge_orchestrator import evaluate_profile
+
+    series, badges, games = _series((1, [CROSS]))
+    hunter = _hunter()
+    _finish(hunter, games[1][0])
+    desired = evaluate_profile(hunter, list(badges.values()))
+    SeriesAward.objects.create(profile=hunter, series=series, kind=SeriesAward.KIND_FULL_SET, since=timezone.now())
+
+    gained = apply_series_rewards(hunter, desired, list(badges.values()), held=set())   # the stale read
+    assert gained == [] or all(kind != SeriesAward.KIND_FULL_SET for kind, _, _ in gained)
+    assert SeriesAward.objects.filter(profile=hunter, series=series, kind=SeriesAward.KIND_FULL_SET).count() == 1
+    assert not Moment.objects.filter(profile=hunter, kind=Moment.KIND_FULL_SET).exists()
+
+
+@patch('trophies.discord_utils.discord_notifications.queue_webhook_send')
+def test_a_failing_series_reward_never_costs_the_badges_their_announcement(mock_send):
+    _, badges, games = _series((1, [CROSS]))
+    hunter = _hunter(is_discord_verified=True, discord_id='123')
+    _finish(hunter, games[1][0])
+    with patch('trophies.services.badge_apply.evaluate_series_rewards', side_effect=RuntimeError('boom')):
+        result = evaluate_and_apply(hunter, notify=True)
+    assert len(result['awarded']) == 2
+    assert mock_send.call_count == 1 and 'Ultra HD' in str(mock_send.call_args)
+
+
+@patch('trophies.discord_utils.discord_notifications.queue_webhook_send')
+def test_a_run_with_only_a_new_reward_sends_the_rewards_embed(mock_send):
+    _, badges, games = _series((1, [ULTRA]), (0, [ULTRA]), legacy=False)
+    hunter = _hunter(is_discord_verified=True, discord_id='123')
+    _finish(hunter, games[1][0])
+    _finish(hunter, games[0][0], full=False)
+    evaluate_and_apply(hunter, notify=True)          # the badge: one embed
+    _finish(hunter, games[0][0])
+    evaluate_and_apply(hunter, notify=True)          # then the mastery alone
+    assert mock_send.call_count == 2
+    assert 'Mastered' in str(mock_send.call_args)
+
+
+@patch('trophies.discord_utils.discord_notifications.queue_webhook_send')
+def test_a_hunter_without_discord_is_not_sent_anything(mock_send):
+    _, _, games = _series((1, [ULTRA]), legacy=False)
+    hunter = _hunter(is_discord_verified=False)
+    _finish(hunter, games[1][0])
+    evaluate_and_apply(hunter, notify=True)
+    assert mock_send.call_count == 0
+
+
+def test_the_nightly_batch_reads_series_awards_once_not_per_profile():
+    from django.db import connection
+    from django.test.utils import CaptureQueriesContext
+
+    _, _, games = _series((1, [CROSS]))
+    hunters = [_hunter() for _ in range(3)]
+    for h in hunters:
+        _finish(h, games[1][0])
+    evaluate_and_apply_batch(hunters)                # everyone gains it: writes
+    with CaptureQueriesContext(connection) as ctx:
+        evaluate_and_apply_batch(hunters)            # nothing changes: reads only
+    reads = [q['sql'] for q in ctx.captured_queries if 'trophies_seriesaward' in q['sql']]
+    assert len(reads) == 1, f'{len(reads)} series-award reads for 3 hunters'
+
+
+def test_a_bundle_is_mastered_by_its_last_member_to_reach_100():
+    from trophies.models import ConceptBundle
+
+    series, badges, _ = _series((1, []), legacy=False)
+    from trophies.models import Stage
+    stage = Stage.objects.get(series_slug=series.series_slug, stage_number=1)
+    bundle = ConceptBundle.objects.create(stage=stage, label='Episodes')
+    members = [ConceptFactory(), ConceptFactory()]
+    bundle.concepts.set(members)
+    first, last = (GameFactory(concept=c, title_platform=ULTRA) for c in members)
+    hunter = _hunter()
+    _finish(hunter, first, ago=timedelta(days=4))
+    _finish(hunter, last, ago=timedelta(days=1))
+
+    evaluate_and_apply(hunter)
+    mastered_at = _hold(hunter, badges['ultra-hd']).mastered_at
+    assert mastered_at is not None
+    assert abs((timezone.now() - timedelta(days=1)) - mastered_at) < timedelta(minutes=5), 'dated by the LAST member'

@@ -265,7 +265,7 @@ def send_group_badges_earned_notification(profile, group_badges, rewards=()):
         shown += 1
     if count > shown:
         lines.append(f"…and {count - shown} more")
-    lines += _reward_lines(list(rewards))
+    lines += _reward_lines(list(rewards), _MAX_BADGE_LINES - shown)   # one budget for both: the 4096 limit
 
     payload = {'embeds': [{
         'title': f"🎖️ {profile.display_psn_username} earned {count} new {noun}!",
@@ -290,10 +290,13 @@ def send_group_badges_earned_notification(profile, group_badges, rewards=()):
 _REWARD_LABELS = {'mastered': 'Mastered', 'full_set': 'Full Set', 'series_master': 'Series Master'}
 
 
-def _reward_lines(rewards):
-    """One line per reward, bounded like the badge lines: a mastery names its edition, a series reward does not."""
+def _reward_lines(rewards, limit=_MAX_BADGE_LINES):
+    """One line per reward, at most `limit` (the embed's line budget left), the rest counted: a mastery names
+    its edition, a series reward does not."""
+    if not rewards:
+        return []
     lines = []
-    for kind, gb, series in rewards[:_MAX_BADGE_LINES]:
+    for kind, gb, series in rewards[:max(limit, 0)]:
         name = f"**{_escape_md(series.name)}**" + (f" ({gb.platform_group.name})" if gb else '')
         lines.append(f"👑 {_REWARD_LABELS[kind]}: {name}")
     if len(rewards) > len(lines):
