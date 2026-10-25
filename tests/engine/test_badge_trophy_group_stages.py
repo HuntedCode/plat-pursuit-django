@@ -464,7 +464,36 @@ def test_a_lists_main_group_can_be_a_member_and_is_named_for_its_game():
 
     assert _evaluate(profile, gb).holo_satisfied_count == 1, 'holo is that game at 100%, not the collection'
     [entry] = _ultra_view(gb.series, profile).stages[0]['obtainable_games']
-    assert entry['group_name'] == 'KINGDOM HEARTS III + Re Mind (DLC)'
+    assert entry['group_name'] == 'KINGDOM HEARTS III + Re Mind (DLC) (Base Game)'
+
+
+def test_group_names_are_tagged_base_game_or_dlc_so_the_banner_never_repeats_the_lists_title():
+    """Owner, 2026-10-25: PSN names a list's main group after the list, so untagged the banner read "In X, only
+    the trophies in X count here". The main group is tagged (Base Game), every other group (DLC)."""
+    concept, game, ctgs = _collection()
+    game.trophy_groups.filter(trophy_group_id='default').update(trophy_group_name=game.title_name)
+    ctgs['001'].display_name = 'Re:Chain of Memories'
+    ctgs['001'].save()
+    gb = _series(lambda st: st.trophy_groups.add(ctgs['default'], ctgs['001']))
+
+    stage = _ultra_view(gb.series, None).stages[0]
+
+    assert sorted(stage['group_notes']) == [('Kingdom Hearts Collection (Base Game)', 'Kingdom Hearts Collection'),
+                                            ('Re:Chain of Memories (DLC)', 'Kingdom Hearts Collection')]
+    html = render_to_string('trophies/partials/badge_detail/bd2_stage.html', {'s': stage})
+    assert ('In <strong>Kingdom Hearts Collection</strong>, only the trophies in '
+            '<strong>Kingdom Hearts Collection (Base Game)</strong> count here.') in html
+    assert '<p class="bd-gcard__name">Re:Chain of Memories (DLC)</p>' in html
+
+
+def test_a_main_group_without_a_psn_name_takes_the_lists_title_and_the_tag():
+    concept, game, ctgs = _collection()
+    game.trophy_groups.filter(trophy_group_id='default').update(trophy_group_name='')
+    gb = _series(lambda st: st.trophy_groups.add(ctgs['default']))
+
+    [entry] = _ultra_view(gb.series, None).stages[0]['obtainable_games']
+
+    assert entry['group_name'] == 'Kingdom Hearts Collection (Base Game)'
 
 
 def test_a_delisted_list_retires_its_group_stage_where_delisted_titles_are_excluded():
@@ -643,13 +672,13 @@ def test_a_group_only_stage_says_so_on_its_header_and_banner():
     stage = _ultra_view(gb.series, None).stages[0]
 
     assert (stage['list_games'], len(stage['group_games'])) == ([], 2)
-    assert stage['group_notes'] == [('Re:Chain of Memories', 'Kingdom Hearts Collection')]
+    assert stage['group_notes'] == [('Re:Chain of Memories (DLC)', 'Kingdom Hearts Collection')]
     html = render_to_string('trophies/partials/badge_detail/bd2_stage.html', {'s': stage})
     assert '2 trophy groups</span>' in html, 'one card per version, as the header counts games'
     assert 'class="bd-groups bd-groups--lead"' in html
     assert html.count('class="bd-gnote"') == 1
     assert ('In <strong>Kingdom Hearts Collection</strong>, only the trophies in '
-            '<strong>Re:Chain of Memories</strong> count here.') in html
+            '<strong>Re:Chain of Memories (DLC)</strong> count here.') in html
     assert html.count('class="bd-stage__grid"') == 1, 'no empty full-list grid above it'
 
 

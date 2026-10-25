@@ -152,7 +152,10 @@ onto the row, and its collapsed header counts "N trophy groups" (one per card, a
 art also carries a "Trophy group" label, which stays in view on a phone after the panel's head scrolls away.
 A group whose list is unobtainable on the edition goes in the stage's unobtainable list like any version,
 named "X · in Y".
-A group card is named for the group, shows its icon, says
+A group card is named for the group, tagged "(Base Game)" for a list's `default` group and "(DLC)" for any
+other (owner, 2026-10-25): PSN usually names the main group after the list itself, and untagged the banner
+read "In Y, only the trophies in Y count here". The tag rides on the name everywhere it shows (card, banner,
+unobtainable row, the stage-title fallback). The card shows the group's icon, says
 which list it ships in ("Part of Y"), and
 reads the viewer's progress on the group (its `pgame` is the `ProfileTrophyGroup` row). It carries no contract
 band and no platinum chip, since both are the whole list's. Its ratings are the group's own. My Stats counts

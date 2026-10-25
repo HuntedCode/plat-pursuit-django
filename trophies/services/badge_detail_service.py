@@ -235,10 +235,13 @@ def _group_entry(ctg, game, tg, group_progress, group_ratings) -> dict:
     is not what this stage asks for.
 
     `group_name`: the CTG's display name, except for a list's MAIN ('default') group, whose CTG name is always
-    "Base Game" (ConceptTrophyGroupService); there PSN's own group name, else the list's, names the game."""
-    name = ctg.display_name
+    "Base Game" (ConceptTrophyGroupService); there PSN's own group name, else the list's, names the game. It is
+    tagged "(Base Game)" or "(DLC)" (owner, 2026-10-25): PSN usually names the main group after the list, so
+    untagged, "only the trophies in X" read as the whole list."""
     if ctg.trophy_group_id == 'default':
-        name = tg.trophy_group_name or game.title_name
+        name = f'{tg.trophy_group_name or game.title_name} (Base Game)'
+    else:
+        name = f'{ctg.display_name} (DLC)'
     return {
         'game': game, 'pgame': group_progress.get(tg.id), 'ratings': group_ratings.get(ctg.id),
         'has_guide': False, 'contract': None, 'group': ctg, 'group_name': name,
