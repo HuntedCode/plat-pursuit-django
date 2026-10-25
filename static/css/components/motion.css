@@ -4,6 +4,15 @@
  * always get the final resting state with no movement.
  * ============================================================ */
 
+/* Hot sparks (PlatPursuit.sparkBurst, utils.js): the earn vocabulary, shared by the claim ceremony and the
+ * celebration moments. The JS animates each one (arc + gravity) and skips them under reduced motion; the
+ * caller owns the fixed layer they spawn into. */
+.pp-spark {
+    position: fixed; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 999px; pointer-events: none;
+    background: radial-gradient(circle, #fff 0%, var(--sc, var(--pp-primary)) 70%);
+    box-shadow: 0 0 6px var(--sc, var(--pp-primary)); will-change: transform, opacity;
+}
+
 /* Page header / hero entrance: the opening beat of a rebuilt page. Put .pp-head-cascade on a header's
  * card-body -- its DIRECT CHILDREN fade + rise (9px) in a staggered cascade (title, then stats, then the
  * rest) for a livelier, layered entrance than moving the whole card as one block. A card-body with a

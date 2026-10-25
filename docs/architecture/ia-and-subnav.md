@@ -318,6 +318,10 @@ both halves of what lives here, where "Membership" would name only one of them.
   is gated on the `my_pursuit` hub key before any read, honours `?preview=career-markers` the same way the nav
   does, and fails closed. Note `hub_subnav` is registered BEFORE `career_attention`, so the strip is the one
   that pays a cold miss.
+- **The moments pill** (2026-10) sits at the END of the My Pursuit strip, after the rail and its More (so the
+  rail's fold still measures only itself), and beside the collapsed bar on phones: "3 new platinums" opens the
+  platinum reel. It is `{% moments_pill %}`, rendered only when `hub_section == 'my_pursuit'`, reading the
+  same once-per-request read as the moment player. See [Celebration Moments](../features/moments.md).
 
 ### The strip: desktop row + mobile collapse-to-grid
 

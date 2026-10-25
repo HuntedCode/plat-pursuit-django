@@ -256,7 +256,7 @@
   "checkbox": 12
  },
  "templates/users/settings.html": {
-  "checkbox": 15
+  "checkbox": 6
  },
  "trophies/forms.py": {
   "input": 10,

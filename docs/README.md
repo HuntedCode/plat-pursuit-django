@@ -77,6 +77,7 @@ Self-contained feature documentation. Read the relevant doc when working on that
 | [Game Leaderboards](features/game-leaderboards.md) | Per-game Ranks tab: completion ranking with first-to-finish tie-break, keyset pagination, jump-to-my-rank; why it is DB-only and lazy-loaded |
 | [Game Ratings Tab](features/game-ratings.md) | Per-game Ratings tab: aggregate conditions card, per-quality tiles, Your take, quick-take blurbs + moderation/guidelines; the deferred "blurbs at scale" cluster |
 | [Home Page Router](features/home-page.md) | Smart `/` router: anonymous, no-PSN, syncing, and synced shells |
+| [Celebration Moments](features/moments.md) | Badge, platinum, milestone and first-sync welcome moments: recorded at the earn, played once on My Pursuit pages (badges auto-play, platinums wait behind the strip's pill) |
 | [Onboarding](features/onboarding.md) | The syncing hero, the enter moment, and the Career first-visit explainer |
 | [Monthly Recap](features/monthly-recap.md) | Recap generation, slides, email, share cards |
 | [Admin Hub](features/admin-hub.md) | Admin tools at `/staff/`: the landing, per-person history, restrictions, the decision log with reversal, and the `AdminAction` audit log |

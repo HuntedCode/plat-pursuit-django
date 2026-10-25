@@ -16,10 +16,13 @@
     align-items: center;
 }
 /* tier accents (aura / ring / count) */
-.pp-med[data-tier="bronze"]   { --med-c: #cf9160; --med-glow: #e6ad74; }
-.pp-med[data-tier="silver"]   { --med-c: #b9c6d6; --med-glow: #dae4f0; }
-.pp-med[data-tier="gold"]     { --med-c: #e7c25c; --med-glow: #f4d778; }
-.pp-med[data-tier="platinum"] { --med-c: #8fd2ea; --med-glow: #c4edfb; }
+/* The four tier metals, as page-wide tokens so a surface AROUND a medallion (the celebration moment's rays)
+   can wear its tier without copying the values. The medallion reads them unchanged through --med-c. */
+:root { --med-tier-bronze: #cf9160; --med-tier-silver: #b9c6d6; --med-tier-gold: #e7c25c; --med-tier-platinum: #8fd2ea; }
+.pp-med[data-tier="bronze"]   { --med-c: var(--med-tier-bronze); --med-glow: #e6ad74; }
+.pp-med[data-tier="silver"]   { --med-c: var(--med-tier-silver); --med-glow: #dae4f0; }
+.pp-med[data-tier="gold"]     { --med-c: var(--med-tier-gold); --med-glow: #f4d778; }
+.pp-med[data-tier="platinum"] { --med-c: var(--med-tier-platinum); --med-glow: #c4edfb; }
 
 /* the square that holds the object (art + glint + aura + pedestal) */
 .pp-med__stage { position: relative; width: 100%; aspect-ratio: 1; display: grid; place-items: center; isolation: isolate; }

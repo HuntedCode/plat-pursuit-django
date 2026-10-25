@@ -103,8 +103,10 @@ class Command(BaseCommand):
                 return
             profiles = [profile]
         elif opts['all']:
-            # .only(): the batch reads profile.id; dry-run also prints psn_username -- don't hydrate full rows.
-            profiles = Profile.objects.exclude(psn_username='').only('id', 'psn_username').order_by('psn_username')
+            # .only(): the batch reads profile.id; dry-run also prints psn_username; an award's celebration moment
+            # reads user_id + moments_since -- don't hydrate full rows (or defer-load those two per award).
+            profiles = (Profile.objects.exclude(psn_username='')
+                        .only('id', 'psn_username', 'user_id', 'moments_since').order_by('psn_username'))
         elif opts['series']:
             # Process this badge for everyone who has PLAYED a game in the series (the "may have progress"
             # set) -- bounded by the series' players, not the whole user base.

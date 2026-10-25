@@ -219,6 +219,14 @@ const debouncedFn = PlatPursuit.debounce(fn, delay = 300);
 
 Creates a trailing-edge debounced function. Returns a new function that delays `fn` execution until `delay` ms after the last call.
 
+### PlatPursuit.sparkBurst
+
+```js
+PlatPursuit.sparkBurst(layer, cx, cy, color, n);
+```
+
+Hot arcing sparks, the earn vocabulary (welding sparks, never confetti): `n` `.pp-spark`s (styled in `motion.css`) spawned into `layer`, a `position: fixed; inset: 0` element the CALLER owns so the sparks sit in its stacking context, at viewport point (`cx`, `cy`). Each arcs up and out, falls and removes itself. A no-op under reduced motion or without a layer. Shared by the claim ceremony and the celebration moments; both call it feature-tested (`if (PP.sparkBurst)`), so a cached older utils.js costs the sparks, never the ceremony. A spark layer inside a transformed or scrolling box is re-anchored and clipped by it: put the layer beside the dialog, not in it. `sparkBurst(layer, cx, cy, color, n, { explode: true })` is the celebration moments' big burst: thrown across much of the screen, then falling slowly off the bottom edge (about half as many below 640px).
+
 ### PlatPursuit.InfiniteScroller
 
 Factory for infinite scroll with IntersectionObserver.

@@ -15,7 +15,7 @@ Layout (subnav.js drives the interactions):
 
 See docs/architecture/ia-and-subnav.md for the design rationale.
 {% endcomment %}
-{% if hub_section and hub_subnav_items %}
+{% if hub_section and hub_subnav_items %}{% load moments %}
 {% regroup hub_subnav_items by group as subnav_groups %}
 <nav aria-label="{{ hub_subnav_label }} sub-navigation" class="pp-sub" data-subnav>
 
@@ -49,10 +49,13 @@ See docs/architecture/ia-and-subnav.md for the design rationale.
             </button>
             <div class="pp-sub__moremenu" id="subnav-more-menu" data-subnav-more-menu role="menu" hidden></div>
         </div>
+        {% comment %}Celebration moments waiting for a tap (the platinum reel). After the rail and its More, so
+        the rail's fold still measures only itself. My Pursuit only: nothing is read on any other hub.{% endcomment %}
+        {% if hub_section == 'my_pursuit' %}{% moments_pill 'desktop' %}{% endif %}
     </div>
 
     {# Mobile (<lg): current-page trigger -> grouped sheet. #}
-    <div class="container mx-auto lg:hidden px-3">
+    <div class="container mx-auto lg:hidden px-3 pp-sub__mrow">
         {% comment %}THE MARKS RIDE THE COLLAPSED BAR, because without them the feature stopped at 1024px.
         Below `lg` the rail above is `hidden` and every pill lives in a sheet that is `visibility: hidden` until
         this button is pressed -- so on a phone the chips that say WHICH page owes something were unreachable,
@@ -74,6 +77,7 @@ See docs/architecture/ia-and-subnav.md for the design rationale.
             {% for mark in hub_subnav_marks %}<span class="pp-subpill__tag pp-subpill__tag--{{ mark.tag_kind }} pp-sub__mtag" aria-hidden="true">{{ mark.tag }}</span>{% endfor %}
             <svg class="pp-sub__mchev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
         </button>
+        {% if hub_section == 'my_pursuit' %}{% moments_pill 'mobile' %}{% endif %}
     </div>
 
     <div class="pp-sub__sheet lg:hidden" id="subnav-sheet" data-subnav-sheet aria-hidden="true">

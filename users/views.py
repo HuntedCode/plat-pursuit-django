@@ -232,6 +232,11 @@ class SettingsView(LoginRequiredMixin, View):
             # The hide toggles feed the filter-respecting trophy-count denorms.
             profile.refresh_from_db()
             update_profile_trophy_counts(profile)
+            # A user-level preference beside them: celebrations need a linked profile, as this section does.
+            play = request.POST.get('play_celebrations') == 'on'
+            if play != request.user.play_celebrations:
+                request.user.play_celebrations = play
+                request.user.save(update_fields=['play_celebrations'])
             messages.success(request, 'Library settings saved.')
         else:
             messages.error(request, 'Could not save library settings.')

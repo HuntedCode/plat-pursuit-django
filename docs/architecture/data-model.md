@@ -9,7 +9,7 @@ Platinum Pursuit's data model is organized across five Django apps: **trophies**
 These models form the foundation of the platform. They represent PSN data synchronized from the PlayStation API and the relationships between players, games, and trophies.
 
 ### Profile
-The PSN player identity on the platform. Links to a `CustomUser` via a OneToOne FK (nullable, since profiles can exist before a user registers). Stores denormalized trophy totals (`total_trophies`, `total_plats`, `total_completes`, `avg_progress`), sync state (`sync_status`, `sync_progress_value`, `sync_progress_target`), and display preferences (`selected_background` FK to Concept, `selected_theme`, `hide_hiddens`). Also tracks Discord integration (`discord_id`, `is_discord_verified`) and verification state.
+The PSN player identity on the platform. Links to a `CustomUser` via a OneToOne FK (nullable, since profiles can exist before a user registers). Stores denormalized trophy totals (`total_trophies`, `total_plats`, `total_completes`, `avg_progress`), sync state (`sync_status`, `sync_progress_value`, `sync_progress_target`), and display preferences (`selected_background` FK to Concept, `selected_theme`, `hide_hiddens`). Also tracks Discord integration (`discord_id`, `is_discord_verified`) and verification state. `moments_since` is when this hunter's celebration moments began (stamped at the end of their first finished sync; null = nothing recorded yet), see [moments.md](../features/moments.md).
 
 Key relationships:
 - `user` OneToOne to `CustomUser` (nullable, SET_NULL)
@@ -553,12 +553,15 @@ Logs PSN API calls for token monitoring: endpoint, status code, response time, r
 ## User & Account Models (users app)
 
 ### CustomUser
-Extends Django's AbstractUser with email-based authentication. Key fields: `stripe_customer_id`, `paypal_subscription_id`, `subscription_provider` (stripe/paypal), `premium_tier`, `user_timezone`, `email_preferences` (JSON). (`default_region` was deleted 2026-08: zero consumers.) The `is_premium()` method checks subscription status against both Stripe and PayPal.
+Extends Django's AbstractUser with email-based authentication. Key fields: `stripe_customer_id`, `paypal_subscription_id`, `subscription_provider` (stripe/paypal), `premium_tier`, `user_timezone`, `email_preferences` (JSON), `play_celebrations` (auto-play celebration moments, default on; see [moments.md](../features/moments.md)). (`default_region` was deleted 2026-08: zero consumers.) The `is_premium()` method checks subscription status against both Stripe and PayPal.
 
 It still carries AbstractUser's unique `username` column, though nothing signs in with it. Leaving it empty works once, then the next empty one breaks the unique constraint. So `CustomUser.save()` fills an empty one through allauth's `populate_username` (the same call signup makes), which covers signup, the admin's "Add user" form, `UserManager.create_user` (and so `manage.py createsuperuser`), and the shell. An older row saved with an empty one is filled the next time it saves (a sign-in's `last_login` write is enough: the fill adds `username` to `update_fields`). `UserFactory` sets its own via a sequence.
 
 Key relationships:
 - Reverse: `profile` OneToOne from Profile
+
+### Moment
+A celebration recorded when it happens and played once: `welcome` (a first sync's one summary), `badge` (FK `GroupBadge`), `platinum` (FK `EarnedTrophy`), `milestone`. `played_at` is server-side so it never replays on another device. FKs reach Profile, GroupBadge and EarnedTrophy only (no `Concept.absorb()` branch). See [moments.md](../features/moments.md).
 
 ### SubscriptionPeriod
 Tracks individual subscription periods for loyalty milestone calculations. A new period is created on activation and closed (`ended_at` set) on deactivation. Enforces one open period per user via a DB constraint.

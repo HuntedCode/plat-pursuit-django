@@ -1,0 +1,3 @@
+{% comment %}The strip's moments button (trophies/templatetags/moments.py): the platinum reel, or every waiting
+moment when auto-play is off. Platinums never ambush, so this is the only way they play. static/js/moments.js
+wires `data-moments-open`.{% endcomment %}{% if pill %}<button type="button" class="pp-moments-pill pp-moments-pill--{{ variant }}" data-moments-open="{{ pill.opens }}">{% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-platinum)' size='w-3.5 h-3.5' %}<span>{{ pill.label }}</span></button>{% endif %}

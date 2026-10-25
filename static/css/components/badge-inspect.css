@@ -180,6 +180,15 @@
    (collection.js). The hover-only rule below simply no-ops where there's no hover. At rest (no tilt) the
    raised layers just sit at their Z with no visible parallax, so this is harmless on a gyro-less touch device. */
 @media (prefers-reduced-motion: no-preference) {
+    /* ROOM TO TURN IT: at full tilt the raised glass dome swings up to ~19% of --sz past the badge's resting
+       box (measured: 50px at 260px, the near edge rising toward the viewer), but the dialog only gave it its
+       28px padding, so a peek with a scrolling dialog clipped it, and its bottom swung into the meter. The
+       room clears the swing with ~12px to spare (owner, 2026-10-25), in --sz terms so the phone's smaller
+       hero keeps the same proportion. Tilt-only, like the swing. */
+    .pp-bdetail__stage .pp-med { margin: calc(var(--sz) * 0.13); }
+    .pp-bdetail__stage .pp-med__meter { margin-top: calc(var(--sz) * 0.24); }
+    /* A meter's own gap already holds the bottom swing; nothing turns below it, so no room is added twice. */
+    .pp-bdetail__stage .pp-med:has(> .pp-med__meter) { margin-bottom: 0; }
     .pp-bdetail__stage .pp-med__glint { display: none; }                 /* the moving glare replaces the hover sweep here */
     .pp-bdetail__stage .pp-med__art.is-tilting { transition: transform 0.09s linear; }
     .pp-bdetail__stage .pp-med--earned:hover .pp-med__art { transform: none; }   /* JS inline transform drives the tilt; suppress the base hover-lift */
@@ -241,11 +250,11 @@
 /* Fit a tall (earned) peek on a phone WITHOUT flattening the 3D medallion: its ancestors must stay
    overflow:visible, so the dialog itself can't scroll. Instead cap the INFO column -- a SIBLING of the
    object, not a 3D ancestor, so its own scroll is safe -- and let it scroll, keeping the medallion fixed
-   above (a product-page feel). Reserve ~medallion + gap + padding. (Reduced motion drops the 3D + the
+   above (a product-page feel). Reserve ~medallion + its room to turn + gap + padding. (Reduced motion drops the 3D + the
    is-growing overflow override, so the dialog scrolls itself there -- no cap needed.) */
 @media (max-width: 640px) and (prefers-reduced-motion: no-preference) {
     .pp-bdetail__info {
-        max-height: calc(88vh - 286px); overflow-y: auto; overscroll-behavior: contain;
+        max-height: calc(88vh - 370px); overflow-y: auto; overscroll-behavior: contain;
         /* Breathing room INSIDE the scroll: content clears the medallion at the top and the "View full
            series" link renders fully at the bottom. The fade is aligned to this padding, so it lands on the
            empty padding (crisp content edges) while still fading content AS IT SCROLLS under the medallion /

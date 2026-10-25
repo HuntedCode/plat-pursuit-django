@@ -99,28 +99,11 @@
 
     var wait = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
 
-    // Hot arcing sparks (the kit's fabrication vocabulary -- NOT confetti). Spawned into the overlay's
-    // fixed spark layer at a viewport point; each arcs up-and-out then falls under "gravity" and fades.
-    // `color` is any CSS colour string (a discipline var for tier blooms, the primary accent for ranks).
+    // Hot arcing sparks (the kit's fabrication vocabulary -- NOT confetti), spawned into the overlay's fixed
+    // spark layer. The burst itself is shared with the celebration moments (PlatPursuit.sparkBurst, utils.js);
+    // feature-tested, so a cached older utils.js costs the sparks and never the ceremony.
     function sparkBurst(layer, cx, cy, color, n) {
-        if (!layer) return;
-        for (var i = 0; i < n; i++) {
-            var s = document.createElement('span');
-            s.className = 'ccx__spark';
-            s.style.left = cx + 'px'; s.style.top = cy + 'px';
-            s.style.setProperty('--sc', color);
-            layer.appendChild(s);
-            var ang = (-90 + (Math.random() * 120 - 60)) * Math.PI / 180;   // upward spread
-            var dist = 26 + Math.random() * 46;
-            var dx = Math.cos(ang) * dist, dy = Math.sin(ang) * dist;
-            var fall = Math.abs(dy) + 34 + Math.random() * 54;             // arc back down under gravity
-            var anim = s.animate([
-                { transform: 'translate(0,0) scale(1)', opacity: 1 },
-                { transform: 'translate(' + dx + 'px,' + dy + 'px) scale(0.9)', opacity: 1, offset: 0.35 },
-                { transform: 'translate(' + (dx * 1.35) + 'px,' + fall + 'px) scale(0.25)', opacity: 0 },
-            ], { duration: 560 + Math.random() * 320, easing: 'cubic-bezier(0.2, 0.55, 0.35, 1)' });
-            anim.onfinish = (function (node) { return function () { node.remove(); }; })(s);
-        }
+        if (PP.sparkBurst) { PP.sparkBurst(layer, cx, cy, color, n); }
     }
 
     // A tier promotion, fired while the level counter is PAUSED on the threshold level: hot sparks off

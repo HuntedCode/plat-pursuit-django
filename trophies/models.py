@@ -143,6 +143,10 @@ class Profile(models.Model):
     flag = models.CharField(max_length=5, blank=True, null=True)
     extra_data = models.JSONField(default=dict, blank=True)
     last_synced = models.DateTimeField(default=timezone.now)
+    # When this hunter's celebration moments began (trophies/services/moment_service.py): stamped at the end of
+    # their FIRST finished sync, with one welcome summary in place of the flood a first sync would otherwise
+    # record. Null = not started, so nothing is recorded for them yet.
+    moments_since = models.DateTimeField(null=True, blank=True)
     user_is_premium = models.BooleanField(default=False)
     # THE WORN MARK, denormalised: 'staff' | 'mod' | a supporter-ladder slug | ''. Precedence
     # (staff > mod > supporter) is baked at write time in users/services/marks.py -- surfaces
@@ -3804,6 +3808,59 @@ class GroupBadgeAnnouncement(models.Model):
 
     def __str__(self):
         return f"{self.profile.psn_username} announced {self.group_badge}"
+
+
+class Moment(models.Model):
+    """A celebration, recorded WHEN IT HAPPENS and played ONCE (badge rewards phase 3, owner 2026-10-25).
+
+    The platinum confetti this replaces fired from an inbox poll on whatever page came next (removed in
+    adbffdd3). A moment is written at the earn instead, and plays only where the hunter looks: badge moments on
+    their next My Pursuit page, platinums behind a pill, as a reel. `played_at` is server-side so a moment seen
+    on one device never replays on another. Unplayed moments older than `moment_service.MOMENT_TTL` drop quietly.
+
+    Kinds: `welcome` (the one summary a first sync gets, counts in `data`), `badge` (`group_badge`), `platinum`
+    (`earned_trophy`), `milestone` (a platinum-count milestone tier, described in `data`). FKs reach Profile,
+    GroupBadge and EarnedTrophy only, never Concept, so `Concept.absorb()` needs no branch.
+    """
+    KIND_WELCOME = 'welcome'
+    KIND_BADGE = 'badge'
+    KIND_PLATINUM = 'platinum'
+    KIND_MILESTONE = 'milestone'
+    KIND_CHOICES = [
+        (KIND_WELCOME, 'Welcome'), (KIND_BADGE, 'Badge earned'), (KIND_PLATINUM, 'Platinum earned'),
+        (KIND_MILESTONE, 'Milestone'),
+    ]
+
+    profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='moments')
+    kind = models.CharField(max_length=16, choices=KIND_CHOICES)
+    group_badge = models.ForeignKey(GroupBadge, null=True, blank=True, on_delete=models.CASCADE, related_name='+')
+    earned_trophy = models.ForeignKey(
+        'EarnedTrophy', null=True, blank=True, on_delete=models.CASCADE, related_name='+',
+    )
+    data = models.JSONField(default=dict, blank=True)
+    occurred_at = models.DateTimeField(help_text='When it happened (the earn), which orders the queue.')
+    created_at = models.DateTimeField(auto_now_add=True, help_text='When it was recorded; the expiry clock.')
+    played_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        indexes = [
+            # The per-page check ("anything waiting?") and the queue read: a seek on a partial index of the
+            # few unplayed rows, so a My Pursuit page never pays for a hunter's history.
+            models.Index(fields=['profile', 'created_at'], condition=Q(played_at__isnull=True),
+                         name='moment_pending_idx'),
+        ]
+        constraints = [
+            # A badge that flips off and on before its moment plays waits as ONE moment, not a stack.
+            models.UniqueConstraint(fields=['profile', 'group_badge'],
+                                    condition=Q(kind='badge', played_at__isnull=True),
+                                    name='moment_one_pending_badge'),
+            # A platinum is celebrated once, ever.
+            models.UniqueConstraint(fields=['earned_trophy'], condition=Q(kind='platinum'),
+                                    name='moment_once_per_platinum'),
+        ]
+
+    def __str__(self):
+        return f"{self.profile.psn_username}: {self.kind} ({'played' if self.played_at else 'waiting'})"
 
 
 class ProfileBadgeStanding(models.Model):

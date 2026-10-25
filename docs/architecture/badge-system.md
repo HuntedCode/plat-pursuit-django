@@ -369,6 +369,10 @@ indistinguishable from a first earn. `GroupBadgeAnnouncement` records every (hun
 announced and is never deleted. A Redis cooldown is not a substitute: any TTL short enough to be a
 cooldown has expired by the time year-later PSN flux re-triggers the earn.
 
+**Every award records a celebration moment** (`moment_service.record_badge`, inside `apply_changes`), on
+every path including the nightly run: a badge earned is news however it was noticed. It never raises, so a
+failed moment cannot roll back the awards. See [Celebration Moments](../features/moments.md).
+
 **Announce BEFORE `recompute_standing`.** `apply_changes` is atomic and has committed; the recompute is
 not and can time out. Announcing after it meant a timeout swallowed the announcement permanently, since
 `awarded` is a transition that never fires again.

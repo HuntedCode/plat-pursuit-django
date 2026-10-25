@@ -80,7 +80,7 @@ def _engaged_series(profile):
     return (held_slugs | set(standings)), holds, earned_at, standings
 
 
-def _badge_frame(gb, holds, standings, participants):
+def badge_frame(gb, holds, standings, participants):
     """A collection Gallery frame for one group badge (edition), with the viewer's PER-EDITION state layered on.
     Progress is READ from the series' materialized SeriesBadgeStanding.group_progress read-model (per-edition
     {platform_group_key: [cleared, gating]}), then run through the shared badge_xp.edition_display_state -- the
@@ -203,7 +203,7 @@ def build_collection_context(profile, sort=DEFAULT_SORT):
         list_badges, edition_counts = [], {}
         earned = in_progress = recent = holo = 0
         for gb in group_badges:
-            fr = _badge_frame(gb, holds, standings, participants)
+            fr = badge_frame(gb, holds, standings, participants)
             btype = gb.series.badge_type
             fr['theme'] = badge_type_label(btype)
             fr['palette'] = palette_of.get(btype, _PALETTES[0])

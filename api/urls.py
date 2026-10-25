@@ -23,6 +23,7 @@ from .recap_views import (
     RecapShareImagePNGView, RecapSlidePartialView, RecapDeckView
 )
 from .tracking_views import TrackSiteEventView
+from .moment_views import MomentsPlayedAPIView
 from .easter_egg_views import RollEasterEggView
 from .share_temp_views import serve_share_temp_image
 # The legacy list API (api/game_list_views.py) was deleted 2026-10: Game Lists came back as the
@@ -165,6 +166,9 @@ urlpatterns = [
     path('user/timezone/', UpdateTimezoneAPIView.as_view(), name='user-timezone-update'),
     path('user/timezone/detect/', DetectTimezoneAPIView.as_view(), name='user-timezone-detect'),
     path('user/quick-settings/', UpdateQuickSettingsAPIView.as_view(), name='user-quick-settings'),
+
+    # Celebration moments: mark the ones that have been on screen as played
+    path('moments/played/', MomentsPlayedAPIView.as_view(), name='moments-played'),
 
     # Profile Card endpoints
 

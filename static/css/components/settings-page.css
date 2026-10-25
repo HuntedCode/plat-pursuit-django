@@ -165,7 +165,8 @@
     cursor: pointer;
 }
 
-.stg-toggle .checkbox { margin-top: 2px; flex: none; }
+/* The house checkbox (.pp-check, field.css) inside a two-line row: top-aligned with the name. */
+.stg-toggle > input { margin-top: 2px; }
 
 .stg-toggle__body { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 

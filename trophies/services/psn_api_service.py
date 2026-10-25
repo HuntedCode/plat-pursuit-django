@@ -664,6 +664,12 @@ class PsnApiService:
             earned_trophy.user_hidden = False  # PSN returned this trophy, so it's not hidden
             earned_trophy.save()
 
+        # The platinum reel's moment (moment_service): after the save, so the live `total_plats` it numbers the
+        # platinum by already counts this one. Shovelware included: the reel is the hunter's own.
+        if is_new_earn and trophy.trophy_type == 'platinum':
+            from trophies.services.moment_service import record_platinum
+            record_platinum(profile, earned_trophy, trophy_data.earned_date_time)
+
         if notify:
             earned_trophy.refresh_from_db()
             if not earned_trophy.trophy.game.is_shovelware:
