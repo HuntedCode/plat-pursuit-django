@@ -520,7 +520,7 @@ edition, per-edition progress, two bulk queries) with the medallion state set by
 button (`aria-pressed`) beside the medallion, because the medallion's `<div>`s may not sit inside a label or a
 button.
 
-**Badge stages are a bonus by default, never a rule.** The badge bar (base list at 100%) is not the contract bar
+**Badge stages are a bonus by default, never a rule.** The badge bar (base list at 100%, or every trophy staff have not marked unobtainable) is not the contract bar
 (platinum or 100%), so a line lists the stages it counts toward, **one row per badge** (owner, 2026-10-17): the
 badge and its editions once, then "Stages 17, 18, 19, 20", each stage's title on hover and read out after its
 number. Rows group by badge, editions and route (`stageList`): a stage reached only through a bundle keeps its own
