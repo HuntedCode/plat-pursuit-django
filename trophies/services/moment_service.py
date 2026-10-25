@@ -9,6 +9,10 @@ is written where the earn happens instead, and plays only where the hunter chose
              stamps `Profile.moments_since`; nothing is recorded for a hunter before that stamp.
   badge      `badge_apply.apply_changes`, on every award (sync, nightly, rechecks). A re-earn records a new
              one (owner: the ceremony plays every time it is earned), but a badge never waits as two.
+  mastered   `badge_apply`, when a held badge becomes MASTERED, and `full_set` / `series_master` when a
+             series reward is gained (phase 4). Like a badge, every time it is earned, but only when the
+             thing was finished within `REWARD_RECENCY`: a veteran whose old mastery is noticed for the first
+             time (the deploy, a data fix) gets the medallion, not a ceremony for something done years ago.
   platinum   `psn_api_service`, when sync sees a platinum newly earned within `PLATINUM_RECENCY`, so an old
              platinum synced for the first time is not news. Shovelware included: it is the hunter's own.
   milestone  a platinum-count milestone tier crossed in a sync (`record_milestones`): the reel's last beat.
@@ -29,16 +33,19 @@ from django.db import DatabaseError, IntegrityError, transaction
 from django.db.models import Exists, OuterRef, Q
 from django.utils import timezone
 
-from trophies.models import EarnedTrophy, Moment, Profile, UserGroupBadge
+from trophies.models import EarnedTrophy, Moment, Profile, SeriesAward, UserGroupBadge
 
 logger = logging.getLogger(__name__)
 
 MOMENT_TTL = timedelta(days=14)
 PLATINUM_RECENCY = timedelta(days=2)       # the old notification threshold, against first-sight-of-an-old-plat
+REWARD_RECENCY = MOMENT_TTL                # a reward finished longer ago than a moment lives is not news
 QUEUE_CAP = 30                             # a page never builds more than this many at once
 PREVIEW = 'moments'                        # `?preview=moments` (core.previews): the team's look at the player
 PLATINUM_METRIC = 'lifetime_platinums'
-AUTO_KINDS = (Moment.KIND_WELCOME, Moment.KIND_BADGE)
+AUTO_KINDS = (Moment.KIND_WELCOME, Moment.KIND_BADGE, Moment.KIND_MASTERED, Moment.KIND_FULL_SET,
+              Moment.KIND_SERIES_MASTER)
+SERIES_KINDS = (Moment.KIND_FULL_SET, Moment.KIND_SERIES_MASTER)
 REEL_KINDS = (Moment.KIND_PLATINUM, Moment.KIND_MILESTONE)
 
 
@@ -49,10 +56,10 @@ def _started(profile) -> bool:
 
 # --- recording ----------------------------------------------------------------------------------------------
 
-def record_badge(profile, group_badge, occurred_at=None):
-    """A badge was awarded. When one is already waiting for it (the badge flipped off and on) that one is
-    REFRESHED rather than a second added: an unplayed moment that had expired would otherwise hold the
-    one-pending slot forever and swallow every later earn of the badge.
+def _record_waiting(profile, kind, occurred_at, **subject):
+    """Record a moment that waits as ONE per subject (a badge, a mastery, a series reward). When one is already
+    waiting (the thing flipped off and on) that one is REFRESHED rather than a second added: an unplayed moment
+    that had expired would otherwise hold the one-pending slot forever and swallow every later earn.
 
     NEVER RAISES. This runs inside `apply_changes`' transaction, so an error escaping here would roll back
     every award in the run: a celebration is not worth a badge. Its own savepoint keeps a failure local."""
@@ -62,15 +69,37 @@ def record_badge(profile, group_badge, occurred_at=None):
     try:
         with transaction.atomic():
             refreshed = Moment.objects.filter(
-                profile=profile, kind=Moment.KIND_BADGE, group_badge=group_badge, played_at__isnull=True,
+                profile=profile, kind=kind, played_at__isnull=True, **subject,
             ).update(occurred_at=when, created_at=timezone.now())
             if not refreshed:
-                Moment.objects.create(profile=profile, kind=Moment.KIND_BADGE, group_badge=group_badge,
-                                      occurred_at=when)
+                Moment.objects.create(profile=profile, kind=kind, occurred_at=when, **subject)
     except IntegrityError:
         pass        # a concurrent award wrote it first: it is waiting either way
     except DatabaseError:
-        logger.exception("moment: badge %s for profile %s not recorded", group_badge.id, profile.id)
+        logger.exception("moment: %s %s for profile %s not recorded", kind, subject, profile.id)
+
+
+def record_badge(profile, group_badge, occurred_at=None):
+    """A badge was awarded: celebrated every time, however it was noticed."""
+    _record_waiting(profile, Moment.KIND_BADGE, occurred_at, group_badge=group_badge)
+
+
+def is_recent_reward(finished_at) -> bool:
+    """Whether a reward finished at `finished_at` is news. Undated is not: it is the deploy's veteran case
+    (an old completion PSN never dated), and a ceremony for it would be a guess."""
+    return finished_at is not None and finished_at >= timezone.now() - REWARD_RECENCY
+
+
+def record_mastered(profile, group_badge, finished_at):
+    """A held badge became mastered. Celebrated only when it was finished recently (`is_recent_reward`)."""
+    if is_recent_reward(finished_at):
+        _record_waiting(profile, Moment.KIND_MASTERED, finished_at, group_badge=group_badge)
+
+
+def record_series_reward(profile, series, kind, finished_at):
+    """A series' Full Set or Series Master was gained (`kind` is the Moment kind). Recent only, as mastery."""
+    if is_recent_reward(finished_at):
+        _record_waiting(profile, kind, finished_at, series=series)
 
 
 def record_platinum(profile, earned_trophy, earned_at):
@@ -123,10 +152,15 @@ def pending(profile):
     """The hunter's playable moments, oldest first: unplayed, not expired, and (for a badge) still held, since
     a badge revoked before its moment played has nothing left to celebrate."""
     held = UserGroupBadge.objects.filter(profile_id=OuterRef('profile_id'), group_badge_id=OuterRef('group_badge_id'))
+    # The same for a reward: a mastery or a Full Set lost before it played has nothing left to celebrate.
+    awarded = SeriesAward.objects.filter(profile_id=OuterRef('profile_id'), series_id=OuterRef('series_id'),
+                                         kind=OuterRef('kind'))
     return (
         Moment.objects.filter(profile=profile, played_at__isnull=True,
                               created_at__gte=timezone.now() - MOMENT_TTL)
         .filter(~Q(kind=Moment.KIND_BADGE) | Q(Exists(held)))
+        .filter(~Q(kind=Moment.KIND_MASTERED) | Q(Exists(held.filter(mastered_at__isnull=False))))
+        .filter(~Q(kind__in=SERIES_KINDS) | Q(Exists(awarded)))
         .order_by('occurred_at', 'id')[:QUEUE_CAP]
     )
 

@@ -10,8 +10,9 @@ from types import SimpleNamespace
 from trophies.services.badge_apply import diff, CurrentBadge, BadgeChange
 
 
-def _desired(base_earned, holo=False, earned_date=None):
-    return SimpleNamespace(base_earned=base_earned, holo=holo, earned_date=earned_date)
+def _desired(base_earned, holo=False, earned_date=None, mastered=False, mastered_date=None):
+    return SimpleNamespace(base_earned=base_earned, holo=holo, earned_date=earned_date,
+                           mastered=mastered, mastered_date=mastered_date)
 
 
 def test_award_when_earned_and_no_row():

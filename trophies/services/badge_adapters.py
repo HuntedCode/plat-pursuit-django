@@ -6,6 +6,8 @@ docs/design/rebuild/badge-backend-rebuild.md §3.6.
 """
 import logging
 
+from django.db.models import Q
+
 from trophies.models import UserTitle, UserGroupBadge
 
 logger = logging.getLogger(__name__)
@@ -89,7 +91,7 @@ def emit_badge_earned(profile_id, group_badge_id):
     logger.info("badge_earned: profile=%s group_badge=%s", profile_id, group_badge_id)
 
 
-def announce_badges_earned(profile, group_badges):
+def announce_badges_earned(profile, group_badges, rewards=()):
     """Announce a run's newly earned group badges to Discord, as ONE consolidated embed.
 
     Replaces the legacy `send_badge_earned_notification`, which reads tier-shaped `Badge` rows. The shape of
@@ -111,20 +113,27 @@ def announce_badges_earned(profile, group_badges):
 
     Never raises: an announcement is the least important thing happening in a sync, and the badges are
     already written by the time this runs.
+
+    `rewards` (phase 4): [(kind, group_badge or None, series)], masteries / Full Sets / Series Masters gained
+    in the same run. ONCE EVER per hunter and reward too (owner, 2026-10-25), by `RewardAnnouncement`, and in
+    the SAME embed as the run's badges, so finishing a series is one ping.
     """
     from trophies.models import GroupBadgeAnnouncement
-    from trophies.discord_utils.discord_notifications import send_group_badges_earned_notification
+    from trophies.discord_utils.discord_notifications import (
+        send_badge_rewards_notification, send_group_badges_earned_notification,
+    )
 
-    if not profile or not group_badges:
+    if not profile or not (group_badges or rewards):
         return
     try:
         already = set(
             GroupBadgeAnnouncement.objects
             .filter(profile=profile, group_badge__in=group_badges)
             .values_list('group_badge_id', flat=True)
-        )
+        ) if group_badges else set()
         fresh = [gb for gb in group_badges if gb.id not in already]
-        if not fresh:
+        fresh_rewards = _fresh_rewards(profile, list(rewards))
+        if not fresh and not fresh_rewards:
             return
 
         # ignore_conflicts: two syncs racing the same profile would otherwise raise on the unique
@@ -133,6 +142,33 @@ def announce_badges_earned(profile, group_badges):
             [GroupBadgeAnnouncement(profile=profile, group_badge=gb) for gb in fresh],
             ignore_conflicts=True,
         )
-        send_group_badges_earned_notification(profile, fresh)
+        if fresh:
+            send_group_badges_earned_notification(profile, fresh, fresh_rewards)
+        else:
+            send_badge_rewards_notification(profile, fresh_rewards)
     except Exception:
         logger.exception("badge announce failed: profile=%s", getattr(profile, 'id', None))
+
+
+def _fresh_rewards(profile, rewards):
+    """The rewards never announced to this hunter, marked announced (before the send, as badges are)."""
+    from trophies.models import RewardAnnouncement
+
+    if not rewards:
+        return []
+    seen = set(
+        RewardAnnouncement.objects.filter(profile=profile)
+        .filter(Q(group_badge__in=[gb for _, gb, _ in rewards if gb])
+                | Q(series__in=[s for _, gb, s in rewards if gb is None]))
+        .values_list('kind', 'group_badge_id', 'series_id')
+    )
+
+    def key(kind, gb, series):
+        return (kind, gb.id, None) if gb else (kind, None, series.id)
+
+    fresh = [r for r in rewards if key(*r) not in seen]
+    RewardAnnouncement.objects.bulk_create(
+        [RewardAnnouncement(profile=profile, kind=k, group_badge=gb, series=None if gb else s) for k, gb, s in fresh],
+        ignore_conflicts=True,
+    )
+    return fresh

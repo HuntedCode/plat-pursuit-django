@@ -201,7 +201,24 @@ def post_webhook_sync(payload, webhook_url, *, label="Webhook", timeout=10):
     return response
 
 
-def send_group_badges_earned_notification(profile, group_badges):
+def _badge_thumbnail(group_badge):
+    """A badge's subject art as an absolute URL for an embed thumbnail, else the default badge."""
+    default_art = 'https://platpursuit.com/static/images/badges/default.png'
+    if settings.DEBUG or group_badge is None:
+        return default_art
+    # `art_layers()` is the single source of truth for a badge's art, and its subject chain has a rung
+    # this used to miss: a `user` badge's subject is the SUBMITTER'S AVATAR. Hand-rolling
+    # `badge_image_override or series.badge_image` showed the real artwork on the badge page and the
+    # generic default in the announcement -- the two surfaces disagreeing about what a badge looks
+    # like, in the one message that goes to the whole server.
+    art = group_badge.art_layers()
+    subject = art.get('main') if art.get('has_custom_image') else None
+    # art_layers() returns a root-relative static path in a non-request context; Discord needs an
+    # absolute URL, so a relative one falls back rather than shipping a broken thumbnail.
+    return subject if subject and str(subject).startswith('http') else default_art
+
+
+def send_group_badges_earned_notification(profile, group_badges, rewards=()):
     """The rebuilt subsystem's badge announcement: ONE consolidated embed per sync.
 
     Sibling of `send_badge_earned_notification` above, which it replaces at cutover. Same gate, same shape,
@@ -214,6 +231,9 @@ def send_group_badges_earned_notification(profile, group_badges):
       badges with separate art and separate boards, so listing only the series would make finishing both
       editions read as the message repeating itself.
     - No tier label. There are no tiers; there is a platform group, which the edition already names.
+
+    `rewards` (phase 4): masteries / Full Sets / Series Masters gained in the SAME run ride this embed as extra
+    lines, so finishing a series is still one ping (`send_badge_rewards_notification` covers a run with none).
     """
     if not profile or not group_badges:
         return
@@ -223,20 +243,7 @@ def send_group_badges_earned_notification(profile, group_badges):
     platinum_emoji = f"<:Platinum_Trophy:{settings.PLATINUM_EMOJI_ID}>" if settings.PLATINUM_EMOJI_ID else "🏆"
     plat_pursuit_emoji = f"<:PlatPursuit:{settings.PLAT_PURSUIT_EMOJI_ID}>" if settings.PLAT_PURSUIT_EMOJI_ID else "🏆"
 
-    default_art = 'https://platpursuit.com/static/images/badges/default.png'
-    thumbnail_url = default_art
-    if not settings.DEBUG:
-        # `art_layers()` is the single source of truth for a badge's art, and its subject chain has a rung
-        # this used to miss: a `user` badge's subject is the SUBMITTER'S AVATAR. Hand-rolling
-        # `badge_image_override or series.badge_image` showed the real artwork on the badge page and the
-        # generic default in the announcement -- the two surfaces disagreeing about what a badge looks
-        # like, in the one message that goes to the whole server.
-        art = group_badges[0].art_layers()
-        subject = art.get('main') if art.get('has_custom_image') else None
-        if subject:
-            # art_layers() returns a root-relative static path in a non-request context; Discord needs an
-            # absolute URL, so a relative one falls back rather than shipping a broken thumbnail.
-            thumbnail_url = subject if str(subject).startswith('http') else default_art
+    thumbnail_url = _badge_thumbnail(group_badges[0])
 
     count = len(group_badges)
     noun = 'badge' if count == 1 else 'badges'
@@ -258,6 +265,7 @@ def send_group_badges_earned_notification(profile, group_badges):
         shown += 1
     if count > shown:
         lines.append(f"…and {count - shown} more")
+    lines += _reward_lines(list(rewards))
 
     payload = {'embeds': [{
         'title': f"🎖️ {profile.display_psn_username} earned {count} new {noun}!",
@@ -276,6 +284,53 @@ def send_group_badges_earned_notification(profile, group_badges):
         logger.info(f"Queued group-badge notification ({count}) for {profile.psn_username}")
     except Exception as e:
         logger.error(f"Failed to queue group-badge notification: {e}")
+
+
+#: How each badge reward reads in its announcement line.
+_REWARD_LABELS = {'mastered': 'Mastered', 'full_set': 'Full Set', 'series_master': 'Series Master'}
+
+
+def _reward_lines(rewards):
+    """One line per reward, bounded like the badge lines: a mastery names its edition, a series reward does not."""
+    lines = []
+    for kind, gb, series in rewards[:_MAX_BADGE_LINES]:
+        name = f"**{_escape_md(series.name)}**" + (f" ({gb.platform_group.name})" if gb else '')
+        lines.append(f"👑 {_REWARD_LABELS[kind]}: {name}")
+    if len(rewards) > len(lines):
+        lines.append(f"…and {len(rewards) - len(lines)} more")
+    return lines
+
+
+def send_badge_rewards_notification(profile, rewards):
+    """Badge rewards (phase 4): masteries, Full Sets and Series Masters, ONE consolidated embed per run, in
+    the badge announcement's voice. `rewards`: [(kind, group_badge or None, series)], kind one of
+    `_REWARD_LABELS`. A mastery names its edition; a series reward is the series' own."""
+    if not profile or not rewards:
+        return
+    if not profile.is_discord_verified or not profile.discord_id:
+        return
+
+    plat_pursuit_emoji = f"<:PlatPursuit:{settings.PLAT_PURSUIT_EMOJI_ID}>" if settings.PLAT_PURSUIT_EMOJI_ID else "🏆"
+    count = len(rewards)
+    lines = _reward_lines(rewards)
+    title = (f"👑 {profile.display_psn_username}: {_REWARD_LABELS[rewards[0][0]]}!" if count == 1
+             else f"👑 {profile.display_psn_username} earned {count} badge rewards!")
+
+    payload = {'embeds': [{
+        'title': title,
+        'description': (f"{plat_pursuit_emoji} <@{profile.discord_id}>, you've finished more than the badge on "
+                        f"PlatPursuit!\n\n" + "\n".join(lines) + "\n\nKeep up the hunt! 🎉"),
+        'color': 0xE7C25C,
+        'footer': {'text': 'Powered by Plat Pursuit | No Trophy Can Hide From Us'},
+        'thumbnail': {'url': _badge_thumbnail(next((gb for _, gb, _ in rewards if gb), None))},
+    }],
+        'allowed_mentions': {'users': [str(profile.discord_id)]},
+    }
+    try:
+        queue_webhook_send(payload)
+        logger.info(f"Queued badge-rewards notification ({count}) for {profile.psn_username}")
+    except Exception as e:
+        logger.error(f"Failed to queue badge-rewards notification: {e}")
 
 
 def send_subscription_notification(user):
