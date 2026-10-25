@@ -89,6 +89,11 @@ class CustomUser(AbstractUser):
         help_text="When the user explicitly confirmed or changed their timezone. Null = never asked/answered.",
     )
     use_24hr_clock = models.BooleanField(default=False, help_text="Use 24-hour time format (23:00) instead of 12-hour AM/PM format (11:00 PM)")
+    play_celebrations = models.BooleanField(
+        default=True,
+        help_text="Auto-play badge celebrations on My Pursuit pages. Off, nothing auto-plays and the My Pursuit "
+                  "strip's button opens every waiting moment (trophies/services/moment_service.py).",
+    )
     stripe_customer_id = models.CharField(max_length=255, blank=True, null=True, help_text="Stripe Customer ID for this user.")
     paypal_subscription_id = models.CharField(max_length=255, blank=True, null=True, help_text="PayPal Subscription ID for active subscription.")
     subscription_provider = models.CharField(max_length=10, blank=True, null=True, choices=[('stripe', 'Stripe'), ('paypal', 'PayPal')], help_text="Which payment provider manages the current subscription.")
