@@ -530,3 +530,41 @@ def test_the_preview_never_posts_and_the_sparks_are_shared():
     assert 'if (PP.sparkBurst) { PP.sparkBurst(layer, cx, cy, color, n); }' in ceremony
     assert "if (!beat || reduced() || !PP.sparkBurst) { return; }" in moments
     assert "s.className = 'ccx__spark'" not in ceremony, 'one spark, styled once (.pp-spark, motion.css)'
+
+
+def test_a_badge_moments_medallion_can_be_picked_up_into_the_hunters_own_inspector(rf):
+    profile = _hunter()
+    gb = GroupBadgeFactory()
+    UserGroupBadge.objects.create(profile=profile, group_badge=gb, earned_at=NOW())
+    moment_service.record_badge(profile, gb)
+
+    html = _render('{% moments_overlay %}', profile, rf)
+
+    assert f'data-moment-pick data-badge-id="{gb.id}" role="button" tabindex="0"' in html
+    peek = reverse('group_badge_progress_peek', args=[profile.psn_username, 0])
+    assert f'id="pp-moments-peek" data-peek-url="{peek}"' in html
+    assert html.index('id="pp-moments"') < html.index('id="pp-moments-peek"'), 'after the player, so it stacks over it'
+
+
+def test_a_reel_without_badges_has_no_inspector(rf):
+    profile = _hunter()
+    et = _plat(profile)
+    moment_service.record_platinum(profile, et, et.earned_date_time)
+
+    assert 'pp-moments-peek' not in _render('{% moments_overlay %}', profile, rf)
+
+
+def test_the_moments_sparks_explode_and_escape_puts_the_medallion_down_first():
+    """Source pins (no JS runner)."""
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2] / 'static' / 'js'
+    moments = (root / 'moments.js').read_text(encoding='utf-8')
+    utils = (root / 'utils.js').read_text(encoding='utf-8')
+
+    assert 'beat.color, beat.n, { explode: true });' in moments
+    assert "if (opts.explode) { explodeSparks(layer, cx, cy, color, n); return; }" in utils
+    assert "const floor = (h - cy) + 40 + Math.random() * 120;" in utils, 'they fall OFF the bottom edge'
+    # Escape answers the inspector first (capture phase) and stops the moment closing underneath it.
+    assert "if (e.key !== 'Escape' || !peekEl || peekEl.hidden) { return; }" in moments
+    assert "e.stopImmediatePropagation();\n        if (peek) { peek.close(); }\n    }, true);" in moments

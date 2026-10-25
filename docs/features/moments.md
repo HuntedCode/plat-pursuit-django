@@ -107,6 +107,16 @@ One beat per moment, in the earn vocabulary (visual-identity.md), never confetti
 | platinum | the cover is dealt in (a turn and a settle), a platinum glow flares, sparks fly, a light sweeps across it, the number counts up |
 | milestone | the number swells in, a platinum ring pulses out, the biggest burst of sparks |
 
+**The sparks explode** (owner, 2026-10-25): `sparkBurst(..., { explode: true })` throws them across much of the
+screen, mostly upward, then lets them fall slowly (3 to 4.5s) under gravity off the BOTTOM edge of the page.
+That is why the spark layer is the whole viewport, beside the dialog. About half as many on a phone.
+
+**Pick it up** (owner, 2026-10-25): a badge moment's medallion is a button. Tapping it (or Enter / Space) lifts it
+into the site's own inspector, the same pick-up / put-down the Collection and Browse Badges use
+(`PlatPursuit.Medallion.detailModal`), fetching the hunter's own state of the badge (`group_badge_progress_peek`).
+It opens over the moment (`#pp-moments-peek`, after the player in the DOM). Escape puts the medallion DOWN and
+leaves the moment open: both dialogs listen on the document, so a capture-phase listener answers first.
+
 **Sunlight** (owner, 2026-10-25): once the object has landed, slow rays rise behind it and turn (one turn in 48s)
 for as long as the moment is up. A badge's rays wear its TIER (the medallion's metals, shared as `--med-tier-*`
 tokens in `badge-medallion.css`), iridescent when the badge is holographic; platinum and milestone rays are
