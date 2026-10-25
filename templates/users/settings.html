@@ -47,8 +47,8 @@
                     </div>
                     <p class="stg-field__hint" id="stg-tz-hint" data-tz-hint role="status" hidden></p>
                 </div>
-                <label class="stg-toggle">
-                    <input type="checkbox" name="use_24hr_clock" class="checkbox checkbox-primary checkbox-sm"{% if user.use_24hr_clock %} checked{% endif %}>
+                <label class="stg-toggle pp-check">
+                    <input type="checkbox" name="use_24hr_clock"{% if user.use_24hr_clock %} checked{% endif %}>
                     <span class="stg-toggle__body">
                         <span class="stg-toggle__name">Use the 24-hour clock</span>
                         <span class="stg-toggle__sub">23:00 instead of 11:00 PM.</span>
@@ -81,18 +81,25 @@
             <form method="post" class="stg-form">
                 {% csrf_token %}
                 <input type="hidden" name="action" value="library">
-                <label class="stg-toggle">
-                    <input type="checkbox" name="hide_hiddens" class="checkbox checkbox-primary checkbox-sm"{% if profile.hide_hiddens %} checked{% endif %}>
+                <label class="stg-toggle pp-check">
+                    <input type="checkbox" name="hide_hiddens"{% if profile.hide_hiddens %} checked{% endif %}>
                     <span class="stg-toggle__body">
                         <span class="stg-toggle__name">Hide hidden and deleted games</span>
                         <span class="stg-toggle__sub">Games you have hidden on PSN stay out of your totals, lists and completion stats.</span>
                     </span>
                 </label>
-                <label class="stg-toggle">
-                    <input type="checkbox" name="hide_zeros" class="checkbox checkbox-primary checkbox-sm"{% if profile.hide_zeros %} checked{% endif %}>
+                <label class="stg-toggle pp-check">
+                    <input type="checkbox" name="hide_zeros"{% if profile.hide_zeros %} checked{% endif %}>
                     <span class="stg-toggle__body">
                         <span class="stg-toggle__name">Hide games with no progress</span>
                         <span class="stg-toggle__sub">Games at 0% never touch your completion average.</span>
+                    </span>
+                </label>
+                <label class="stg-toggle pp-check">
+                    <input type="checkbox" name="play_celebrations"{% if user.play_celebrations %} checked{% endif %}>
+                    <span class="stg-toggle__body">
+                        <span class="stg-toggle__name">Play celebrations</span>
+                        <span class="stg-toggle__sub">A badge you earn plays on your next My Pursuit page. Off, it waits behind a button with your new platinums.</span>
                     </span>
                 </label>
                 <p class="stg-form__note">Saving recalculates your totals, so the change lands everywhere at once.</p>
