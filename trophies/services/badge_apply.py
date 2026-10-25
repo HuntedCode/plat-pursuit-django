@@ -19,6 +19,7 @@ from django.db.models.functions import Greatest
 from django.utils import timezone
 
 from trophies.models import GroupBadge, UserGroupBadge
+from trophies.services.moment_service import record_badge as record_badge_moment
 from trophies.services.badge_orchestrator import (
     resolve_group_badges, build_catalog, evaluate_with_catalog,
 )
@@ -86,6 +87,9 @@ def apply_changes(profile, changes, gb_map: dict) -> dict:
             GroupBadge.objects.filter(id=gb.id).update(earned_count=F('earned_count') + 1)
             grant_series_title(profile.id, gb.series)
             emit_badge_earned(profile.id, gb.id)
+            # Its celebration, played on the hunter's next My Pursuit page (moment_service). Every award path
+            # comes through here, nightly and rechecks included: a badge earned is news however it was noticed.
+            record_badge_moment(profile, gb, ch.earned_date)
             result['awarded'].append(gb.id)
         elif ch.action == 'revoke':
             UserGroupBadge.objects.filter(profile=profile, group_badge=gb).delete()

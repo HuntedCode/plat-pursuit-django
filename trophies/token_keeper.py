@@ -1560,10 +1560,21 @@ class TokenKeeper:
             # (Stays under the 'finishing' phase -- it's quick and part of finalize.)
             # Import outside the guard: see the contract-detection note above.
             from milestones.services import recompute_on_sync
+            from trophies.services import moment_service
             try:
-                recompute_on_sync(profile)
+                newly_earned_tiers = recompute_on_sync(profile)
             except Exception:
+                newly_earned_tiers = []
                 logger.exception(f"[profile {profile_id}] milestone recompute failed")
+            # Celebration moments (moment_service): a platinum-count milestone becomes the reel's last beat, and
+            # a hunter's FIRST finished sync records its one welcome summary and starts their moments. LAST, so
+            # nothing this first sync awarded is also recorded one by one. A failure costs a celebration, never
+            # the sync.
+            try:
+                moment_service.record_milestones(profile, newly_earned_tiers)
+                moment_service.start_moments(profile)
+            except Exception:
+                logger.exception(f"[profile {profile_id}] moment recording failed")
 
             profile.set_sync_status('synced')
 
