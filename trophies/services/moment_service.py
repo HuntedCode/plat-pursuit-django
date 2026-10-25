@@ -36,6 +36,7 @@ logger = logging.getLogger(__name__)
 MOMENT_TTL = timedelta(days=14)
 PLATINUM_RECENCY = timedelta(days=2)       # the old notification threshold, against first-sight-of-an-old-plat
 QUEUE_CAP = 30                             # a page never builds more than this many at once
+PREVIEW = 'moments'                        # `?preview=moments` (core.previews): the team's look at the player
 PLATINUM_METRIC = 'lifetime_platinums'
 AUTO_KINDS = (Moment.KIND_WELCOME, Moment.KIND_BADGE)
 REEL_KINDS = (Moment.KIND_PLATINUM, Moment.KIND_MILESTONE)
@@ -130,9 +131,41 @@ def pending(profile):
     )
 
 
+def is_preview(request) -> bool:
+    """`?preview=moments` on a My Pursuit page, staff or moderator only: a sample queue from the viewer's own
+    data, written nowhere and never marked played, so it replays on every reload (core/previews.py)."""
+    from core.previews import previewing
+
+    return previewing(request, PREVIEW)
+
+
+def preview_moments(profile):
+    """UNSAVED moments for the preview: the welcome, the viewer's latest badge (or any live one), their two
+    latest platinums and a platinum milestone. Negative ids, so nothing could ever mark a real row played."""
+    from trophies.models import GroupBadge
+
+    now = timezone.now()
+    moments = [Moment(id=-1, profile=profile, kind=Moment.KIND_WELCOME, occurred_at=now, data={
+        'badges': UserGroupBadge.objects.filter(profile=profile).count(), 'platinums': profile.total_plats,
+    })]
+    hold = UserGroupBadge.objects.filter(profile=profile).select_related('group_badge').order_by('-earned_at').first()
+    badge = hold.group_badge if hold else GroupBadge.objects.filter(is_live=True).order_by('id').first()
+    if badge:
+        moments.append(Moment(id=-2, profile=profile, kind=Moment.KIND_BADGE, group_badge=badge, occurred_at=now))
+    plats = EarnedTrophy.objects.filter(profile=profile, earned=True, trophy__trophy_type='platinum') \
+        .order_by('-earned_date_time')[:2]
+    for i, et in enumerate(plats):
+        moments.append(Moment(id=-3 - i, profile=profile, kind=Moment.KIND_PLATINUM, earned_trophy=et,
+                              occurred_at=et.earned_date_time or now, data={'number': profile.total_plats - i}))
+    threshold = max(10, (profile.total_plats // 50) * 50)
+    moments.append(Moment(id=-9, profile=profile, kind=Moment.KIND_MILESTONE, occurred_at=now,
+                          data={'name': 'Preview', 'threshold': threshold}))
+    return moments
+
+
 def for_request(request):
     """The waiting moments for THIS request's hunter, read once per request (the strip's pill and the overlay
-    both ask). Empty for anyone without a started profile."""
+    both ask). Empty for anyone without a started profile. The team's `?preview=moments` gets a sample."""
     cached = getattr(request, '_pp_moments', None)
     if cached is not None:
         return cached
@@ -140,7 +173,9 @@ def for_request(request):
     user = getattr(request, 'user', None)
     if user is not None and user.is_authenticated:
         profile = getattr(user, 'profile', None) if hasattr(user, 'profile') else None
-        if profile is not None and profile.moments_since:
+        if profile is not None and is_preview(request):
+            moments = preview_moments(profile)
+        elif profile is not None and profile.moments_since:
             # Every relation the badge medallion's art and caption read (GroupBadge.art_layers, badge_frame),
             # so a page with several waiting badges does not pay a query per relation per badge.
             moments = list(pending(profile).select_related(

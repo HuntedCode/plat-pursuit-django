@@ -14,6 +14,8 @@ register = template.Library()
 
 
 def _autoplay(request):
+    if moment_service.is_preview(request):
+        return True            # the preview shows the full experience whatever the viewer's own setting
     return bool(getattr(request.user, 'play_celebrations', True))
 
 
@@ -23,7 +25,8 @@ def moments_overlay(context):
     moments = moment_service.for_request(request) if request is not None else []
     if not moments:
         return {'view': None}
-    return {'view': moment_service.build_view(request.user.profile, moments, autoplay=_autoplay(request))}
+    return {'view': moment_service.build_view(request.user.profile, moments, autoplay=_autoplay(request)),
+            'preview': moment_service.is_preview(request)}
 
 
 @register.inclusion_tag('partials/moments/_pill.html', takes_context=True)

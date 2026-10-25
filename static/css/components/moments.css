@@ -9,7 +9,7 @@
 }
 /* A steady floor so the dialog does not jump between a medallion and a line of text, without leaving a
    text-only moment adrift in an empty box on a phone. */
-.pp-moments__stage { min-height: 240px; display: grid; place-items: center; }
+.pp-moments__stage { min-height: 240px; display: grid; place-items: center; overflow-x: clip; }   /* the rays outgrow the dialog */
 @media (min-width: 768px) { .pp-moments__stage { min-height: 300px; } }
 .pp-moments__foot {
     display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px;
@@ -45,7 +45,11 @@
 .pp-moment__tally b { color: var(--pp-text); }
 
 /* The badge: the real medallion, at a size that is the moment. */
-.pp-moment__med { width: min(210px, 58vw); margin: 4px auto 6px; }
+/* The object each moment is about (medallion, cover, milestone number), centred over its rays. */
+.pp-moment__obj { position: relative; display: grid; justify-items: center; }
+.pp-moment__med { margin: 14px auto 12px; }   /* room for the mint's pop */
+/* The medallion component sizes itself (--sz, badge-medallion.css): a moment is the one place it is big. */
+.pp-moment__med > .pp-med { --sz: min(190px, 52vw); }
 /* The platinum: its cover (portrait, logo kept at the top) and which platinum it is. */
 .pp-moment__cover {
     width: 132px; aspect-ratio: 3 / 4; margin: 6px auto 4px; overflow: hidden;
@@ -56,12 +60,106 @@
 .pp-moment__cover.is-placeholder img { object-fit: contain; padding: 12px; }
 .pp-moment__number { margin: 2px 0 0; color: var(--color-trophy-platinum); }
 
+/* SUNLIGHT: slow rays behind the object, in its colour, rising once the strike has landed and then turning
+   (owner, 2026-10-25). A badge's rays wear its tier, iridescent when it is holographic; a platinum's and a
+   milestone's are platinum. The rays are a MASK over a colour fill (repeating wedges intersected with a radial
+   fade), so the fill alone decides the colour, a gradient included. Transform-only motion on its own layer;
+   reduced motion keeps them, still. */
+.pp-moment__rays {
+    position: absolute; left: 50%; top: 50%; z-index: -1; width: 210%; aspect-ratio: 1; pointer-events: none;
+    translate: -50% -50%; will-change: transform; opacity: 0.42;
+    background: var(--ray-fill, color-mix(in oklab, var(--ray, var(--pp-primary)) 60%, transparent));
+    -webkit-mask: repeating-conic-gradient(#000 0deg 4deg, transparent 4deg 15deg),
+                  radial-gradient(circle closest-side, #000 18%, transparent 80%);
+    -webkit-mask-composite: source-in;
+    mask: repeating-conic-gradient(#000 0deg 4deg, transparent 4deg 15deg),
+          radial-gradient(circle closest-side, #000 18%, transparent 80%);
+    mask-composite: intersect;
+}
+.pp-moment__med .pp-moment__rays { width: 215%; }
+.pp-moment__med[data-tier="bronze"]   { --ray: var(--med-tier-bronze); }
+.pp-moment__med[data-tier="silver"]   { --ray: var(--med-tier-silver); }
+.pp-moment__med[data-tier="gold"]     { --ray: var(--med-tier-gold); }
+.pp-moment__med[data-tier="platinum"] { --ray: var(--med-tier-platinum); }
+.pp-moment__med[data-holo] {
+    --ray-fill: conic-gradient(oklch(0.82 0.16 350 / 0.6), oklch(0.86 0.12 220 / 0.6), oklch(0.88 0.14 150 / 0.6),
+                               oklch(0.9 0.14 90 / 0.6), oklch(0.82 0.16 350 / 0.6));
+}
+.pp-moment--plat .pp-moment__rays, .pp-moment--milestone .pp-moment__rays { --ray: var(--color-trophy-platinum); }
+.pp-moment--milestone .pp-moment__rays { width: 300%; }
+
+/* The sparks' fixed layer (moments.js), over the dialog. */
+.pp-moments__sparks { position: fixed; inset: 0; z-index: 3; pointer-events: none; }
+
+/* A soft bloom behind the object (medallion, cover, number): it flares as the object lands, then rests. */
+.pp-moment__med, .pp-moment__cover, .pp-moment__number { position: relative; }
+.pp-moment__med::before, .pp-moment--milestone .pp-moment__number::before {
+    content: ""; position: absolute; left: 50%; top: 50%; width: 160%; aspect-ratio: 1; z-index: -1; pointer-events: none;
+    transform: translate(-50%, -50%); border-radius: 50%; opacity: 0.35;
+    background: radial-gradient(circle, color-mix(in oklab, var(--bloom, var(--pp-primary)) 40%, transparent) 0%, transparent 65%);
+}
+.pp-moment--milestone .pp-moment__number::before { --bloom: var(--color-trophy-platinum); }
+.pp-moment__cover::after {
+    /* The scan-light sweep across the cover (the earn vocabulary's "scan beam"). Resting state: off-card. */
+    content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+    background: linear-gradient(105deg, transparent 35%, oklch(1 0 0 / 0.38) 50%, transparent 65%);
+    transform: translateX(-120%); opacity: 0;
+}
+
 @media (prefers-reduced-motion: no-preference) {
-    .pp-moment { animation: ppMomentIn 0.42s cubic-bezier(0.22, 1, 0.36, 1) both; }
-    .pp-moment__cover { animation: ppMomentCover 0.6s cubic-bezier(0.3, 1.35, 0.5, 1) 0.08s both; }
+    /* Text arrives in a short cascade; the object gets its own, heavier beat. */
+    .pp-moment > * { animation: ppMomentIn 0.45s cubic-bezier(0.22, 1, 0.36, 1) backwards; }
+    .pp-moment > :nth-child(2) { animation-delay: 0.06s; }
+    .pp-moment > :nth-child(3) { animation-delay: 0.42s; }
+    .pp-moment > :nth-child(4) { animation-delay: 0.5s; }
+    .pp-moment > :nth-child(n+5) { animation-delay: 0.58s; }
+
+    /* Badge: the medallion is struck. It drops in small and dim, overshoots and settles, and its bloom flares. */
+    .pp-moment > .pp-moment__med { animation: ppMomentStrike 0.6s cubic-bezier(0.22, 1, 0.36, 1) 0.1s backwards; }
+    .pp-moment__med::before { animation: ppMomentBloom 1.6s ease 0.35s backwards; }
+
+    /* The sunlight rises once the object has landed, then turns, slowly, for as long as the moment is up. */
+    .pp-moment__rays { animation: ppRaysIn 1.1s ease 0.8s backwards, ppRaysSpin 48s linear 0.8s infinite; }
+
+    /* Platinum: the cover turns in like a card being dealt, then the light sweeps across it. */
+    .pp-moment--plat .pp-moment__cover { perspective: 600px; }
+    .pp-moment__cover::after { animation: ppMomentSweep 0.9s ease 0.7s; }
+    /* The cover keeps its clip (the sweep must stay on the card), so its bloom is a glow on the card itself. */
+    .pp-moment__obj > .pp-moment__cover { animation: ppMomentDeal 0.7s cubic-bezier(0.3, 1.35, 0.5, 1) 0.1s backwards, ppMomentGlow 1.8s ease 0.4s; }
+
+    /* Milestone: the number swells in and its bloom pulses out like a ring. */
+    .pp-moment--milestone .pp-moment__obj > .pp-moment__number { animation: ppMomentStrike 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) 0.15s backwards; }
+    .pp-moment--milestone .pp-moment__number::before { animation: ppMomentRing 1.4s ease-out 0.5s backwards; }
 }
 @keyframes ppMomentIn { from { opacity: 0; transform: translateY(8px); } }
-@keyframes ppMomentCover { from { opacity: 0; transform: scale(0.9) translateY(6px); } }
+@keyframes ppMomentStrike {
+    0% { opacity: 0; transform: translateY(14px) scale(0.7); }
+    60% { opacity: 1; }
+    100% { opacity: 1; transform: none; }
+}
+@keyframes ppMomentDeal {
+    0% { opacity: 0; transform: rotateY(-38deg) rotateZ(-4deg) scale(0.82) translateY(10px); }
+    100% { opacity: 1; transform: none; }
+}
+@keyframes ppMomentSweep {
+    0% { transform: translateX(-120%); opacity: 1; }
+    100% { transform: translateX(120%); opacity: 1; }
+}
+@keyframes ppMomentBloom {
+    0% { opacity: 0; transform: translate(-50%, -50%) scale(0.6); }
+    35% { opacity: 1; transform: translate(-50%, -50%) scale(1.12); }
+    100% { opacity: 0.35; transform: translate(-50%, -50%) scale(1); }
+}
+@keyframes ppMomentGlow {
+    0%, 100% { box-shadow: 0 14px 40px rgba(0, 0, 0, 0.45); }
+    35% { box-shadow: 0 14px 40px rgba(0, 0, 0, 0.45), 0 0 46px color-mix(in oklab, var(--color-trophy-platinum) 55%, transparent); }
+}
+@keyframes ppRaysIn { from { opacity: 0; scale: 0.7; } }   /* to the resting 0.42 */
+@keyframes ppRaysSpin { to { rotate: 360deg; } }
+@keyframes ppMomentRing {
+    0% { opacity: 0.9; transform: translate(-50%, -50%) scale(0.5); }
+    100% { opacity: 0.35; transform: translate(-50%, -50%) scale(1); }
+}
 
 /* The strip's button for moments that wait for a tap (the platinum reel). Platinum-tinted, a hover GLOW
    not a scale, like every chip on the strip. */

@@ -21,11 +21,15 @@
     var AUTO_DELAY = 1100;                 // after the page's own first-visit modals (450ms) have opened
     var MINT_KEY = 'pp-badges-minted';     // the Collection's per-device "already minted" set (collection.js)
     var stage = root.querySelector('[data-moments-stage]');
+    var sparks = root.querySelector('[data-moments-sparks]');
     var countEl = root.querySelector('[data-moments-count]');
     var nextBtn = root.querySelector('[data-moments-next]');
     var skipBtn = root.querySelector('[data-moments-skip]');
     var linkEl = root.querySelector('[data-moments-link]');
     var playedUrl = root.getAttribute('data-played-url');
+    // `?preview=moments` (team only): sample moments with no rows behind them. Nothing is posted and the
+    // Collection's minted set is left alone, so the preview replays on every reload.
+    var preview = root.hasAttribute('data-preview');
     var modal = PP.DetailModal(root, { closeSelector: '[data-moments-close]' });
     var queue = [], idx = 0;
 
@@ -41,14 +45,14 @@
         var ids = templates.map(function (t) { return parseInt(t.getAttribute('data-moment'), 10); });
         templates.forEach(function (t) { if (t.parentNode) { t.parentNode.removeChild(t); } });
         refreshPills();
-        if (!ids.length || !PP.API) { return; }
+        if (preview || !ids.length || !PP.API) { return; }
         PP.API.post(playedUrl, { ids: ids }).catch(function () { /* it replays once more; never an error to show */ });
     }
 
     // The Collection mints a badge the first time it sees it earned. This one was just celebrated, so it is
     // already "seen" there: one ceremony per badge, not two.
     function rememberMinted(badgeId) {
-        if (!badgeId) { return; }
+        if (!badgeId || preview) { return; }
         try {
             var seen = JSON.parse(localStorage.getItem(MINT_KEY) || 'null');
             if (!Array.isArray(seen)) { return; }   // no set yet: the Collection seeds it silently on first visit
@@ -56,11 +60,32 @@
         } catch (e) { /* private mode */ }
     }
 
+    // THE FLOURISH, one beat per moment and in the earn vocabulary (sparks, the medallion's own mint, a light
+    // sweep), never confetti. The CSS carries the entrances (moments.css); this lands the sparks on the beat
+    // the object arrives, from wherever it actually is on screen. Reduced motion: none of it (sparkBurst and
+    // the CSS are both gated), the end state is what you see.
+    var BEATS = {
+        badge: { sel: '.pp-moment__med', at: 380, color: 'var(--pp-primary)', n: 22 },
+        platinum: { sel: '.pp-moment__cover', at: 560, color: 'var(--color-trophy-platinum)', n: 26 },
+        milestone: { sel: '.pp-moment__number', at: 520, color: 'var(--color-trophy-platinum)', n: 28 },
+    };
+    function flourish(kind) {
+        var beat = BEATS[kind];
+        if (!beat || reduced() || !PP.sparkBurst) { return; }
+        window.setTimeout(function () {
+            var el = stage.querySelector(beat.sel);
+            if (!el || root.hidden) { return; }
+            var r = el.getBoundingClientRect();
+            PP.sparkBurst(sparks, r.left + r.width / 2, r.top + r.height / 2, beat.color, beat.n);
+        }, beat.at);
+    }
+
     function show(i) {
         idx = i;
         var t = queue[i];
         stage.innerHTML = '';
         stage.appendChild(t.content.cloneNode(true));
+        flourish(t.getAttribute('data-kind'));
         countEl.textContent = queue.length > 1 ? (i + 1) + ' of ' + queue.length : '';
         var href = t.getAttribute('data-link-href');
         linkEl.hidden = !href;
@@ -70,8 +95,8 @@
 
         var med = stage.querySelector('.pp-med');
         if (med && !reduced()) {
-            // The medallion's own first-earn mint (badge-medallion.css), the site's earn vocabulary.
-            window.requestAnimationFrame(function () { med.classList.add('is-minting'); });
+            // The medallion's own first-earn mint (badge-medallion.css), struck as it lands and the sparks fly.
+            window.setTimeout(function () { med.classList.add('is-minting'); }, 360);
         }
         if (PP.countUp) {
             Array.prototype.forEach.call(stage.querySelectorAll('[data-countup]'), function (el) { PP.countUp(el, 900); });
@@ -128,6 +153,14 @@
         });
         mo.observe(document.body, { subtree: true, attributes: true, attributeFilter: ['hidden', 'class'] });
     }
+    // Warm every waiting moment's art now: a <template>'s images only start loading when it is cloned in, which
+    // left the medallion dark through its own strike.
+    Array.prototype.forEach.call(document.querySelectorAll('template[data-moment]'), function (t) {
+        Array.prototype.forEach.call(t.content.querySelectorAll('img[src]'), function (img) {
+            new Image().src = img.getAttribute('src');
+        });
+    });
+
     // A badge waiting here is celebrated by this player, so the Collection must not mint it as well. This
     // (deferred) script runs before DOMContentLoaded, when collection.js decides what to mint.
     // Only when it will auto-play: with celebrations off the hunter may never open it, and the Collection's
