@@ -239,13 +239,8 @@
     .ccx__ts-name { font-size: 12px; }
 }
 
-/* Hot sparks: fixed layer over everything; JS spawns + animates each (arc + gravity). */
+/* Hot sparks: fixed layer over everything; PlatPursuit.sparkBurst spawns each `.pp-spark` (motion.css). */
 .ccx__sparks { position: fixed; inset: 0; z-index: 4; pointer-events: none; }
-.ccx__spark {
-    position: fixed; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 999px;
-    background: radial-gradient(circle, #fff 0%, var(--sc, var(--pp-primary)) 70%);
-    box-shadow: 0 0 6px var(--sc, var(--pp-primary)); will-change: transform, opacity;
-}
 
 /* ---- End summary: "Tiers earned  Apprentice x2 . Adept" (revealed at settle) ----
  * Omitted on mobile: it's the only unbounded block in the stack (its wrapped-chip height grows with the
