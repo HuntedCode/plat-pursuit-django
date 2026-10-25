@@ -8,7 +8,7 @@ platinum/100%, filled to stages_done; a smooth bar off progress_pct above the ca
 page's tier ladder, with the "X / Y" count below. See docs/reference/badge-medallion.md.
 {% endcomment %}
 {% with tier=frame.tier|default:"gold" state=frame.state|default:"earned" total=frame.stages_total|default:0 %}
-<div class="pp-med pp-med--{{ tier }} pp-med--{{ state }}{% if frame.is_holographic and state == 'earned' %} pp-med--holographic{% endif %}{% if frame.is_avatar %} pp-med--avatar{% endif %}{% if show_repair and state == 'maintenance' %} pp-med--repair{% endif %}{% if frame.extra_class %} {{ frame.extra_class }}{% endif %}"
+<div class="pp-med pp-med--{{ tier }} pp-med--{{ state }}{% if frame.is_holographic and state == 'earned' %} pp-med--holographic{% endif %}{% if frame.is_mastered and state == 'earned' %} pp-med--mastered{% endif %}{% if frame.is_avatar %} pp-med--avatar{% endif %}{% if show_repair and state == 'maintenance' %} pp-med--repair{% endif %}{% if frame.extra_class %} {{ frame.extra_class }}{% endif %}"
      data-tier="{{ tier }}" data-state="{{ state }}"{% if frame.badge_id %} data-badge-id="{{ frame.badge_id }}"{% endif %}
      {% if frame.dom_id and not no_id %}id="{{ frame.dom_id }}"{% endif %}>
     <div class="pp-med__stage">
@@ -17,7 +17,7 @@ page's tier ladder, with the "X / Y" count below. See docs/reference/badge-medal
         filters can target nth-child(1)=backdrop, nth-child(2)=subject. {% endcomment %}
         <div class="pp-med__art">
             {% for layer in frame.art_layers %}
-            <img class="pp-med__l" src="{{ layer }}" alt="{% if forloop.counter == 2 %}{{ frame.series_name }} badge{% endif %}" loading="lazy" draggable="false">
+            <img class="pp-med__l" src="{{ layer }}" alt="{% if forloop.counter == 2 %}{{ frame.series_name }} badge{% if frame.is_mastered and state == 'earned' %}, mastered{% endif %}{% endif %}" loading="lazy" draggable="false">
             {% endfor %}
             {% comment %} Rising colour (in_progress + maintenance): full-colour copies of the backdrop AND
             the subject (art_layers.0 + .1) masked bottom-up to progress_pct, so the whole badge "colours in"
@@ -32,6 +32,10 @@ page's tier ladder, with the "X / Y" count below. See docs/reference/badge-medal
             Kept LAST so the state filters' nth-child(N) still count only the art layers. No mix-blend-mode
             (it would flatten the modal's preserve-3d parallax). {% endcomment %}
             {% if frame.is_holographic and state == 'earned' %}<span class="pp-med__foil" aria-hidden="true"></span>{% endif %}
+            {% comment %} MASTERED (phase 4, owner 2026-10-25): an upgrade ON TOP of holo, never in place of it. The
+            gold rim is CSS on the backdrop (it traces the art's own outline); the crown is a static SVG so its
+            gradients live in their own document (inline, a page of medallions would repeat the ids). {% endcomment %}
+            {% if frame.is_mastered and state == 'earned' %}<img class="pp-med__crown" src="{% static 'images/badges/mastery-crown.svg' %}" alt="" aria-hidden="true" draggable="false">{% endif %}
             {% comment %} Flip-to-base (modal only, with_back): the object's engraved "underside" -- the PP
             maker's mark embossed into a tier-metal disc, set number engraved below. Pure flavour, no info.
             Kept after the foil so the state filters' nth-child(N) still count only the art layers. {% endcomment %}

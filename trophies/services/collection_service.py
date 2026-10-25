@@ -67,25 +67,28 @@ def _engaged_series(profile):
     """The series the viewer is engaged with: they HOLD an edition (a UserGroupBadge) or have STARTED it (a
     SeriesBadgeStanding row exists only while xp>0, i.e. real progress). ONE bounded read of the held editions
     (with every field the wall needs off them) + one of the standings -- both catalog-bounded, not
-    trophy-bounded. Returns (engaged_slugs, holds, earned_at, standings) where holds = {group_badge_id: is_holo},
-    earned_at = {group_badge_id: dt}, standings = {series_slug: SeriesBadgeStanding} (carries group_progress)."""
+    trophy-bounded. Returns (engaged_slugs, holds, earned_at, standings, mastered) where holds = {group_badge_id:
+    is_holo}, earned_at = {group_badge_id: dt}, standings = {series_slug: SeriesBadgeStanding} (carries
+    group_progress) and mastered = the set of mastered group_badge ids."""
     held_rows = list(
         UserGroupBadge.objects.filter(profile=profile)
-        .values_list('group_badge_id', 'is_holo', 'group_badge__series__series_slug', 'earned_at')
+        .values_list('group_badge_id', 'is_holo', 'group_badge__series__series_slug', 'earned_at', 'mastered_at')
     )
-    holds = {gid: is_holo for gid, is_holo, _slug, _ea in held_rows}
-    earned_at = {gid: ea for gid, _holo, _slug, ea in held_rows}
-    held_slugs = {slug for _gid, _holo, slug, _ea in held_rows}
+    holds = {gid: is_holo for gid, is_holo, _slug, _ea, _ma in held_rows}
+    earned_at = {gid: ea for gid, _holo, _slug, ea, _ma in held_rows}
+    held_slugs = {slug for _gid, _holo, slug, _ea, _ma in held_rows}
+    mastered = {gid for gid, _holo, _slug, _ea, ma in held_rows if ma is not None}
     standings = {sb.series_slug: sb for sb in SeriesBadgeStanding.objects.filter(profile=profile)}
-    return (held_slugs | set(standings)), holds, earned_at, standings
+    return (held_slugs | set(standings)), holds, earned_at, standings, mastered
 
 
-def badge_frame(gb, holds, standings, participants):
+def badge_frame(gb, holds, standings, participants, mastered=frozenset()):
     """A collection Gallery frame for one group badge (edition), with the viewer's PER-EDITION state layered on.
     Progress is READ from the series' materialized SeriesBadgeStanding.group_progress read-model (per-edition
     {platform_group_key: [cleared, gating]}), then run through the shared badge_xp.edition_display_state -- the
     SAME derivation the live badge-detail view uses, so the wall and the modal can't disagree:
-      - held                                    -> 'earned' (holo when mastered),
+      - held                                    -> 'earned' (holo at 100% on the gating stages; MASTERED,
+                                                   in `mastered`, at 100% on every stage, phase 4),
       - not held, THIS edition has partial progress -> 'in_progress' + its own progress,
       - else                                    -> 'unearned' (an edition the viewer has 0% on, which the series
                                                    furthest-along would wrongly paint). build_collection_context
@@ -129,6 +132,7 @@ def badge_frame(gb, holds, standings, participants):
         'art_layers': layers,
         'is_avatar': is_avatar,
         'is_holographic': held and is_holo,
+        'is_mastered': held and gb.id in mastered,
         'series_name': series.name,
         'franchise': series.franchise.name if series.franchise_id else None,
         'collection': series.collection.name if series.collection_id else None,
@@ -172,7 +176,7 @@ def build_collection_context(profile, sort=DEFAULT_SORT):
         'sort': sort,
     }
     try:
-        engaged, holds, earned_at, standings = _engaged_series(profile)
+        engaged, holds, earned_at, standings, mastered = _engaged_series(profile)
         if not engaged:
             return context
 
@@ -203,7 +207,7 @@ def build_collection_context(profile, sort=DEFAULT_SORT):
         list_badges, edition_counts = [], {}
         earned = in_progress = recent = holo = 0
         for gb in group_badges:
-            fr = badge_frame(gb, holds, standings, participants)
+            fr = badge_frame(gb, holds, standings, participants, mastered)
             btype = gb.series.badge_type
             fr['theme'] = badge_type_label(btype)
             fr['palette'] = palette_of.get(btype, _PALETTES[0])

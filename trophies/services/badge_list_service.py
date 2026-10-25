@@ -41,10 +41,12 @@ def live_editions(*, groups=(), badge_types=(), query=''):
     return qs
 
 
-def _list_frame(gb, tier, layers, is_avatar, held, is_holo, stages_done=None, stages_total=None) -> dict:
+def _list_frame(gb, tier, layers, is_avatar, held, is_holo, stages_done=None, stages_total=None,
+                mastered=False) -> dict:
     """A SHOWCASE medallion frame for a list card: the full-colour display piece (ownership is shown by a
     separate card marker, not by desaturating the art). No progress meter / engraving rank -- those need the
-    engine / Redis and stay off the catalog wall. A mastered (holo) hold shimmers, as a personal flourish."""
+    engine / Redis and stay off the catalog wall. A holo hold shimmers, and a mastered one wears its rim and
+    crown, as a personal flourish."""
     series = gb.series
     return {
         'tier': tier,
@@ -52,6 +54,7 @@ def _list_frame(gb, tier, layers, is_avatar, held, is_holo, stages_done=None, st
         'art_layers': layers,
         'is_avatar': is_avatar,                     # user-badge avatar subject -> circle-masked + shrunk
         'is_holographic': bool(held and is_holo),
+        'is_mastered': bool(held and mastered),
         'series_name': series.name,
         'franchise': series.franchise.name if series.franchise_id else None,
         'collection': series.collection.name if series.collection_id else None,
@@ -89,7 +92,7 @@ def _edition_progress(gb, held, progress):
 
 def build_list_cards(group_badges, profile) -> list:
     """Cards for a page of GroupBadges (already select_related'd on series + platform_group), in the SAME order.
-    Each card: {group_badge, series, platform_group, frame, rarity_pct, rarity_class, earned, is_holo,
+    Each card: {group_badge, series, platform_group, frame, rarity_pct, rarity_class, earned, is_holo, is_mastered,
     earned_count}. TWO bulk queries beyond the caller's queryset for a signed-in viewer (their holds,
     and their per-edition standings), ZERO for an anonymous one -- whale-safe regardless of page size.
     The community-size denominator is a cached scalar, so it usually costs no query at all."""
@@ -101,14 +104,17 @@ def build_list_cards(group_badges, profile) -> list:
     # pursuer count -- one query fewer, and it cannot disagree with the badge detail page).
     community = community_size()
 
-    # The viewer's holds (earned + holo), one query. Anonymous -> no holds -> everything reads as not-earned.
-    holds = {}
+    # The viewer's holds (earned + holo + mastered), one query. Anonymous -> no holds -> everything reads as
+    # not-earned.
+    holds, mastered = {}, set()
     cleared = {}
     if profile:
-        holds = dict(
+        rows = list(
             UserGroupBadge.objects.filter(profile=profile, group_badge__in=group_badges)
-            .values_list('group_badge_id', 'is_holo')
+            .values_list('group_badge_id', 'is_holo', 'mastered_at')
         )
+        holds = {gid: holo for gid, holo, _ in rows}
+        mastered = {gid for gid, _, at in rows if at is not None}
         # The viewer's PER-EDITION progress, one bulk query keyed on series_slug (SeriesBadgeStanding
         # has no FK to the series).
         #
@@ -138,11 +144,13 @@ def build_list_cards(group_badges, profile) -> list:
             'frame': _list_frame(
                 gb, tier, layers, is_avatar, held, is_holo,
                 *_edition_progress(gb, held, progress) if profile else (None, gb.required_stages),
+                mastered=gb.id in mastered,
             ),
             'rarity_pct': pct,
             'rarity_class': cls,
             'earned': held,
             'is_holo': is_holo,
+            'is_mastered': held and gb.id in mastered,
             'earned_count': gb.earned_count,
         })
     return cards

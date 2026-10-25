@@ -137,6 +137,7 @@
     .pp-bdetail__stage .pp-med__foil,
     .pp-bdetail__stage .pp-med__glare,
     .pp-bdetail__stage .pp-med__contact,
+    .pp-bdetail__stage .pp-med__crown,
     .pp-bdetail__stage .pp-med__plate { backface-visibility: hidden; -webkit-backface-visibility: hidden; }
     /* Contact shadow the raised badge casts onto its plate. Sits just above the plate; the badge floats
        ~40px above it, so the tilt parallax slides this under the badge -- the cue that it's a separate
@@ -173,6 +174,11 @@
     .pp-detail-modal.is-opening .pp-bdetail__stage .pp-med--maintenance .pp-med__l:nth-child(1),
     .pp-detail-modal.is-closing .pp-bdetail__stage .pp-med--maintenance .pp-med__l:nth-child(1) { filter: grayscale(0.68) brightness(0.64) sepia(0.08) drop-shadow(var(--med-cast) rgba(0, 0, 0, 0.4)); }
     .pp-detail-modal.is-opening .pp-bdetail__stage .pp-med__l:nth-child(1) { transition: none; }   /* pick-up START is instant */
+    /* MASTERED: the rim rides the same leaf, so its lists carry the rim first and the grounding cast last,
+       matching in every state so the filter still interpolates (badge-medallion.css owns --mast-rim). */
+    .pp-bdetail__stage .pp-med--mastered .pp-med__l:nth-child(1) { filter: var(--mast-rim) drop-shadow(var(--med-cast) rgba(0, 0, 0, 0)); }
+    .pp-detail-modal.is-opening .pp-bdetail__stage .pp-med--mastered .pp-med__l:nth-child(1),
+    .pp-detail-modal.is-closing .pp-bdetail__stage .pp-med--mastered .pp-med__l:nth-child(1) { filter: var(--mast-rim) drop-shadow(var(--med-cast) rgba(0, 0, 0, 0.4)); }
 }
 
 /* Tilt enhancement: the layered parallax depths + tilt tuning + the light-tracking glare. Motion-OK on ALL
@@ -201,6 +207,10 @@
        in front of the grey base backdrop. */
     .pp-bdetail__stage .pp-med__fill--bg { transform: translateZ(0.5px); }
     .pp-bdetail__stage .pp-med__glare { transform: translateZ(52px); }   /* raised ABOVE the art (subject is at 40) so the dome floats as its own glass surface */
+    /* The crown stands proud of the subject, under the glass: it parallaxes as its own piece when you turn it. */
+    .pp-bdetail__stage .pp-med__crown { transform: translateZ(46px); transition: transform 0.4s ease; }
+    .pp-detail-modal.is-opening .pp-bdetail__stage .pp-med__crown { transform: translateZ(0); transition: none; }
+    .pp-detail-modal.is-closing .pp-bdetail__stage .pp-med__crown { transform: translateZ(0); }
     /* Subject (nth-child 2): raised + grounded with a cast shadow (a filter on this LEAF is 3D-safe). It
        KEEPS its per-state darkening so the hero matches the shelf -- in-progress/maintenance stay only
        partially coloured (the bright colour comes from the rising fill, not the base), and unearned stays

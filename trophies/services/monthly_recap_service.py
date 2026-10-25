@@ -601,6 +601,7 @@ class MonthlyRecapService:
                 'art_layers': layers,
                 'is_avatar': is_avatar,
                 'is_holographic': ugb.is_holo,
+                'is_mastered': ugb.mastered_at is not None,
                 'series_name': gb.series.name,
                 'badge_name': gb.platform_group.name,      # the edition: "Legacy HD" / "Ultra HD"
                 'series_slug': gb.series.series_slug,
