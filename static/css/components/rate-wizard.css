@@ -298,6 +298,18 @@
     }
 }
 
+/* BACK-TO-TOP AND THE TOASTS, LIFTED ABOVE THE PINNED BAR (audit, 2026-10-26). Both are fixed at the bottom
+   right, exactly where Submit sits once the bar is pinned: back-to-top covered it on any scroll-up, and every
+   "Elden Ring rated!" toast of a bulk run landed on it. The challenge optimizer lifts the button above its dock
+   the same way (challenge-optimizer.css). The bar is ~64px tall (a 40px button, 10px padding, the border);
+   unlayered, so these outrank input.css's `@layer base` positions whatever the specificity. */
+html:has(.rmg__actions) #back-to-top { bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px) + 64px + 16px); }
+html:has(.rmg__actions) #toast-container { bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px) + 64px + 12px); }
+@media (min-width: 1024px) {
+    html:has(.rmg__actions) #back-to-top { bottom: calc(12px + 64px + 16px); }
+    html:has(.rmg__actions) #toast-container { bottom: calc(12px + 64px + 12px); }
+}
+
 /* Shortcut hint. Only where there is a keyboard to use -- a touch device gets no value from being told
    about Enter, and the row is pure noise there. */
 .rmg__keys { display: none; margin-top: 10px; text-align: right; font-size: 11px; color: var(--pp-text-mute); }

@@ -142,7 +142,38 @@ def test_the_next_game_in_the_wizard_starts_unset_again(tmp_path):
         pg.evaluate(ATTACH, None)
         for name in SLIDERS:
             pg.click(f'[name="{name}"]')
+        before = _readouts(pg)
         pg.evaluate('window.fields.prefill(null, "")')
+        return before, _readouts(pg)
+
+    before, after = _run(tmp_path, steps)
+    assert '-' not in before, f'the clicks never set the sliders, so the reset proves nothing: {before}'
+    assert after == ['-', '-', '-', '-']
+
+
+def test_tabbing_through_the_form_sets_nothing(tmp_path):
+    """Audit: any keydown counted, so tabbing past the sliders filed each at its default, and Enter (the
+    wizard's submit shortcut) set the slider a refusal had just focused."""
+    def steps(pg):
+        pg.evaluate(ATTACH, None)
+        pg.focus('[name="difficulty"]')
+        for _ in range(6):
+            pg.keyboard.press('Tab')
+        pg.focus('[name="grindiness"]')
+        pg.keyboard.press('Enter')
+        return _readouts(pg)
+
+    assert _run(tmp_path, steps) == ['-', '-', '-', '-']
+
+
+def test_clicking_a_sliders_label_sets_nothing(tmp_path):
+    """Audit: each slider sits inside a <label>, which forwards a click on its text to the input. Clicking
+    "Difficulty", "Easy" or the "-" readout is not choosing a score."""
+    def steps(pg):
+        pg.evaluate(ATTACH, None)
+        pg.click('text=Difficulty')
+        pg.click('text=Easy')
+        pg.click('[data-gd-qr-val="overall_rating"]')
         return _readouts(pg)
 
     assert _run(tmp_path, steps) == ['-', '-', '-', '-']

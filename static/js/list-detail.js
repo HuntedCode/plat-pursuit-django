@@ -298,7 +298,27 @@
                 if (itemsRoot() === before) {
                     throw new Error('the items panel did not swap');
                 }
+                paintYou();
             });
+    }
+
+    /**
+     * "You: 3 of 8 platinumed" (review AU-02), recounted from the cards after the owner adds or removes a game.
+     * The line sits in the header, outside the panel that refresh replaces, and the cards carry the marks the
+     * server already decided -- so counting them is the same answer without a second source.
+     */
+    function paintYou() {
+        var line = document.querySelector('[data-gl-you]');
+        var panel = document.getElementById('gl-items-panel');
+        if (!line || !panel) { return; }
+        var total = panel.querySelectorAll('.gl-item').length;
+        var plat = panel.querySelectorAll('.gl-item .pp-gcard__mark--plat').length;
+        var started = panel.querySelectorAll('.gl-item .pp-gcard__mark:not(.pp-gcard__mark--plat)').length;
+        line.querySelector('[data-gl-you-plat]').textContent = String(plat);
+        line.querySelector('[data-gl-you-total]').textContent = String(total);
+        line.querySelector('[data-gl-you-started]').textContent = String(started);
+        line.querySelector('[data-gl-you-started-wrap]').hidden = started === 0;
+        line.hidden = plat === 0 && started === 0;
     }
 
     /**
@@ -1039,11 +1059,14 @@
         identityShow = open;
         // Leaving edit mode DROPS unsaved changes to the name, description and type (review AU-09): Done is
         // the one way out, so it does what the Cancel button beside Save used to.
-        // Mid-save it closes WITHOUT the reset, for the reason `dismiss()` gives below.
+        // DONE SAVES (audit, 2026-10-26). It is the one way out of edit mode now (review AU-09), and "Done" reads
+        // as "keep what I did": submitting runs the form's own path, which sends only what changed and simply
+        // closes when nothing did. A form the browser refuses (an empty name) is reset instead, and mid-save it
+        // just closes, for the reason `dismiss()` gives below.
         identityHide = function () {
             var save = form.querySelector('[data-gl-edit-save]');
-            if (!(save && save.dataset.busy === '1')) { reset(); }
-            close();
+            if (save && save.dataset.busy === '1') { close(); return; }
+            if (form.checkValidity()) { form.requestSubmit(); } else { reset(); close(); }
         };
 
         // Dismissal refuses while a save is in flight. It was not guarded, and the response
@@ -3188,6 +3211,9 @@
         }
         var strip = document.querySelector('[data-gl-positions]');
         if (strip) { strip.hidden = true; }
+        // The band's edit-mode class is a CLASS, so it rides the history snapshot the same way (audit).
+        var band = document.querySelector('[data-gl-actions]');
+        if (band) { band.classList.remove('is-editing'); }
         parkAdder();
         pendingDockSection = null;
         orderChain = Promise.resolve();

@@ -287,8 +287,8 @@ both halves of what lives here, where "Membership" would name only one of them.
   url_name, icon, auth_required, divider_before)` (frozen dataclasses). `HUB_SUBNAV_CONFIG` holds
   My Pursuit / Browse / Leaderboards / Support.
 - **Resolution.** `resolve_hub_subnav(request)`: (0) a VIEW's own answer, `request.hub_subnav_override =
-  (hub_key, slug)`, for a page whose hub depends on the viewer rather than its URL (the challenge run page for its
-  owner); the context processor reads it after the view has run, and an unknown hub key falls through to the
+  (hub_key, slug)`, for a page whose hub depends on the viewer rather than its URL (the challenge run page and a
+  game list's page, each for its owner); the context processor reads it after the view has run, and an unknown hub key falls through to the
   rules below rather than blanking the rail; (1) `_URL_NAME_TO_SLUG_OVERRIDES` — sub-pages whose
   url_name differs from their tab short-circuit here (e.g. `game_detail` → Browse/trophy-lists:
   the whole `/games/<np>/` list family, roadmaps included, lights the list-level catalogue,

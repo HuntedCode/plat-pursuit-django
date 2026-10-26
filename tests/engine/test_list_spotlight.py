@@ -802,3 +802,36 @@ def test_the_admin_form_cannot_set_featured_at_directly(owner_client):
     assert 'Weekend Platinums' in body, 'the change form did not render'
     assert 'name="featured_at_0"' not in body and 'name="featured_at"' not in body, (
         'featured_at is editable on the change form, which bypasses feature_selected entirely')
+
+
+
+# -- the pick left out of the grid (review AU-12) -------------------------------------------------------------
+
+def _grid_ids(html):
+    grid = html[html.index('id="items-grid"'):] if 'id="items-grid"' in html else html
+    return re.findall(r'href="/community/lists/(\d+)/" class="pp-gcard', grid)
+
+
+def test_paging_past_the_first_page_neither_repeats_nor_skips_a_list(viewer):
+    lists = [_list(name=f'List {n:02d}', games=1) for n in range(30)]
+    pick = lists[5]
+    _feature(pick)
+    first = _grid_ids(viewer.get(BROWSE + '?sort=alpha').content.decode())
+    second = _grid_ids(viewer.get(BROWSE + '?sort=alpha&page=2', HTTP_X_REQUESTED_WITH='XMLHttpRequest').content.decode())
+    seen = first + second
+    assert len(seen) == len(set(seen)) == 29, (len(seen), len(set(seen)))
+    assert str(pick.pk) not in seen
+
+
+def test_a_filter_puts_the_pick_back_in_the_results(viewer):
+    pick = _list(name='Zelda marathon', games=1)
+    _feature(pick)
+    body = viewer.get(BROWSE + '?q=zelda').content.decode()
+    assert str(pick.pk) in _grid_ids(body)
+
+
+def test_a_catalogue_of_one_featured_list_shows_no_empty_state(viewer):
+    _feature(_list(name='The only one', games=1))
+    body = viewer.get(BROWSE).content.decode()
+    assert 'No public lists yet' not in body
+    assert re.search(r'id="gl-count"[^>]*>1<', body), 'the count does not include the pick'

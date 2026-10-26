@@ -87,8 +87,11 @@ below with no outer wrapper.
                         {% endif %}
                         {% comment %}What the READER has done with this list (owner, 2026-10-26, review AU-02), the
                         sum of the marks on its cards. Absent when they have done nothing with any of it.{% endcomment %}
-                        {% if viewer_summary %}
-                        <p class="gl-you mt-2">You: <b>{{ viewer_summary.platinumed }}</b> of {{ viewer_summary.total }} platinumed{% if viewer_summary.started %} &middot; <b>{{ viewer_summary.started }}</b> started{% endif %}</p>
+                        {% comment %}Rendered for every signed-in reader and HIDDEN while there is nothing to say, so
+                        `list-detail.js` (`paintYou`) can recount it from the cards after the owner adds or removes a
+                        game: the panel refreshes, this line sits outside it.{% endcomment %}
+                        {% if user.is_authenticated %}
+                        <p class="gl-you mt-2" data-gl-you {% if not viewer_summary %}hidden{% endif %}>You: <b data-gl-you-plat>{{ viewer_summary.platinumed|default:0 }}</b> of <span data-gl-you-total>{{ viewer_summary.total|default:0 }}</span> platinumed<span data-gl-you-started-wrap {% if not viewer_summary.started %}hidden{% endif %}> &middot; <b data-gl-you-started>{{ viewer_summary.started|default:0 }}</b> started</span></p>
                         {% endif %}
                     </div>
 
@@ -318,7 +321,7 @@ below with no outer wrapper.
                             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.59 13.51 6.83 3.98"/><path d="m15.41 6.51-6.82 3.98"/></svg>
                             <span>Share</span>
                         </button>
-                        <span class="gl-actions__note text-xs text-base-content/50">Published. Anyone with the link can read it.</span>
+                        <span class="gl-actions__note text-xs text-base-content/50">Published. Anyone with the link can read it.<span data-gl-private-hint> Edit the list to make it private.</span></span>
                         {% comment %}Make private shows in EDIT MODE only (review AU-06): it is a setting you change
                         rarely, and on a phone it pushed the owner's actions to three rows.{% endcomment %}
                         <button type="button" class="pp-cta pp-cta--ghost" data-gl-unpublish>

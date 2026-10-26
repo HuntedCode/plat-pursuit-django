@@ -39,17 +39,21 @@ def progress_by_concept(profile, concept_ids):
 
 def platinumed_by_list(profile, lists):
     """Set `viewer_platinumed` on each list: how many of its games the hunter has platinumed (review AU-02),
-    for the My Lists cards. Two queries for the whole page (the lists' items, then the hunter's rows for
-    those games), bounded by the page's lists and `MAX_ITEMS_PER_LIST`."""
+    for the My Lists cards. ONE grouped query for the whole page, counted in the database: an item counts when
+    the hunter holds a platinum on any version of its game."""
+    from django.db.models import Count, Exists, OuterRef
+
     from gamelists.models import GameListItem
 
     lists = list(lists)
-    pairs = list(GameListItem.objects.filter(game_list__in=lists).values_list('game_list_id', 'concept_id'))
-    progress = progress_by_concept(profile, {concept_id for _, concept_id in pairs})
     counts = {}
-    for list_id, concept_id in pairs:
-        if concept_id in progress and progress[concept_id].has_plat:
-            counts[list_id] = counts.get(list_id, 0) + 1
+    if profile is not None and lists:
+        platinumed = ProfileGame.objects.filter(profile=profile, has_plat=True,
+                                                game__concept_id=OuterRef('concept_id'))
+        counts = dict(
+            GameListItem.objects.filter(game_list__in=lists).filter(Exists(platinumed))
+            .values('game_list_id').annotate(n=Count('id')).values_list('game_list_id', 'n')
+        )
     for game_list in lists:
         game_list.viewer_platinumed = counts.get(game_list.pk, 0)
 

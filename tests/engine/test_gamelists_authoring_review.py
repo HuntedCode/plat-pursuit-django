@@ -44,6 +44,32 @@ def test_progress_picks_the_hunters_best_version_of_each_game():
     assert untouched.pk not in got, 'a game the hunter never touched has no state'
 
 
+def test_a_platinum_beats_a_higher_percentage_without_one():
+    """The key is platinum FIRST: a 90% platinum (DLC left) is a finished hunt, a 100% list without a
+    platinum on another version is not the better answer to "have you platinumed this"."""
+    hunter = ProfileFactory()
+    concept = ConceptFactory()
+    _played(hunter, concept, progress=90, has_plat=True, platforms=('PS4',))
+    _played(hunter, concept, progress=100, platinum=False, platforms=('PS5',))
+    got = viewer_progress.progress_by_concept(hunter, [concept.pk])[concept.pk]
+    assert (got.has_plat, got.progress) == (True, 90)
+
+
+def test_the_cards_bar_colour_says_whether_there_is_a_platinum_to_chase(client):
+    owner = ProfileFactory(is_linked=True, psn_username='curator')
+    game_list = _list(owner, games=0)
+    chase, plain = ConceptFactory(unified_title='Has a plat'), ConceptFactory(unified_title='No plat')
+    from gamelists.services import game_list_service as svc
+    reader = _staff(client, psn='reader')
+    _played(reader, chase, progress=40)
+    _played(reader, plain, progress=40, platinum=False)
+    for concept in (chase, plain):
+        svc.add_concept(game_list, owner, concept)
+    body = client.get(_url(game_list)).content.decode()
+    assert 'pp-gcard__barfill--chase' in body and 'pp-gcard__barfill--prog' in body
+    assert 'you are 40% through it' in body, 'the mark is not in the card\'s accessible name'
+
+
 def test_nobody_reading_means_no_query_and_no_progress(django_assert_num_queries):
     with django_assert_num_queries(0):
         assert viewer_progress.progress_by_concept(None, [1, 2]) == {}
@@ -65,7 +91,9 @@ def test_a_list_marks_the_readers_games_and_sums_them(client):
 
     body = client.get(_url(game_list)).content.decode()
     assert 'pp-gcard__mark pp-gcard__mark--plat' in body and '>35%</span>' in body
-    assert 'You: <b>1</b> of 3 platinumed &middot; <b>1</b> started' in body
+    line = re.search(r'<p class="gl-you mt-2" data-gl-you\s*>(.*?)</p>', body, flags=re.S)
+    assert line, 'the progress line is hidden or missing'
+    assert re.sub(r'<[^>]+>', '', line.group(1)).split() == 'You: 1 of 3 platinumed &middot; 1 started'.split()
 
 
 def test_a_reader_who_has_played_none_of_it_sees_no_progress_line(client):
@@ -73,7 +101,7 @@ def test_a_reader_who_has_played_none_of_it_sees_no_progress_line(client):
     game_list = _list(owner, games=2)
     _staff(client, psn='reader')
     body = client.get(_url(game_list)).content.decode()
-    assert 'class="gl-you' not in body and 'pp-gcard__mark' not in body
+    assert re.search(r'data-gl-you\s+hidden', body) and 'pp-gcard__mark' not in body
 
 
 def test_my_lists_cards_count_the_platinums(client):
@@ -83,6 +111,32 @@ def test_my_lists_cards_count_the_platinums(client):
     ProfileGameFactory(profile=me, game=first.games.first(), progress=100, has_plat=True)
     body = client.get(MINE).content.decode()
     assert '<b class="gl-card__done">1</b> of 3 platinumed' in body
+
+
+def test_lists_you_follow_count_your_platinums_too(client):
+    from gamelists.models import GameListFollow
+
+    owner = ProfileFactory(is_linked=True, psn_username='curator')
+    game_list = _list(owner, games=2)
+    me = _staff(client, psn='me')
+    GameListFollow.objects.create(game_list=game_list, profile=me)
+    first = game_list.items.order_by('position').first().concept
+    ProfileGameFactory(profile=me, game=first.games.first(), progress=100, has_plat=True)
+    assert '<b class="gl-card__done">1</b> of 2 platinumed' in client.get(MINE + '?scope=following').content.decode()
+
+
+def test_my_lists_counts_platinums_in_one_query(client, django_assert_max_num_queries):
+    """Counted in the database (audit): the page's lists, grouped, never their items pulled into Python."""
+    from django.db import connection
+    from django.test.utils import CaptureQueriesContext
+
+    me = _staff(client, psn='me')
+    for n in range(3):
+        _list(me, games=3, name=f'List {n}')
+    with CaptureQueriesContext(connection) as ctx:
+        client.get(MINE)
+    grouped = [q['sql'] for q in ctx.captured_queries if 'has_plat' in q['sql'] and 'GROUP BY' in q['sql']]
+    assert len(grouped) == 1, grouped
 
 
 def test_a_card_with_no_platinums_keeps_its_game_count(client):
@@ -121,11 +175,21 @@ def test_somebody_elses_list_keeps_its_byline_and_community(client):
 def test_a_published_list_can_be_shared_by_owner_reader_and_visitor(client):
     owner = ProfileFactory(is_linked=True, psn_username='curator')
     game_list = _list(owner, games=1)
+    share_url = f'data-share-url="http://testserver/community/lists/{game_list.id}/"'
     anon = client.get(_url(game_list)).content.decode()
-    assert 'data-gl-share' in anon and f'/community/lists/{game_list.id}/' in anon
+    assert anon.count('data-gl-share') == 1 and share_url in anon
 
     _staff(client, psn='reader')
-    assert client.get(_url(game_list)).content.decode().count('data-gl-share') == 1
+    reader = client.get(_url(game_list)).content.decode()
+    assert reader.count('data-gl-share') == 1 and share_url in reader
+
+
+def test_the_owner_of_a_published_list_can_share_it(client):
+    me = _staff(client, psn='me')
+    game_list = _list(me, games=1)
+    body = client.get(_url(game_list)).content.decode()
+    assert f'data-share-url="http://testserver/community/lists/{game_list.id}/"' in body
+    assert 'data-gl-public-state hidden' not in body, 'the published state (and its Share) is hidden'
 
 
 def test_a_private_list_offers_no_share(client):
@@ -147,12 +211,43 @@ def test_share_uses_the_sheet_on_a_phone_and_the_clipboard_elsewhere():
 
 # -- AU-09 / AU-11 / AU-04: chrome --------------------------------------------------------------------------
 
+def test_the_you_line_is_recounted_after_an_add_or_remove():
+    """Audit: the line sits in the header, outside the panel an add or remove refreshes, so it went stale."""
+    js = (ROOT / 'static' / 'js' / 'list-detail.js').read_text(encoding='utf-8')
+    refresh = js[js.index('function refreshItems('):js.index('function paintYou(')]
+    assert 'paintYou();' in refresh
+    paint = js[js.index('function paintYou('):]
+    assert ".pp-gcard__mark--plat" in paint[:1200] and 'line.hidden' in paint[:1200]
+
+
+def test_the_you_line_waits_hidden_for_a_signed_in_reader_with_nothing_yet(client):
+    owner = ProfileFactory(is_linked=True, psn_username='curator')
+    game_list = _list(owner, games=1)
+    _staff(client, psn='reader')
+    body = client.get(_url(game_list)).content.decode()
+    assert re.search(r'class="gl-you mt-2" data-gl-you\s+hidden', body)
+
+
+def test_make_private_lives_in_edit_mode_and_a_restore_resets_it():
+    css = (ROOT / 'static' / 'css' / 'components' / 'gamelists.css').read_text(encoding='utf-8')
+    assert '.gl-actions:not(.is-editing) [data-gl-unpublish] { display: none; }' in css
+    js = (ROOT / 'static' / 'js' / 'list-detail.js').read_text(encoding='utf-8')
+    boot = js[js.index('function boot(first)'):]
+    assert "band.classList.remove('is-editing')" in boot[:4000], 'a restored page keeps the edit-mode class'
+    enter = js[js.index('function enterEditing()'):js.index('function exitEditing(')]
+    assert "classList.add('is-editing')" in enter
+
+
+def test_done_saves_what_was_typed():
+    js = (ROOT / 'static' / 'js' / 'list-detail.js').read_text(encoding='utf-8')
+    hide = js[js.index('identityHide = function () {'):][:400]
+    assert 'form.requestSubmit()' in hide and 'form.checkValidity()' in hide
+
+
 def test_edit_mode_has_one_way_out(client):
     me = _staff(client, psn='me')
     body = client.get(_url(_list(me, games=1))).content.decode()
     assert 'data-gl-edit-cancel' not in body, 'Cancel is back beside Save'
-    js = (ROOT / 'static' / 'js' / 'list-detail.js').read_text(encoding='utf-8')
-    assert 'identityHide = function () {' in js and 'reset(); }' in js[js.index('identityHide = function'):][:300]
 
 
 def test_the_toolbar_has_no_games_label(client):

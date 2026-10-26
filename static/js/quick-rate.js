@@ -202,15 +202,34 @@
         // A press sets a slider even when it changes nothing: `input` fires only on a CHANGE, so clicking
         // the thumb where it sits, or pressing a key at the end of the track, would otherwise leave the
         // hunter's real answer of "5" unset.
-        function markSet(e) {
-            if (!e.target.matches || !e.target.matches('[data-gd-qr-slider][data-unset]')) { return; }
-            e.target.removeAttribute('data-unset');
-            setReadout(form, e.target.name);
+        //
+        // Only a press ON THE SLIDER, and only a key that MOVES one (audit, 2026-10-26). Any keydown counted,
+        // so tabbing through the form set every slider at its default -- the exact 5 / 5 / 5 / 3.0 this gate
+        // exists to stop -- and Enter (the wizard's submit shortcut) set the one the refusal had just
+        // focused. And any click counted, but each slider sits inside a <label>, which forwards a click on its
+        // text ("Difficulty", "Easy", the readout) to the input as a click of its own. A pointerdown lands on
+        // the input only when the pointer does, so the click that follows one is a real press.
+        var MOVE_KEYS = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown'];
+        var pressed = null;
+        function setSlider(input) {
+            if (!input.matches('[data-gd-qr-slider][data-unset]')) { return; }
+            input.removeAttribute('data-unset');
+            setReadout(form, input.name);
             announce();
+        }
+        function onPointerDown(e) { pressed = e.target.matches && e.target.matches('[data-gd-qr-slider]') ? e.target : null; }
+        function onClick(e) {
+            if (pressed && e.target === pressed) { setSlider(pressed); }
+            pressed = null;
+        }
+        function onKeyDown(e) {
+            if (MOVE_KEYS.indexOf(e.key) !== -1 && e.target.matches && e.target.matches('[data-gd-qr-slider]')) {
+                setSlider(e.target);
+            }
         }
 
         function onInput(e) {
-            if (e.target.matches('[data-gd-qr-slider]')) { markSet(e); setReadout(form, e.target.name); }
+            if (e.target.matches('[data-gd-qr-slider]')) { setSlider(e.target); setReadout(form, e.target.name); }
             if (e.target.matches('[data-gd-qr-blurb]')) { refreshCount(form); }
             if (e.target.name === 'hours_to_platinum') { announce(); }
             // Radios fire `input` as well as `change`, so the existing delegated listener covers them.
@@ -302,8 +321,9 @@
         function onSubmitEvent(e) { e.preventDefault(); doSubmit(); }
 
         form.addEventListener('input', onInput);
-        form.addEventListener('click', markSet);
-        form.addEventListener('keydown', markSet);
+        form.addEventListener('pointerdown', onPointerDown);
+        form.addEventListener('click', onClick);
+        form.addEventListener('keydown', onKeyDown);
         form.addEventListener('submit', onSubmitEvent);
 
         // The guidelines sheet is wired HERE, by the component that owns the link. `_rating_fields.html`
@@ -374,8 +394,9 @@
             state: function () { return { ready: ready(), busy: busy }; },
             detach: function () {
                 form.removeEventListener('input', onInput);
-                form.removeEventListener('click', markSet);
-                form.removeEventListener('keydown', markSet);
+                form.removeEventListener('pointerdown', onPointerDown);
+                form.removeEventListener('click', onClick);
+                form.removeEventListener('keydown', onKeyDown);
                 form.removeEventListener('submit', onSubmitEvent);
             },
         };

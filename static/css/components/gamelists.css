@@ -1390,6 +1390,8 @@
 }
 /* Make private belongs to edit mode (review AU-06): `list-detail.js` marks the band while the mode is on. */
 .gl-actions:not(.is-editing) [data-gl-unpublish] { display: none; }
+/* ...and the note says where it went, until edit mode shows it. */
+.gl-actions.is-editing [data-gl-private-hint] { display: none; }
 
 /* The reader's own progress over the list (review AU-02), in the cards' own vocabulary: platinum for the
    platinums. */

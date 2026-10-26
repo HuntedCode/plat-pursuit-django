@@ -46,13 +46,14 @@ it never tears down to a spinner, which read as a full-page reload.
                 "Games total 89", the same for DLC): on a phone they were the whole first screen and the game to rate
                 started under the pinned Skip / Submit bar. The same tiles came off Discovery and Progression.
 
-                The waiting figures keep their ids and tick DOWN live as you rate (`tickWaiting`); the total
-                shows only once it differs ("88 of 89"), since a fresh queue's total is the same number twice. The
+                The waiting figures keep their ids and tick DOWN live as you rate (`tickWaiting`). The total shows
+                only when the page loads with some already rated ("88 of 89"), since a fresh queue's total is the
+                same number twice; a live tick moves the figure alone. "Games" agrees with the figure shown. The
                 split ("12 new, 77 need a rec") stays: "new" is a whole rating, "need a rec" one tap on a card that
                 arrives prefilled, and lumping them makes a long-standing rater's count look like it jumped by
                 hundreds overnight.{% endcomment %}
                 <p class="pp-factline w-full">
-                    <span><b id="rmg-waiting-base" data-countup="{{ rating_progress.games_waiting }}">{{ rating_progress.games_waiting|intcomma }}</b>{% if rating_progress.games_waiting != rating_progress.games_total %} of {{ rating_progress.games_total|intcomma }}{% endif %} game{{ rating_progress.games_total|pluralize }} to rate{% if rating_progress.games_new and rating_progress.games_need_rec %} ({{ rating_progress.games_new|intcomma }} new, {{ rating_progress.games_need_rec|intcomma }} need a rec){% endif %}</span>
+                    <span><b id="rmg-waiting-base" data-countup="{{ rating_progress.games_waiting }}">{{ rating_progress.games_waiting|intcomma }}</b>{% if rating_progress.games_waiting != rating_progress.games_total %} of {{ rating_progress.games_total|intcomma }}{% endif %} game{{ rating_progress.games_waiting|pluralize }} to rate{% if rating_progress.games_new and rating_progress.games_need_rec %} ({{ rating_progress.games_new|intcomma }} new, {{ rating_progress.games_need_rec|intcomma }} need a rec){% endif %}</span>
                     {% if rating_progress.dlc_total %}<span><b id="rmg-waiting-dlc" data-countup="{{ rating_progress.dlc_waiting }}">{{ rating_progress.dlc_waiting|intcomma }}</b>{% if rating_progress.dlc_waiting != rating_progress.dlc_total %} of {{ rating_progress.dlc_total|intcomma }}{% endif %} DLC{% if rating_progress.dlc_new and rating_progress.dlc_need_rec %} ({{ rating_progress.dlc_new|intcomma }} new, {{ rating_progress.dlc_need_rec|intcomma }} need a rec){% endif %}</span>{% endif %}
                 </p>
             </div>
