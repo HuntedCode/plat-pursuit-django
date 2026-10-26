@@ -9,8 +9,8 @@
 The artifact leads. `visual-identity.md` says custom badge artwork is the moat and "if the chrome ever
 fights the art, the chrome loses", so a page teaching the badge system that showed no badges was teaching
 around its own subject. Every medallion here is a REAL live badge composed by `badge_forge_medallions()`,
-shared verbatim with the browse page's first-run modal so the two cannot show different art, and every
-one of them is TAPPABLE into the same quick-peek the rest of the site uses.
+each a different piece of art (no artwork twice on the page, owner 2026-10-26), and the hero and the journey's
+medallions are TAPPABLE into the same quick-peek the rest of the site uses.
 
 LANGUAGE NOTE (2026-08): the forging / minting / striking vocabulary is retired from user-facing copy.
 It belonged to an older badge system we moved off, and it now describes something the product does not
@@ -167,7 +167,7 @@ quick-peek (`PlatPursuit.Medallion.detailModal`), `.pp-tally`, `.pp-head-cascade
                 <span class="pp-hiw__n" aria-hidden="true">04</span>
                 <h2 class="pp-hiw__cap">Make it shine</h2>
                 <p class="pp-hiw__desc">
-                    Not finished yet. Push every game to a true 100%, DLC and all, and the same medallion
+                    Not finished yet. Push every game to a true 100%, DLC and all, and your medallion
                     turns <strong class="pp-forge__holo">holographic</strong>.
                 </p>
             </div>
@@ -230,7 +230,8 @@ quick-peek (`PlatPursuit.Medallion.detailModal`), `.pp-tally`, `.pp-head-cascade
     Names and platforms come from `PlatformGroup` rows, never retyped: the model owns the mapping, the
     engine routes games by it, and its docstring calls adding a group "a row, not a schema change". The
     medallion is matched by INDEX, which is the honest limit of a two-metal illustration: a third seeded
-    edition still gets a correct name, platforms and card, just the second metal. {% endcomment %}
+    edition still gets a correct name, platforms and card, on the bare gold plate (its art would repeat
+    the second's). {% endcomment %}
     <section class="pp-hiw__eds">
         <h2 class="pp-hiw__sec">One set, two generations</h2>
         <p class="pp-hiw__sec-sub">
@@ -244,8 +245,10 @@ quick-peek (`PlatPursuit.Medallion.detailModal`), `.pp-tally`, `.pp-head-cascade
                 <span class="pp-hiw__ed-med">
                     {% if forloop.first %}
                     {% include 'components/badge_medallion.html' with frame=forge_meds.ultra no_id=True %}
-                    {% else %}
+                    {% elif forloop.counter == 2 %}
                     {% include 'components/badge_medallion.html' with frame=forge_meds.legacy no_id=True %}
+                    {% else %}
+                    {% include 'components/badge_medallion.html' with frame=forge_meds.plate no_id=True %}
                     {% endif %}
                 </span>
                 <span class="pp-hiw__ed-name">{{ ed.name }}</span>

@@ -123,6 +123,8 @@ def badge_forge_medallions(subjects):
         'mastered': frame(dealt.get('mastered'), 'platinum', mastered=True),  # beat 5: Mastery
         'ultra': frame(dealt.get('ultra'), 'platinum'),                     # editions legend: Ultra HD
         'legacy': frame(dealt.get('legacy'), 'gold'),                       # editions legend: Legacy HD
+        # A third (or later) edition in the legend: the bare gold plate, so legacy's art is not repeated.
+        'plate': frame(None, 'gold'),
     }
     meds['source_id'] = next((m['source_id'] for m in meds.values() if m['source_id']), None)
     return meds
@@ -132,10 +134,13 @@ def badge_subject_art(limit=4):
     """Raw SUBJECT artwork, most-earned first: the drawings themselves, not the composed medallion. Feeds the
     how-it-works page (its medallions and its handmade claim) and the Support page's header.
 
-    Distinct by the ARTWORK, not just the badge. Sister series can share one piece (`artwork_source`), and the
-    plate, shape and backing are shared by every badge in an edition, so the subject is the only part that
-    tells two medallions apart: the same subject twice would read as two copies of one object (owner,
-    2026-10-26: no artwork twice on the how-it-works page).
+    Distinct by the art FILE, not just the badge: two editions of a series, or sister series sharing one piece
+    (`artwork_source`), give the same URL and count once. The plate, shape and backing are shared by every
+    badge in an edition, so the subject is the only part that tells two medallions apart: the same subject
+    twice would read as two copies of one object (owner, 2026-10-26: no artwork twice on the how-it-works
+    page). Known limit: the same drawing UPLOADED twice (an edition override re-uploading the series art, or
+    two series each given the file instead of linking `artwork_source`) is two files, and would count twice;
+    linking the art is the fix, not a content hash here.
 
     Avatar subjects are skipped: a submitter's profile picture is a real custom image as far as
     `art_layers()` is concerned, but it is not a commissioned piece and putting one here would make the
@@ -1269,8 +1274,8 @@ class BadgeHowItWorksView(TemplateView):
     could not index it, and no other surface could reach it. Three surfaces render those names straight
     off `PlatformGroup.name` without being able to say what they mean -- badge detail as the group-switch
     TABS, the Browse Badges gallery as PLATFORM FILTER CHIPS, and the Collection as edition stat labels
-    (plus a per-card caption). Each of the three now carries a `.pp-edhint` link pointing here. The modal
-    keeps its onboarding job: it greets a first visit once and links here.
+    (plus a per-card caption). Each of the three now carries a `.pp-edhint` link pointing here. (The modal
+    itself was retired on 2026-10-24: this page is the one place the badge system is taught.)
 
     The edition table is read from `PlatformGroup`, never retyped. That model already owns the mapping
     (`name` + `platforms`), the badge engine routes games by it, and the class docstring calls adding a

@@ -217,7 +217,7 @@ def test_the_page_leads_with_real_badge_artwork(client):
     """
     body = client.get(reverse('badge_how_it_works')).content.decode()
 
-    # Hero + beats 3/4 + one per edition: the page is carried by medallions, not by prose about them.
+    # Hero + beats 3/4/5 + one per edition: the page is carried by medallions, not by prose about them.
     meds = body.count('class="pp-med ')
     assert meds >= 4, f'only {meds} medallions render -- the artifact no longer leads'
 
@@ -322,7 +322,7 @@ def test_the_page_states_the_artwork_is_handmade_and_never_ai(client):
 def test_the_artwork_strip_shows_the_pieces_not_the_medallions(client):
     """The medallion form works against this section's argument: the plate, shape and backing are shared
     across an edition, so four medallions from one series would look like four copies of one object. The
-    SUBJECT is the part an artist drew, so the strip shows raw subject art, one per series."""
+    SUBJECT is the part an artist drew, so the strip shows raw subject art, each piece once."""
     page = (ROOT / 'templates' / 'trophies' / 'badge_how_it_works.html').read_text(encoding='utf-8')
     craft = page[page.index('pp-hiw__craft'):page.index('pp-hiw__eds')]
 
@@ -379,15 +379,17 @@ def test_the_journey_stacks_its_art_above_the_copy_on_a_phone():
 # -- no artwork twice (owner, 2026-10-26) ---------------------------------------------------------------------
 
 def _art_badges(n, start=0):
-    """`n` live badges with their own art, most-earned first."""
-    from tests.factories import BadgeSeriesFactory, GroupBadgeFactory
+    """`n` live badges with their own art, most-earned first, all on ONE edition (a new PlatformGroup per
+    badge would seed n editions into the legend)."""
+    from tests.factories import BadgeSeriesFactory, GroupBadgeFactory, PlatformGroupFactory
+    edition = PlatformGroupFactory(key='art-ed')
     return [GroupBadgeFactory(series=BadgeSeriesFactory(name=f'Art {i}', badge_image=f'badges/art-{i}.png'),
-                              is_live=True, earned_count=100 - i)
+                              platform_group=edition, is_live=True, earned_count=100 - i)
             for i in range(start, start + n)]
 
 
 def _page_art():
-    """The pieces each slot shows, from the view's own context: (medallion subjects, handmade pieces)."""
+    """The pieces each slot shows, from the view's own context: (medallion subjects, handmade pieces, ctx)."""
     from django.test import RequestFactory
     from trophies.views.badge_views import FORGE_SLOTS, BadgeHowItWorksView
 
@@ -398,20 +400,44 @@ def _page_art():
     return [m[0] for m in meds if m], [piece['src'] for piece in ctx['craft_art']], ctx
 
 
+def _rendered_art(client):
+    """Every subject drawing the RENDERED page shows: each medallion's art layer (the plates excluded) and
+    each handmade piece. Read off the HTML, so a template showing one slot twice is caught too."""
+    body = client.get(reverse('badge_how_it_works')).content.decode()
+    layers = re.findall(r'<img class="pp-med__l" src="([^"]+)"', body)
+    pieces = re.findall(r'<li class="pp-hiw__piece">\s*<img src="([^"]+)"', body)
+    return [src for src in layers if 'backdrops/' not in src] + pieces, body
+
+
 @pytest.mark.django_db
-def test_no_artwork_shows_twice_on_the_page():
+def test_no_artwork_shows_twice_on_the_page(client):
     _art_badges(12)
     meds, craft, _ = _page_art()
     assert len(meds) == 6 and len(craft) == 4
-    assert len(set(meds + craft)) == 10, 'a piece shows twice'
+    art, _ = _rendered_art(client)
+    assert len(art) == 10 and len(set(art)) == 10, sorted(art)
 
 
 @pytest.mark.django_db
-def test_a_small_catalog_leaves_slots_on_the_bare_plate_rather_than_repeat():
+def test_a_third_edition_shows_the_bare_plate_not_a_repeat(client):
+    from tests.factories import PlatformGroupFactory
+    for key in ('ed-a', 'ed-b', 'ed-c'):
+        PlatformGroupFactory(key=key)
+    _art_badges(12)
+    art, _ = _rendered_art(client)
+    assert len(art) == len(set(art)), sorted(art)
+
+
+@pytest.mark.django_db
+def test_a_small_catalog_leaves_slots_on_the_bare_plate_rather_than_repeat(client):
     _art_badges(3)
     meds, craft, ctx = _page_art()
     assert len(meds) == 3 and craft == [] and len(set(meds)) == 3
     assert ctx['forge_meds']['hero']['art_layers'][1:], 'the hero gets the first piece'
+    art, body = _rendered_art(client)
+    assert len(art) == len(set(art)) == 3
+    ids = re.findall(r'pp-forge-peek"\s+data-badge-id="(\d+)"', body)
+    assert len(ids) == 3, 'a plate-only medallion has no badge behind it, so it is not tappable'
 
 
 @pytest.mark.django_db
@@ -427,9 +453,11 @@ def test_two_editions_and_sister_series_sharing_one_piece_count_once():
 
 
 @pytest.mark.django_db
-def test_each_medallion_opens_its_own_badge(client):
-    badges = _art_badges(6)
-    body = client.get(reverse('badge_how_it_works')).content.decode()
-    ids = re.findall(r'pp-forge-peek"\s+data-badge-id="(\d+)"', body)
-    assert len(ids) == 4 and len(set(ids)) == 4, ids   # hero + beats 3, 4, 5 are tappable
-    assert set(map(int, ids)) <= {gb.id for gb in badges}
+def test_each_medallion_opens_the_badge_its_art_belongs_to():
+    from trophies.views.badge_views import FORGE_SLOTS
+
+    owner = {f'art-{i}.png': gb.id for i, gb in enumerate(_art_badges(6))}
+    _, _, ctx = _page_art()
+    for slot in FORGE_SLOTS:
+        med = ctx['forge_meds'][slot]
+        assert owner[med['art_layers'][1].rsplit('/', 1)[1]] == med['source_id'], slot
