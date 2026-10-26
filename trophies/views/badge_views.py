@@ -79,59 +79,68 @@ def badge_catalog_stats():
     }
 
 
-def badge_forge_medallions():
-    """Edition medallions for the header's 'how badges work' forge journey. A teaching abstraction, so it
-    composes a REAL badge's subject art onto each edition's metal plate (Ultra HD -> platinum, Legacy HD ->
-    gold): the journey's claim/master beats + the editions legend show the genuine .pp-med OBJECT with real
-    artwork rather than a bare plate. Picks a representative live badge that HAS custom art (most-earned
-    first, bounded scan); falls back to the plain metal plate on an empty catalog (fresh install / tests)."""
+#: The How badges work page's medallion slots, each a DIFFERENT badge's art (owner, 2026-10-26: no artwork
+#: twice on the page). The hero first, so it gets the best-attended piece.
+FORGE_SLOTS = ('hero', 'earned', 'holo', 'mastered', 'ultra', 'legacy')
+
+
+def badge_forge_medallions(subjects):
+    """Edition medallions for the how-it-works page. A teaching abstraction, so it composes a REAL badge's
+    subject art onto each edition's metal plate (Ultra HD -> platinum, Legacy HD -> gold): the hero, the
+    journey's claim / holo / mastery beats and the editions legend show the genuine .pp-med OBJECT with real
+    artwork rather than a bare plate.
+
+    `subjects` (from `badge_subject_art`) is dealt one per slot in FORGE_SLOTS order, so no two medallions
+    share art. A slot past the end of the list gets the plain metal plate, never a repeat (a small catalog,
+    a fresh install, tests). Each frame carries its own `source_id` for the quick-peek; `source_id` at the top
+    is set when any slot has a badge behind it, which is what gates the peek dialog."""
     from django.templatetags.static import static
 
     def plate(metal):
         n = 4 if metal == 'platinum' else 3   # 4_backdrop = platinum plate, 3_backdrop = gold plate
         return static(f'images/badges/backdrops/{n}_backdrop.png')
 
-    subject, name, source_id, is_avatar = None, 'Platinum Pursuit', None, False
-    for cand in (GroupBadge.objects.filter(is_live=True)
-                 .select_related('series', 'series__artwork_source', 'series__submitted_by', 'platform_group')
-                 .order_by('-earned_count', 'id')[:12]):
-        art = cand.art_layers()
-        if art.get('has_custom_image'):      # a real subject (override / series / avatar), not default.png
-            subject, name, source_id, is_avatar = art['main'], cand.series.name, cand.id, art['is_avatar']
-            break
-
-    def frame(metal, holo=False, mastered=False):
-        # Subject rides on OUR metal plate (the subject is metal-agnostic -- the plate carries the edition),
-        # so the same badge shows in both editions' metals. No subject -> the plate alone (graceful).
+    def frame(subject, metal, holo=False, mastered=False):
+        # Subject rides on OUR metal plate (the subject is metal-agnostic -- the plate carries the edition).
+        # No subject -> the plate alone (graceful).
         return {
             'tier': metal,
             'state': 'earned',
-            'art_layers': [plate(metal)] + ([subject] if subject else []),
-            'is_avatar': is_avatar,          # a user-badge avatar subject -> circle-masked + shrunk
+            'art_layers': [plate(metal)] + ([subject['src']] if subject else []),
             'is_holographic': holo or mastered,
             'is_mastered': mastered,
-            'series_name': name,
+            'series_name': subject['series'] if subject else 'Platinum Pursuit',
+            # The real badge behind the art: tapping the medallion opens its quick-peek (like every other
+            # medallion on the page). None for a plate-only slot, which is then non-interactive.
+            'source_id': subject['badge_id'] if subject else None,
         }
 
-    return {
-        'earned': frame('platinum'),               # beat 3: the badge, claimed (solid)
-        'holo': frame('platinum', holo=True),      # beat 4: 100% on every game -> holographic
-        'mastered': frame('platinum', mastered=True),   # beat 5 + the hero: every stage at 100% -> mastered
-        'ultra': frame('platinum'),                # editions legend: Ultra HD
-        'legacy': frame('gold'),                   # editions legend: Legacy HD
-        # The real badge behind the art -- tapping any forge medallion opens its quick-peek (like every
-        # other medallion on the page). None on an empty catalog -> the illustrations are non-interactive.
-        'source_id': source_id,
+    dealt = dict(zip(FORGE_SLOTS, subjects))
+    meds = {
+        'hero': frame(dealt.get('hero'), 'platinum', mastered=True),        # the thing the page sells
+        'earned': frame(dealt.get('earned'), 'platinum'),                   # beat 3: the badge, claimed
+        'holo': frame(dealt.get('holo'), 'platinum', holo=True),            # beat 4: 100% on every game
+        'mastered': frame(dealt.get('mastered'), 'platinum', mastered=True),  # beat 5: Mastery
+        'ultra': frame(dealt.get('ultra'), 'platinum'),                     # editions legend: Ultra HD
+        'legacy': frame(dealt.get('legacy'), 'gold'),                       # editions legend: Legacy HD
+        # A third (or later) edition in the legend: the bare gold plate, so legacy's art is not repeated.
+        'plate': frame(None, 'gold'),
     }
+    meds['source_id'] = next((m['source_id'] for m in meds.values() if m['source_id']), None)
+    return meds
 
 
 def badge_subject_art(limit=4):
-    """Raw SUBJECT artwork for the how-it-works page's handmade claim: the drawings themselves, not the
-    composed medallion.
+    """Raw SUBJECT artwork, most-earned first: the drawings themselves, not the composed medallion. Feeds the
+    how-it-works page (its medallions and its handmade claim) and the Support page's header.
 
-    One per SERIES, deliberately. The plate, shape and backing are shared by every badge in an edition, so
-    four medallions from one series would look like four copies of the same object and undersell exactly
-    the thing being claimed. The subject is the part an artist drew.
+    Distinct by the art FILE, not just the badge: two editions of a series, or sister series sharing one piece
+    (`artwork_source`), give the same URL and count once. The plate, shape and backing are shared by every
+    badge in an edition, so the subject is the only part that tells two medallions apart: the same subject
+    twice would read as two copies of one object (owner, 2026-10-26: no artwork twice on the how-it-works
+    page). Known limit: the same drawing UPLOADED twice (an edition override re-uploading the series art, or
+    two series each given the file instead of linking `artwork_source`) is two files, and would count twice;
+    linking the art is the fix, not a content hash here.
 
     Avatar subjects are skipped: a submitter's profile picture is a real custom image as far as
     `art_layers()` is concerned, but it is not a commissioned piece and putting one here would make the
@@ -140,13 +149,11 @@ def badge_subject_art(limit=4):
     seen, out = set(), []
     for cand in (GroupBadge.objects.filter(is_live=True)
                  .select_related('series', 'series__artwork_source', 'series__submitted_by', 'platform_group')
-                 .order_by('-earned_count', 'id')[:60]):
-        if cand.series_id in seen:
-            continue
+                 .order_by('-earned_count', 'id')[:80]):
         art = cand.art_layers()
-        if not art.get('has_custom_image') or art.get('is_avatar'):
+        if not art.get('has_custom_image') or art.get('is_avatar') or art['main'] in seen:
             continue
-        seen.add(cand.series_id)
+        seen.add(art['main'])
         out.append({'src': art['main'], 'series': cand.series.name, 'badge_id': cand.id})
         if len(out) >= limit:
             break
@@ -1267,8 +1274,8 @@ class BadgeHowItWorksView(TemplateView):
     could not index it, and no other surface could reach it. Three surfaces render those names straight
     off `PlatformGroup.name` without being able to say what they mean -- badge detail as the group-switch
     TABS, the Browse Badges gallery as PLATFORM FILTER CHIPS, and the Collection as edition stat labels
-    (plus a per-card caption). Each of the three now carries a `.pp-edhint` link pointing here. The modal
-    keeps its onboarding job: it greets a first visit once and links here.
+    (plus a per-card caption). Each of the three now carries a `.pp-edhint` link pointing here. (The modal
+    itself was retired on 2026-10-24: this page is the one place the badge system is taught.)
 
     The edition table is read from `PlatformGroup`, never retyped. That model already owns the mapping
     (`name` + `platforms`), the badge engine routes games by it, and the class docstring calls adding a
@@ -1300,9 +1307,11 @@ class BadgeHowItWorksView(TemplateView):
         # subject onto each edition's metal plate, which is the whole point on a page teaching a system
         # whose moat IS the custom art: "if the chrome ever fights the art, the chrome loses"
         # (visual-identity.md). It falls back to the bare plate on an empty catalog, so a fresh install
-        # still renders. Shared verbatim with the browse page's first-run modal -- one source, so the
-        # page and the sheet cannot show different badges.
-        context['forge_meds'] = badge_forge_medallions()
+        # still renders.
+        # ONE pool of distinct artwork, dealt out: the medallions take the first pieces and the handmade claim
+        # the next four, so no piece shows twice on the page (owner, 2026-10-26).
+        art = badge_subject_art(limit=len(FORGE_SLOTS) + 4)
+        context['forge_meds'] = badge_forge_medallions(art[:len(FORGE_SLOTS)])
 
         # Real numbers, because the brief makes them first-class material: "watching them climb is half
         # the joy of the hobby and we should never bury it." Read from the hourly-cached site heartbeat,
@@ -1313,7 +1322,7 @@ class BadgeHowItWorksView(TemplateView):
         # asserting the art is hand-drawn is worth less than four pieces of it sitting there, and the
         # medallion form would work against the point: the plate and shape are the same on every badge,
         # so it is the SUBJECT that shows a person drew this one.
-        context['craft_art'] = badge_subject_art(limit=4)
+        context['craft_art'] = art[len(FORGE_SLOTS):]
 
         context['breadcrumb'] = [
             {'text': 'Home', 'url': reverse_lazy('home')},
