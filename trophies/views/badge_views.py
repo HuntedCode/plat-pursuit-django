@@ -48,7 +48,7 @@ from ..models import (
     ProfileCareerStanding, SeriesBadgeStanding,
 )
 from ..forms import BadgeSearchForm
-from trophies.services.badge_detail_service import get_badge_detail
+from trophies.services.badge_detail_service import get_badge_detail, group_medallion_layers
 from trophies.services.badge_list_service import build_list_cards, build_series_items, live_editions
 from trophies.services.badge_rarity import (
     annotate_group_rarity, RARITY_CLASSES, RARITY_FILTER_CHOICES, RARITY_UNEARNED,
@@ -88,10 +88,14 @@ SHOWCASE_FINISHES = ('holo', 'mastered')
 
 
 def badge_forge_medallions(subjects):
-    """Edition medallions for the how-it-works page. A teaching abstraction, so it composes a REAL badge's
-    subject art onto each edition's metal plate (Ultra HD -> platinum, Legacy HD -> gold): the hero, the
-    journey's claim / holo / mastery beats and the editions legend show the genuine .pp-med OBJECT with real
-    artwork rather than a bare plate.
+    """Medallions for the how-it-works page, each a REAL badge's art, so the page shows the genuine .pp-med
+    OBJECT rather than a bare plate.
+
+    The hero and the journey's claim / holo / mastery beats are TAPPABLE, so they show their badge exactly
+    as its quick-peek will: its own edition's metal and plate (`group_medallion_layers`, which the peek also
+    uses), dressed in the beat's finish. Forcing them onto the platinum plate made a Legacy HD badge change
+    metal when picked up (owner, 2026-10-26). The editions legend is the one TEACHING abstraction: it composes
+    a badge's subject onto each edition's plate (Ultra HD -> platinum, Legacy HD -> gold), and is not tappable.
 
     `subjects` (from `badge_subject_art`) is dealt one per slot in FORGE_SLOTS order, so no two medallions
     share art. A slot past the end of the list gets the plain metal plate, never a repeat (a small catalog,
@@ -103,13 +107,17 @@ def badge_forge_medallions(subjects):
         n = 4 if metal == 'platinum' else 3   # 4_backdrop = platinum plate, 3_backdrop = gold plate
         return static(f'images/badges/backdrops/{n}_backdrop.png')
 
-    def frame(subject, metal, holo=False, mastered=False):
-        # Subject rides on OUR metal plate (the subject is metal-agnostic -- the plate carries the edition).
-        # No subject -> the plate alone (graceful).
+    def frame(subject, metal, holo=False, mastered=False, own_edition=False):
+        # own_edition: the badge's own metal and plate. Otherwise the subject rides on OUR metal plate (the
+        # subject is metal-agnostic, the plate carries the edition). No subject -> the plate alone (graceful).
+        if subject and own_edition:
+            tier, layers = subject['tier'], subject['layers']
+        else:
+            tier, layers = metal, [plate(metal)] + ([subject['src']] if subject else [])
         return {
-            'tier': metal,
+            'tier': tier,
             'state': 'earned',
-            'art_layers': [plate(metal)] + ([subject['src']] if subject else []),
+            'art_layers': layers,
             'is_holographic': holo or mastered,
             'is_mastered': mastered,
             # The finish this medallion wears, passed to its quick-peek so the badge keeps it when picked up.
@@ -122,10 +130,10 @@ def badge_forge_medallions(subjects):
 
     dealt = dict(zip(FORGE_SLOTS, subjects))
     meds = {
-        'hero': frame(dealt.get('hero'), 'platinum', mastered=True),        # the thing the page sells
-        'earned': frame(dealt.get('earned'), 'platinum'),                   # beat 3: the badge, claimed
-        'holo': frame(dealt.get('holo'), 'platinum', holo=True),            # beat 4: 100% on every game
-        'mastered': frame(dealt.get('mastered'), 'platinum', mastered=True),  # beat 5: Mastery
+        'hero': frame(dealt.get('hero'), 'platinum', mastered=True, own_edition=True),      # what the page sells
+        'earned': frame(dealt.get('earned'), 'platinum', own_edition=True),                 # beat 3: claimed
+        'holo': frame(dealt.get('holo'), 'platinum', holo=True, own_edition=True),          # beat 4: 100%
+        'mastered': frame(dealt.get('mastered'), 'platinum', mastered=True, own_edition=True),  # beat 5: Mastery
         'ultra': frame(dealt.get('ultra'), 'platinum'),                     # editions legend: Ultra HD
         'legacy': frame(dealt.get('legacy'), 'gold'),                       # editions legend: Legacy HD
         # A third (or later) edition in the legend: the bare gold plate, so legacy's art is not repeated.
@@ -137,7 +145,9 @@ def badge_forge_medallions(subjects):
 
 def badge_subject_art(limit=4):
     """Raw SUBJECT artwork, most-earned first: the drawings themselves, not the composed medallion. Feeds the
-    how-it-works page (its medallions and its handmade claim) and the Support page's header.
+    how-it-works page (its medallions and its handmade claim) and the Support page's header. Each entry also
+    carries its badge's composed medallion (`tier`, `layers`), for a medallion that has to match the badge's
+    quick-peek.
 
     Distinct by the art FILE, not just the badge: two editions of a series, or sister series sharing one piece
     (`artwork_source`), give the same URL and count once. The plate, shape and backing are shared by every
@@ -159,7 +169,9 @@ def badge_subject_art(limit=4):
         if not art.get('has_custom_image') or art.get('is_avatar') or art['main'] in seen:
             continue
         seen.add(art['main'])
-        out.append({'src': art['main'], 'series': cand.series.name, 'badge_id': cand.id})
+        tier, layers, _ = group_medallion_layers(cand)   # the whole medallion, as the badge's peek composes it
+        out.append({'src': art['main'], 'series': cand.series.name, 'badge_id': cand.id,
+                    'tier': tier, 'layers': layers})
         if len(out) >= limit:
             break
     return out
@@ -1315,8 +1327,8 @@ class BadgeHowItWorksView(TemplateView):
             for g in groups
         ]
 
-        # The ARTWORK, not an illustration of it. `badge_forge_medallions()` composes a real live badge's
-        # subject onto each edition's metal plate, which is the whole point on a page teaching a system
+        # The ARTWORK, not an illustration of it. `badge_forge_medallions()` shows real live badges (the
+        # editions legend puts each subject on its edition's plate), which is the whole point on a page teaching a system
         # whose moat IS the custom art: "if the chrome ever fights the art, the chrome loses"
         # (visual-identity.md). It falls back to the bare plate on an empty catalog, so a fresh install
         # still renders.
