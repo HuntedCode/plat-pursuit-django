@@ -461,3 +461,62 @@ def test_each_medallion_opens_the_badge_its_art_belongs_to():
     for slot in FORGE_SLOTS:
         med = ctx['forge_meds'][slot]
         assert owner[med['art_layers'][1].rsplit('/', 1)[1]] == med['source_id'], slot
+
+
+@pytest.mark.django_db
+def test_each_medallion_asks_its_peek_for_its_own_finish(client):
+    """The Mastery hero and the holo / Mastery beats open the peek in the finish they wear; the claimed beat
+    asks for none (owner, 2026-10-26: the hero lost its rim and crown when picked up)."""
+    _art_badges(6)
+    _, _, ctx = _page_art()
+    meds = ctx['forge_meds']
+    body = client.get(reverse('badge_how_it_works')).content.decode()
+    for slot, finish in (('hero', 'mastered'), ('earned', None), ('holo', 'holo'), ('mastered', 'mastered')):
+        cell = re.search(rf'data-badge-id="{meds[slot]["source_id"]}"([^>]*)>', body)
+        assert cell, slot
+        got = re.search(r'data-peek-finish="([^"]+)"', cell.group(1))
+        assert (got.group(1) if got else None) == finish, slot
+
+
+def test_the_peek_request_carries_the_finish():
+    page = (ROOT / 'templates' / 'trophies' / 'badge_how_it_works.html').read_text(encoding='utf-8')
+    start = page.index('function openPeek(cell)')
+    open_peek = page[start:page.index('peek.open(url, cell)', start) + len('peek.open(url, cell)')]
+    assert "cell.getAttribute('data-peek-finish')" in open_peek
+    assert "url += '?finish=' + encodeURIComponent(finish)" in open_peek
+    assert open_peek.index("url += '?finish='") < open_peek.index('peek.open(url, cell)')
+
+
+@pytest.mark.django_db
+def test_a_tappable_medallion_is_drawn_exactly_as_its_peek_draws_it(client):
+    """A Legacy HD badge in the hero used to sit on the platinum plate and turn gold when picked up (owner,
+    2026-10-26). The hero and the journey beats now draw their badge's own edition, as the peek does."""
+    from tests.factories import BadgeSeriesFactory, GroupBadgeFactory, PlatformGroupFactory
+
+    legacy = PlatformGroupFactory(key='legacy-hd', name='Legacy HD', platforms=['PS3'])
+    ultra = PlatformGroupFactory(key='ultra-hd', name='Ultra HD', platforms=['PS5'])
+    for i in range(6):
+        GroupBadgeFactory(series=BadgeSeriesFactory(name=f'Ed {i}', badge_image=f'badges/ed-{i}.png'),
+                          platform_group=legacy if i < 4 else ultra, is_live=True, earned_count=100 - i)
+    _, _, ctx = _page_art()
+    meds = ctx['forge_meds']
+    # Every tappable slot is Legacy HD, where the old platinum plate would differ from the peek's gold one.
+    for slot in ('hero', 'earned', 'holo', 'mastered'):
+        med = meds[slot]
+        assert med['tier'] == 'gold', slot
+        peek = client.get(reverse('group_badge_quick_peek', kwargs={'group_badge_id': med['source_id']}),
+                          {'finish': med['finish'] or ''}).content.decode()
+        assert f'pp-med--{med["tier"]} ' in peek, slot
+        assert re.findall(r'<img class="pp-med__l" src="([^"]+)"', peek) == med['art_layers'], slot
+
+
+@pytest.mark.django_db
+def test_the_editions_legend_keeps_teaching_each_editions_metal():
+    """The legend is the one teaching abstraction: Ultra HD on platinum and Legacy HD on gold, whatever edition
+    the badge lending its art belongs to. It is not tappable, so no peek has to match it."""
+    _art_badges(6)
+    _, _, ctx = _page_art()
+    meds = ctx['forge_meds']
+    assert (meds['ultra']['tier'], meds['legacy']['tier'], meds['plate']['tier']) == ('platinum', 'gold', 'gold')
+    assert meds['ultra']['art_layers'][0].endswith('4_backdrop.png')
+    assert meds['legacy']['art_layers'][0].endswith('3_backdrop.png')

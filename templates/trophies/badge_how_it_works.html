@@ -41,7 +41,7 @@ quick-peek (`PlatPursuit.Medallion.detailModal`), `.pp-tally`, `.pp-head-cascade
             are plate-only illustrations with no badge behind them, and a button that opens nothing is
             worse than no button. {% endcomment %}
             <span class="pp-hiw__medwrap{% if forge_meds.hero.source_id %} pp-forge-peek{% endif %}"
-                  {% if forge_meds.hero.source_id %}data-badge-id="{{ forge_meds.hero.source_id }}" role="button" tabindex="0" aria-label="Inspect this badge"{% endif %}>
+                  {% if forge_meds.hero.source_id %}data-badge-id="{{ forge_meds.hero.source_id }}"{% if forge_meds.hero.finish %} data-peek-finish="{{ forge_meds.hero.finish }}"{% endif %} role="button" tabindex="0" aria-label="Inspect this badge"{% endif %}>
                 {% include 'components/badge_medallion.html' with frame=forge_meds.hero no_id=True %}
                 {% if forge_meds.hero.source_id %}
                 <span class="pp-hiw__poke" aria-hidden="true">
@@ -135,7 +135,7 @@ quick-peek (`PlatPursuit.Medallion.detailModal`), `.pp-tally`, `.pp-head-cascade
         <li class="pp-hiw__step pp-hiw__step--claim">
             <span class="pp-hiw__art pp-hiw__art--med">
                 <span class="pp-hiw__medwrap{% if forge_meds.earned.source_id %} pp-forge-peek{% endif %}"
-                      {% if forge_meds.earned.source_id %}data-badge-id="{{ forge_meds.earned.source_id }}" role="button" tabindex="0" aria-label="Inspect this badge"{% endif %}>
+                      {% if forge_meds.earned.source_id %}data-badge-id="{{ forge_meds.earned.source_id }}"{% if forge_meds.earned.finish %} data-peek-finish="{{ forge_meds.earned.finish }}"{% endif %} role="button" tabindex="0" aria-label="Inspect this badge"{% endif %}>
                     {% include 'components/badge_medallion.html' with frame=forge_meds.earned no_id=True %}
                 </span>
             </span>
@@ -159,7 +159,7 @@ quick-peek (`PlatPursuit.Medallion.detailModal`), `.pp-tally`, `.pp-head-cascade
         <li class="pp-hiw__step pp-hiw__step--master">
             <span class="pp-hiw__art pp-hiw__art--med">
                 <span class="pp-hiw__medwrap{% if forge_meds.holo.source_id %} pp-forge-peek{% endif %}"
-                      {% if forge_meds.holo.source_id %}data-badge-id="{{ forge_meds.holo.source_id }}" role="button" tabindex="0" aria-label="Inspect this badge"{% endif %}>
+                      {% if forge_meds.holo.source_id %}data-badge-id="{{ forge_meds.holo.source_id }}"{% if forge_meds.holo.finish %} data-peek-finish="{{ forge_meds.holo.finish }}"{% endif %} role="button" tabindex="0" aria-label="Inspect this badge"{% endif %}>
                     {% include 'components/badge_medallion.html' with frame=forge_meds.holo no_id=True %}
                 </span>
             </span>
@@ -175,7 +175,7 @@ quick-peek (`PlatPursuit.Medallion.detailModal`), `.pp-tally`, `.pp-head-cascade
         <li class="pp-hiw__step pp-hiw__step--mastery">
             <span class="pp-hiw__art pp-hiw__art--med">
                 <span class="pp-hiw__medwrap{% if forge_meds.mastered.source_id %} pp-forge-peek{% endif %}"
-                      {% if forge_meds.mastered.source_id %}data-badge-id="{{ forge_meds.mastered.source_id }}" role="button" tabindex="0" aria-label="Inspect this badge"{% endif %}>
+                      {% if forge_meds.mastered.source_id %}data-badge-id="{{ forge_meds.mastered.source_id }}"{% if forge_meds.mastered.finish %} data-peek-finish="{{ forge_meds.mastered.finish }}"{% endif %} role="button" tabindex="0" aria-label="Inspect this badge"{% endif %}>
                     {% include 'components/badge_medallion.html' with frame=forge_meds.mastered no_id=True %}
                 </span>
             </span>
@@ -348,6 +348,9 @@ reverse with a 0 placeholder the JS swaps for the real badge id. {% endcomment %
             var tmpl = peekEl.getAttribute('data-peek-url') || '';
             var url = tmpl.replace(/0\/$/, id + '/');
             if (!peek || !id || !url || url === tmpl) { return; }
+            {% comment %}The holo and Mastery beats ask for their finish, so the badge keeps it when picked up.{% endcomment %}
+            var finish = cell.getAttribute('data-peek-finish');
+            if (finish) { url += '?finish=' + encodeURIComponent(finish); }
             peek.open(url, cell);
         }
 

@@ -473,6 +473,16 @@ transaction, so unclamped drift aborted the whole evaluation, not just the count
 to the digest and to the community stats. Counting held rows without that filter made a curator's
 smoke-test badge show up in a real hunter's totals.
 
+**The showcase peek has no finish of its own.** `group_badge_quick_peek` renders a badge with no hunter
+behind it, so it is plain: no holo, no Mastery rim or crown. How badges work shows its hero and its holo
+and Mastery beats on REAL badges in those finishes, and picking one up used to drop the very finish the
+beat teaches (owner, 2026-10-26). Each of those medallions now sends its finish (`?finish=holo|mastered`,
+`SHOWCASE_FINISHES` in `badge_views.py`). Only the showcase honours it: a hunter's own peek
+(`group_badge_progress_peek`) always shows the state they really hold, whatever the query says. Those
+tappable medallions also draw the badge's OWN edition (`group_medallion_layers`, as the peek does): they
+used to sit on the platinum plate, so a Legacy HD badge turned gold when picked up. Only the page's
+editions legend, which is not tappable, still puts a subject on each edition's plate to teach the metals.
+
 ## Curator authoring in admin
 
 These affordances exist on the admin side because the models are shaped for the engine, not for the person
