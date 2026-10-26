@@ -27,11 +27,21 @@
  *                                onCancel(), onDismiss(), onOpen(), onClose() })  ->  bool
  *
  * The form INPUT NAMES are the API contract (see partials/_rating_fields.html) -- do not rename them.
+ *
+ * EVERY SCORE IS ASKED FOR (owner, 2026-10-26, review AU-01). A fresh rating starts with its four sliders
+ * UNSET (`data-unset`, readout "-"), and the save waits until each one has been set. They used to start at
+ * 5 / 5 / 5 / 3.0 and post those when left alone, so every "recommend and go" rating dragged a game's
+ * community averages to the middle. Any press on a slider sets it, including one that lands on the value
+ * the thumb already shows (a click or a key that changes nothing fires no `input`), so choosing 5 is a
+ * real answer. An existing rating prefills as set.
  */
 (function () {
     var PP = window.PlatPursuit = window.PlatPursuit || {};
 
     var SLIDERS = ['difficulty', 'grindiness', 'fun_ranking', 'overall_rating'];
+    // How a refusal names each score, in the order the form shows them.
+    var SLIDER_NAMES = { difficulty: 'difficulty', grindiness: 'grindiness', fun_ranking: 'fun',
+                         overall_rating: 'overall score' };
     var DEFAULTS = { difficulty: 5, grindiness: 5, fun_ranking: 5, overall_rating: 3, hours_to_platinum: '' };
     var BLURB_MAX = 140;
 
@@ -77,7 +87,10 @@
         var out = form.querySelector('[data-gd-qr-val="' + name + '"]');
         var input = field(form, name);
         if (!out || !input) { return; }
-        out.textContent = name === 'overall_rating' ? parseFloat(input.value).toFixed(1) : String(input.value);
+        var unset = input.hasAttribute('data-unset');
+        out.classList.toggle('is-unset', unset);
+        out.textContent = unset ? '-'
+            : name === 'overall_rating' ? parseFloat(input.value).toFixed(1) : String(input.value);
 
         // Overall also drives a star bar, because that is the form the score takes everywhere else on the
         // site -- so the control shows the thing being set, not only the number setting it. Percentage of
@@ -85,8 +98,15 @@
         // so 3.5 draws as three and a half stars.
         if (name === 'overall_rating') {
             var stars = form.querySelector('[data-gd-qr-stars]');
-            if (stars) { stars.style.setProperty('--fill', (parseFloat(input.value) / 5) * 100 + '%'); }
+            if (stars) { stars.style.setProperty('--fill', unset ? '0%' : (parseFloat(input.value) / 5) * 100 + '%'); }
         }
+    }
+
+    function unsetSliders(form) {
+        return SLIDERS.filter(function (n) {
+            var input = field(form, n);
+            return input && input.hasAttribute('data-unset');
+        });
     }
 
     function refreshCount(form) {
@@ -105,9 +125,11 @@
         Object.keys(DEFAULTS).forEach(function (name) {
             var input = field(form, name);
             if (!input) { return; }
-            var v = existing && existing[name] !== null && existing[name] !== undefined
-                ? existing[name] : DEFAULTS[name];
-            input.value = v;
+            var known = existing && existing[name] !== null && existing[name] !== undefined;
+            input.value = known ? existing[name] : DEFAULTS[name];
+            // A score the hunter has not given is UNSET, not the default it sits on: the thumb rests mid
+            // track so the control is usable, but nothing is filed until it is pressed.
+            if (SLIDERS.indexOf(name) !== -1) { input.toggleAttribute('data-unset', !known); }
         });
         // Cleared explicitly rather than through DEFAULTS, because its "default" is NOTHING PICKED. The
         // wizard calls prefill() with no argument between games, and a recommendation left checked from
@@ -156,7 +178,7 @@
             // TWO gates now. The host's submit button is enabled off this and nothing else, so a
             // requirement missing from here is a requirement the button ignores -- the save would go out
             // and come back 400 from the server instead of being prevented.
-            return Boolean(h) && h >= 1 && Boolean(recValue(form));
+            return Boolean(h) && h >= 1 && Boolean(recValue(form)) && unsetSliders(form).length === 0;
         }
         // A refused submit is FEEDBACK, never silence. The first cut suppressed the toast for
         // hosts with an inline requirement line (onChange), and a hunter who missed the line was
@@ -177,8 +199,18 @@
             }
         }
 
+        // A press sets a slider even when it changes nothing: `input` fires only on a CHANGE, so clicking
+        // the thumb where it sits, or pressing a key at the end of the track, would otherwise leave the
+        // hunter's real answer of "5" unset.
+        function markSet(e) {
+            if (!e.target.matches || !e.target.matches('[data-gd-qr-slider][data-unset]')) { return; }
+            e.target.removeAttribute('data-unset');
+            setReadout(form, e.target.name);
+            announce();
+        }
+
         function onInput(e) {
-            if (e.target.matches('[data-gd-qr-slider]')) { setReadout(form, e.target.name); }
+            if (e.target.matches('[data-gd-qr-slider]')) { markSet(e); setReadout(form, e.target.name); }
             if (e.target.matches('[data-gd-qr-blurb]')) { refreshCount(form); }
             if (e.target.name === 'hours_to_platinum') { announce(); }
             // Radios fire `input` as well as `change`, so the existing delegated listener covers them.
@@ -190,6 +222,12 @@
             // `modal.open` guard; a host with an external button (the wizard) has no such guard, and a
             // double-press would post twice.
             if (busy) { return; }
+            var unset = unsetSliders(form);
+            if (unset.length) {
+                refuse('Set your ' + SLIDER_NAMES[unset[0]] + '.', unset[0]);
+                announce();
+                return;
+            }
             var hours = hoursValue();
             if (!hours || hours < 1) {
                 refuse('Enter the hours it took you.', 'hours_to_platinum');
@@ -264,6 +302,8 @@
         function onSubmitEvent(e) { e.preventDefault(); doSubmit(); }
 
         form.addEventListener('input', onInput);
+        form.addEventListener('click', markSet);
+        form.addEventListener('keydown', markSet);
         form.addEventListener('submit', onSubmitEvent);
 
         // The guidelines sheet is wired HERE, by the component that owns the link. `_rating_fields.html`
@@ -334,6 +374,8 @@
             state: function () { return { ready: ready(), busy: busy }; },
             detach: function () {
                 form.removeEventListener('input', onInput);
+                form.removeEventListener('click', markSet);
+                form.removeEventListener('keydown', markSet);
                 form.removeEventListener('submit', onSubmitEvent);
             },
         };

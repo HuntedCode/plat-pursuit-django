@@ -1351,6 +1351,10 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
    sets are then visibly the same measurement rather than two unrelated readings. Selected by input name
    so the partial needs no extra class -- the name is already the API contract. */
 .gd-qr__range[name="overall_rating"] { accent-color: var(--pp-rating-star); }
+/* UNSET (review AU-01): a score the hunter has not given yet. The thumb rests mid track so the control is
+   usable, in a muted tone so it does not read as an answer; the readout says "-". Any press sets it. */
+.gd-qr__range[data-unset] { accent-color: var(--pp-text-mute); }
+.gd-qr__val.is-unset { color: var(--pp-text-mute); }
 /* The live star bar, pushed to the label's far end so the row reads "Overall .......... ★★★½☆ 3.5 / 5":
    name on the left, value on the right, the way every other readout in this form sits. */
 .gd-qr__stars { margin-left: auto; --star: 0.95rem; }

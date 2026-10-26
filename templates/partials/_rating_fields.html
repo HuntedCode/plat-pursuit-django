@@ -18,20 +18,22 @@ wires whatever sheet it finds, so the include is the host's whole obligation.
 The input NAMES are the API contract (recommendation, difficulty, grindiness, hours_to_platinum,
 fun_ranking, overall_rating, blurb) -- do not rename. Value/label hooks are data-gd-qr-*.
 
-`recommendation` is the only REQUIRED field: the blurb is optional and the five scores all carry
-defaults, so it is the one thing a submit waits on.
+Everything but the quick take is REQUIRED (owner, 2026-10-26, review AU-01): the four sliders start UNSET
+(`data-unset`, readout "-") and a submit waits until each is set, plus the hours and a recommendation. They
+used to start at 5 / 5 / 5 / 3.0 and post those when left alone, which pulled every game's community
+averages to the middle. `RatingFields` owns the gate; the markup only starts in the unset state.
 
 `user_play_hours` is optional: where playtime is a page-level fact (Game Detail) it is SSR'd here; where it
 varies per card the host passes it in through RatingFields' `playtimeHint` and this renders the muted
 default until it does. {% endcomment %}
 <label class="gd-qr__field">
-    <span class="gd-qr__lbl">Difficulty <span class="gd-qr__val" data-gd-qr-val="difficulty">5</span></span>
-    <input type="range" name="difficulty" min="1" max="10" step="1" value="5" class="gd-qr__range" data-gd-qr-slider />
+    <span class="gd-qr__lbl">Difficulty <span class="gd-qr__val" data-gd-qr-val="difficulty">-</span></span>
+    <input type="range" name="difficulty" min="1" max="10" step="1" value="5" class="gd-qr__range" data-gd-qr-slider data-unset />
     <span class="gd-qr__scale"><span>Easy</span><span>Brutal</span></span>
 </label>
 <label class="gd-qr__field">
-    <span class="gd-qr__lbl">Grindiness <span class="gd-qr__val" data-gd-qr-val="grindiness">5</span></span>
-    <input type="range" name="grindiness" min="1" max="10" step="1" value="5" class="gd-qr__range" data-gd-qr-slider />
+    <span class="gd-qr__lbl">Grindiness <span class="gd-qr__val" data-gd-qr-val="grindiness">-</span></span>
+    <input type="range" name="grindiness" min="1" max="10" step="1" value="5" class="gd-qr__range" data-gd-qr-slider data-unset />
     <span class="gd-qr__scale"><span>Breezy</span><span>Grindy</span></span>
 </label>
 <label class="gd-qr__field">
@@ -40,8 +42,8 @@ default until it does. {% endcomment %}
     {% if user_play_hours %}<span class="gd-qr__hint">Playtime: about <b>{{ user_play_hours }}</b> hour{{ user_play_hours|pluralize }}.</span>{% else %}<span class="gd-qr__hint gd-qr__hint--muted">No playtime tracked.</span>{% endif %}
 </label>
 <label class="gd-qr__field">
-    <span class="gd-qr__lbl">Fun <span class="gd-qr__val" data-gd-qr-val="fun_ranking">5</span></span>
-    <input type="range" name="fun_ranking" min="1" max="10" step="1" value="5" class="gd-qr__range" data-gd-qr-slider />
+    <span class="gd-qr__lbl">Fun <span class="gd-qr__val" data-gd-qr-val="fun_ranking">-</span></span>
+    <input type="range" name="fun_ranking" min="1" max="10" step="1" value="5" class="gd-qr__range" data-gd-qr-slider data-unset />
     <span class="gd-qr__scale"><span>Chore</span><span>A blast</span></span>
 </label>
 {% comment %} Overall is the one score with a SHAPE people already read -- everywhere else on the site it
@@ -54,10 +56,10 @@ taste header and the rating cards. Marked `aria-hidden`: the figure beside it al
 a screen reader does not need the same value twice in two notations. {% endcomment %}
 <label class="gd-qr__field">
     <span class="gd-qr__lbl">Overall
-        <span class="gd-qr__stars pp-stars" style="--fill: 60%;" data-gd-qr-stars aria-hidden="true"><span class="pp-stars__on"></span></span>
-        <span class="gd-qr__val" data-gd-qr-val="overall_rating">3.0</span><span class="gd-qr__of">/ 5</span>
+        <span class="gd-qr__stars pp-stars" style="--fill: 0%;" data-gd-qr-stars aria-hidden="true"><span class="pp-stars__on"></span></span>
+        <span class="gd-qr__val" data-gd-qr-val="overall_rating">-</span><span class="gd-qr__of">/ 5</span>
     </span>
-    <input type="range" name="overall_rating" min="0.5" max="5" step="0.5" value="3" class="gd-qr__range" data-gd-qr-slider />
+    <input type="range" name="overall_rating" min="0.5" max="5" step="0.5" value="3" class="gd-qr__range" data-gd-qr-slider data-unset />
     <span class="gd-qr__scale"><span>0.5</span><span>5</span></span>
 </label>
 {% comment %} The recommendation sits after the scores, not before them. It is the CONCLUSION -- every
