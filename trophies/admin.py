@@ -1373,7 +1373,7 @@ class UserConceptRatingAdmin(admin.ModelAdmin):
 class StageInline(admin.TabularInline):
     model = Stage
     extra = 1
-    fields = ('stage_number', 'title', 'concepts')
+    fields = ('stage_number', 'title', 'is_bonus', 'concepts')
     autocomplete_fields = ['concepts']
 
 class ConceptBundleInlineFormSet(BaseInlineFormSet):
@@ -1498,10 +1498,10 @@ class StageAdminForm(forms.ModelForm):
 class StageAdmin(admin.ModelAdmin):
     form = StageAdminForm
     list_display = (
-        '__str__', 'series_slug', 'stage_number', 'title',
+        '__str__', 'series_slug', 'stage_number', 'title', 'is_bonus',
         'concepts_display', 'bundle_concepts_display', 'trophy_groups_display',
     )
-    list_filter = ('series_slug', 'stage_number')
+    list_filter = ('is_bonus', 'series_slug', 'stage_number')
     search_fields = (
         'title', 'series_slug',
         'concepts__concept_id', 'concepts__unified_title',
@@ -1526,7 +1526,7 @@ class StageAdmin(admin.ModelAdmin):
         megamix that reuses another series' stage list) means re-entering the same concept picks one
         stage at a time. The stages themselves are identical; only the slug they join on differs.
 
-        Everything that makes a stage a stage travels: number, title, the standalone concepts, the
+        Everything that makes a stage a stage travels: number, title, bonus flag, the standalone concepts, the
         trophy groups, and each ConceptBundle with its own members (the icon is derived from those on the badge page, so
         it follows). Nothing is MOVED -- the originals are untouched.
 
@@ -1607,6 +1607,7 @@ class StageAdmin(admin.ModelAdmin):
                     series_slug=new_slug,
                     stage_number=stage.stage_number,
                     title=stage.title,
+                    is_bonus=stage.is_bonus,
                 )
                 copy.concepts.set(stage.concepts.all())
                 copy.trophy_groups.set(stage.trophy_groups.all())

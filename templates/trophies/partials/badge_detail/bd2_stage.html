@@ -11,16 +11,17 @@ have gaps (stages get retired, renumbered, authored out of order) and "Stage 1, 
 reader hunting for the missing ones.
 
 RETIRED stages (`retired=True`, passed by the includer) are in scope but no longer gate: nothing on this
-edition's platforms is obtainable any more. They carry NO number, because a number reads as "step N of this
-badge" and they are explicitly not steps -- the section they sit in says so once, for all of them.
+edition's platforms is obtainable any more. BONUS stages (`bonus=True`) never count toward the badge, only
+toward Mastery. Neither carries a number, because a number reads as "step N of this badge" and they are
+explicitly not steps -- the section they sit in (bd2_stage_fence.html) says so once, for all of them.
 {% endcomment %}
 {% with stage=s.stage %}
 <section{% if group_key and s.display_number %} id="bd2-stage-{{ group_key }}-{{ s.display_number }}"{% endif %} class="bd-card bd-stage mt-3{% if s.completion_state == 'complete' %} bd-stage--done{% if s.is_mastered %} bd-stage--mastered{% endif %}{% endif %}{% if retired %} bd-stage--retired{% endif %}">
     {% comment %} Journey-spine node -- done check / up-next pulse / plain to-do number (stages finish in any
-    order). A retired stage gets a struck-circle instead of a number: it has none, and a blank node would
-    read as a rendering fault. {% endcomment %}
-    <span class="bd-node bd-node--{% if s.completion_state == 'complete' %}done{% elif retired %}retired{% elif s.is_next %}next{% else %}todo{% endif %}{% if s.completion_state == 'complete' and s.is_mastered %} bd-node--mastered{% endif %}" aria-hidden="true">
-        {% if s.completion_state == 'complete' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>{% elif retired %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><line x1="5.6" y1="5.6" x2="18.4" y2="18.4"></line></svg>{% else %}{{ s.display_number }}{% endif %}
+    order). A retired stage gets a struck-circle instead of a number, a bonus stage a star: neither has one,
+    and a blank node would read as a rendering fault. {% endcomment %}
+    <span class="bd-node bd-node--{% if s.completion_state == 'complete' %}done{% elif retired %}retired{% elif bonus %}bonus{% elif s.is_next %}next{% else %}todo{% endif %}{% if s.completion_state == 'complete' and s.is_mastered %} bd-node--mastered{% endif %}" aria-hidden="true">
+        {% if s.completion_state == 'complete' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>{% elif retired %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><line x1="5.6" y1="5.6" x2="18.4" y2="18.4"></line></svg>{% elif bonus %}<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.3 1.3-6.6-4.9-4.6 6.6-.8z"></path></svg>{% else %}{{ s.display_number }}{% endif %}
     </span>
 
     {% comment %} Header = the collapse toggle. Default: the "up next" stage open, the rest collapsed. The JS
@@ -28,10 +29,11 @@ badge" and they are explicitly not steps -- the section they sit in says so once
     <div class="bd-stage__head" data-stage-toggle role="button" aria-expanded="{% if s.is_next %}true{% else %}false{% endif %}" tabindex="0">
         {% if s.icon_url %}<span class="bd-stage__ico"><img src="{{ s.icon_url }}" alt="" loading="lazy" /></span>{% endif %}
         <div class="bd-stage__id">
-            {% comment %} A retired stage is named, never numbered. With no title it falls back to its own
-            games rather than rendering an empty line. {% endcomment %}
-            {% if retired %}
-                <span class="bd-stage__eyebrow bd-stage__eyebrow--retired">Doesn&rsquo;t count toward this badge</span>
+            {% comment %} A retired or bonus stage is named, never numbered. With no title it falls back to its
+            own games rather than rendering an empty line. {% endcomment %}
+            {% if retired or bonus %}
+                {% if bonus %}<span class="bd-stage__eyebrow bd-stage__eyebrow--bonus">Bonus &middot; toward Mastery</span>
+                {% else %}<span class="bd-stage__eyebrow bd-stage__eyebrow--retired">Doesn&rsquo;t count toward this badge</span>{% endif %}
                 {% comment %} No authored title: name it after whatever it holds. Bundles are included --
                 a bundle-only stage is reachable and used to render a blank line. {% endcomment %}
                 <span class="bd-stage__title">{% if stage.title %}{{ stage.title }}{% else %}{% for e in s.obtainable_games|slice:":1" %}{% if e.group %}{{ e.group_name }}{% else %}{{ e.game.title_name }}{% endif %}{% empty %}{% for e in s.delisted_games|slice:":1" %}{% if e.group %}{{ e.group_name }}{% else %}{{ e.game.title_name }}{% endif %}{% empty %}{% for b in s.bundles|slice:":1" %}{{ b.label }}{% empty %}Untitled stage{% endfor %}{% endfor %}{% endfor %}{% endif %}</span>

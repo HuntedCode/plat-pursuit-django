@@ -127,8 +127,8 @@ def _origin(concept, contract):
 
 
 def _gates(states, group):
-    """Whether a stage holding these games would gate on `group`, by the engine's own rule. The stage number
-    only has to be non-zero (stage 0 never gates); evaluate_stage reads nothing else from it."""
+    """Whether a stage holding these games would gate on `group`, by the engine's own rule (a counting stage:
+    evaluate_stage reads nothing else from the StageInput's number)."""
     return evaluate_stage(StageInput(1, tuple(states)), group).gates
 
 

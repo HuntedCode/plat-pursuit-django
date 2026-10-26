@@ -1696,3 +1696,14 @@ rebuilds in that window keep labels as they are rather than improving them. That
       marks every existing master and Full Set (silent for anything finished more than 14 days ago: the owner's
       "silent backfill"). Until it runs, a master's page reads Holographic, not Mastered. Its summary line now
       reports "N newly mastered, N series rewards gained".
+
+## 2026-10-25 - Bonus stages replace stage 0 (branch `feature/badges/bonus-stages`)
+
+- [ ] **1. `migrate`**: `trophies.0355` adds `Stage.is_bonus`, moves each stage 0 to the end of its series as a
+      bonus stage (games and all), then adds the `stage_number_from_one` check. A handful of rows (6 series),
+      cheap. Until step 2, a series' bonus games still sit together in one stage, exactly as they did in stage 0.
+- [ ] **2. Split the bonus stages by hand** (owner): admin, Stages, filter "is bonus". One title per bonus
+      stage; a stage with two Japan-only titles is cleared by either one, which makes Mastery too easy.
+- [ ] **3. `python manage.py evaluate_badges --series <slug>`** for each of those 6 series after splitting (or
+      wait for the nightly). Nothing about the badges themselves changes: a bonus stage counts exactly as
+      stage 0 did, except that each title is now its own stage for Mastery.

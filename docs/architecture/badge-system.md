@@ -44,7 +44,7 @@ earned. **No points, no titles.** Their reward is that they show.
 
 | Reward | Rule | Stored |
 |---|---|---|
-| **Mastery** (per badge) | every stage IN SCOPE for the edition, **stage 0 and stages that no longer gate included**, at the full bar (100% with DLC, flagged trophies excused) on any one version. Needs the hold, so it always implies holo. **Offered only when it asks more than holo** (see below) | `UserGroupBadge.mastered_at` (null = not mastered) |
+| **Mastery** (per badge) | every stage IN SCOPE for the edition, **bonus stages and stages that no longer gate included**, at the full bar (100% with DLC, flagged trophies excused) on any one version. Needs the hold, so it always implies holo. **Offered only when it asks more than holo** (see below) | `UserGroupBadge.mastered_at` (null = not mastered) |
 | **Full Set** (per series) | every live edition **that can be earned** (`gating_count > 0`) held; needs 2+ of them. A dead edition never blocks it, as an unobtainable game never makes a badge harder | `SeriesAward` (`full_set`) |
 | **Series Master** (per series) | every such edition FINISHED: mastered, or holo where the edition offers no Mastery. **Offered only when no single edition's stage scope covers every stage**: when one does, finishing it finishes the others too (satisfaction is cross-platform), so it would say nothing | `SeriesAward` (`series_master`) |
 
@@ -52,7 +52,7 @@ earned. **No points, no titles.** Their reward is that they show.
 100%" is exactly holo, and a crown there would be holo under another name. So an edition OFFERS Mastery
 (`GroupBadgeResult.mastery_offered`) only when it has one of:
 
-- a **stage 0** game (in practice a region-locked release, e.g. Japan-only, kept off the badge's requirement)
+- a **bonus stage** (`Stage.is_bonus`, see below; in practice a region-locked release, e.g. Japan-only)
 - a stage that **no longer gates** it: its qualifying games are unobtainable, delisted on an edition that
   excludes delisted games (Ultra HD), or every trophy on its bar is flagged unobtainable
 - a **megamix**'s stages past its threshold (`min_required` below the gating count)
@@ -84,6 +84,24 @@ rank number: "Master #3" breaks the day a game is added) and carries the series'
 line ("Take both to 100% for Series Master", counting each edition's own finish). The "No longer obtainable"
 section says those stages count toward Mastery. How It Works describes the extras in hunter terms (a game
 released in only one region, one you can't buy any more) and never says "stage 0".
+
+### Bonus stages
+
+A **bonus stage** (`Stage.is_bonus`, owner 2026-10-25) is an ordinary numbered stage that never counts toward
+the badge: it never gates the badge or its holo and pays no XP. It is in scope for Mastery, and having one
+is what makes an edition offer Mastery. Region-locked releases are the usual case.
+
+It replaced **stage 0**, one optional stage per series. A stage is cleared by ANY one of its games, so a
+stage 0 holding two different Japan-only titles was cleared, for Mastery, by finishing either one. It also
+never showed on the badge page, so "Mastery: 1 of 2 stages" pointed at a stage nobody could see. Migration
+0355 moved each stage 0 to the end of its series (last number + 1) as a bonus stage, games and all, and a
+check constraint (`stage_number_from_one`) now refuses a stage 0. **One title per bonus stage**: a curator
+splits a multi-title one by hand in admin (Stages, filter "is bonus").
+
+On the badge page bonus stages get their own fenced section (`bd2_stage_fence.html`, shared with "No
+longer obtainable"), between the ladder and the retired stages: "Bonus · N stages", unnumbered with a star
+node. A bonus stage whose game went unobtainable stays a bonus (it was never required). The engine keys
+on the FLAG, never the number: a stage numbered 0 would be an ordinary stage to it.
 
 ### Scope, gating, satisfaction
 
@@ -310,8 +328,8 @@ Flat and deliberately simple, all constants in `badge_xp.py`:
 - `XP_PER_STAGE = 500` per **in-scope** stage cleared — gating or not (see below)
 - `XP_BADGE_COMPLETION_BONUS = 600` once, when the base badge is earned
 - Holo is worth nothing
-- Stage 0 pays nothing, ever. It is tangential by definition, and paying for it would make optional work
-  feel mandatory.
+- A bonus stage (it replaced stage 0) pays nothing, ever. It is tangential by definition, and paying for
+  it would make optional work feel mandatory. `xp_on_offer` leaves it out.
 
 **XP and requirements came apart in 2026-09.** A stage that stopped gating — its qualifying games went
 unobtainable, or delisted in an excluding group — still pays whoever cleared it while it was alive. Points

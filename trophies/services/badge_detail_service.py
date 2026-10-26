@@ -71,6 +71,9 @@ class GroupView:
     #: carry no stage number, but they still PAY whoever cleared them, so they are shown in their own
     #: labelled section below the ladder rather than dropped.
     retired_stages: list
+    #: BONUS stages (`Stage.is_bonus`): never toward the badge, only toward Mastery. Their own labelled section,
+    #: unnumbered like the retired ones, and ahead of them: these can still be played.
+    bonus_stages: list
     #: A developer badge whose stages in this edition span 2+ studios: the same stages as `stages` /
     #: `retired_stages`, split into `[{'name', 'stages', 'cleared'}]` by filing studio (the developer first,
     #: then its studios A-Z, then "Other studios"). Each section also carries `company` (the Company, for
@@ -499,7 +502,7 @@ def _studio_sections(stages, stage_studios) -> list:
 
 def _group_journey(gb, result, catalog, games_map, profile_games, ratings_map, contract_map,
                    stage_studios, group_progress, group_ratings, excused) -> tuple:
-    """The stage spine for THIS group, as `(required, retired, studio_sections, retired_studio_sections)`.
+    """The stage spine for THIS group, as `(required, retired, bonus, studio_sections, retired_studio_sections)`.
 
     IN SCOPE (the stage appears at all) is platform-based: a stage with no game on this group's platforms
     credits this badge nothing and is not shown here. Once in scope, EVERY game in the stage is listed
@@ -511,6 +514,10 @@ def _group_journey(gb, result, catalog, games_map, profile_games, ratings_map, c
     required of anyone any more, but it still PAYS whoever cleared it, so it is shown -- below the required
     ladder, in its own labelled section, and without a stage number, because a number reads as "step N of
     this badge" and these are explicitly not steps.
+
+    BONUS stages (`Stage.is_bonus`) are their own list whatever their gating: they never count toward the
+    badge, so a bonus stage whose games went unobtainable is still a bonus, not a retired requirement. Flat
+    (never split by studio) and unnumbered, like the retired ones.
 
     Required stages carry `display_number`: a fresh 1..N over the REQUIRED ladder only, never `stage_number`.
     Authored numbers have gaps (a stage can be retired, renumbered, or authored out of order), and a badge
@@ -524,13 +531,11 @@ def _group_journey(gb, result, catalog, games_map, profile_games, ratings_map, c
     """
     platforms = set(gb.platform_group.platforms)
     exclude_delisted = gb.platform_group.exclude_delisted
-    stage_results = {sr.stage_number: sr for sr in (result.stages if result else [])}
+    stage_results = {sr.stage_number: sr for sr in (result.stages + result.bonus_stages if result else [])}
     group_input = GroupInput(frozenset(platforms), exclude_delisted)
 
-    required, retired = [], []
+    required, retired, bonus = [], [], []
     for st in sorted(catalog['stages'], key=lambda s: s.stage_number):
-        if st.stage_number <= 0:
-            continue                          # stage 0 = tangential; not part of the journey
         # SCOPE and GATING come from the engine's own predicates over the engine's own units, so the page
         # and the evaluation can never disagree -- including on bundles, whose synthetic platforms are the
         # INTERSECTION of their members' (a bundle needs every member, so it is completable only where all
@@ -602,7 +607,7 @@ def _group_journey(gb, result, catalog, games_map, profile_games, ratings_map, c
             # and everything downstream keying on 'complete' should keep meaning exactly that.
             'is_mastered': bool(sr and sr.holo_satisfied),
         }
-        (required if gates else retired).append(entry)
+        (bonus if st.is_bonus else required if gates else retired).append(entry)
 
     studio_sections = retired_studio_sections = None
     if stage_studios and len({stage_studios[s['stage'].id] for s in required + retired}) >= 2:
@@ -623,7 +628,7 @@ def _group_journey(gb, result, catalog, games_map, profile_games, ratings_map, c
             if s['completion_state'] != 'complete':
                 s['is_next'] = True
                 break
-    return required, retired, studio_sections, retired_studio_sections
+    return required, retired, bonus, studio_sections, retired_studio_sections
 
 
 def _entry_platted(e) -> bool:
@@ -636,12 +641,16 @@ def _entry_platted(e) -> bool:
     return e['pgame'].has_plat
 
 
-def _group_user_stats(profile_games, journey, target_profile) -> Optional[dict]:
+def _group_user_stats(profile_games, journey, ladder, target_profile) -> Optional[dict]:
     """The viewer's My Stats for THIS group's badge: trophy haul, play time, games platted / 100%'d, the
     stage-progress split (platted vs 100%'d), and the first-played / last-trophy span. Everything is read from
     DENORMALIZED ProfileGame fields over the games the JOURNEY lists (a bounded set -- so this is whale-safe,
     NOT a scan of the viewer's whole library). Returns None ONLY for anon (no profile on display); a signed-in viewer
-    who owns none of this badge's games gets an all-zeros dict, so the My Stats panel always renders."""
+    who owns none of this badge's games gets an all-zeros dict, so the My Stats panel always renders.
+
+    `journey` is every stage on screen (the games, haul and play time); `ladder` is the REQUIRED stages alone,
+    which the stage split counts, because the panel prints it as "N of {gating_count}". Counting the bonus
+    and retired stages there read "2 of 1" for a hunter with one counting stage and a bonus platted."""
     if target_profile is None:
         return None
     # Over the games the JOURNEY shows, not a platform-filtered re-derivation. Those came apart when
@@ -718,7 +727,7 @@ def _group_user_stats(profile_games, journey, target_profile) -> Optional[dict]:
     # without one is never "platted" here either: these numbers count what they say, while the engine's
     # `group_state` (100% clears the stage) is what earns the badge.
     stages_platted = stages_hundred = 0
-    for s in journey:
+    for s in ladder:
         entries = s['obtainable_games'] + s['delisted_games']
         platted = any(_entry_platted(e) for e in entries)
         hundred = any(e['pgame'] and e['pgame'].progress == 100 for e in entries)
@@ -753,7 +762,7 @@ def _group_view(gb, result, hold, target_profile, series, catalog, games_map, pr
     # complete chase to anonymous visitors while a signed-in viewer on the same page saw the real 0. The
     # column is a maintained denorm now (recompute_required_stages), so it is the answer, including when it
     # is zero.
-    journey, retired, studio_sections, retired_studio_sections = _group_journey(
+    journey, retired, bonus, studio_sections, retired_studio_sections = _group_journey(
         gb, result, catalog, games_map, profile_games, ratings_map, contract_map, stage_studios, group_progress,
         group_ratings, excused,
     )
@@ -777,11 +786,12 @@ def _group_view(gb, result, hold, target_profile, series, catalog, games_map, pr
     # Over the JOURNEY, so the headline figures describe the games actually on screen. Re-deriving a
     # platform-filtered set here left "4 games" and a difficulty average sitting above a ladder showing 7
     # cards -- the same hero-vs-panel disagreement this change fixed for My Stats, one tile to the left.
-    stats = _group_stats(journey + retired, ratings_map)
+    stats = _group_stats(journey + retired + bonus, ratings_map)
     # Priced off every IN-SCOPE stage, and zero when nothing gates. "On offer" is what the badge is WORTH,
     # not what this viewer can still reach: a retired stage is counted, because a hunter who cleared it
     # while it was alive was paid for it. Deliberately more than `gating_count * XP_PER_STAGE`, which
-    # under-reported, and deliberately NOT a promise that every point is still obtainable today.
+    # under-reported, and deliberately NOT a promise that every point is still obtainable today. Bonus stages
+    # pay nothing, so they are not priced.
     xp_on_offer = (0 if gating == 0
                    else (len(journey) + len(retired)) * XP_PER_STAGE + XP_BADGE_COMPLETION_BONUS)
     # Rarity is derived LIVE from the maintained earned_count over the whole COMMUNITY -- no stored
@@ -801,12 +811,13 @@ def _group_view(gb, result, hold, target_profile, series, catalog, games_map, pr
         avg_hours=stats['avg_hours'], xp_on_offer=xp_on_offer,
         stages=journey,
         retired_stages=retired,
+        bonus_stages=bonus,
         studio_sections=studio_sections,
         retired_studio_sections=retired_studio_sections,
         is_unearnable=(gating == 0),
         # BOTH ladders: a retired stage's games are shown on the page and its clear paid XP, so leaving
         # them out would reproduce the same "panel disagrees with the page" bug one level down.
-        user_stats=_group_user_stats(profile_games, journey + retired, target_profile),
+        user_stats=_group_user_stats(profile_games, journey + retired + bonus, journey, target_profile),
         frame={},
         mastered_at=(hold.mastered_at if hold else None),
         mastery_done=result.mastery_done if result else 0,

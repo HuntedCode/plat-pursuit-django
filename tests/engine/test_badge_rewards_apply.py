@@ -4,8 +4,9 @@ The pure rules are pinned in test_badge_mastery.py. These hold down what the DB 
 go with the badge, "Mastered since" that never re-stamps while it holds, a celebration only for what was
 finished recently (a veteran's old mastery seen for the first time is silent), and one Discord ping per run.
 
-Mastery is offered only on an edition that asks more than holo, so the mastery tests give their series a stage 0
-(a region-locked release) the hunter has also cleared; without one, every finished hold here stays holo.
+Mastery is offered only on an edition that asks more than holo, so the mastery tests give their series a bonus
+stage (`BONUS`, a region-locked release) the hunter has also cleared; without one, every finished hold here stays
+holo.
 """
 from datetime import timedelta
 from unittest.mock import patch
@@ -27,6 +28,11 @@ ULTRA = ['PS4', 'PS5']
 LEGACY = ['PS3', 'PSVITA']
 CROSS = ['PS3', 'PS5']
 
+#: A bonus stage in `_series(...)`: stored after the counting ones with `is_bonus` (a region-locked release,
+#: usually). Mastery is offered only on an edition that asks more than holo, and a bonus stage is the plainest
+#: way to give a test series that.
+BONUS = 'bonus'
+
 
 def _hunter(**kw):
     """A hunter whose moments have started (their first sync has finished)."""
@@ -44,7 +50,8 @@ def _series(*stages, legacy=True):
         badges['legacy-hd'] = GroupBadgeFactory(series=series, platform_group=lg, is_live=True)
     games = {}
     for number, platform_lists in stages:
-        st = StageFactory(series_slug=series.series_slug, stage_number=number)
+        bonus = number == BONUS
+        st = StageFactory(series_slug=series.series_slug, stage_number=99 if bonus else number, is_bonus=bonus)
         for platforms in platform_lists:
             concept = ConceptFactory()
             st.concepts.add(concept)
@@ -69,18 +76,18 @@ def _hold(profile, badge):
 
 # -- mastery -------------------------------------------------------------------------------------------------
 
-def test_every_stage_at_100_with_stage_zero_masters_the_badge_and_celebrates_it():
-    _, badges, games = _series((0, [ULTRA]), (1, [ULTRA]), legacy=False)
+def test_every_stage_at_100_with_the_bonus_masters_the_badge_and_celebrates_it():
+    _, badges, games = _series((BONUS, [ULTRA]), (1, [ULTRA]), legacy=False)
     hunter = _hunter()
     _finish(hunter, games[1][0])
-    _finish(hunter, games[0][0], full=False)
+    _finish(hunter, games[BONUS][0], full=False)
 
     result = evaluate_and_apply(hunter)
     hold = _hold(hunter, badges['ultra-hd'])
-    assert hold.is_holo and hold.mastered_at is None, 'stage 0 short of 100% leaves it holo, not mastered'
+    assert hold.is_holo and hold.mastered_at is None, 'the bonus short of 100% leaves it holo, not mastered'
     assert result['mastered'] == []
 
-    _finish(hunter, games[0][0])
+    _finish(hunter, games[BONUS][0])
     result = evaluate_and_apply(hunter)
     assert result['mastered'] == [badges['ultra-hd'].id]
     assert _hold(hunter, badges['ultra-hd']).mastered_at is not None
@@ -88,9 +95,9 @@ def test_every_stage_at_100_with_stage_zero_masters_the_badge_and_celebrates_it(
 
 
 def test_a_new_stage_takes_mastery_away_and_the_re_clear_brings_it_back_with_a_new_date():
-    series, badges, games = _series((0, [ULTRA]), (1, [ULTRA]), legacy=False)
+    series, badges, games = _series((BONUS, [ULTRA]), (1, [ULTRA]), legacy=False)
     hunter = _hunter()
-    _finish(hunter, games[0][0], ago=timedelta(days=3))
+    _finish(hunter, games[BONUS][0], ago=timedelta(days=3))
     _finish(hunter, games[1][0], ago=timedelta(days=3))
     evaluate_and_apply(hunter)
     first = _hold(hunter, badges['ultra-hd']).mastered_at
@@ -110,9 +117,9 @@ def test_a_new_stage_takes_mastery_away_and_the_re_clear_brings_it_back_with_a_n
 
 
 def test_mastered_since_does_not_move_while_it_holds():
-    _, badges, games = _series((0, [ULTRA]), (1, [ULTRA, ULTRA]), legacy=False)
+    _, badges, games = _series((BONUS, [ULTRA]), (1, [ULTRA, ULTRA]), legacy=False)
     hunter = _hunter()
-    _finish(hunter, games[0][0], ago=timedelta(days=5))
+    _finish(hunter, games[BONUS][0], ago=timedelta(days=5))
     _finish(hunter, games[1][0], ago=timedelta(days=5))
     evaluate_and_apply(hunter)
     since = _hold(hunter, badges['ultra-hd']).mastered_at
@@ -139,9 +146,9 @@ def test_a_dead_stage_counts_toward_mastery_but_never_toward_the_badge():
 def test_an_old_mastery_seen_for_the_first_time_is_marked_but_not_celebrated():
     """The deploy's veteran case (owner: silent backfill): the hold is marked, dated by the real finish, and
     no ceremony plays for something done long ago."""
-    _, badges, games = _series((0, [ULTRA]), (1, [ULTRA]), legacy=False)
+    _, badges, games = _series((BONUS, [ULTRA]), (1, [ULTRA]), legacy=False)
     hunter = _hunter()
-    _finish(hunter, games[0][0], ago=timedelta(days=200))
+    _finish(hunter, games[BONUS][0], ago=timedelta(days=200))
     _finish(hunter, games[1][0], ago=timedelta(days=200))
 
     evaluate_and_apply(hunter)
@@ -153,9 +160,9 @@ def test_an_old_mastery_seen_for_the_first_time_is_marked_but_not_celebrated():
 def test_a_badge_earned_already_mastered_plays_one_moment_not_two():
     """Audit: the badge moment and a mastery moment of the same medallion back to back said one thing twice.
     The badge moment wears the crown instead."""
-    _, badges, games = _series((0, [ULTRA]), (1, [ULTRA]), legacy=False)
+    _, badges, games = _series((BONUS, [ULTRA]), (1, [ULTRA]), legacy=False)
     hunter = _hunter()
-    _finish(hunter, games[0][0])
+    _finish(hunter, games[BONUS][0])
     _finish(hunter, games[1][0])
     result = evaluate_and_apply(hunter)
     assert result['mastered'] == [badges['ultra-hd'].id], 'still reported, for the announcement'
@@ -201,12 +208,12 @@ def test_a_stage_that_stops_gating_offers_mastery_to_whoever_cleared_it():
 
 
 def test_a_mastery_lost_before_it_played_has_nothing_left_to_celebrate():
-    series, badges, games = _series((0, [ULTRA]), (1, [ULTRA]), legacy=False)
+    series, badges, games = _series((BONUS, [ULTRA]), (1, [ULTRA]), legacy=False)
     hunter = _hunter()
     _finish(hunter, games[1][0])
-    _finish(hunter, games[0][0], full=False)
+    _finish(hunter, games[BONUS][0], full=False)
     evaluate_and_apply(hunter)                       # the badge, short of mastery
-    _finish(hunter, games[0][0])
+    _finish(hunter, games[BONUS][0])
     evaluate_and_apply(hunter)                       # mastered: its own moment
     assert any(m.kind == Moment.KIND_MASTERED for m in moment_service.pending(hunter))
 
@@ -287,17 +294,17 @@ def test_a_series_master_moment_draws_each_edition_as_it_is_held(rf):
 
 
 def test_series_master_waits_on_the_mastery_an_edition_offers():
-    """Ultra HD has a stage 0 (region-locked): its top finish is Mastery, so its holo alone is not enough."""
-    series, badges, games = _series((0, [ULTRA]), (1, [CROSS]), (2, [ULTRA]), (3, [LEGACY]))
+    """Ultra HD has a bonus stage (region-locked): its top finish is Mastery, so its holo alone is not enough."""
+    series, badges, games = _series((BONUS, [ULTRA]), (1, [CROSS]), (2, [ULTRA]), (3, [LEGACY]))
     hunter = _hunter()
     for number in (1, 2, 3):
         _finish(hunter, games[number][0])
-    _finish(hunter, games[0][0], full=False)
+    _finish(hunter, games[BONUS][0], full=False)
     evaluate_and_apply(hunter)
     assert _hold(hunter, badges['ultra-hd']).is_holo
     assert not SeriesAward.objects.filter(profile=hunter, series=series, kind=SeriesAward.KIND_SERIES_MASTER).exists()
 
-    _finish(hunter, games[0][0])
+    _finish(hunter, games[BONUS][0])
     evaluate_and_apply(hunter)
     assert SeriesAward.objects.filter(profile=hunter, series=series, kind=SeriesAward.KIND_SERIES_MASTER).exists()
 
@@ -324,9 +331,9 @@ def test_the_nightly_batch_applies_series_rewards_too():
 
 @patch('trophies.discord_utils.discord_notifications.queue_webhook_send')
 def test_one_ping_carries_the_badges_and_the_rewards_and_a_reward_is_announced_once_ever(mock_send):
-    series, badges, games = _series((0, [CROSS]), (1, [CROSS]))
+    series, badges, games = _series((BONUS, [CROSS]), (1, [CROSS]))
     hunter = _hunter(is_discord_verified=True, discord_id='123')
-    _finish(hunter, games[0][0])
+    _finish(hunter, games[BONUS][0])
     _finish(hunter, games[1][0])
 
     evaluate_and_apply(hunter, notify=True)
@@ -338,7 +345,7 @@ def test_one_ping_carries_the_badges_and_the_rewards_and_a_reward_is_announced_o
     ProfileTrophyGroup.objects.filter(profile=hunter).update(progress=50)
     ProfileGame.objects.filter(profile=hunter).update(progress=50)
     evaluate_and_apply(hunter, notify=True)
-    _finish(hunter, games[0][0])
+    _finish(hunter, games[BONUS][0])
     _finish(hunter, games[1][0])
     evaluate_and_apply(hunter, notify=True)
     assert mock_send.call_count == 1
@@ -347,9 +354,9 @@ def test_one_ping_carries_the_badges_and_the_rewards_and_a_reward_is_announced_o
 
 @patch('trophies.discord_utils.discord_notifications.queue_webhook_send')
 def test_an_old_reward_is_not_announced(mock_send):
-    _, badges, games = _series((0, [ULTRA]), (1, [ULTRA]), legacy=False)
+    _, badges, games = _series((BONUS, [ULTRA]), (1, [ULTRA]), legacy=False)
     hunter = _hunter(is_discord_verified=True, discord_id='123')
-    _finish(hunter, games[0][0], ago=timedelta(days=200))
+    _finish(hunter, games[BONUS][0], ago=timedelta(days=200))
     _finish(hunter, games[1][0], ago=timedelta(days=200))
     evaluate_and_apply(hunter, notify=True)
     assert _hold(hunter, badges['ultra-hd']).mastered_at is not None, 'mastered, so the silence means something'
@@ -390,12 +397,12 @@ def test_a_failing_series_reward_never_costs_the_badges_their_announcement(mock_
 
 @patch('trophies.discord_utils.discord_notifications.queue_webhook_send')
 def test_a_run_with_only_a_new_reward_sends_the_rewards_embed(mock_send):
-    _, badges, games = _series((1, [ULTRA]), (0, [ULTRA]), legacy=False)
+    _, badges, games = _series((1, [ULTRA]), (BONUS, [ULTRA]), legacy=False)
     hunter = _hunter(is_discord_verified=True, discord_id='123')
     _finish(hunter, games[1][0])
-    _finish(hunter, games[0][0], full=False)
+    _finish(hunter, games[BONUS][0], full=False)
     evaluate_and_apply(hunter, notify=True)          # the badge: one embed
-    _finish(hunter, games[0][0])
+    _finish(hunter, games[BONUS][0])
     evaluate_and_apply(hunter, notify=True)          # then the mastery alone
     assert mock_send.call_count == 2
     assert 'Mastered' in str(mock_send.call_args)
@@ -428,7 +435,7 @@ def test_the_nightly_batch_reads_series_awards_once_not_per_profile():
 def test_a_bundle_is_mastered_by_its_last_member_to_reach_100():
     from trophies.models import ConceptBundle
 
-    series, badges, games = _series((0, [ULTRA]), (1, []), legacy=False)
+    series, badges, games = _series((BONUS, [ULTRA]), (1, []), legacy=False)
     from trophies.models import Stage
     stage = Stage.objects.get(series_slug=series.series_slug, stage_number=1)
     bundle = ConceptBundle.objects.create(stage=stage, label='Episodes')
@@ -436,7 +443,7 @@ def test_a_bundle_is_mastered_by_its_last_member_to_reach_100():
     bundle.concepts.set(members)
     first, last = (GameFactory(concept=c, title_platform=ULTRA) for c in members)
     hunter = _hunter()
-    _finish(hunter, games[0][0], ago=timedelta(days=6))
+    _finish(hunter, games[BONUS][0], ago=timedelta(days=6))
     _finish(hunter, first, ago=timedelta(days=4))
     _finish(hunter, last, ago=timedelta(days=1))
 

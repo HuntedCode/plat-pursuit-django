@@ -49,12 +49,12 @@ def test_the_count_is_written_at_all():
     assert gb.required_stages == 3
 
 
-def test_stage_zero_does_not_gate():
-    """Stage 0 is tangential by design -- the engine skips it, so the count must too."""
+def test_a_bonus_stage_does_not_gate():
+    """A bonus stage is tangential by design -- the engine skips it, so the count must too."""
     series = _series_with_stages(2)
     # It needs a qualifying, obtainable game: an empty stage cannot gate whatever the filter does, so
-    # a bare StageFactory here would pass even with the stage_number check deleted.
-    tangential = StageFactory(series_slug=series.series_slug, stage_number=0)
+    # a bare StageFactory here would pass even with the is_bonus check deleted.
+    tangential = StageFactory(series_slug=series.series_slug, stage_number=3, is_bonus=True)
     concept = ConceptFactory()
     GameFactory(concept=concept, title_platform=['PS4', 'PS5'], is_obtainable=True)
     tangential.concepts.add(concept)

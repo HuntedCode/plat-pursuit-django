@@ -27,11 +27,12 @@ Rules encoded here (see docs/design/rebuild/badge-backend-rebuild.md §3.3):
                       no-plat games; DLC-independent).
       full_complete = the WHOLE game at 100% incl DLC.
     base = every gating stage has a qualifying game at base_complete; holo = ...at full_complete (live, cosmetic).
-  - Stage 0 is skipped (tangential/bonus) for the badge, its holo and its XP.
-  - MASTERY (owner, 2026-10-25) is the badge's top finish: every stage IN SCOPE for the edition, stage 0 and
-    stages that no longer gate included, at full_complete on any one version. It is never required, so it
+  - A BONUS stage (`StageInput.is_bonus`, which replaced stage 0) is skipped for the badge, its holo and
+    its XP.
+  - MASTERY (owner, 2026-10-25) is the badge's top finish: every stage IN SCOPE for the edition, bonus stages
+    and stages that no longer gate included, at full_complete on any one version. It is never required, so it
     can read what gating cannot. It needs the badge itself, and it implies holo (a superset of its stages).
-    It is OFFERED only when it asks more than holo (owner, 2026-10-25): a stage 0 game (a region-locked
+    It is OFFERED only when it asks more than holo (owner, 2026-10-25): a bonus stage (usually a region-locked
     release), a stage that no longer gates, or a megamix's stages past its threshold. Elsewhere it would be
     holo under another name, so holo is that badge's top finish. Either way the edition is FINISHED when every
     in-scope stage is at the full bar, which is what Series Master reads.
@@ -64,6 +65,7 @@ class GameState:
 class StageInput:
     stage_number: int
     games: tuple                  # tuple[GameState, ...]
+    is_bonus: bool = False        # counts toward Mastery only (Stage.is_bonus)
 
 
 @dataclass(frozen=True)
@@ -90,6 +92,7 @@ class StageResult:
     # Appended with defaults so the positional constructions in the test suite keep working.
     in_scope: bool = True             # the stage holds a game on this edition's platforms (mastery's scope)
     full_date: Optional[date] = None  # earliest date the stage's full bar was met (for mastered_date)
+    is_bonus: bool = False            # the stage counts toward Mastery only
 
 
 @dataclass
@@ -107,7 +110,7 @@ class GroupBadgeResult:
     #: progress fraction, which must never exceed its own denominator. Appended with a default so the
     #: positional constructions in the test suite keep working.
     xp_stage_count: int = 0
-    #: FINISHED: every in-scope stage, stage 0 included, at the full bar, with the badge held. `mastery_done`
+    #: FINISHED: every in-scope stage, bonus stages included, at the full bar, with the badge held. `mastery_done`
     #: of `mastery_total` is its progress. `finished_date` is when the last of them fell (None when any is
     #: undated). MASTERED is finished on an edition that offers Mastery (see the module docstring).
     mastered: bool = False
@@ -117,8 +120,11 @@ class GroupBadgeResult:
     mastery_offered: bool = False
     finished: bool = False
     finished_date: Optional[date] = None
-    #: The in-scope stage numbers, stage 0 included: which edition "covers" what, for Series Master.
+    #: The in-scope stage numbers, bonus stages included: which edition "covers" what, for Series Master.
     scope: frozenset = frozenset()
+    #: The BONUS stages' results (list[StageResult]), apart from `stages`: everything that reads `stages`
+    #: (XP buckets, the challenge planner) must never see them. The badge page reads both.
+    bonus_stages: list = field(default_factory=list)
 
 
 # ------------------------------------------------------------------ per-game predicates ------------------
@@ -153,7 +159,7 @@ def evaluate_stage(stage: StageInput, group: GroupInput) -> StageResult:
     """
     qualifying = [g for g in stage.games if _qualifies(g, group)]
     if not qualifying:
-        return StageResult(stage.stage_number, False, False, False, None, in_scope=False)
+        return StageResult(stage.stage_number, False, False, False, None, in_scope=False, is_bonus=stage.is_bonus)
 
     gates = any(_gates(g, group) for g in qualifying)
     base_satisfied = any(g.base_complete for g in stage.games)
@@ -164,7 +170,7 @@ def evaluate_stage(stage: StageInput, group: GroupInput) -> StageResult:
     base_date = min(base_dates) if base_dates else None
     full_dates = [g.full_date for g in stage.games if g.full_complete and g.full_date is not None]
     return StageResult(stage.stage_number, gates, base_satisfied, holo_satisfied, base_date,
-                       full_date=min(full_dates) if full_dates else None)
+                       full_date=min(full_dates) if full_dates else None, is_bonus=stage.is_bonus)
 
 
 def _earned_date(gating: list, policy: str, need: int, base_earned: bool) -> Optional[date]:
@@ -180,14 +186,14 @@ def _earned_date(gating: list, policy: str, need: int, base_earned: bool) -> Opt
 
 
 def _mastery(scoped: list, base_earned: bool, extra_stages: bool, earnable: bool = True) -> dict:
-    """Mastery over the in-scope stages (stage 0 included). It needs the badge itself: a badge with nothing
+    """Mastery over the in-scope stages (bonus stages included). It needs the badge itself: a badge with nothing
     left to gate (`earnable` False) is revoked, so there is no hold to master and nothing is offered.
     `extra_stages`: a megamix asks for fewer stages than it gates."""
     done = sum(1 for r in scoped if r.holo_satisfied)
     finished = base_earned and bool(scoped) and done == len(scoped)
     dates = [r.full_date for r in scoped]
     when = max(dates) if finished and None not in dates else None
-    offered = earnable and (extra_stages or any(r.stage_number == 0 or not r.gates for r in scoped))
+    offered = earnable and (extra_stages or any(r.is_bonus or not r.gates for r in scoped))
     mastered = offered and finished
     return {'mastered': mastered, 'mastery_done': done, 'mastery_total': len(scoped),
             'mastered_date': when if mastered else None, 'scope': frozenset(r.stage_number for r in scoped),
@@ -196,16 +202,17 @@ def _mastery(scoped: list, base_earned: bool, extra_stages: bool, earnable: bool
 
 def evaluate_group_badge(series: SeriesInput, group: GroupInput, stages: list) -> GroupBadgeResult:
     """Evaluate one group badge (a BadgeSeries x PlatformGroup) for one profile. Pure."""
-    results = [evaluate_stage(s, group) for s in stages if s.stage_number > 0]   # stage 0 is tangential
+    results = [evaluate_stage(s, group) for s in stages if not s.is_bonus]   # a bonus stage is tangential
     # ...to everything but mastery, which is every stage the edition covers.
-    scoped = [r for r in results + [evaluate_stage(s, group) for s in stages if s.stage_number == 0] if r.in_scope]
+    bonus = [evaluate_stage(s, group) for s in stages if s.is_bonus]
+    scoped = [r for r in results + bonus if r.in_scope]
     gating = [r for r in results if r.gates]
     gating_count = len(gating)
     base_ok = sum(1 for r in gating if r.base_satisfied)
     holo_ok = sum(1 for r in gating if r.holo_satisfied)
     # Every in-scope stage cleared, gating or not. Out-of-scope stages report base_satisfied=False, so this
-    # needs no scope test of its own. Stage 0 is already excluded above and must stay excluded: it is
-    # tangential by definition, and paying XP for it would make optional work feel mandatory.
+    # needs no scope test of its own. Bonus stages are already excluded above and must stay excluded: they are
+    # tangential by definition, and paying XP for them would make optional work feel mandatory.
     xp_stage_count = sum(1 for r in results if r.base_satisfied)
 
     if gating_count == 0:
@@ -214,7 +221,7 @@ def evaluate_group_badge(series: SeriesInput, group: GroupInput, stages: list) -
         # The XP still travels. Those stages were genuinely cleared, and clawing points back because a
         # storefront closed would punish the hunter for someone else's decision.
         return GroupBadgeResult(False, False, 0, base_ok, holo_ok, None, results, xp_stage_count,
-                                **_mastery(scoped, False, False, earnable=False))
+                                bonus_stages=bonus, **_mastery(scoped, False, False, earnable=False))
 
     if series.completion_policy == 'min_count':
         # Megamix. min_required applies to THIS group's gating stages; 0 means "all". (How min_required maps
@@ -229,7 +236,7 @@ def evaluate_group_badge(series: SeriesInput, group: GroupInput, stages: list) -
 
     earned_date = _earned_date(gating, series.completion_policy, need, base_earned)
     return GroupBadgeResult(base_earned, holo, gating_count, base_ok, holo_ok, earned_date, results,
-                            xp_stage_count, **_mastery(scoped, base_earned, need < gating_count))
+                            xp_stage_count, bonus_stages=bonus, **_mastery(scoped, base_earned, need < gating_count))
 
 
 @dataclass(frozen=True)

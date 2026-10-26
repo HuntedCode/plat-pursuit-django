@@ -435,20 +435,20 @@ a.bd-studio__ico:hover { box-shadow: 0 0 0 2px color-mix(in oklab, var(--pp-prim
 .bd-studio__meta .pp-tally { font-weight: 800; color: var(--pp-text-dim); }
 .bd-studio__meta .is-done, .bd-studio__meta .is-done .pp-tally { color: var(--pp-success); }
 /* Inside the retired fence: a quiet label per studio, aligned with the cards. */
-.bd-retired__studio {
+.bd-fence__studio {
     margin: 14px 0 0 52px;
     font-size: 0.68rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--pp-text-mute);
 }
-.bd-retired__studio-link { color: inherit; text-decoration: none; border-radius: 3px; transition: color var(--pp-dur) var(--pp-ease); }
-.bd-retired__studio-link:hover { color: var(--pp-primary); }
-.bd-retired__studio-link:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+.bd-fence__studio-link { color: inherit; text-decoration: none; border-radius: 3px; transition: color var(--pp-dur) var(--pp-ease); }
+.bd-fence__studio-link:hover { color: var(--pp-primary); }
+.bd-fence__studio-link:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
 @media (max-width: 640px) {
     /* Follow the slimmer mobile gutter (34px): a 28px glyph + 6. */
     .bd-studio__head { gap: 6px; }
     .bd-studio__ico { width: 28px; height: 28px; }
     .bd-studio__ico svg { width: 13px; height: 13px; }
     .bd-studio__name { font-size: 0.88rem; }
-    .bd-retired__studio { margin-left: 34px; }
+    .bd-fence__studio { margin-left: 34px; }
 }
 
 /* Mobile stage journey: the ladder gutter + node shrink to reclaim horizontal space, the head tightens,
@@ -757,25 +757,33 @@ a.bd2-comm__master:focus-visible { outline: 2px solid var(--med-tier-gold); outl
 #bd-view-overview > .bd2-groupswitch { margin-top: 0; }
 
 /* ============================================================
-   Retired stages + the unearnable-edition notice
+   Fenced stages (bonus, retired) + the unearnable-edition notice
    ============================================================
    A RETIRED stage is in scope for this edition but no longer gates it: everything it asks for here has gone
    unobtainable. It stays on the page because clearing it still PAID -- dropping it would erase credited work
    -- but it has to read as fenced off, not as another rung. Muted, desaturated, and visibly below the ladder.
    Deliberately NOT hidden behind a <details>: the stage's own games already collapse, and burying a whole
    section the hunter may have points in makes it look like the site forgot them. */
-.bd-retired { border-top: 1px solid var(--pp-divider); padding-top: 16px; }
-.bd-retired__head { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 4px; }
-.bd-retired__ico {
+.bd-fence { border-top: 1px solid var(--pp-divider); padding-top: 16px; }
+.bd-fence__head { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 4px; }
+.bd-fence__ico {
     display: grid; place-items: center; width: 26px; height: 26px; flex: none; margin-top: 1px;
     border-radius: 50%; color: var(--pp-text-mute);
     background: var(--pp-bg-2); border: 1px solid var(--pp-border);
 }
-.bd-retired__ico svg { width: 15px; height: 15px; }
-.bd-retired__title { font-size: 0.78rem; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: var(--pp-text-dim); }
-.bd-retired__note { font-size: 0.78rem; line-height: 1.5; color: var(--pp-text-mute); max-width: 62ch; margin-top: 2px; }
+.bd-fence__ico svg { width: 15px; height: 15px; }
+.bd-fence__title { font-size: 0.78rem; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: var(--pp-text-dim); }
+.bd-fence__note { font-size: 0.78rem; line-height: 1.5; color: var(--pp-text-mute); max-width: 62ch; margin-top: 2px; }
 
-/* The cards themselves: same anatomy, dialled down -- through COLOUR only, never `opacity`.
+/* BONUS: the same fence, but these can still be played, so the cards keep the ladder's own colours and only
+   the fence and the eyebrow speak in Mastery's gold (the crown is the section's icon). */
+.bd-fence--bonus .bd-fence__ico { border-color: color-mix(in oklab, var(--med-tier-gold) 45%, var(--pp-border)); }
+.bd-fence__ico img { width: 15px; height: auto; }
+.bd-fence--bonus .bd-fence__title, .bd-stage__eyebrow--bonus { color: var(--med-tier-gold); }
+.bd-node--bonus { color: var(--med-tier-gold); }
+.bd-node--bonus svg { width: 13px; height: 13px; }
+
+/* RETIRED. The cards themselves: same anatomy, dialled down -- through COLOUR only, never `opacity`.
    A blanket 0.78 composited foreground and background alike toward the page and took three elements below
    AA (the eyebrow to 3.30:1, the title to 4.02:1, the count pill to 3.39:1), plus every game card inside an
    expanded retired stage. And it failed worst exactly where it mattered: the escape hatch below restores
@@ -828,7 +836,7 @@ a.bd2-comm__master:focus-visible { outline: 2px solid var(--med-tier-gold); outl
 .bd-dead__text { font-size: 0.8rem; line-height: 1.55; color: var(--pp-text-dim); margin-top: 3px; max-width: 68ch; }
 
 @media (min-width: 768px) {
-    .bd-retired__note, .bd-dead__text { font-size: 0.82rem; }
+    .bd-fence__note, .bd-dead__text { font-size: 0.82rem; }
 }
 
 /* Narrow: the chip drops to one word so the stage TITLE keeps the room. The distinction survives -- the

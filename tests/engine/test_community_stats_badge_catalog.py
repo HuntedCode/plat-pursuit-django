@@ -31,10 +31,10 @@ def _seed_catalog():
     live = BadgeSeriesFactory(series_slug='cat')
     GroupBadgeFactory(series=live, platform_group=PlatformGroupFactory(key='ultra'), is_live=True)
     GroupBadgeFactory(series=live, platform_group=PlatformGroupFactory(key='legacy'), is_live=True)
-    # Two counting stages + a base stage 0 that must NOT count toward the total.
+    # Two counting stages + a bonus stage that must NOT count toward the total.
     StageFactory(series_slug='cat', stage_number=1)
     StageFactory(series_slug='cat', stage_number=2)
-    StageFactory(series_slug='cat', stage_number=0)
+    StageFactory(series_slug='cat', stage_number=3, is_bonus=True)
 
     # A series whose only edition is dormant must be excluded from every figure.
     hidden = BadgeSeriesFactory(series_slug='hidden')
@@ -45,7 +45,7 @@ def _seed_catalog():
 def test_community_stats_badge_catalog_aggregates():
     _seed_catalog()
     stats = compute_community_stats()
-    # Only the live series' counting stages (1, 2): stage 0 and the dormant series are excluded. Counted
+    # Only the live series' counting stages (1, 2): the bonus stage and the dormant series are excluded. Counted
     # once per SERIES even though the series has two editions -- the stage list is series-level.
     assert stats['badge_stages']['total'] == 2
     assert stats['badge_earnable_xp']['total'] == _EXPECTED_XP
