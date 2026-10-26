@@ -2,8 +2,8 @@
 {% comment %}
 The celebration player (trophies/services/moment_service.py, static/js/moments.js). One .pp-detail-modal;
 each waiting moment is a <template> the script swaps into the stage, ONE AT A TIME ("1 of 3", Next, Skip all;
-owner 2026-10-25). `data-queue="auto"` (welcome, badges) auto-plays when `data-autoplay`; `reel` (platinums,
-then a milestone) plays only from the strip's pill. A moment is marked played the moment it is on screen.
+owner 2026-10-25). `data-queue="auto"` (welcome, badges, masteries, Full Sets, Series Masters) auto-plays when
+`data-autoplay`; `reel` (platinums, then a milestone) plays only from the strip's pill. A moment is marked played the moment it is on screen.
 Particles stay the earn vocabulary: the medallion's own mint, never confetti.
 {% endcomment %}
 <div class="pp-detail-modal pp-moments" id="pp-moments" data-autoplay="{% if view.autoplay %}1{% endif %}"{% if preview %} data-preview="1"{% endif %}
@@ -41,7 +41,7 @@ After the player in the DOM, so it stacks over it.{% endcomment %}
 
 {% for item in view.auto %}
 <template data-moment="{{ item.moment.id }}" data-queue="auto" data-kind="{{ item.kind }}"
-          {% if item.kind == 'badge' %}data-badge-id="{{ item.frame.badge_id }}" data-link-href="{% url 'badge_detail' item.series.series_slug %}" data-link-label="See the badge"{% else %}data-link-href="{% url 'badge_collection' %}" data-link-label="See your Collection"{% endif %}>
+          {% if item.kind == 'badge' %}data-badge-id="{{ item.frame.badge_id }}" data-link-href="{% url 'badge_detail' item.series.series_slug %}" data-link-label="See the badge"{% elif item.kind == 'mastered' %}data-link-href="{% url 'badge_detail' item.series.series_slug %}" data-link-label="See the badge"{% elif item.kind == 'full_set' or item.kind == 'series_master' %}data-link-href="{% url 'badge_detail' item.series.series_slug %}" data-link-label="See the series"{% else %}data-link-href="{% url 'badge_collection' %}" data-link-label="See your Collection"{% endif %}>
     {% if item.kind == 'welcome' %}
     <div class="pp-moment pp-moment--welcome">
         <span class="pp-moment__eyebrow">Welcome to Platinum Pursuit</span>
@@ -56,12 +56,45 @@ After the player in the DOM, so it stacks over it.{% endcomment %}
         <p class="pp-moment__say">From here on, every badge you earn and every new platinum gets a moment of its own.</p>
         {% endif %}
     </div>
+    {% elif item.kind == 'mastered' %}
+    {% comment %}MASTERED (phase 4): the badge's top finish, its medallion wearing the rim and crown, the rays gold.
+    No points line: mastery is worth none (owner, 2026-10-25), its reward is that it shows.{% endcomment %}
+    <div class="pp-moment pp-moment--badge pp-moment--mastered">
+        <span class="pp-moment__eyebrow">Mastered</span>
+        <div class="pp-moment__obj pp-moment__med" data-tier="{{ item.frame.tier }}" data-mastered
+             data-moment-pick data-badge-id="{{ item.frame.badge_id }}" role="button" tabindex="0" aria-label="Pick up {{ item.series.name }}">
+            <span class="pp-moment__rays" aria-hidden="true"></span>
+            {% include 'components/badge_medallion.html' with frame=item.frame no_id=True %}
+        </div>
+        <h2 class="pp-moment__title" id="pp-moments-title">{{ item.series.name }}</h2>
+        <p class="pp-moment__sub">{{ item.edition }}</p>
+        <p class="pp-moment__facts">
+            <span>Every stage at 100%, every trophy you can still earn.</span>
+            {% if item.masters > 1 %}<span><span class="pp-moment__dim">One of</span> <b>{{ item.masters|intcomma }}</b> <span class="pp-moment__dim">masters</span></span>{% endif %}
+        </p>
+    </div>
+    {% elif item.kind == 'full_set' or item.kind == 'series_master' %}
+    {% comment %}A series reward: every edition's medallion side by side, each one can be picked up.{% endcomment %}
+    <div class="pp-moment pp-moment--set{% if item.kind == 'series_master' %} pp-moment--mastered{% endif %}">
+        <span class="pp-moment__eyebrow">{% if item.kind == 'series_master' %}Series Master{% else %}Full Set{% endif %}</span>
+        <div class="pp-moment__obj pp-moment__set" style="--n: {{ item.frames|length }}"{% if item.kind == 'series_master' %} data-mastered{% endif %}>
+            <span class="pp-moment__rays" aria-hidden="true"></span>
+            {% for frame in item.frames %}
+            <div class="pp-moment__setmed" data-moment-pick data-badge-id="{{ frame.badge_id }}" role="button" tabindex="0"
+                 aria-label="Pick up {{ item.series.name }}, {{ frame.group_name }}">
+                {% include 'components/badge_medallion.html' with frame=frame no_id=True %}
+            </div>
+            {% endfor %}
+        </div>
+        <h2 class="pp-moment__title" id="pp-moments-title">{{ item.series.name }}</h2>
+        <p class="pp-moment__sub">{% if item.kind == 'series_master' %}Every edition at 100%{% else %}Every edition held{% endif %}: {{ item.editions_label }}</p>
+    </div>
     {% else %}
-    <div class="pp-moment pp-moment--badge">
-        <span class="pp-moment__eyebrow">Badge earned</span>
-        {% comment %}The rays wear the badge's tier (data-tier), iridescent when it is holographic. Phase 4's
-        mastered badge turns them gold with its rim and crown.{% endcomment %}
-        <div class="pp-moment__obj pp-moment__med" data-tier="{{ item.frame.tier }}"{% if item.frame.is_holographic %} data-holo{% endif %}
+    <div class="pp-moment pp-moment--badge{% if item.frame.is_mastered %} pp-moment--mastered{% endif %}">
+        <span class="pp-moment__eyebrow">{% if item.frame.is_mastered %}Badge earned and mastered{% else %}Badge earned{% endif %}</span>
+        {% comment %}The rays wear the badge's edition metal (data-tier), iridescent when it is holographic,
+        gold when it is mastered: a badge earned already mastered plays this ONE moment, crowned.{% endcomment %}
+        <div class="pp-moment__obj pp-moment__med" data-tier="{{ item.frame.tier }}"{% if item.frame.is_holographic %} data-holo{% endif %}{% if item.frame.is_mastered %} data-mastered{% endif %}
              data-moment-pick data-badge-id="{{ item.frame.badge_id }}" role="button" tabindex="0" aria-label="Pick up {{ item.series.name }}">
             <span class="pp-moment__rays" aria-hidden="true"></span>
             {% include 'components/badge_medallion.html' with frame=item.frame no_id=True %}

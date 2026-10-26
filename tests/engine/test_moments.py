@@ -527,6 +527,7 @@ def test_the_preview_never_posts_and_the_sparks_are_shared():
 
     assert "if (preview || !ids.length || !PP.API) { return; }" in moments
     assert 'window.PlatPursuit.sparkBurst = sparkBurst;' in utils
+    assert utils.count("s.className = 'pp-spark pp-spark--burst';") == 2, 'both spark paths need the class that outranks frame.css'
     assert 'if (PP.sparkBurst) { PP.sparkBurst(layer, cx, cy, color, n); }' in ceremony
     assert "if (!beat || reduced() || !PP.sparkBurst) { return; }" in moments
     assert "s.className = 'ccx__spark'" not in ceremony, 'one spark, styled once (.pp-spark, motion.css)'
@@ -562,9 +563,110 @@ def test_the_moments_sparks_explode_and_escape_puts_the_medallion_down_first():
     moments = (root / 'moments.js').read_text(encoding='utf-8')
     utils = (root / 'utils.js').read_text(encoding='utf-8')
 
-    assert 'beat.color, beat.n, { explode: true });' in moments
+    assert 'PP.sparkBurst(sparks, c.x, c.y, color, share, { explode: true });' in moments
     assert "if (opts.explode) { explodeSparks(layer, cx, cy, color, n); return; }" in utils
     assert "const floor = (h - cy) + 40 + Math.random() * 120;" in utils, 'they fall OFF the bottom edge'
     # Escape answers the inspector first (capture phase) and stops the moment closing underneath it.
     assert "if (e.key !== 'Escape' || !peekEl || peekEl.hidden) { return; }" in moments
     assert "e.stopImmediatePropagation();\n        if (peek) { peek.close(); }\n    }, true);" in moments
+
+
+# --- phase 4: mastery and series rewards --------------------------------------------------------------------
+
+def _mastered_hold(profile, gb, linked=False):
+    # `is_linked` is the hold's own mirror of the profile's (the boards' predicate), stamped at award.
+    return UserGroupBadge.objects.create(profile=profile, group_badge=gb, earned_at=NOW(), is_holo=True,
+                                         mastered_at=NOW(), is_linked=linked)
+
+
+def test_a_mastery_plays_by_itself_with_its_crown_and_how_many_hold_it(rf):
+    profile = _hunter(is_linked=True)
+    gb = GroupBadgeFactory()
+    _mastered_hold(profile, gb, linked=True)
+    for _ in range(2):
+        _mastered_hold(ProfileFactory(is_linked=True), gb, linked=True)
+    moment_service.record_mastered(profile, gb, NOW() - timedelta(hours=1))
+
+    html = _render('{% moments_overlay %}', profile, rf)
+
+    assert 'data-kind="mastered"' in html and 'data-queue="auto"' in html
+    assert 'pp-med--mastered' in html and 'mastery-crown.svg' in html, 'the medallion wears the rim and crown'
+    assert 'One of</span> <b>3</b>' in html
+
+
+def test_an_unverified_master_is_not_told_they_are_one_of_the_verified_count(rf):
+    profile = _hunter(is_linked=False)
+    gb = GroupBadgeFactory()
+    _mastered_hold(profile, gb)
+    for _ in range(2):
+        _mastered_hold(ProfileFactory(is_linked=True), gb, linked=True)
+    moment_service.record_mastered(profile, gb, NOW() - timedelta(hours=1))
+
+    assert 'One of' not in _render('{% moments_overlay %}', profile, rf)
+
+
+def test_an_old_mastery_records_nothing_to_play():
+    profile = _hunter()
+    gb = GroupBadgeFactory()
+    _mastered_hold(profile, gb)
+    moment_service.record_mastered(profile, gb, NOW() - timedelta(days=40))
+    moment_service.record_mastered(profile, gb, None)
+    assert not Moment.objects.filter(kind=Moment.KIND_MASTERED).exists()
+
+
+def test_a_series_reward_shows_every_edition_and_plays_only_while_it_is_held(rf):
+    from trophies.models import SeriesAward
+
+    profile = _hunter()
+    series = BadgeSeriesFactory()
+    editions = [GroupBadgeFactory(series=series, is_live=True,
+                                  platform_group=PlatformGroupFactory(key=k, name=n, platforms=p))
+                for k, n, p in (('ultra-hd', 'Ultra HD', ['PS5']), ('legacy-hd', 'Legacy HD', ['PS3']))]
+    for gb in editions:
+        UserGroupBadge.objects.create(profile=profile, group_badge=gb, earned_at=NOW())
+    award = SeriesAward.objects.create(profile=profile, series=series, kind=SeriesAward.KIND_FULL_SET, since=NOW())
+    moment_service.record_series_reward(profile, series, Moment.KIND_FULL_SET, NOW() - timedelta(hours=1))
+
+    html = _render('{% moments_overlay %}', profile, rf)
+    assert 'data-kind="full_set"' in html and 'Every edition held: Ultra HD and Legacy HD' in html
+    for gb in editions:
+        assert f'data-moment-pick data-badge-id="{gb.id}"' in html
+    assert 'id="pp-moments-peek"' in html, 'each edition can be picked up'
+
+    award.delete()
+    assert not [m for m in moment_service.pending(profile) if m.kind == Moment.KIND_FULL_SET]
+
+
+def test_the_preview_samples_the_new_beats_too(rf):
+    profile = _team(_hunter())
+    gb = GroupBadgeFactory()
+    UserGroupBadge.objects.create(profile=profile, group_badge=gb, earned_at=NOW())
+
+    html = _preview_render('{% moments_overlay %}', profile, rf)
+    for kind in ('mastered', 'full_set', 'series_master'):
+        assert f'data-kind="{kind}"' in html
+    assert not Moment.objects.exists()
+
+
+def test_the_sparks_climb_the_reward_ladder_and_wear_what_the_rays_wear():
+    """Source pins (no JS runner) for the spark ladder (owner, 2026-10-25): the bigger the reward the bigger the
+    burst, counted the way a two-edition series plays them; a mastery or a Series Master never shrinks later in a
+    queue; a badge's sparks read its edition metal off the medallion, a holo one the foil's colours."""
+    import re
+    from pathlib import Path
+
+    js = (Path(__file__).resolve().parents[2] / 'static' / 'js' / 'moments.js').read_text(encoding='utf-8')
+    beats = {k: dict(re.findall(r'(\w+): (\d+|true)', body))
+             for k, body in re.findall(r'^\s+(\w+): \{([^}]*)\},?$', js.split('var BEATS = {')[1].split('};')[0], re.M)}
+
+    def total(kind, editions=2):
+        b = beats[kind]
+        per = int(b.get('n', 0)) + int(b.get('crown', 0))
+        return per * (editions if 'each' in b else 1) + int(b.get('finale', 0))
+
+    ladder = ['badge', 'holo', 'full_set', 'mastered', 'series_master']
+    totals = [total(k) for k in ladder]
+    assert totals == sorted(totals) and len(set(totals)) == len(totals), dict(zip(ladder, totals))
+    assert beats['mastered'].get('always') == 'true' and beats['series_master'].get('always') == 'true'
+    assert "getPropertyValue('--med-c')" in js, 'a badge no longer throws its edition metal'
+    assert "querySelector('.pp-moment__med[data-holo]') ? BEATS.holo" in js

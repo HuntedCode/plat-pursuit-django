@@ -206,17 +206,7 @@ def recompute_required_stages(catalog) -> int:
     games are delisted (and the group excludes delisted) or unobtainable. Counting `Stage` rows would
     over-report on exactly the editions where the difference is visible.
     """
-    counts = {}
-    stages_by_series = defaultdict(list)
-    for st in catalog['stages']:
-        units = catalog_stage_units(st, catalog)
-        stages_by_series[st.series_slug].append(StageInput(st.stage_number, tuple(units)))
-
-    for gb in catalog['group_badges']:
-        group_input = GroupInput(frozenset(gb.platform_group.platforms), gb.platform_group.exclude_delisted)
-        stages = stages_by_series.get(gb.series.series_slug, [])
-        results = [evaluate_stage(s, group_input) for s in stages if s.stage_number > 0]
-        counts[gb.id] = sum(1 for r in results if r.gates)
+    counts = {gb_id: r.gating_count for gb_id, r in catalog_results(catalog).items()}
 
     stale = [gb for gb in catalog['group_badges'] if gb.required_stages != counts[gb.id]]
     for gb in stale:
@@ -227,6 +217,24 @@ def recompute_required_stages(catalog) -> int:
         with transaction.atomic():
             GroupBadge.objects.bulk_update(stale, ['required_stages'], batch_size=500)
     return len(stale)
+
+
+def catalog_results(catalog) -> dict:
+    """Every badge in the catalogue evaluated on catalogue facts alone, with no hunter: {group_badge_id:
+    GroupBadgeResult}. Nothing is complete, so only what every hunter shares is meaningful in it: the gating
+    count (`recompute_required_stages`) and each edition's stage scope (the badge page's Series Master offer
+    for a visitor who is not signed in). No queries."""
+    stages_by_series = defaultdict(list)
+    for st in catalog['stages']:
+        stages_by_series[st.series_slug].append(StageInput(st.stage_number, tuple(catalog_stage_units(st, catalog))))
+    return {
+        gb.id: evaluate_group_badge(
+            SeriesInput(gb.series.completion_policy, gb.series.min_required),
+            GroupInput(frozenset(gb.platform_group.platforms), gb.platform_group.exclude_delisted),
+            stages_by_series.get(gb.series.series_slug, []),
+        )
+        for gb in catalog['group_badges']
+    }
 
 
 def _catalog_game_state(g, obtainable=None):
@@ -322,6 +330,14 @@ def evaluate_with_catalog(profile, catalog, excused=None):
             completion_date = full_excused_date or full_date
         else:
             completion_date = None
+        # The full bar's own date, for mastery: the list's last trophy, or the last required one when excusal
+        # carried it. Undated only when PSN sent no date at all.
+        if full_prog == 100:
+            full_bar_date = full_date
+        elif full_excused:
+            full_bar_date = full_excused_date or full_date
+        else:
+            full_bar_date = None
         return GameState(
             game_id=g.id,
             platforms=frozenset(g.title_platform or []),
@@ -330,6 +346,7 @@ def evaluate_with_catalog(profile, catalog, excused=None):
             base_complete=base_complete,
             full_complete=full_complete,
             completion_date=completion_date,
+            full_date=full_bar_date,
         )
 
     def group_state(g, tg):
@@ -357,6 +374,7 @@ def evaluate_with_catalog(profile, catalog, excused=None):
             base_complete=complete,
             full_complete=complete,
             completion_date=completion_date,
+            full_date=completion_date,    # one bar: the group is the whole game it stands for
         )
 
     stages_by_series = defaultdict(list)
@@ -403,7 +421,7 @@ def _bundle_state(bundle, game_state_fn):
         return None
     platforms, any_delisted = None, False
     base_all, full_all, obtainable_all = True, True, True
-    member_dates = []
+    member_dates, member_full_dates = [], []
     for c in members:
         states = [game_state_fn(g) for g in c.games.all()]
         member_platforms = set()
@@ -420,11 +438,19 @@ def _bundle_state(bundle, game_state_fn):
             member_dates.append(min(dates) if dates else None)
         else:
             base_all = False
-        if not any(s.full_complete for s in states):
+        full_states = [s for s in states if s.full_complete]
+        if full_states:
+            dates = [s.full_date for s in full_states if s.full_date is not None]
+            member_full_dates.append(min(dates) if dates else None)
+        else:
             full_all = False
     bundle_date = None
     if base_all and member_dates and all(d is not None for d in member_dates):
         bundle_date = max(member_dates)
+    # The full bar's tipper, the same way: the last member to reach it (undated if any member is).
+    full_date = None
+    if full_all and member_full_dates and all(d is not None for d in member_full_dates):
+        full_date = max(member_full_dates)
     return GameState(
         game_id=-bundle.id,               # synthetic; game_id is identity-only in the engine
         platforms=frozenset(platforms or ()),
@@ -433,4 +459,5 @@ def _bundle_state(bundle, game_state_fn):
         base_complete=base_all,
         full_complete=full_all,
         completion_date=bundle_date,
+        full_date=full_date,
     )

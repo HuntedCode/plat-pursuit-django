@@ -24,7 +24,7 @@ indexed reads, whale-safe. rows(...) returns a page of (profile_id, value) for r
 page of ids into display rows in ONE query.
 """
 
-from django.db.models import F, OuterRef, Q, Subquery
+from django.db.models import Count, F, OuterRef, Q, Subquery
 
 from trophies.services import rarity_score as rarity_score_module
 
@@ -819,6 +819,42 @@ def earners_rows(group_badge_id, limit=50, offset=0, country=None):
         _earners_qs(group_badge_id, country).order_by('earned_at', 'profile_id')
         .values_list('profile_id', 'earned_at')[offset:offset + limit]
     )
+
+
+#: How many masters a badge page names; the count says how many there are in all.
+MASTERS_SHOWN = 12
+
+
+def _masters_qs(group_badge_ids):
+    return _linked(UserGroupBadge.objects.filter(group_badge_id__in=group_badge_ids, mastered_at__isnull=False))
+
+
+def masters_counts(group_badge_ids) -> dict:
+    """{group_badge_id: current masters}, verified hunters only, in ONE grouped count (missing = none)."""
+    return dict(_masters_qs(list(group_badge_ids)).values('group_badge_id').annotate(c=Count('id'))
+                .values_list('group_badge_id', 'c'))
+
+
+def badge_masters(group_badge_ids, limit=MASTERS_SHOWN):
+    """A badge's CURRENT masters (phase 4), per edition: {group_badge_id: {'count': n, 'rows': [hold, ...]}},
+    the first `limit` holds in mastery order (earliest current mastery first) with their profile loaded.
+
+    No rank NUMBER (owner, 2026-10-25: "Master #3" breaks the day a game is added); the order only seats the
+    list. Verified hunters only, like every board here. A seek on `ugb_badge_mastered_idx`: one grouped count
+    for all editions plus one bounded read per edition that has any."""
+    ids = list(group_badge_ids)
+    qs = _masters_qs(ids)
+    counts = masters_counts(ids)
+    out = {gid: {'count': counts.get(gid, 0), 'rows': []} for gid in ids}
+    for gid, n in counts.items():
+        if n:
+            out[gid]['rows'] = list(
+                qs.filter(group_badge_id=gid).select_related('profile')
+                .only('mastered_at', 'group_badge_id', 'profile__psn_username', 'profile__display_psn_username',
+                      'profile__avatar_url')
+                .order_by('mastered_at', 'profile_id')[:limit]
+            )
+    return out
 
 
 #: The earners order: first to complete wins, profile id breaks the tie. `earners_rows` already ordered

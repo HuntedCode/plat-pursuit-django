@@ -12,10 +12,12 @@ from typing import Optional
 
 from django.urls import NoReverseMatch, reverse
 
-from trophies.models import Company, UserGroupBadge, SeriesBadgeStanding, Game, ProfileGame, ProfileTrophyGroup
-from trophies.services.badge_engine import GroupInput, _gates as engine_gates, _qualifies as engine_qualifies
+from trophies.models import Company, UserGroupBadge, SeriesAward, SeriesBadgeStanding, Game, ProfileGame, ProfileTrophyGroup
+from trophies.services.badge_engine import (
+    GroupInput, evaluate_series_rewards, _gates as engine_gates, _qualifies as engine_qualifies,
+)
 from trophies.services.badge_orchestrator import (
-    build_catalog, catalog_stage_units, evaluate_with_catalog, group_members, unit_obtainable,
+    build_catalog, catalog_results, catalog_stage_units, evaluate_with_catalog, group_members, unit_obtainable,
 )
 from trophies.services.excused_trophies import ExcusedProgress, candidates
 from trophies.services.badge_xp import compute_series_standings, edition_display_state, XP_PER_STAGE, XP_BADGE_COMPLETION_BONUS
@@ -83,6 +85,17 @@ class GroupView:
     is_unearnable: bool
     user_stats: Optional[dict]   # the viewer's per-group My Stats (haul/play/games/stages); None for anon
     frame: dict                  # medallion frame dict for components/badge_medallion.html
+    #: MASTERY (phase 4): every stage the edition covers at 100% with DLC. `mastered_at` is "Mastered since"
+    #: (None = not mastered); `mastery_done` of `mastery_total` stages is the viewer's progress (0 of 0 for anon).
+    #: `mastery_offered`: the edition asks more than holo (badge_engine), so its page speaks of Mastery at all.
+    mastered_at: object = None
+    mastery_done: int = 0
+    mastery_total: int = 0
+    mastery_offered: bool = False
+    #: The edition's current masters: how many, and the first few holds (`badge_leaderboards.badge_masters`).
+    masters_count: int = 0
+    masters: list = field(default_factory=list)
+    masters_more: int = 0        # how many masters the list leaves out ("+N")
 
 
 @dataclass
@@ -97,6 +110,9 @@ class BadgeDetail:
     series_size: Optional[int]   # total profiles with a standing in this series (the rank's denominator)
     community_max_earned: int    # max earned_count across groups (scales the community band's earners bars)
     target_profile: object       # whose state is shown (may be None for anon)
+    #: The series' Full Set / Series Master for the viewer (phase 4), or None when fewer than two editions can
+    #: be earned (no set to collect): see `_series_rewards`.
+    rewards: Optional[dict] = None
 
 
 def _contract_map(concept_ids) -> dict:
@@ -199,6 +215,7 @@ def _medallion_frame(gv: GroupView, series, target_profile) -> dict:
         'art_layers': layers,
         'is_avatar': is_avatar,
         'is_holographic': gv.is_holo,
+        'is_mastered': gv.mastered_at is not None,
         'series_name': series.name,
         'franchise': series.franchise.name if series.franchise_id else None,
         'collection': series.collection.name if series.collection_id else None,
@@ -791,16 +808,22 @@ def _group_view(gb, result, hold, target_profile, series, catalog, games_map, pr
         # them out would reproduce the same "panel disagrees with the page" bug one level down.
         user_stats=_group_user_stats(profile_games, journey + retired, target_profile),
         frame={},
+        mastered_at=(hold.mastered_at if hold else None),
+        mastery_done=result.mastery_done if result else 0,
+        mastery_total=result.mastery_total if result else 0,
+        mastery_offered=bool(result and result.mastery_offered),
     )
     gv.frame = _medallion_frame(gv, series, target_profile)
     return gv
 
 
-def get_badge_detail(series, target_profile, *, studio_sections=False) -> BadgeDetail:
+def get_badge_detail(series, target_profile, *, studio_sections=False, with_rewards=False) -> BadgeDetail:
     """Build the detail context for `series` (a BadgeSeries) as seen by `target_profile` (or None for anon).
 
     `studio_sections`: split a developer badge's ladders by studio (see `_group_journey`). Only the badge
     page renders them, so the medallion peek and the collection modal leave it off and skip the family walk.
+    `with_rewards`: each edition's current masters (count + the first few) and the series' Full Set / Series
+    Master, for the badge page alone: the peeks show neither.
     """
     group_badges = list(
         series.group_badges.filter(is_live=True)
@@ -873,6 +896,11 @@ def get_badge_detail(series, target_profile, *, studio_sections=False) -> BadgeD
                           group_progress, group_ratings, excused)
               for gb in group_badges]
     viewer_state = max((g.state for g in groups), key=lambda s: _STATE_ORDER[s], default='none')
+    if with_rewards and groups:
+        masters = lb.badge_masters([g.group_badge.id for g in groups])
+        for g in groups:
+            g.masters_count, g.masters = masters[g.group_badge.id]['count'], masters[g.group_badge.id]['rows']
+            g.masters_more = g.masters_count - len(g.masters)
 
     # Series XP + progress LIVE from this pass (matches the per-group numbers); rank is stored (relative).
     series_xp, series_progress_pct, series_rank = 0, 0, None
@@ -896,4 +924,35 @@ def get_badge_detail(series, target_profile, *, studio_sections=False) -> BadgeD
         series_rank=series_rank, series_size=participants,
         community_max_earned=max((g.earned_count for g in groups), default=0),
         target_profile=target_profile,
+        rewards=(_series_rewards(series, group_badges, catalog, desired, holds, target_profile)
+                 if catalog and with_rewards else None),
     )
+
+
+def _finished(hold, result):
+    """An edition at its top finish, read off the stored hold: mastered where it offers Mastery, holo where
+    it does not (badge_engine's `finished`, which is what Series Master asks of every edition)."""
+    return hold.mastered_at is not None if result.mastery_offered else hold.is_holo
+
+
+def _series_rewards(series, group_badges, catalog, desired, holds, target_profile):
+    """The viewer's Full Set and Series Master for this series, or None with fewer than two editions that can be
+    earned. What is HELD is read from the stored holds and `SeriesAward`s, exactly as the hero's Earned / Mastered
+    line reads its hold, so the page never says "Mastered" above "hold both editions" while the stores and this
+    pass disagree (they agree again after the next evaluation). Which editions can be earned and whether a Series
+    Master is offered at all are the same for everyone: this pass's results, or catalogue facts for a visitor."""
+    static = catalog_results(catalog) if not desired else {}
+    results = {gb.id: desired.get(gb.id) or static.get(gb.id) for gb in group_badges}
+    earnable = [gid for gid, r in results.items() if r is not None and r.gating_count > 0]
+    if len(earnable) < 2:
+        return None
+    offered = evaluate_series_rewards([r for r in results.values() if r is not None]).master_offered
+    awards = dict(SeriesAward.objects.filter(profile=target_profile, series=series).values_list('kind', 'since'))         if target_profile else {}
+    return {
+        'editions': len(earnable),
+        'held': sum(1 for gid in earnable if gid in holds),
+        'finished': sum(1 for gid in earnable if gid in holds and _finished(holds[gid], results[gid])),
+        'full_set': SeriesAward.KIND_FULL_SET in awards, 'full_set_since': awards.get(SeriesAward.KIND_FULL_SET),
+        'master_offered': offered, 'series_master': SeriesAward.KIND_SERIES_MASTER in awards,
+        'series_master_since': awards.get(SeriesAward.KIND_SERIES_MASTER),
+    }

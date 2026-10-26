@@ -135,12 +135,19 @@ it. There is no `maintenance` state and no permanent rank -- rank is the live po
 holders ordered by `earned_at`.
 
 Key fields: `earned_at` (the hunter's COMPLETION date, resynced when a badge's iteration changes),
-`created_at` (when WE awarded the row -- use this for "earned this week"), `is_holo`, `is_displayed`.
+`created_at` (when WE awarded the row -- use this for "earned this week"), `is_holo`, `is_displayed`,
+`mastered_at` (Mastery, phase 4: null = not mastered; stamped on the transition, so it is "Mastered since").
 
 #### GroupBadgeAnnouncement
 Append-only marker: one row per (profile, group_badge) ever announced to Discord. Never deleted. Exists
 because holds are binary, so a revoke-then-re-earn is indistinguishable from a first earn and would
 re-ping a hunter about a badge they have held for a year.
+
+#### SeriesAward / RewardAnnouncement
+`SeriesAward`: a profile's CURRENT Full Set or Series Master of a `BadgeSeries` (`kind`, `since`), binary like a
+hold. Its own table because the series standing is deleted and rebuilt on every evaluation. `RewardAnnouncement`:
+the append-only Discord marker for a mastery (`group_badge`) or a series reward (`series`), once ever. See
+[badge-system.md](badge-system.md#mastery-full-set-series-master-phase-4).
 
 #### ProfileBadgeStanding / SeriesBadgeStanding / SeriesEditionStanding / ProfileEditionStanding
 The BADGE read-models the leaderboards sort on, all recomputed from scratch by
@@ -561,7 +568,7 @@ Key relationships:
 - Reverse: `profile` OneToOne from Profile
 
 ### Moment
-A celebration recorded when it happens and played once: `welcome` (a first sync's one summary), `badge` (FK `GroupBadge`), `platinum` (FK `EarnedTrophy`), `milestone`. `played_at` is server-side so it never replays on another device. FKs reach Profile, GroupBadge and EarnedTrophy only (no `Concept.absorb()` branch). See [moments.md](../features/moments.md).
+A celebration recorded when it happens and played once: `welcome` (a first sync's one summary), `badge` and `mastered` (FK `GroupBadge`), `full_set` and `series_master` (FK `BadgeSeries`), `platinum` (FK `EarnedTrophy`), `milestone`. `played_at` is server-side so it never replays on another device. FKs reach Profile, GroupBadge, BadgeSeries and EarnedTrophy only (no `Concept.absorb()` branch). See [moments.md](../features/moments.md).
 
 ### SubscriptionPeriod
 Tracks individual subscription periods for loyalty milestone calculations. A new period is created on activation and closed (`ended_at` set) on deactivation. Enforces one open period per user via a DB constraint.

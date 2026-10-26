@@ -2,13 +2,14 @@
 
 `diff()` compares the engine's DesiredState against the profile's currently-held UserGroupBadge rows and yields
 the minimal set of changes — pure, so it's unit-testable like the engine. Binary model: award (create the held
-row) / revoke (delete it) / update (resync is_holo + earned_at). There is NO permanent earn_rank; the earners
-rank is derived live from earned_at (current holders ordered by completion date), so awards need no ordering.
+row) / revoke (delete it) / update (resync is_holo + earned_at, and mastery). There is NO permanent earn_rank;
+the earners rank is derived live from earned_at (current holders ordered by completion date), so awards need no
+ordering. A series' Full Set / Series Master are applied after the badges (`apply_series_rewards`).
 `apply_changes()` executes changes in one transaction and OWNS the earned_count denorm (no signals); the
 eval->diff->apply entry points also recompute badge XP. See docs/design/rebuild/badge-backend-rebuild.md.
 """
 import logging
-from collections import Counter
+from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional
@@ -18,8 +19,9 @@ from django.db.models import F
 from django.db.models.functions import Greatest
 from django.utils import timezone
 
-from trophies.models import GroupBadge, UserGroupBadge
-from trophies.services.moment_service import record_badge as record_badge_moment
+from trophies.models import GroupBadge, RewardAnnouncement, SeriesAward, UserGroupBadge
+from trophies.services import moment_service
+from trophies.services.badge_engine import evaluate_series_rewards
 from trophies.services.badge_orchestrator import (
     resolve_group_badges, build_catalog, evaluate_with_catalog,
 )
@@ -35,6 +37,7 @@ logger = logging.getLogger(__name__)
 class CurrentBadge:
     is_holo: bool
     earned_at: Optional[datetime]
+    mastered: bool = False
 
 
 @dataclass(frozen=True)
@@ -43,22 +46,36 @@ class BadgeChange:
     action: str          # 'award' | 'revoke' | 'update'
     holo: bool
     earned_date: Optional[datetime] = None
+    mastery: str = ''    # 'gained' | 'lost' | '' (unchanged)
+    mastered_date: Optional[datetime] = None
+
+
+def _empty_result() -> dict:
+    """The apply summary's shape: what was awarded, revoked, updated, and which badges became mastered."""
+    return {'awarded': [], 'revoked': [], 'updated': [], 'mastered': []}
 
 
 def diff(desired: dict, current: dict) -> list:
     """Pure. desired: {group_badge_id: GroupBadgeResult}; current: {group_badge_id: CurrentBadge} for the rows
     the profile CURRENTLY holds. Binary model: hold iff base_earned. Only evaluated badges (desired's keys) are
     considered. 'update' resyncs a held row's is_holo / earned_at (the latter shifts when the badge iteration
-    changes, keeping the leaderboard sort honest)."""
+    changes, keeping the leaderboard sort honest) and its mastery.
+
+    Mastery changes on the TRANSITION only. Its date is "Mastered since", stamped when it is gained and kept
+    while it holds, so a recomputed date never re-stamps it (the undated-earn churn, see badge-system.md)."""
     changes = []
     for gb_id, res in desired.items():
         cur = current.get(gb_id)
         if res.base_earned:
             if cur is None:
-                changes.append(BadgeChange(gb_id, 'award', res.holo, res.earned_date))
-            elif cur.is_holo != res.holo or cur.earned_at != res.earned_date:
-                changes.append(BadgeChange(gb_id, 'update', res.holo, res.earned_date))
-            # else: held, holo + earned_at already match -> no change
+                changes.append(BadgeChange(gb_id, 'award', res.holo, res.earned_date,
+                                           'gained' if res.mastered else '', res.mastered_date))
+                continue
+            mastery = ('gained' if res.mastered and not cur.mastered
+                       else 'lost' if cur.mastered and not res.mastered else '')
+            if cur.is_holo != res.holo or cur.earned_at != res.earned_date or mastery:
+                changes.append(BadgeChange(gb_id, 'update', res.holo, res.earned_date, mastery, res.mastered_date))
+            # else: held, and holo + earned_at + mastery already match -> no change
         else:
             if cur is not None:
                 changes.append(BadgeChange(gb_id, 'revoke', False))
@@ -70,14 +87,23 @@ def diff(desired: dict, current: dict) -> list:
 def apply_changes(profile, changes, gb_map: dict) -> dict:
     """Execute changes for ONE profile. gb_map: {group_badge_id: GroupBadge with `series` select_related}.
     Binary model: award creates the held row, revoke deletes it, update resyncs is_holo/earned_at. This layer
-    OWNS the earned_count denorm (no signals). Returns a summary."""
-    result = {'awarded': [], 'revoked': [], 'updated': []}
+    OWNS the earned_count denorm (no signals). Returns a summary; `mastered` lists the badges that BECAME
+    mastered in this run."""
+    result = _empty_result()
     for ch in changes:
         gb = gb_map[ch.group_badge_id]
+        if ch.mastery == 'gained':
+            # Celebrated (when finished recently) and reported for the announcement. A badge EARNED already
+            # mastered gets one ceremony, not two of the same medallion back to back: its badge moment below
+            # wears the crown and says so.
+            if ch.action != 'award':
+                moment_service.record_mastered(profile, gb, ch.mastered_date)
+            result['mastered'].append(gb.id)
         if ch.action == 'award':
             UserGroupBadge.objects.create(
                 profile=profile, group_badge=gb, is_holo=ch.holo,
                 earned_at=ch.earned_date or timezone.now(),   # current-iteration completion, not the sync time
+                mastered_at=(ch.mastered_date or timezone.now()) if ch.mastery == 'gained' else None,
                 # Mirrored from Profile so the earners rank can gate and slice on its own table. Stamped
                 # at birth because the propagation signal only fires on CHANGE -- a badge awarded after a
                 # hunter linked (or moved country) would otherwise keep the defaults forever.
@@ -89,7 +115,7 @@ def apply_changes(profile, changes, gb_map: dict) -> dict:
             emit_badge_earned(profile.id, gb.id)
             # Its celebration, played on the hunter's next My Pursuit page (moment_service). Every award path
             # comes through here, nightly and rechecks included: a badge earned is news however it was noticed.
-            record_badge_moment(profile, gb, ch.earned_date)
+            moment_service.record_badge(profile, gb, ch.earned_date)
             result['awarded'].append(gb.id)
         elif ch.action == 'revoke':
             UserGroupBadge.objects.filter(profile=profile, group_badge=gb).delete()
@@ -105,12 +131,75 @@ def apply_changes(profile, changes, gb_map: dict) -> dict:
             revoke_series_title_if_orphaned(profile.id, gb.series)
             result['revoked'].append(gb.id)
         elif ch.action == 'update':
-            # Held badge stays held: resync the live flags. earned_at moves when the iteration changes.
-            UserGroupBadge.objects.filter(profile=profile, group_badge=gb).update(
-                is_holo=ch.holo, earned_at=ch.earned_date or timezone.now(),
-            )
+            # Held badge stays held: resync the live flags. earned_at moves when the iteration changes; mastery
+            # only on its transition (its date is when the CURRENT mastery began).
+            fields = {'is_holo': ch.holo, 'earned_at': ch.earned_date or timezone.now()}
+            if ch.mastery:
+                fields['mastered_at'] = (ch.mastered_date or timezone.now()) if ch.mastery == 'gained' else None
+            UserGroupBadge.objects.filter(profile=profile, group_badge=gb).update(**fields)
             result['updated'].append(gb.id)
     return result
+
+
+def apply_series_rewards(profile, desired, group_badges, held=None) -> list:
+    """A series' Full Set and Series Master, from its editions' results (`badge_engine.evaluate_series_rewards`).
+    Binary like a hold: gained creates the `SeriesAward`, lost deletes it. Returns what was GAINED, as
+    [(kind, series, finished_at)], for the announcement.
+
+    Needs EVERY live edition of a series in `desired`, which every entry point gives (they scope by series, see
+    `evaluate_for_touched_games`); a partial list would read a Full Set as lost.
+
+    `held`: the hunter's current awards as {(series_id, kind)}, when the caller already read them (the nightly
+    batch reads the catalogue's once, so 300,000 profiles do not each send a query); else one read here. A
+    transaction opens only when something changes.
+
+    NEVER RAISES. It runs after the badges are committed and before their announcement and the XP recompute:
+    a reward is not worth either. A sync and the nightly racing the same hunter both see "not held" and both
+    create; `get_or_create` lets the loser find the winner's row (and stay silent) instead of raising."""
+    try:
+        editions, series = defaultdict(list), {}
+        for gb in group_badges:
+            if gb.id in desired:
+                editions[gb.series_id].append(desired[gb.id])
+                series[gb.series_id] = gb.series
+        if not editions:
+            return []
+        if held is None:
+            held = set(SeriesAward.objects.filter(profile=profile, series_id__in=list(editions))
+                       .values_list('series_id', 'kind'))
+        gains, losses = [], []
+        for sid, results in editions.items():
+            r = evaluate_series_rewards(results)
+            for kind, has, when in ((SeriesAward.KIND_FULL_SET, r.full_set, r.full_set_date),
+                                    (SeriesAward.KIND_SERIES_MASTER, r.series_master, r.series_master_date)):
+                if has and (sid, kind) not in held:
+                    gains.append((sid, kind, when))
+                elif not has and (sid, kind) in held:
+                    losses.append((sid, kind))
+        if not gains and not losses:
+            return []
+        gained = []
+        with transaction.atomic():
+            for sid, kind, when in gains:
+                _, created = SeriesAward.objects.get_or_create(
+                    profile=profile, series_id=sid, kind=kind, defaults={'since': when or timezone.now()})
+                if created:
+                    moment_service.record_series_reward(profile, series[sid], kind, when)
+                    gained.append((kind, series[sid], when))
+            for sid, kind in losses:
+                SeriesAward.objects.filter(profile=profile, series_id=sid, kind=kind).delete()
+        return gained
+    except Exception:
+        logger.exception('series rewards failed for profile %s', getattr(profile, 'id', None))
+        return []
+
+
+def _news_rewards(result, desired, gained, gb_map) -> list:
+    """The run's new rewards worth announcing: only the ones finished recently, the rule their moments use, so
+    a veteran's old mastery noticed for the first time is not announced as news."""
+    rewards = [(RewardAnnouncement.KIND_MASTERED, gb_map[gb_id], gb_map[gb_id].series) for gb_id in result['mastered']
+               if moment_service.is_recent_reward(desired[gb_id].mastered_date)]
+    return rewards + [(kind, None, series) for kind, series, when in gained if moment_service.is_recent_reward(when)]
 
 
 def _plan_with_catalog(profile, catalog):
@@ -120,7 +209,7 @@ def _plan_with_catalog(profile, catalog):
     desired = evaluate_with_catalog(profile, catalog)
     gb_ids = [gb.id for gb in catalog['group_badges']]
     current = {
-        ugb.group_badge_id: CurrentBadge(ugb.is_holo, ugb.earned_at)
+        ugb.group_badge_id: CurrentBadge(ugb.is_holo, ugb.earned_at, ugb.mastered_at is not None)
         for ugb in UserGroupBadge.objects.filter(profile=profile, group_badge_id__in=gb_ids)
     }
     return diff(desired, current), desired
@@ -146,11 +235,12 @@ def evaluate_and_apply(profile, group_badges=None, notify=False) -> dict:
     """
     group_badges = resolve_group_badges(group_badges)
     if not group_badges:
-        return {'awarded': [], 'revoked': [], 'updated': []}
+        return _empty_result()
     catalog = build_catalog(group_badges)
     gb_map = {gb.id: gb for gb in group_badges}
     changes, desired = _plan_with_catalog(profile, catalog)
     result = apply_changes(profile, changes, gb_map)
+    gained = apply_series_rewards(profile, desired, group_badges)
 
     # Announced BEFORE the standing recompute, and that ordering is deliberate. `apply_changes` is atomic
     # and has committed by here, so the badges are durable. `recompute_standing` is atomic too, but it is
@@ -161,8 +251,11 @@ def evaluate_and_apply(profile, group_badges=None, notify=False) -> dict:
     #
     # ONE consolidated announcement for the whole run, not one per badge from inside apply_changes, which
     # would ping a hunter three times for finishing a three-edition series.
-    if notify and result['awarded']:
-        announce_badges_earned(profile, [gb_map[gb_id] for gb_id in result['awarded'] if gb_id in gb_map])
+    if notify:
+        awarded = [gb_map[gb_id] for gb_id in result['awarded'] if gb_id in gb_map]
+        rewards = _news_rewards(result, desired, gained, gb_map)
+        if awarded or rewards:
+            announce_badges_earned(profile, awarded, rewards)
 
     recompute_standing(profile.id, desired, group_badges)   # XP tracks current progress, not just earns
     return result
@@ -185,7 +278,7 @@ def evaluate_for_sync(profile, profilegame_ids) -> dict:
         return evaluate_for_touched_games(profile, profilegame_ids, notify=True)
     except Exception:
         logger.exception('group-badge evaluation failed for profile %s', getattr(profile, 'id', None))
-        return {'awarded': [], 'revoked': [], 'updated': []}
+        return _empty_result()
 
 
 def evaluate_for_touched_games(profile, profilegame_ids, notify=True) -> dict:
@@ -216,7 +309,7 @@ def evaluate_for_touched_games(profile, profilegame_ids, notify=True) -> dict:
     from trophies.services.stage_membership import stage_has_concept_q
 
     if not profilegame_ids:
-        return {'awarded': [], 'revoked': [], 'updated': []}
+        return _empty_result()
 
     concept_ids = list(
         ProfileGame.objects.filter(id__in=profilegame_ids, profile=profile)
@@ -227,7 +320,7 @@ def evaluate_for_touched_games(profile, profilegame_ids, notify=True) -> dict:
         Stage.objects.filter(stage_has_concept_q(concept_ids)).values_list('series_slug', flat=True).distinct()
     )
     if not series_slugs:
-        return {'awarded': [], 'revoked': [], 'updated': []}
+        return _empty_result()
 
     return evaluate_and_apply(
         profile,
@@ -252,6 +345,12 @@ def evaluate_and_apply_batch(profiles, group_badges=None, catalog=None) -> Count
         return totals
     catalog = catalog if catalog is not None else build_catalog(group_badges)
     gb_map = {gb.id: gb for gb in group_badges}
+    # Every series award in the catalogue, read ONCE: the table holds only hunters who have one, so this is
+    # small, and it spares each profile its own read (`apply_series_rewards`).
+    awards = defaultdict(set)
+    for pid, sid, kind in SeriesAward.objects.filter(
+            series_id__in={gb.series_id for gb in group_badges}).values_list('profile_id', 'series_id', 'kind'):
+        awards[pid].add((sid, kind))
 
     for profile in profiles:
         # Per-profile insulation. Without it the first raising profile aborts the WHOLE batch, and the
@@ -263,6 +362,7 @@ def evaluate_and_apply_batch(profiles, group_badges=None, catalog=None) -> Count
             if changes:
                 for key, ids in apply_changes(profile, changes, gb_map).items():
                     totals[key] += len(ids)
+            totals['series_rewards'] += len(apply_series_rewards(profile, desired, group_badges, awards[profile.id]))
             recompute_standing(profile.id, desired, group_badges)   # XP tracks progress, not just earns
         except Exception:
             totals['failed'] += 1

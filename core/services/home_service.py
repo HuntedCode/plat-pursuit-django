@@ -208,6 +208,7 @@ def _recent_medallions(profile, limit=3):
                 'tier': tier,
                 'state': 'earned',
                 'is_holographic': bool(getattr(row, 'is_holo', False)),
+                'is_mastered': getattr(row, 'mastered_at', None) is not None,
                 'is_avatar': is_avatar,
                 'art_layers': layers,
                 'series_name': gb.series.name,

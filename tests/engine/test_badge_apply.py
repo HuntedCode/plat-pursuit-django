@@ -184,7 +184,7 @@ def test_second_run_is_a_noop():
     _complete(profile, game)
     evaluate_and_apply(profile, [gb])
     res2 = evaluate_and_apply(profile, [gb])
-    assert res2 == {'awarded': [], 'revoked': [], 'updated': []}
+    assert res2 == {'awarded': [], 'revoked': [], 'updated': [], 'mastered': []}
     gb.refresh_from_db()
     assert gb.earned_count == 1                            # not double-counted
 

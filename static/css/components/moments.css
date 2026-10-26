@@ -53,6 +53,23 @@
 /* It can be picked up (the site's inspector): the pointer says so, and the keyboard ring sits on the disc. */
 .pp-moment__med[data-moment-pick] { cursor: pointer; border-radius: 50%; }
 .pp-moment__med[data-moment-pick]:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 6px; }
+/* A crowned medallion's crown rises ~15% of its size above it: room for it under the eyebrow. */
+.pp-moment__med[data-mastered] { margin-top: 44px; }
+/* A set (Full Set, Series Master): every edition side by side over one set of rays, each its own pick-up. The
+   template sets --n (how many), so three editions still fit a phone. */
+.pp-moment__set {
+    --set-sz: min(132px, calc(76vw / var(--n, 2) - 14px), calc(360px / var(--n, 2) - 14px));
+    grid-auto-flow: column; justify-content: center; gap: clamp(14px, 4vw, 28px); margin: 24px auto 12px;
+}
+.pp-moment__set .pp-med { --sz: var(--set-sz); }
+/* Sized from ONE medallion, as a badge's are (~2x its size each side), not from the row: rays as wide as two
+   editions are as TALL as that too, and hung below the dialog, giving it a scrollbar. */
+.pp-moment__set .pp-moment__rays { width: calc(var(--set-sz) * 2.9); }
+/* Its bloom too (the flare swells it 1.12x as it lands): as wide as the row, it reached past the dialog mid-flare.
+   Two classes, so it outranks the shared bloom rule further down. */
+.pp-moment__obj.pp-moment__set::before { width: calc(var(--set-sz) * 2.3); }
+.pp-moment__setmed { cursor: pointer; border-radius: 50%; }
+.pp-moment__setmed:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 6px; }
 /* The platinum: its cover (portrait, logo kept at the top) and which platinum it is. */
 .pp-moment__cover {
     width: 132px; aspect-ratio: 3 / 4; margin: 6px auto 4px; overflow: hidden;
@@ -67,10 +84,16 @@
    (owner, 2026-10-25). A badge's rays wear its tier, iridescent when it is holographic; a platinum's and a
    milestone's are platinum. The rays are a MASK over a colour fill (repeating wedges intersected with a radial
    fade), so the fill alone decides the colour, a gradient included. Transform-only motion on its own layer;
-   reduced motion keeps them, still. */
+   reduced motion keeps them, still.
+   The SPIN is on an inner layer the box clips: a turning square's corners reach 1.41x as far at 45 degrees, and
+   a transformed box counts as the dialog's scrollable overflow, so the dialog grew a scrollbar that came and
+   went as the rays turned. The visible rays fade out inside the inscribed circle, so the clip never shows. */
 .pp-moment__rays {
     position: absolute; left: 50%; top: 50%; z-index: -1; width: 210%; aspect-ratio: 1; pointer-events: none;
-    translate: -50% -50%; will-change: transform; opacity: 0.42;
+    translate: -50% -50%; opacity: 0.42; overflow: hidden;
+}
+.pp-moment__rays::before {
+    content: ""; position: absolute; inset: 0; will-change: transform;
     background: var(--ray-fill, color-mix(in oklab, var(--ray, var(--pp-primary)) 60%, transparent));
     -webkit-mask: repeating-conic-gradient(#000 0deg 4deg, transparent 4deg 15deg),
                   radial-gradient(circle closest-side, #000 18%, transparent 80%);
@@ -89,14 +112,20 @@
                                oklch(0.9 0.14 90 / 0.6), oklch(0.82 0.16 350 / 0.6));
 }
 .pp-moment--plat .pp-moment__rays, .pp-moment--milestone .pp-moment__rays { --ray: var(--color-trophy-platinum); }
+/* Phase 4: a mastery's rays and bloom are GOLD (its rim and crown's metal), over the holo, as are a Series
+   Master's. After the tier rules, so it wins on a medallion that also carries a tier. */
+.pp-moment__obj[data-mastered] {
+    --ray: var(--med-tier-gold); --ray-fill: color-mix(in oklab, var(--med-tier-gold) 60%, transparent);
+    --bloom: var(--med-tier-gold);
+}
 .pp-moment--milestone .pp-moment__rays { width: 300%; }
 
 /* The sparks' fixed layer (moments.js), over the dialog. */
 .pp-moments__sparks { position: fixed; inset: 0; z-index: 3; pointer-events: none; }
 
 /* A soft bloom behind the object (medallion, cover, number): it flares as the object lands, then rests. */
-.pp-moment__med, .pp-moment__cover, .pp-moment__number { position: relative; }
-.pp-moment__med::before, .pp-moment--milestone .pp-moment__number::before {
+.pp-moment__med, .pp-moment__set, .pp-moment__cover, .pp-moment__number { position: relative; }
+.pp-moment__med::before, .pp-moment__set::before, .pp-moment--milestone .pp-moment__number::before {
     content: ""; position: absolute; left: 50%; top: 50%; width: 160%; aspect-ratio: 1; z-index: -1; pointer-events: none;
     transform: translate(-50%, -50%); border-radius: 50%; opacity: 0.35;
     background: radial-gradient(circle, color-mix(in oklab, var(--bloom, var(--pp-primary)) 40%, transparent) 0%, transparent 65%);
@@ -118,11 +147,12 @@
     .pp-moment > :nth-child(n+5) { animation-delay: 0.58s; }
 
     /* Badge: the medallion is struck. It drops in small and dim, overshoots and settles, and its bloom flares. */
-    .pp-moment > .pp-moment__med { animation: ppMomentStrike 0.6s cubic-bezier(0.22, 1, 0.36, 1) 0.1s backwards; }
-    .pp-moment__med::before { animation: ppMomentBloom 1.6s ease 0.35s backwards; }
+    .pp-moment > .pp-moment__med, .pp-moment > .pp-moment__set { animation: ppMomentStrike 0.6s cubic-bezier(0.22, 1, 0.36, 1) 0.1s backwards; }
+    .pp-moment__med::before, .pp-moment__set::before { animation: ppMomentBloom 1.6s ease 0.35s backwards; }
 
     /* The sunlight rises once the object has landed, then turns, slowly, for as long as the moment is up. */
-    .pp-moment__rays { animation: ppRaysIn 1.1s ease 0.8s backwards, ppRaysSpin 48s linear 0.8s infinite; }
+    .pp-moment__rays { animation: ppRaysIn 1.1s ease 0.8s backwards; }
+    .pp-moment__rays::before { animation: ppRaysSpin 48s linear 0.8s infinite; }
 
     /* Platinum: the cover turns in like a card being dealt, then the light sweeps across it. */
     .pp-moment--plat .pp-moment__cover { perspective: 600px; }

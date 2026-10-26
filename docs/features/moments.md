@@ -2,8 +2,8 @@
 
 A hunter's wins, celebrated once, where they chose to look. A `Moment` is recorded **when the thing happens**
 (a badge awarded, a platinum earned) and **played once** in the browser: badge moments on the hunter's next
-My Pursuit page, platinums behind a button as a reel. Badge rewards phase 3 (owner, 2026-10-25). Full Set and
-Mastery moments join in phase 4.
+My Pursuit page, platinums behind a button as a reel. Badge rewards phase 3 (owner, 2026-10-25); the Mastery,
+Full Set and Series Master moments joined in phase 4.
 
 ## Architecture Overview
 
@@ -18,6 +18,8 @@ happens and read only on My Pursuit pages.
 |---|---|---|
 | `welcome` | `moment_service.start_moments` (end of `_job_sync_complete`) | A hunter's FIRST finished sync, once. Counts their badges and platinums. Also stamps `Profile.moments_since` |
 | `badge` | `badge_apply.apply_changes` (every award: sync, nightly, rechecks) | A badge is awarded. A re-earn records a new one (owner: it plays every time it is earned) |
+| `mastered` | `badge_apply.apply_changes` (`record_mastered`) | A held badge becomes mastered, finished within `REWARD_RECENCY` (14 days): a veteran's old mastery seen for the first time is not news |
+| `full_set` / `series_master` | `badge_apply.apply_series_rewards` (`record_series_reward`) | A series reward is gained, by the same recency rule |
 | `platinum` | `psn_api_service.create_or_update_earned_trophy_from_trophy_data` | Sync sees a platinum newly earned within `PLATINUM_RECENCY` (2 days). Shovelware included: it is the hunter's own |
 | `milestone` | `moment_service.record_milestones` (after `recompute_on_sync`) | A **platinum-count** milestone tier crossed in a sync: the reel's last beat |
 
@@ -29,7 +31,7 @@ set, which happens at the end of their first finished sync, together with the on
 
 | Queue | Kinds | How it plays |
 |---|---|---|
-| auto | welcome, badge | Auto-plays on a My Pursuit page, ONE AT A TIME ("1 of 3", Next, Skip all), after any other modal on the page has had its turn |
+| auto | welcome, badge, mastered, full_set, series_master | Auto-plays on a My Pursuit page, ONE AT A TIME ("1 of 3", Next, Skip all), after any other modal on the page has had its turn |
 | reel | platinum, milestone | **Never auto-plays.** A pill at the end of the My Pursuit strip ("3 new platinums") opens it |
 
 Settings > Library > **Play celebrations** (`CustomUser.play_celebrations`, default on) stops auto-play. Off,
@@ -106,6 +108,28 @@ One beat per moment, in the earn vocabulary (visual-identity.md), never confetti
 | badge | the medallion is struck (drops in small, settles), its bloom flares, sparks fly and its own mint pops |
 | platinum | the cover is dealt in (a turn and a settle), a platinum glow flares, sparks fly, a light sweeps across it, the number counts up |
 | milestone | the number swells in, a platinum ring pulses out, the biggest burst of sparks |
+| mastered | the mastered medallion is struck, its crown set on as it mints, over GOLD rays, gold sparks; "One of N masters" |
+| full_set / series_master | every held edition side by side over one set of rays (gold for a Series Master), minted one after another, each as held (a Series Master's crowned only where the edition offers Mastery); each can be picked up |
+
+**The sparks climb a ladder and wear what the rays wear** (owner, 2026-10-25, after phase 4; `BEATS` in
+`moments.js`):
+
+| Moment | Sparks |
+|---|---|
+| badge | the edition's metal, read off the medallion (`--med-c`): platinum-blue Ultra HD, gold Legacy HD |
+| holo badge | the foil's four colours |
+| Full Set | each edition bursts as it mints, in its own metal |
+| mastered (and a badge earned already mastered) | gold, bigger, plus a second gold burst as the crown lands |
+| Series Master | each edition in gold as it mints, a burst per crown, then a finale from between them: the biggest |
+| platinum / milestone | platinum, as before |
+
+The bigger the reward, the bigger the burst (pinned by `test_the_sparks_climb_the_reward_ladder...`). A later
+moment in one sitting bursts at 60%, except a mastery, a Series Master and a milestone, which always get their full
+beat.
+
+**The spark is `.pp-spark.pp-spark--burst`** (`motion.css`). The legacy Frame styles its own `.pp-spark`
+(`frame.css`, loaded later) with a hard-coded orange and a CSS fly animation, and until 2026-10-25 that silently won:
+every burst, the claim ceremony's included, came out orange whatever colour it asked for.
 
 **The sparks explode** (owner, 2026-10-25): `sparkBurst(..., { explode: true })` throws them across much of the
 screen, mostly upward, then lets them fall (2 to 2.7s, owner-tuned: longer read as hanging) under gravity off the BOTTOM edge of the page.
@@ -142,9 +166,16 @@ untouched, so it replays on every reload, on dev or on the live site.
 - **The platinum number is stored at record time** from the live `total_plats` denorm (the EarnedTrophy signal
   bumps it before the hook runs). Counting a hunter's platinums by date at play time would scan a whale's
   whole trophy history.
-- **A revoked badge's moment does not play.** `pending` filters badge moments to badges still held.
+- **A revoked badge's moment does not play.** `pending` filters badge moments to badges still held, a
+  mastery's to holds still mastered and a series reward's to awards still held.
+- **Reward kinds are the reward tables' strings.** `Moment.KIND_MASTERED` / `KIND_FULL_SET` /
+  `KIND_SERIES_MASTER` are defined FROM `RewardAnnouncement` / `SeriesAward`, because `pending` joins on them.
 - **The Collection's mint and this ceremony are one celebration.** `moments.js` (deferred, so it runs before
   collection.js's DOMContentLoaded `initMint`) adds waiting badges to the Collection's per-device minted set.
+- **The rays must never make the dialog scroll.** A transformed box counts as scrollable overflow, and a turning
+  square reaches 1.41x as far at 45 degrees, so the spin is an inner layer (`::before`) the rays' box clips, and
+  a set's rays are sized from ONE medallion, not the row. `test_moments_fit_browser.py` parks the spin at its
+  widest and checks.
 - **The phone row of the strip is `lg:hidden`.** Any `display` rule on `.pp-sub__mrow` outside a below-`lg`
   media query outranks that utility and puts a second strip on desktop.
 - **Not a `ui_flags` shape.** Played state is a server column per moment, not a per-user flag

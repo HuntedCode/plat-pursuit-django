@@ -3718,7 +3718,11 @@ class UserGroupBadge(models.Model):
     flips both ways (100% incl DLC) -- cosmetic, no XP. See docs/design/rebuild/badge-backend-rebuild.md."""
     profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='group_badges')
     group_badge = models.ForeignKey(GroupBadge, on_delete=models.CASCADE, related_name='earned_by')
-    is_holo = models.BooleanField(default=False, help_text="LIVE mastery flag: currently 100% on every gating stage. Flips both ways; cosmetic; no XP.")
+    is_holo = models.BooleanField(default=False, help_text="LIVE holo flag: currently 100% on every gating stage. Flips both ways; cosmetic; no XP.")
+    # MASTERY (badge rewards phase 4, owner 2026-10-25): every stage the edition covers, stage 0 and dead stages
+    # included, at 100% with DLC. Null = not mastered. Binary and live like the hold: it goes when a stage is
+    # added and comes back (with a new date) when re-earned. Worth no points. The date is "Mastered since".
+    mastered_at = models.DateTimeField(null=True, blank=True)
     is_displayed = models.BooleanField(default=False, help_text="Profile's selected display badge.")
     earned_at = models.DateTimeField(
         default=timezone.now,
@@ -3777,6 +3781,9 @@ class UserGroupBadge(models.Model):
             # always-filtered key first, then the slice, then the sort.
             models.Index(fields=['group_badge', 'country_code', 'earned_at', 'profile'],
                          name='ugb_badge_cc_earned_idx', condition=Q(is_linked=True)),
+            # A badge's masters (the count and the list on its page): a seek on the few mastered rows.
+            models.Index(fields=['group_badge', 'mastered_at', 'profile'], name='ugb_badge_mastered_idx',
+                         condition=Q(mastered_at__isnull=False)),
         ]
 
     def __str__(self):
@@ -3810,6 +3817,63 @@ class GroupBadgeAnnouncement(models.Model):
         return f"{self.profile.psn_username} announced {self.group_badge}"
 
 
+class SeriesAward(models.Model):
+    """A profile's CURRENT series-level reward (badge rewards phase 4, owner 2026-10-25). Binary, like a hold:
+    the row exists iff the hunter currently has it, and is deleted when they lose it.
+
+    - FULL SET: every edition of the series that can be earned, held (2+ of them).
+    - SERIES MASTER: every such edition mastered, offered only when no one edition covers every stage.
+
+    Its own table because the per-series standing (`SeriesBadgeStanding`) is deleted and rebuilt on every
+    evaluation, which would lose `since`. Written by `badge_apply` from `badge_engine.evaluate_series_rewards`.
+    Worth no points, carries no title.
+    """
+    KIND_FULL_SET = 'full_set'
+    KIND_SERIES_MASTER = 'series_master'
+    KIND_CHOICES = [(KIND_FULL_SET, 'Full Set'), (KIND_SERIES_MASTER, 'Series Master')]
+
+    profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='series_awards')
+    series = models.ForeignKey(BadgeSeries, on_delete=models.CASCADE, related_name='awards')
+    kind = models.CharField(max_length=16, choices=KIND_CHOICES)
+    since = models.DateTimeField(help_text='When the current hold began: the last edition held / mastered.')
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['profile', 'series', 'kind'], name='seriesaward_once'),
+        ]
+
+    def __str__(self):
+        return f"{self.profile.psn_username}: {self.get_kind_display()} of {self.series}"
+
+
+class RewardAnnouncement(models.Model):
+    """One row per reward EVER announced to Discord: a mastery (`group_badge`), a Full Set or a Series Master
+    (`series`). Append-only and never deleted, for the reason `GroupBadgeAnnouncement` gives: rewards are
+    binary, so PSN flux or a new stage would otherwise re-ping a hunter about one they have had for a year.
+    Owner, 2026-10-25: once ever per hunter.
+    """
+    KIND_MASTERED = 'mastered'
+    KIND_CHOICES = [(KIND_MASTERED, 'Mastered')] + SeriesAward.KIND_CHOICES
+
+    profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='reward_announcements')
+    kind = models.CharField(max_length=16, choices=KIND_CHOICES)
+    group_badge = models.ForeignKey(GroupBadge, null=True, blank=True, on_delete=models.CASCADE, related_name='+')
+    series = models.ForeignKey(BadgeSeries, null=True, blank=True, on_delete=models.CASCADE, related_name='+')
+    announced_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['profile', 'group_badge'], condition=Q(kind='mastered'),
+                                    name='rewardann_once_per_mastery'),
+            models.UniqueConstraint(fields=['profile', 'series', 'kind'],
+                                    condition=Q(kind__in=['full_set', 'series_master']),
+                                    name='rewardann_once_per_series_reward'),
+        ]
+
+    def __str__(self):
+        return f"{self.profile.psn_username} announced {self.kind}"
+
+
 class Moment(models.Model):
     """A celebration, recorded WHEN IT HAPPENS and played ONCE (badge rewards phase 3, owner 2026-10-25).
 
@@ -3818,22 +3882,29 @@ class Moment(models.Model):
     their next My Pursuit page, platinums behind a pill, as a reel. `played_at` is server-side so a moment seen
     on one device never replays on another. Unplayed moments older than `moment_service.MOMENT_TTL` drop quietly.
 
-    Kinds: `welcome` (the one summary a first sync gets, counts in `data`), `badge` (`group_badge`), `platinum`
-    (`earned_trophy`), `milestone` (a platinum-count milestone tier, described in `data`). FKs reach Profile,
-    GroupBadge and EarnedTrophy only, never Concept, so `Concept.absorb()` needs no branch.
+    Kinds: `welcome` (the one summary a first sync gets, counts in `data`), `badge` and `mastered`
+    (`group_badge`), `full_set` and `series_master` (`series`), `platinum` (`earned_trophy`), `milestone` (a
+    platinum-count milestone tier, described in `data`). FKs reach Profile, GroupBadge, BadgeSeries and
+    EarnedTrophy only, never Concept, so `Concept.absorb()` needs no branch.
     """
     KIND_WELCOME = 'welcome'
     KIND_BADGE = 'badge'
+    # The reward kinds are the SAME strings as the reward tables' own (moment_service.pending joins on them).
+    KIND_MASTERED = RewardAnnouncement.KIND_MASTERED
+    KIND_FULL_SET = SeriesAward.KIND_FULL_SET
+    KIND_SERIES_MASTER = SeriesAward.KIND_SERIES_MASTER
     KIND_PLATINUM = 'platinum'
     KIND_MILESTONE = 'milestone'
     KIND_CHOICES = [
-        (KIND_WELCOME, 'Welcome'), (KIND_BADGE, 'Badge earned'), (KIND_PLATINUM, 'Platinum earned'),
-        (KIND_MILESTONE, 'Milestone'),
+        (KIND_WELCOME, 'Welcome'), (KIND_BADGE, 'Badge earned'), (KIND_MASTERED, 'Badge mastered'),
+        (KIND_FULL_SET, 'Full Set'), (KIND_SERIES_MASTER, 'Series Master'),
+        (KIND_PLATINUM, 'Platinum earned'), (KIND_MILESTONE, 'Milestone'),
     ]
 
     profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='moments')
     kind = models.CharField(max_length=16, choices=KIND_CHOICES)
     group_badge = models.ForeignKey(GroupBadge, null=True, blank=True, on_delete=models.CASCADE, related_name='+')
+    series = models.ForeignKey(BadgeSeries, null=True, blank=True, on_delete=models.CASCADE, related_name='+')
     earned_trophy = models.ForeignKey(
         'EarnedTrophy', null=True, blank=True, on_delete=models.CASCADE, related_name='+',
     )
@@ -3854,6 +3925,13 @@ class Moment(models.Model):
             models.UniqueConstraint(fields=['profile', 'group_badge'],
                                     condition=Q(kind='badge', played_at__isnull=True),
                                     name='moment_one_pending_badge'),
+            # The same for a mastery, and for a series' Full Set / Series Master.
+            models.UniqueConstraint(fields=['profile', 'group_badge'],
+                                    condition=Q(kind='mastered', played_at__isnull=True),
+                                    name='moment_one_pending_mastery'),
+            models.UniqueConstraint(fields=['profile', 'series', 'kind'],
+                                    condition=Q(kind__in=['full_set', 'series_master'], played_at__isnull=True),
+                                    name='moment_one_pending_series'),
             # A platinum is celebrated once, ever.
             models.UniqueConstraint(fields=['earned_trophy'], condition=Q(kind='platinum'),
                                     name='moment_once_per_platinum'),

@@ -1,4 +1,4 @@
-{% load humanize %}
+{% load static humanize %}
 {% comment %}
 Rarity & Community band (series-level, shows ALL groups side by side -- does NOT swap with the switcher). Leads
 with rarity (the prestige signal missing elsewhere on the page): per-group rarity class + the share of the whole
@@ -62,9 +62,38 @@ pursuer base, but it drives series_size and the series rank's "of N" -- never th
                 <div class="pp-horizon bd2-comm__bar" style="--horizon-h: 5px; --horizon-accent: var(--comm-metal);" role="presentation">
                     <span class="pp-horizon__track"><span class="pp-horizon__fill" data-fill="{% widthratio g.earned_count detail.community_max_earned 100 %}%" style="--horizon-progress: {% widthratio g.earned_count detail.community_max_earned 100 %}%;"></span></span>
                 </div>
+
+                {% comment %} The edition's current MASTERS (phase 4): how many, and the first few, in the order their
+                current mastery began. No rank number (owner: "Master #3" breaks the day a game is added). Only when
+                there are any: absence is not content. {% endcomment %}
+                {% if g.masters_count %}
+                <div class="bd2-comm__masters" id="bd2-masters-{{ g.platform_group.key }}">
+                    <span class="bd2-comm__masters-label"><img src="{% static 'images/badges/mastery-crown.svg' %}" alt="" aria-hidden="true" class="bd2-crown"><b class="pp-tally">{{ g.masters_count|intcomma }}</b> master{{ g.masters_count|pluralize }}</span>
+                    <ul class="bd2-comm__masters-list">
+                        {% for hold in g.masters %}{% with name=hold.profile.display_psn_username|default:hold.profile.psn_username %}
+                        <li><a href="{% url 'profile_detail' hold.profile.psn_username %}" class="bd2-comm__master" title="{{ name }}, since {{ hold.mastered_at|date:'M j, Y' }}">
+                            {% if hold.profile.avatar_url %}<img src="{{ hold.profile.avatar_url }}" alt="{{ name }}" loading="lazy">{% else %}<span aria-hidden="true">{{ name|first|upper }}</span><span class="sr-only">{{ name }}</span>{% endif %}
+                        </a></li>
+                        {% endwith %}{% endfor %}
+                        {% if g.masters_more %}<li class="bd2-comm__master bd2-comm__master--more">+{{ g.masters_more|intcomma }}</li>{% endif %}
+                    </ul>
+                </div>
+                {% endif %}
             </div>
             {% endfor %}
         </div>
+
+        {% comment %} FULL SET / SERIES MASTER (phase 4): series-level, so here beside the editions it is made of.
+        Only on a series with two or more editions you can earn (`detail.rewards`). A visitor reads what it takes;
+        a hunter reads where they are. {% endcomment %}
+        {% if detail.rewards %}{% with r=detail.rewards %}
+        <div class="bd2-comm__set{% if r.series_master %} is-master{% elif r.full_set %} is-held{% endif %}">
+            {% if r.series_master %}<img src="{% static 'images/badges/mastery-crown.svg' %}" alt="" aria-hidden="true" class="bd2-crown"><span><b>Series Master</b> &middot; every edition at 100%{% if r.series_master_since %}, since {{ r.series_master_since|date:"M j, Y" }}{% endif %}</span>
+            {% elif r.full_set %}<span><b>Full Set</b> &middot; every edition held{% if r.full_set_since %}, since {{ r.full_set_since|date:"M j, Y" }}{% endif %}{% if r.master_offered %}. Take {% if r.editions == 2 %}both{% else %}all {{ r.editions }}{% endif %} to 100% for Series Master{% if r.finished %} ({{ r.finished }} so far){% endif %}{% endif %}</span>
+            {% elif r.held %}<span><b>Full Set</b> &middot; {{ r.held }} of {{ r.editions }} editions held</span>
+            {% else %}<span><b>Full Set</b> &middot; hold {% if r.editions == 2 %}both editions{% else %}all {{ r.editions }} editions{% endif %}{% if r.master_offered %}, then take them to 100% for Series Master{% endif %}</span>{% endif %}
+        </div>
+        {% endwith %}{% endif %}
 
         {% if detail.target_profile and detail.series_rank %}
         <div class="bd2-comm__standing">

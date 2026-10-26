@@ -182,7 +182,7 @@ def test_nothing_happens_for_games_in_no_badge():
 
     unbadged = _finish(profile, GameFactory(concept=ConceptFactory(), title_platform=ULTRA))
     assert evaluate_for_touched_games(profile, [unbadged.id], notify=False) == {
-        'awarded': [], 'revoked': [], 'updated': []}
+        'awarded': [], 'revoked': [], 'updated': [], 'mastered': []}
     assert not UserGroupBadge.objects.filter(profile=profile).exists(), (
         'touching a game in no stage evaluated the catalogue anyway'
     )
@@ -248,7 +248,7 @@ def test_the_sync_entry_point_never_raises():
                side_effect=RuntimeError('engine exploded')):
         result = evaluate_for_sync(profile, [1, 2, 3])
 
-    assert result == {'awarded': [], 'revoked': [], 'updated': []}
+    assert result == {'awarded': [], 'revoked': [], 'updated': [], 'mastered': []}
 
 
 @patch('trophies.discord_utils.discord_notifications.queue_webhook_send')

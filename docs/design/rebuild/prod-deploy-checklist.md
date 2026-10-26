@@ -1685,3 +1685,14 @@ rebuilds in that window keep labels as they are rather than improving them. That
 - [ ] **7. `python manage.py audit_regions`** once `--status` reads 0: the after picture. Expect chips and
       flags to change a second time per list as the walk reaches it (label from the prefix first, then the stores).
 - [ ] Not needed: re-running `populate_title_ids` later never touches the walk's results.
+
+## 2026-10-25 - Badge rewards phase 4: Mastery, Full Set, Series Master (branch `feature/badges/mastery`)
+
+- [ ] **1. `migrate`**: `trophies.0353` (UserGroupBadge.mastered_at, SeriesAward, RewardAnnouncement, the new
+      Moment kinds and constraints; a nullable column and new tables, cheap) and `trophies.0354` (the masters
+      index, built CONCURRENTLY; if it fails, `DROP INDEX CONCURRENTLY IF EXISTS ugb_badge_mastered_idx;` and
+      re-run).
+- [ ] **2. `python manage.py evaluate_badges --all`** after the deploy, rather than waiting for the nightly. It
+      marks every existing master and Full Set (silent for anything finished more than 14 days ago: the owner's
+      "silent backfill"). Until it runs, a master's page reads Holographic, not Mastered. Its summary line now
+      reports "N newly mastered, N series rewards gained".

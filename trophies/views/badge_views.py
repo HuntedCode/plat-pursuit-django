@@ -100,7 +100,7 @@ def badge_forge_medallions():
             subject, name, source_id, is_avatar = art['main'], cand.series.name, cand.id, art['is_avatar']
             break
 
-    def frame(metal, holo=False):
+    def frame(metal, holo=False, mastered=False):
         # Subject rides on OUR metal plate (the subject is metal-agnostic -- the plate carries the edition),
         # so the same badge shows in both editions' metals. No subject -> the plate alone (graceful).
         return {
@@ -108,13 +108,15 @@ def badge_forge_medallions():
             'state': 'earned',
             'art_layers': [plate(metal)] + ([subject] if subject else []),
             'is_avatar': is_avatar,          # a user-badge avatar subject -> circle-masked + shrunk
-            'is_holographic': holo,
+            'is_holographic': holo or mastered,
+            'is_mastered': mastered,
             'series_name': name,
         }
 
     return {
         'earned': frame('platinum'),               # beat 3: the badge, claimed (solid)
-        'mastered': frame('platinum', holo=True),  # beat 4: mastered -> holographic
+        'holo': frame('platinum', holo=True),      # beat 4: 100% on every game -> holographic
+        'mastered': frame('platinum', mastered=True),   # beat 5 + the hero: every stage at 100% -> mastered
         'ultra': frame('platinum'),                # editions legend: Ultra HD
         'legacy': frame('gold'),                   # editions legend: Legacy HD
         # The real badge behind the art -- tapping any forge medallion opens its quick-peek (like every
@@ -534,7 +536,7 @@ class BadgeDetailView(DetailView):
         # When showing SOMEONE ELSE'S progress (the /<slug>/<username>/ variant), surface whose.
         context['viewing_other_profile'] = target_profile if (target_profile and target_profile != viewer_profile) else None
 
-        detail = context['detail'] = get_badge_detail(series, target_profile, studio_sections=True)
+        detail = context['detail'] = get_badge_detail(series, target_profile, studio_sections=True, with_rewards=True)
 
         # Deep-link the platform-group tab: the list page's medallions/cells link to ?group=<key> so a click
         # lands on that edition directly. Validate against the series' live groups; default to the first.

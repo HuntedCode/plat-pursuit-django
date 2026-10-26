@@ -74,21 +74,39 @@ Collection. No extra wrapper container: a nested one would double the horizontal
                             </div>
                         </div>
 
-                        <a href="#ranks" class="shrink-0 mx-auto sm:mx-0 text-center sm:text-right group/earn">
-                            <div class="leading-none"><span class="pp-tally text-2xl md:text-3xl text-primary">{{ g.earned_count|intcomma }}</span></div>
-                            <div class="text-[0.6rem] md:text-xs uppercase tracking-wider text-base-content/40 mt-1 group-hover/earn:text-primary transition-colors">Earners &rsaquo;</div>
-                        </a>
+                        <div class="shrink-0 mx-auto sm:mx-0 flex gap-5 md:gap-6">
+                            <a href="#ranks" class="text-center sm:text-right group/earn">
+                                <div class="leading-none"><span class="pp-tally text-2xl md:text-3xl text-primary">{{ g.earned_count|intcomma }}</span></div>
+                                <div class="text-[0.6rem] md:text-xs uppercase tracking-wider text-base-content/40 mt-1 group-hover/earn:text-primary transition-colors">Earners &rsaquo;</div>
+                            </a>
+                            {% if g.masters_count %}
+                            <a href="#bd2-masters-{{ g.platform_group.key }}" class="text-center sm:text-right group/mast">
+                                <div class="leading-none"><span class="pp-tally text-2xl md:text-3xl bd2-mastered">{{ g.masters_count|intcomma }}</span></div>
+                                <div class="text-[0.6rem] md:text-xs uppercase tracking-wider text-base-content/40 mt-1 bd2-mastered-hover transition-colors">Masters &rsaquo;</div>
+                            </a>
+                            {% endif %}
+                        </div>
                     </div>
 
                     {% comment %} Row 2: state | segmented progress | badge stat cells. Stacks vertically until lg:,
                     where it lines up on one row (mirrors the old header's substance strip). {% endcomment %}
                     <div class="mt-4 md:mt-5 pt-4 md:pt-5 border-t border-base-content/10 flex flex-col lg:flex-row lg:items-center gap-3 lg:gap-6">
+                        {% comment %} MASTERED (phase 4) replaces the holo line, which it includes: dated by when the
+                        current mastery began. A held badge short of it says how far, the one next goal it has. {% endcomment %}
                         <div class="shrink-0 text-sm font-semibold text-center sm:text-left">
-                            {% if g.state == 'holo' %}<span class="text-secondary">&#10022; Holographic{% if g.earned_at %} &middot; {{ g.earned_at|date:"M j, Y" }}{% endif %}</span>
+                            {% if g.mastered_at %}<span class="bd2-mastered"><img src="{% static 'images/badges/mastery-crown.svg' %}" alt="" aria-hidden="true" class="bd2-crown"> Mastered &middot; since {{ g.mastered_at|date:"M j, Y" }}</span>
+                            {% elif g.state == 'holo' %}<span class="text-secondary">&#10022; Holographic{% if g.earned_at %} &middot; {{ g.earned_at|date:"M j, Y" }}{% endif %}</span>
                             {% elif g.state == 'earned' %}<span class="text-success">&#10003; Earned{% if g.earned_at %} &middot; {{ g.earned_at|date:"M j, Y" }}{% endif %}</span>
                             {% elif g.state == 'in_progress' %}<span class="text-primary">In progress</span>
                             {% elif g.is_unearnable %}<span class="text-base-content/50 font-medium">No longer earnable</span>
                             {% else %}<span class="text-base-content/50 font-medium">Not yet earned</span>{% endif %}
+                            {% comment %} `mastery_done` is this pass's; `mastered_at` the stored hold. At N of N
+                            the hold has not caught up yet (it does on the next evaluation): say nothing rather
+                            than "3 of 3" under a line that is not "Mastered". Only on an edition that offers
+                            Mastery: elsewhere holo is the top finish and there is nothing more to count. {% endcomment %}
+                            {% if g.mastery_offered and g.earned_at and not g.mastered_at and g.mastery_total and g.mastery_done < g.mastery_total %}
+                            <span class="block mt-0.5 text-xs font-medium text-base-content/50">Mastery: {{ g.mastery_done }} of {{ g.mastery_total }} stage{{ g.mastery_total|pluralize }} at 100%</span>
+                            {% endif %}
                         </div>
 
                         {% comment %} An unearnable edition renders no progress bar. With zero gating stages
@@ -335,6 +353,7 @@ Collection. No extra wrapper container: a nested one would double the horizontal
                         <p class="bd-retired__note">
                             These don&rsquo;t count toward the badge. There&rsquo;s no way left to get them on
                             {{ g.platform_group.name }}, but if you cleared one while you still could, it kept its points.
+                            They do count toward Mastery, which takes every stage at 100%.
                         </p>
                     </div>
                 </div>

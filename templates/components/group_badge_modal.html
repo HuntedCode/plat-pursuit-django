@@ -17,6 +17,7 @@ detail page, deep-linked to this edition's tab; omitted on the badge-detail peek
         <h2 class="pp-bdetail__title">{{ gv.platform_group.name }}</h2>
         <div class="pp-bdetail__state">
             {% if showcase %}Showcase
+            {% elif gv.mastered_at %}Mastered &middot; since {{ gv.mastered_at|date:"M j, Y" }}
             {% elif gv.state == 'holo' %}Holographic{% if gv.earned_at %} &middot; {{ gv.earned_at|date:"M j, Y" }}{% endif %}
             {% elif gv.state == 'earned' %}Earned{% if gv.earned_at %} &middot; {{ gv.earned_at|date:"M j, Y" }}{% endif %}
             {% elif gv.state == 'in_progress' %}In progress &middot; {{ gv.stages_cleared }} / {{ gv.gating_count }} stages

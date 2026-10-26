@@ -4,7 +4,7 @@
  * One .pp-detail-modal (PlatPursuit.DetailModal owns open, close, Escape and the focus trap) and a <template>
  * per waiting moment. Moments play ONE AT A TIME with "1 of 3", Next and Skip all (owner, 2026-10-25):
  *
- *   auto  welcome + badges: auto-play on a My Pursuit page when the hunter has celebrations on, after any
+ *   auto  welcome, badges, masteries and series rewards: auto-play on a My Pursuit page when the hunter has celebrations on, after any
  *         other modal on the page has had its turn (they open at 450ms and win; this waits for a clear stage)
  *   reel  platinums, then a milestone: NEVER auto-play. Only the strip's pill opens them.
  *
@@ -66,20 +66,81 @@
     // the CSS are both gated), the end state is what you see.
     // EXPLODE (owner, 2026-10-25): the sparks are thrown across much of the screen and fall slowly off the
     // bottom of it, which is why the spark layer is the whole viewport, not the dialog.
+    //
+    // ONE COLOUR STORY, AND A LADDER (owner, 2026-10-25, after phase 4):
+    //   - the sparks wear what the rays wear: a badge its edition's metal (read off the medallion, --med-c),
+    //     a holo badge the foil's colours, a mastery and a Series Master gold, a set each edition its own metal;
+    //   - the bigger the reward, the bigger the burst: badge < holo < Full Set < Mastery < Series Master;
+    //   - sparks land with what happens: a set bursts from each medallion as it mints, and a crown's landing
+    //     throws a second, smaller gold burst;
+    //   - later moments in one sitting burst smaller (the fifth badge is still an event, not a wall of sparks),
+    //     except a mastery or a Series Master, which always get their full beat.
+    var GOLD = 'var(--med-tier-gold)';
+    var FOIL = ['hsl(310 95% 74%)', 'hsl(200 95% 70%)', 'hsl(122 90% 70%)', 'hsl(48 100% 72%)'];
+    var MINT_AT = 360, MINT_STEP = 180;    // when each medallion mints (show() below), a set's one after another
+    var CROWN_LANDS = 790;                 // after its mint starts: the crown's 0.32s delay plus most of its drop
+    var LATER = 0.6;                       // a later moment's share of its burst
     var BEATS = {
-        badge: { sel: '.pp-moment__med .pp-med', at: 380, color: 'var(--pp-primary)', n: 70 },
-        platinum: { sel: '.pp-moment__cover', at: 560, color: 'var(--color-trophy-platinum)', n: 60 },
-        milestone: { sel: '.pp-moment__number', at: 520, color: 'var(--color-trophy-platinum)', n: 90 },
+        badge: { sel: '.pp-moment__med .pp-med', at: 380, n: 60 },
+        holo: { sel: '.pp-moment__med .pp-med', at: 380, n: 75, colors: FOIL },
+        mastered: { sel: '.pp-moment__med .pp-med', at: 380, n: 90, color: GOLD, crown: 30, always: true },
+        full_set: { each: true, n: 50 },
+        series_master: { each: true, n: 55, color: GOLD, crown: 22, finale: 60, always: true },
+        platinum: { sel: '.pp-moment__cover', at: 560, n: 60, color: 'var(--color-trophy-platinum)' },
+        milestone: { sel: '.pp-moment__number', at: 520, n: 90, color: 'var(--color-trophy-platinum)', always: true },
     };
-    function flourish(kind) {
-        var beat = BEATS[kind];
+    function centre(el) {
+        var r = el.getBoundingClientRect();
+        return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    }
+    // `colors` share the burst between them (sparkBurst throws one colour); counts are kept whole.
+    function burst(el, colors, n) {
+        if (!el || root.hidden || n < 1) { return; }
+        var c = centre(el), share = Math.max(1, Math.round(n / colors.length));
+        colors.forEach(function (color) {
+            PP.sparkBurst(sparks, c.x, c.y, color, share, { explode: true });
+        });
+    }
+    function metal(med) {
+        return (med && getComputedStyle(med).getPropertyValue('--med-c').trim()) || 'var(--pp-primary)';
+    }
+    function later(n, beat, i) { return beat.always || i === 0 ? n : Math.round(n * LATER); }
+    function beatFor(t) {
+        var kind = t.getAttribute('data-kind');
+        if (kind !== 'badge') { return BEATS[kind]; }
+        // A badge earned already mastered plays its mastery's beat; a holo one throws the foil's colours.
+        if (stage.querySelector('.pp-moment--mastered')) { return BEATS.mastered; }
+        return stage.querySelector('.pp-moment__med[data-holo]') ? BEATS.holo : BEATS.badge;
+    }
+    function flourish(t, i) {
+        var beat = beatFor(t);
         if (!beat || reduced() || !PP.sparkBurst) { return; }
+        if (beat.each) {
+            // A set: each edition bursts as it mints, in its own metal (gold for a Series Master), its crown lands
+            // with a smaller one, and a Series Master ends on one from between them.
+            var meds = Array.prototype.slice.call(stage.querySelectorAll('.pp-moment__set .pp-med'));
+            meds.forEach(function (med, k) {
+                var at = MINT_AT + k * MINT_STEP + 20;
+                window.setTimeout(function () { burst(med, [beat.color || metal(med)], later(beat.n, beat, i)); }, at);
+                if (beat.crown) {
+                    window.setTimeout(function () { burst(med.querySelector('.pp-med__crown'), [GOLD], beat.crown); },
+                                      at + CROWN_LANDS);
+                }
+            });
+            if (beat.finale) {
+                window.setTimeout(function () { burst(stage.querySelector('.pp-moment__set'), [GOLD], beat.finale); },
+                                  MINT_AT + meds.length * MINT_STEP + CROWN_LANDS + 220);
+            }
+            return;
+        }
         window.setTimeout(function () {
             var el = stage.querySelector(beat.sel);
-            if (!el || root.hidden) { return; }
-            var r = el.getBoundingClientRect();
-            PP.sparkBurst(sparks, r.left + r.width / 2, r.top + r.height / 2, beat.color, beat.n, { explode: true });
+            burst(el, beat.colors || [beat.color || metal(el)], later(beat.n, beat, i));
         }, beat.at);
+        if (beat.crown) {
+            window.setTimeout(function () { burst(stage.querySelector('.pp-med__crown'), [GOLD], beat.crown); },
+                              MINT_AT + CROWN_LANDS);
+        }
     }
 
     function show(i) {
@@ -87,7 +148,7 @@
         var t = queue[i];
         stage.innerHTML = '';
         stage.appendChild(t.content.cloneNode(true));
-        flourish(t.getAttribute('data-kind'));
+        flourish(t, i);
         countEl.textContent = queue.length > 1 ? (i + 1) + ' of ' + queue.length : '';
         var href = t.getAttribute('data-link-href');
         linkEl.hidden = !href;
@@ -95,10 +156,12 @@
         nextBtn.textContent = i === queue.length - 1 ? 'Done' : 'Next';
         skipBtn.hidden = queue.length - i <= 1;
 
-        var med = stage.querySelector('.pp-med');
-        if (med && !reduced()) {
-            // The medallion's own first-earn mint (badge-medallion.css), struck as it lands and the sparks fly.
-            window.setTimeout(function () { med.classList.add('is-minting'); }, 360);
+        if (!reduced()) {
+            // Each medallion's own first-earn mint (badge-medallion.css), struck as it lands and the sparks fly;
+            // a set's editions one after another. A mastered one has its crown set on in the same beat.
+            Array.prototype.forEach.call(stage.querySelectorAll('.pp-med'), function (med, n) {
+                window.setTimeout(function () { med.classList.add('is-minting'); }, MINT_AT + n * MINT_STEP);
+            });
         }
         if (PP.countUp) {
             Array.prototype.forEach.call(stage.querySelectorAll('[data-countup]'), function (el) { PP.countUp(el, 900); });

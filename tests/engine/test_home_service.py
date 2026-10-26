@@ -376,3 +376,24 @@ def test_the_progress_mirror_reads_the_fields_navsync_actually_sends():
     for field in ('sync_percentage', 'is_finalizing', 'finalize_phase', 'sync_status'):
         assert field in nav, f'{field} is not in the payload navsync builds'
         assert field in home, f'the homepage mirror does not read {field}'
+
+
+def test_a_mastered_recent_badge_wears_its_crown():
+    """Phase 4: the Home strip's frames carry mastery like every other medallion surface."""
+    import datetime as dt
+
+    from django.utils import timezone
+
+    from core.services import home_service
+    from trophies.models import UserGroupBadge
+
+    profile = ProfileFactory()
+    base = dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc)
+    _held(profile, 'srs-plain', earned_at=base, created_at=base)
+    _held(profile, 'srs-crowned', earned_at=base, created_at=base + dt.timedelta(days=1))
+    UserGroupBadge.objects.filter(profile=profile, group_badge__series__series_slug='srs-crowned').update(
+        is_holo=True, mastered_at=timezone.now())
+
+    frames = {m['series_slug']: m['frame'] for m in home_service._recent_medallions(profile)}
+    assert frames['srs-crowned']['is_mastered'] is True
+    assert frames['srs-plain']['is_mastered'] is False

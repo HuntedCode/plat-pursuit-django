@@ -56,6 +56,7 @@
                 {% for e in summary.editions %}{% if e.count %}<span><b>{{ e.count|intcomma }}</b> {{ e.label }} earned</span>{% endif %}{% endfor %}
                 {% if summary.in_progress %}<span><b>{{ summary.in_progress|intcomma }}</b> in progress</span>{% endif %}
                 {% if summary.holo %}<span><b>{{ summary.holo|intcomma }}</b> holographic</span>{% endif %}
+                {% if summary.mastered %}<span><b>{{ summary.mastered|intcomma }}</b> mastered</span>{% endif %}
             </p>
             {% comment %} The line above, and the gallery's filters, name editions with words off PlatformGroup
             that nobody has defined. The hint trails them. {% endcomment %}
