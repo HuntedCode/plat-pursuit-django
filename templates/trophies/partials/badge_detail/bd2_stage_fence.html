@@ -1,0 +1,54 @@
+{% load static %}
+{% comment %}
+A fenced stage section below the required ladder: stages that are shown but are not steps of this badge, so
+they carry no number. Two kinds share the markup, set by the includer:
+
+  bonus=True    BONUS stages (`g.bonus_stages`, Stage.is_bonus): never toward the badge, only toward Mastery.
+                Still playable, so they keep the normal stage colours and sit first.
+  (otherwise)   RETIRED stages (`g.retired_stages`): in scope for this edition but no longer gating, because
+                everything they ask for here is unobtainable. Kept on the page because clearing one still PAID
+                (dropping them would erase work the hunter was credited for), but muted and clearly fenced, so
+                they cannot be mistaken for something still standing between them and the badge.
+
+`stages` = the list; `studio_sections` = the same stages by studio (retired only), or None.
+{% endcomment %}
+<section class="bd-fence{% if bonus %} bd-fence--bonus{% endif %} mt-5">
+    <div class="bd-fence__head">
+        <span class="bd-fence__ico" aria-hidden="true">
+            {% if bonus %}<img src="{% static 'images/badges/mastery-crown.svg' %}" alt="">
+            {% else %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="4.9" y1="4.9" x2="19.1" y2="19.1"></line></svg>{% endif %}
+        </span>
+        <div>
+            {% if bonus %}
+            <h3 class="bd-fence__title">Bonus &middot; {{ stages|length }} stage{{ stages|length|pluralize }}</h3>
+            <p class="bd-fence__note">These don&rsquo;t count toward the badge, only toward Mastery.</p>
+            {% else %}
+            <h3 class="bd-fence__title">No longer obtainable &middot; {{ stages|length }} stage{{ stages|length|pluralize }}</h3>
+            <p class="bd-fence__note">
+                These don&rsquo;t count toward the badge. There&rsquo;s no way left to get them on
+                {{ g.platform_group.name }}, but if you cleared one while you still could, it kept its points.
+                They do count toward Mastery, which takes every stage at 100%.
+            </p>
+            {% endif %}
+        </div>
+    </div>
+    {% comment %} One fence for the whole edition, labelled by studio inside it: a fence per studio would break
+    up the live ladders above and, on a dead edition, leave a stack of fences. {% endcomment %}
+    {% if studio_sections %}
+    {% for sec in studio_sections %}
+    <h4 class="bd-fence__studio">{% if sec.url %}<a href="{{ sec.url }}" class="bd-fence__studio-link">{{ sec.name }}</a>{% else %}{{ sec.name }}{% endif %} &middot; {{ sec.stages|length }} stage{{ sec.stages|length|pluralize }}</h4>
+    <div class="bd-stages bd-stages--retired">
+        {% for s in sec.stages %}
+        {% include 'trophies/partials/badge_detail/bd2_stage.html' with retired=True %}
+        {% endfor %}
+    </div>
+    {% endfor %}
+    {% else %}
+    <div class="bd-stages{% if not bonus %} bd-stages--retired{% endif %}">
+        {% for s in stages %}
+        {% if bonus %}{% include 'trophies/partials/badge_detail/bd2_stage.html' with bonus=True %}
+        {% else %}{% include 'trophies/partials/badge_detail/bd2_stage.html' with retired=True %}{% endif %}
+        {% endfor %}
+    </div>
+    {% endif %}
+</section>

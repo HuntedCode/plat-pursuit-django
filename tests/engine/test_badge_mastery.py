@@ -1,8 +1,8 @@
 """Mastery, Full Set and Series Master in the PURE engine (badge rewards phase 4, owner 2026-10-25).
 
-Mastery: every stage the edition covers (stage 0 and stages that no longer gate included) at the full bar
+Mastery: every stage the edition covers (bonus stages and stages that no longer gate included) at the full bar
 (100% with DLC) on any one version, and it needs the badge itself. It is offered only when it asks more than
-holo: a stage 0 game, a stage that no longer gates, or a megamix's stages past its threshold. Full Set: every
+holo: a bonus stage, a stage that no longer gates, or a megamix's stages past its threshold. Full Set: every
 edition you can earn, held. Series Master: every such edition finished (mastered, or holo where no Mastery is
 offered), offered only when no single edition covers every stage.
 """
@@ -28,22 +28,27 @@ def stage(n, *games):
     return StageInput(n, tuple(games))
 
 
+def bonus(*games, n=9):
+    """A bonus stage (Stage.is_bonus): toward Mastery only, usually a region-locked release."""
+    return StageInput(n, tuple(games), is_bonus=True)
+
+
 def ultra(*stages, series=ALL):
     return evaluate_group_badge(series, ULTRA, list(stages))
 
 
 # -- mastery -----------------------------------------------------------------------------------------------
 
-def test_every_stage_at_full_including_stage_zero_masters_the_badge():
-    r = ultra(stage(0, game(full_day=9)), stage(1, game(full_day=3)), stage(2, game(full_day=5)))
+def test_every_stage_at_full_including_the_bonus_masters_the_badge():
+    r = ultra(bonus(game(full_day=9)), stage(1, game(full_day=3)), stage(2, game(full_day=5)))
     assert r.base_earned and r.holo and r.mastered
     assert (r.mastery_done, r.mastery_total) == (3, 3)
-    assert r.mastered_date == date(2026, 2, 9), 'mastered when the LAST stage fell, stage 0 included'
+    assert r.mastered_date == date(2026, 2, 9), 'mastered when the LAST stage fell, the bonus included'
 
 
-def test_stage_zero_short_of_full_holds_holo_but_not_mastery():
-    r = ultra(stage(0, game(full=False)), stage(1, game()), stage(2, game()))
-    assert r.holo is True, 'holo never reads stage 0'
+def test_a_bonus_short_of_full_holds_holo_but_not_mastery():
+    r = ultra(bonus(game(full=False)), stage(1, game()), stage(2, game()))
+    assert r.holo is True, 'holo never reads a bonus stage'
     assert r.mastered is False and (r.mastery_done, r.mastery_total) == (2, 3)
 
 
@@ -58,13 +63,13 @@ def test_a_stage_that_no_longer_gates_still_counts_for_mastery():
 
 
 def test_a_stage_with_nothing_on_the_editions_platforms_is_not_its_business():
-    r = ultra(stage(0, game()), stage(1, game()), stage(2, game(platforms=('PS3',), base=False, full=False, day=None)))
+    r = ultra(bonus(game()), stage(1, game()), stage(2, game(platforms=('PS3',), base=False, full=False, day=None)))
     assert r.mastered is True and r.mastery_total == 2
-    assert r.scope == frozenset({0, 1})
+    assert r.scope == frozenset({1, 9})
 
 
 def test_mastery_is_satisfied_cross_platform_like_everything_else():
-    r = ultra(stage(0, game()), stage(1, game(platforms=('PS4',), full=False), game(platforms=('PS3',))))
+    r = ultra(bonus(game()), stage(1, game(platforms=('PS4',), full=False), game(platforms=('PS3',))))
     assert r.mastered is True, 'the PS3 version at 100% masters the stage for Ultra HD'
 
 
@@ -84,14 +89,14 @@ def test_a_megamix_is_mastered_only_on_every_stage():
 
 
 def test_an_undated_stage_leaves_the_date_unknown_not_wrong():
-    r = ultra(stage(0, game(full_day=3)), stage(1, game(full_day=3)), stage(2, game(day=None, full_day=0)))
+    r = ultra(bonus(game(full_day=3)), stage(1, game(full_day=3)), stage(2, game(day=None, full_day=0)))
     assert r.mastered is True and r.mastered_date is None
 
 
 # -- when mastery is offered ---------------------------------------------------------------------------------
 
 def test_a_badge_that_asks_nothing_past_holo_offers_no_mastery():
-    """Owner, 2026-10-25: Mastery is above and beyond. Every stage gating, no stage 0, no megamix: Mastery would
+    """Owner, 2026-10-25: Mastery is above and beyond. Every stage gating, no bonus stage, no megamix: Mastery would
     be holo under another name, so the edition is FINISHED at holo and never mastered."""
     r = ultra(stage(1, game(full_day=3)), stage(2, game(full_day=5)))
     assert r.holo and r.finished and r.finished_date == date(2026, 2, 5)
@@ -101,8 +106,8 @@ def test_a_badge_that_asks_nothing_past_holo_offers_no_mastery():
 def test_each_extra_offers_mastery():
     dead = game(obtainable=False)
     delisted = GameState(1, frozenset({'PS5'}), True, True, True, True, date(2026, 1, 1), full_date=date(2026, 2, 1))
-    region_locked = stage(0, game())
-    for why, stages in (('a stage 0 game (region-locked)', [stage(1, game()), region_locked]),
+    region_locked = bonus(game())
+    for why, stages in (('a bonus stage (region-locked)', [stage(1, game()), region_locked]),
                         ('a stage that is unobtainable', [stage(1, game()), stage(2, dead)]),
                         ('a stage delisted on Ultra HD', [stage(1, game()), stage(2, delisted)])):
         r = ultra(*stages)
@@ -123,7 +128,7 @@ def test_a_megamix_offers_mastery_only_past_its_threshold():
 
 
 def test_an_edition_with_nothing_left_to_gate_offers_nothing():
-    r = ultra(stage(1, game(obtainable=False)), stage(0, game()))
+    r = ultra(stage(1, game(obtainable=False)), bonus(game()))
     assert r.gating_count == 0 and r.mastery_offered is False
 
 
@@ -170,14 +175,14 @@ def test_series_master_is_offered_only_when_no_edition_covers_every_stage():
 
 def test_series_master_reads_each_editions_own_finish():
     shared = stage(1, game(platforms=('PS3', 'PS5')))
-    # Ultra HD has a region-locked stage 0 short of 100%: it is holo but not finished, so no Series Master.
-    split = both([shared, stage(0, game(full=False)), stage(2, game(platforms=('PS5',)))],
+    # Ultra HD has a region-locked bonus stage short of 100%: it is holo but not finished, so no Series Master.
+    split = both([shared, bonus(game(full=False)), stage(2, game(platforms=('PS5',)))],
                  [shared, stage(3, game(platforms=('PS3',)))])
     assert split[0].holo and not split[0].finished and split[1].finished and not split[1].mastery_offered
     r = evaluate_series_rewards(split)
     assert r.master_offered is True and r.series_master is False
 
-    split[0] = evaluate_group_badge(ALL, ULTRA, [shared, stage(0, game()), stage(2, game(platforms=('PS5',)))])
+    split[0] = evaluate_group_badge(ALL, ULTRA, [shared, bonus(game()), stage(2, game(platforms=('PS5',)))])
     assert split[0].mastered and evaluate_series_rewards(split).series_master is True
 
 

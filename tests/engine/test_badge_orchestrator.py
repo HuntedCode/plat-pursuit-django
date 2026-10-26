@@ -443,16 +443,16 @@ def test_earned_date_through_orm():
     assert r.base_earned is True and r.earned_date == _dt(7)   # last gating stage to fall
 
 
-# ── stage 0 skipped through the ORM ──────────────────────────────────────────
-def test_stage_zero_skipped_via_orm():
+# ── a bonus stage skipped through the ORM ────────────────────────────────────
+def test_a_bonus_stage_is_skipped_via_orm():
     _, ultra = _groups()
     series = BadgeSeriesFactory(series_slug='s0')
-    s0 = StageFactory(series_slug='s0', stage_number=0)
+    s0 = StageFactory(series_slug='s0', stage_number=2, is_bonus=True)
     s1 = StageFactory(series_slug='s0', stage_number=1)
     c0, c1 = ConceptFactory(), ConceptFactory()
     s0.concepts.add(c0)
     s1.concepts.add(c1)
-    _game(c0)                                # stage 0 game left untouched
+    _game(c0)                                # the bonus game left untouched
     g1 = _game(c1)
     gb = GroupBadgeFactory(series=series, platform_group=ultra)
 

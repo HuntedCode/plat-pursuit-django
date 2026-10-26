@@ -148,15 +148,15 @@ def test_a_badge_with_nothing_left_to_gate_is_revoked_but_still_pays():
     assert r.xp_stage_count == 2, 'the hunter lost points for work they had already done'
 
 
-def test_stage_zero_never_pays_even_when_cleared():
-    """Stage 0 is tangential by definition. Paying XP for it would make optional work feel mandatory, and
-    it is the one exception the owner called out explicitly."""
+def test_a_bonus_stage_never_pays_even_when_cleared():
+    """A bonus stage (it replaced stage 0) is tangential by definition. Paying XP for it would make optional
+    work feel mandatory, and it is the one exception the owner called out explicitly."""
     r = evaluate_group_badge(ALL, ULTRA, [
-        stage(0, game(gid=1, base=True, day=1)),
+        StageInput(2, (game(gid=1, base=True, day=1),), is_bonus=True),
         stage(1, game(gid=2, base=True, day=2)),
     ])
 
-    assert r.xp_stage_count == 1, 'stage 0 was paid'
+    assert r.xp_stage_count == 1, 'the bonus stage was paid'
 
 
 # ── cross-platform satisfaction ──────────────────────────────────────────────
@@ -238,12 +238,19 @@ def test_an_out_of_scope_stage_credits_nothing_anywhere():
     assert legacy.stages[0].base_satisfied is False
 
 
-# ── stage 0 + all-required ───────────────────────────────────────────────────
-def test_stage_zero_is_skipped():
+# ── bonus stages + all-required ──────────────────────────────────────────────
+def test_a_bonus_stage_never_gates_the_badge_or_its_holo():
     done = game(gid=1, base=True, full=True, day=1)
     bonus_undone = game(gid=2, base=False)
-    r = evaluate_group_badge(ALL, ULTRA, [stage(0, bonus_undone), stage(1, done)])
-    assert r.gating_count == 1 and r.base_earned is True   # stage 0 ignored
+    r = evaluate_group_badge(ALL, ULTRA, [StageInput(2, (bonus_undone,), is_bonus=True), stage(1, done)])
+    assert r.gating_count == 1 and r.base_earned is True and r.holo is True
+    assert r.mastery_offered and r.mastery_total == 2, 'but it is in scope for Mastery'
+
+
+def test_the_flag_not_the_number_makes_a_stage_bonus():
+    """Stage 0 is gone (migration 0355): a stage numbered 0 is an ordinary stage to the engine now."""
+    r = evaluate_group_badge(ALL, ULTRA, [stage(0, game(gid=2, base=False)), stage(1, game(gid=1, base=True, day=1))])
+    assert r.gating_count == 2 and r.base_earned is False
 
 
 def test_all_gating_stages_required():

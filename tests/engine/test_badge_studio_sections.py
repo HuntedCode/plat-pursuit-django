@@ -303,7 +303,7 @@ def test_the_page_renders_a_header_per_studio_and_a_label_per_retired_run(client
     assert f'<a href="{north_url}" class="bd-studio__ico" tabindex="-1" aria-hidden="true">' in html
     # ...and "Other studios" is not a company, so it links nowhere.
     assert '<h3 class="bd-studio__name">Other studios</h3>' in html
-    assert ('<h4 class="bd-retired__studio"><a href="/companies/{}/" class="bd-retired__studio-link">'
+    assert ('<h4 class="bd-fence__studio"><a href="/companies/{}/" class="bd-fence__studio-link">'
             'Rockstar San Diego</a> &middot; 1 stage</h4>').format(rockstar['sd'].slug) in html
     # Anonymous: nothing has been cleared by anyone on display, so the header offers no "cleared" count.
     assert '<span class="bd-studio__meta"><b class="pp-tally">1</b> stage</span>' in html
@@ -325,7 +325,7 @@ def test_the_studio_headings_sit_under_the_editions_own_h2(client, rockstar):
     page = html[html.index('<h1'):]
     levels = [int(n) for n in re.findall(r'<h([1-6])[\s>]', page)]
 
-    for h3 in ('<h3 class="bd-studio__name"', '<h3 class="bd-retired__title"'):
+    for h3 in ('<h3 class="bd-studio__name"', '<h3 class="bd-fence__title"'):
         at = page.index(h3)
         assert page.startswith('<h2 class="bd-req__ask"', page.rfind('<h2', 0, at)), h3
     assert [(a, b) for a, b in zip(levels, levels[1:]) if b > a + 1] == [], 'a heading level is skipped'

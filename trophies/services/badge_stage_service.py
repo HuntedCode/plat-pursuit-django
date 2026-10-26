@@ -22,8 +22,8 @@ ordinary concepts, where any ONE of them satisfies the stage.
 
 A series that already has stages is refused unless `append=True`. Appending only adds concepts: it never
 renames, renumbers or removes what is there. An uncovered concept whose origin game already has a
-stage (a new remaster of a game in stage 4) is ADDED to that stage, preferring a gating stage over the
-optional stage 0. When that stage holds the origin only inside a BUNDLE, nothing is added and the stage is
+stage (a new remaster of a game in stage 4) is ADDED to that stage, preferring a counting stage over a
+bonus one. When that stage holds the origin only inside a BUNDLE, nothing is added and the stage is
 reported for a curator instead: adding the concept directly would let it satisfy the stage on its own,
 turning an all-episodes requirement into any-one-episode. Every other origin game becomes a new stage after
 the last one. Appended stages land after the existing ones, so a developer badge's numbers only read in
@@ -135,8 +135,8 @@ def _group_date(group):
 def _existing_stage_by_origin(series_slug):
     """{origin key: (stage, bundled)} for the existing stage an uncovered concept of that origin should join.
 
-    Preference when an origin sits in several stages: a gating stage over the optional stage 0 (which never
-    counts), a DIRECT member over a bundled one, then the lowest stage number. `bundled` True means the
+    Preference when an origin sits in several stages: a counting stage over a bonus one (which never counts
+    toward the badge), a DIRECT member over a bundled one, then the lowest stage number. `bundled` True means the
     chosen stage holds the origin only inside a ConceptBundle, or only as the list of a trophy-group member:
     either way the addition is reported for a curator, never written (writing the concept whole onto a stage
     that counts one of its groups would set two bars for one list, which StageAdminForm refuses).
@@ -156,7 +156,7 @@ def _existing_stage_by_origin(series_slug):
             members.extend((concept, True) for concept in bundle.concepts.all())
         members.extend((ctg.concept, True) for ctg in stage.trophy_groups.all())
         for concept, bundled in members:
-            rank = (stage.stage_number == 0, bundled, stage.stage_number)
+            rank = (stage.is_bonus, bundled, stage.stage_number)
             key = origin_key(concept)
             if key not in best or rank < best[key][0]:
                 best[key] = (rank, stage, bundled)

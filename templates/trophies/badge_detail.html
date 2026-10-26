@@ -283,7 +283,7 @@ Collection. No extra wrapper container: a nested one would double the horizontal
             </div>
             {% endif %}
 
-            {% if g.stages or g.retired_stages %}
+            {% if g.stages or g.retired_stages or g.bonus_stages %}
             {% comment %} Requirements preview: the compact stage-tile checklist (checked when cleared), each
             tile jumping to its stage in the journey below. Skipped entirely on an unearnable edition -- its
             tile grid loops `g.stages`, which is empty there, so it rendered as a gap under a headline that
@@ -338,44 +338,13 @@ Collection. No extra wrapper container: a nested one would double the horizontal
             {% endif %}
             {% endif %}
 
-            {% comment %} Retired stages: in scope for this edition but no longer gating, because everything
-            they ask for here is unobtainable. Kept on the page because clearing one still PAID -- dropping
-            them would erase work the hunter was credited for -- but below the ladder and clearly fenced, so
-            they cannot be mistaken for something still standing between them and the badge. {% endcomment %}
+            {% comment %} Below the ladder, fenced and unnumbered: bonus stages (still playable, toward Mastery
+            only), then retired ones (no longer obtainable). See bd2_stage_fence.html. {% endcomment %}
+            {% if g.bonus_stages %}
+            {% include 'trophies/partials/badge_detail/bd2_stage_fence.html' with bonus=True stages=g.bonus_stages studio_sections=None %}
+            {% endif %}
             {% if g.retired_stages %}
-            <section class="bd-retired mt-5">
-                <div class="bd-retired__head">
-                    <span class="bd-retired__ico" aria-hidden="true">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="4.9" y1="4.9" x2="19.1" y2="19.1"></line></svg>
-                    </span>
-                    <div>
-                        <h3 class="bd-retired__title">No longer obtainable &middot; {{ g.retired_stages|length }} stage{{ g.retired_stages|length|pluralize }}</h3>
-                        <p class="bd-retired__note">
-                            These don&rsquo;t count toward the badge. There&rsquo;s no way left to get them on
-                            {{ g.platform_group.name }}, but if you cleared one while you still could, it kept its points.
-                            They do count toward Mastery, which takes every stage at 100%.
-                        </p>
-                    </div>
-                </div>
-                {% comment %} One fence for the whole edition, labelled by studio inside it: a fence per studio
-                would break up the live ladders above and, on a dead edition, leave a stack of fences. {% endcomment %}
-                {% if g.retired_studio_sections %}
-                {% for sec in g.retired_studio_sections %}
-                <h4 class="bd-retired__studio">{% if sec.url %}<a href="{{ sec.url }}" class="bd-retired__studio-link">{{ sec.name }}</a>{% else %}{{ sec.name }}{% endif %} &middot; {{ sec.stages|length }} stage{{ sec.stages|length|pluralize }}</h4>
-                <div class="bd-stages bd-stages--retired">
-                    {% for s in sec.stages %}
-                    {% include 'trophies/partials/badge_detail/bd2_stage.html' with retired=True %}
-                    {% endfor %}
-                </div>
-                {% endfor %}
-                {% else %}
-                <div class="bd-stages bd-stages--retired">
-                    {% for s in g.retired_stages %}
-                    {% include 'trophies/partials/badge_detail/bd2_stage.html' with retired=True %}
-                    {% endfor %}
-                </div>
-                {% endif %}
-            </section>
+            {% include 'trophies/partials/badge_detail/bd2_stage_fence.html' with bonus=False stages=g.retired_stages studio_sections=g.retired_studio_sections %}
             {% endif %}
             {% else %}
             <p class="text-base-content/50 text-center py-6">No stages are defined for this badge yet.</p>

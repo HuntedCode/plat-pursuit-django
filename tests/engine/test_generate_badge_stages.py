@@ -522,13 +522,13 @@ def test_append_never_adds_to_a_bundle_stage_and_reports_it_instead():
     assert list(stage.concept_bundles.get().concepts.values_list('id', flat=True)) == [episode_one.id]
 
 
-def test_append_prefers_a_gating_stage_over_stage_zero_and_direct_over_bundled():
+def test_append_prefers_a_counting_stage_over_a_bonus_one_and_direct_over_bundled():
     badge, fran = _franchise_badge("gen-append-pick")
     family = _family("Picky", 1405, year=2001)
     in_zero = _concept("Picky Optional", family=family)
     in_bundle = _concept("Picky Bundled", family=family)
     in_direct = _concept("Picky Direct", family=family)
-    StageFactory(series_slug=badge.series_slug, stage_number=0).concepts.add(in_zero)
+    StageFactory(series_slug=badge.series_slug, stage_number=1, is_bonus=True).concepts.add(in_zero)
     bundle_stage = StageFactory(series_slug=badge.series_slug, stage_number=2)
     ConceptBundleFactory(stage=bundle_stage).concepts.add(in_bundle)
     StageFactory(series_slug=badge.series_slug, stage_number=7).concepts.add(in_direct)
@@ -553,15 +553,15 @@ def test_append_with_nothing_missing_writes_nothing():
     assert len(_stages(badge.series_slug)) == 1
 
 
-def test_append_after_only_an_optional_stage_starts_at_one():
+def test_append_after_only_a_bonus_stage_numbers_after_it():
     badge, fran = _franchise_badge("gen-append-zero")
-    StageFactory(series_slug=badge.series_slug, stage_number=0, title="Optional")
+    StageFactory(series_slug=badge.series_slug, stage_number=1, title="Optional", is_bonus=True)
     game = _concept("Real Game", family=_family("Real Game", 1601))
     _link(game, fran)
 
     _run(badge.series_slug, '--append')
 
-    assert [number for number, _, _ in _stages(badge.series_slug)] == [0, 1]
+    assert [number for number, _, _ in _stages(badge.series_slug)] == [1, 2]
 
 
 # --- command behaviour ---------------------------------------------------------

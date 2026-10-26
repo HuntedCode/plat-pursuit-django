@@ -193,12 +193,13 @@ def test_originals_are_untouched(client):
 
 def test_duplicates_a_whole_multi_stage_selection(client):
     _owner(client)
-    stages = [_stage('soulsborne', n) for n in (0, 1, 2)]
+    stages = [_stage('soulsborne', n) for n in (1, 2)] + [_stage('soulsborne', 3, is_bonus=True)]
 
     _duplicate(client, stages, 'fromsoft')
 
     assert sorted(Stage.objects.filter(series_slug='fromsoft')
-                  .values_list('stage_number', flat=True)) == [0, 1, 2]
+                  .values_list('stage_number', 'is_bonus')) == [(1, False), (2, False), (3, True)], \
+        'the bonus flag travels with the stage'
 
 
 def test_collision_is_skipped_and_reported_never_renumbered(client):

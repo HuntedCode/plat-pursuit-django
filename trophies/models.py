@@ -3296,8 +3296,16 @@ class ProgressionMilestone(models.Model):
 
 class Stage(models.Model):
     series_slug = models.SlugField(max_length=100, db_index=True, help_text="Series slug this stage applies to.")
-    stage_number = models.IntegerField(validators=[MinValueValidator(0)], help_text="Stage number (0 for optional/tangential concepts.)")
+    stage_number = models.IntegerField(validators=[MinValueValidator(1)], help_text="Stage number, from 1.")
     title = models.CharField(max_length=255, blank=True, help_text="Optional stage title")
+    # A BONUS stage never counts toward the badge (it never gates it, its holo or its XP) but counts toward
+    # Mastery, and having one is what makes a badge offer Mastery. Region-locked releases (a Japan-only game)
+    # are the usual case. It replaced stage 0, which held every such game in ONE stage, so finishing any one
+    # of them cleared it (see badge_engine and migration 0355).
+    is_bonus = models.BooleanField(
+        default=False,
+        help_text="Bonus stage: doesn't count toward the badge, only toward Mastery (e.g. a region-locked game).",
+    )
     # No stored icon: the badge page derives it from the stage's newest version
     # (badge_detail_service._stage_icon_url).
     concepts = models.ManyToManyField(Concept, related_name='stages', blank=True, help_text='Concepts required for this stage.')
@@ -3314,6 +3322,10 @@ class Stage(models.Model):
         ordering = ['stage_number']
         indexes = [
             models.Index(fields=['series_slug', 'stage_number'], name='stage_slug_number_idx'),
+        ]
+        constraints = [
+            # Stage 0 is gone: an optional stage is a numbered stage with `is_bonus`.
+            models.CheckConstraint(condition=Q(stage_number__gte=1), name='stage_number_from_one'),
         ]
 
     def __str__(self):
@@ -3719,7 +3731,7 @@ class UserGroupBadge(models.Model):
     profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='group_badges')
     group_badge = models.ForeignKey(GroupBadge, on_delete=models.CASCADE, related_name='earned_by')
     is_holo = models.BooleanField(default=False, help_text="LIVE holo flag: currently 100% on every gating stage. Flips both ways; cosmetic; no XP.")
-    # MASTERY (badge rewards phase 4, owner 2026-10-25): every stage the edition covers, stage 0 and dead stages
+    # MASTERY (badge rewards phase 4, owner 2026-10-25): every stage the edition covers, bonus and dead stages
     # included, at 100% with DLC. Null = not mastered. Binary and live like the hold: it goes when a stage is
     # added and comes back (with a new date) when re-earned. Worth no points. The date is "Mastered since".
     mastered_at = models.DateTimeField(null=True, blank=True)

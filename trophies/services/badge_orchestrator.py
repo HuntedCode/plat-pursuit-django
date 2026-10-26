@@ -226,7 +226,8 @@ def catalog_results(catalog) -> dict:
     for a visitor who is not signed in). No queries."""
     stages_by_series = defaultdict(list)
     for st in catalog['stages']:
-        stages_by_series[st.series_slug].append(StageInput(st.stage_number, tuple(catalog_stage_units(st, catalog))))
+        stages_by_series[st.series_slug].append(
+            StageInput(st.stage_number, tuple(catalog_stage_units(st, catalog)), st.is_bonus))
     return {
         gb.id: evaluate_group_badge(
             SeriesInput(gb.series.completion_policy, gb.series.min_required),
@@ -380,7 +381,7 @@ def evaluate_with_catalog(profile, catalog, excused=None):
     stages_by_series = defaultdict(list)
     for st in catalog['stages']:
         units = stage_units(st, game_state, group_state)
-        stages_by_series[st.series_slug].append(StageInput(st.stage_number, tuple(units)))
+        stages_by_series[st.series_slug].append(StageInput(st.stage_number, tuple(units), st.is_bonus))
 
     results = {}
     for gb in catalog['group_badges']:

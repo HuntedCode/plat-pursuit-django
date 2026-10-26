@@ -81,11 +81,11 @@ def compute_community_stats():
     }
 
     # --- Catalog stats: what the collection OFFERS, independent of who earned it ---
-    # Stages per live series (stage 0 is the non-counting base stage). Counted once per SERIES: the stage
+    # Stages per live series (bonus stages don't count toward a badge, so they are not counted). Counted once per SERIES: the stage
     # list is series-level, and every edition of a series works the same stages.
     stages_by_series = dict(
         Stage.objects.filter(series_slug__in=live_series_slugs)
-        .exclude(stage_number=0)
+        .exclude(is_bonus=True)
         .values('series_slug')
         .annotate(n=Count('id'))
         .values_list('series_slug', 'n')

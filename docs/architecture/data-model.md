@@ -187,7 +187,9 @@ tiebreaking one edition's board on another edition's date meant advancing in one
 other.
 
 #### Stage
-One "step" in a series: the Concepts a hunter must complete. `stage_number` 0 marks optional entries.
+One "step" in a series: the Concepts a hunter must complete. `stage_number` starts at 1 (check constraint
+`stage_number_from_one`). `is_bonus` marks an optional stage: never toward the badge, only toward Mastery
+(it replaced stage 0 in migration 0355; see [badge-system.md](badge-system.md#bonus-stages)).
 
 **Joined to a series by the `series_slug` STRING, not an FK** -- so nothing stops a stage existing under a
 slug no series owns, and renaming a slug orphans its stages.
