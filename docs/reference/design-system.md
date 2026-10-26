@@ -379,7 +379,9 @@ gone: they counted a different unit from the grid ("Total games 40,125", which w
 games shown"), and on a phone they pushed every result below the first screen (DS-02). Site-wide numbers belong
 on the landing. This holds on the six Discovery list pages (Games, Trophy Lists, Recently Added, Franchises,
 Companies, Genres & Themes) and, since the [Progression review](../design/reviews/progression.md) (2026-10-24,
-PR-02), on Jobs and Badges. Hunters still carries a tile grid until the Identity and social slice.
+PR-02), on Jobs and Badges, and since the [Identity review](../design/reviews/identity.md) (2026-10-26, ID-03,
+ID-05, ID-10) on Hunters, a profile's header and Plat Cards. Milestones still carries one (an Odds-and-ends
+slice question).
 
 **The hunter's own shelves follow it too** (Collection, Titles, a job page's header; PR-03 to PR-05): what is
 there goes in one `.pp-factline`, and a figure that would read 0 is left out rather than shown (rule 3 of the
@@ -403,7 +405,7 @@ rule 3. Franchise and company share `trophies/partials/_catalog_factline.html`.
 
 ### Tab Group / View Switcher (site-wide standard, 2026-07)
 
-**The one sanctioned tab treatment.** Any in-page tab group or view switcher -- 2-way (Series/Gallery) or multi-tab (Jobs/Radar/Contracts) -- uses the shared **`.pp-switch`** component (`static/css/components/switcher.css`): one bordered container holding transparent chips, active chip tinted, an icon per chip. Right-aligned in its own `flex items-center justify-end mt-5` row -- `mt-5` is the standard top gap above the switcher (it sits below the page-header card / whatever chrome precedes it). A row may carry one quiet link at its LEFT end (Career's "How does my Career work?", 2026-10): then it is `justify-between` and the switcher takes `ml-auto`, so it still sits right when the row wraps on a phone. A sub-switch alone in its row under it (Career's Dossier / Sheet) right-aligns to match. Used site-wide: Career, Badges (Series/Gallery). (Collection was a Case/Gallery switcher but is now a single Gallery, so it no longer carries one.) Unified 2026-07 from three near-identical class systems (`.lab-view-tab` / `.pp-collection__view-chip` / `.pp-vtoggle`, all retired).
+**The one sanctioned tab treatment.** Any in-page tab group or view switcher -- 2-way (Series/Gallery) or multi-tab (Jobs/Radar/Contracts) -- uses the shared **`.pp-switch`** component (`static/css/components/switcher.css`): one bordered container holding transparent chips, active chip tinted, an icon per chip. Right-aligned in its own `flex items-center justify-end mt-5` row -- `mt-5` is the standard top gap above the switcher (it sits below the page-header card / whatever chrome precedes it). A row may carry one quiet link at its LEFT end (Career's "How does my Career work?", 2026-10): then it is `justify-between` and the switcher takes `ml-auto`, so it still sits right when the row wraps on a phone. A sub-switch alone in its row under it (Career's Dossier / Sheet) right-aligns to match. Used site-wide: Career, Badges (Series/Gallery). (Collection was a Case/Gallery switcher but is now a single Gallery, so it no longer carries one.) Unified 2026-07 from three near-identical class systems (`.lab-view-tab` / `.pp-collection__view-chip` / `.pp-vtoggle`, all retired). **`.pp-switch--many`** is for a strip with more chips than a phone row holds (a profile's seven tabs): below 640px its chips drop their icons and tighten, which brings seven labels onto two rows instead of three (review ID-03). The label is what a chip says; the icon only repeats it.
 
 ```html
 <div class="flex items-center justify-end mt-5">

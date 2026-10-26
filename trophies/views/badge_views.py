@@ -924,13 +924,16 @@ class OverallBadgeLeaderboardsView(TemplateView):
     #: every window the rows endpoint serves all read it, so the labels above a column and the labels
     #: inside its rows cannot drift -- which is the failure a separate rows endpoint invites.
     FIGURES = {
-        'clean': ('platinums', 'trophies'),
+        # CLEAN trophies, said so: the tie-break counts trophies outside shovelware, and beside a profile's
+        # total "trophies" it read as a wrong number (review ID-09).
+        'clean': ('platinums', 'clean trophies'),
         # The supporting figure is a PERCENTAGE, and the shared row partial has no suffix slot -- it
         # renders `{{ value }} {{ label }}`. So the label carries the unit rather than the number.
         'rarity': ('points', 'avg rarity %'),
         'trophies': ('platinums', 'trophies'),
         'points': ('points', 'badges'),
-        'career': ('XP', 'level'),
+        # The PURSUER level, said so: a bare "level" read as the PSN trophy level a profile shows (review ID-07).
+        'career': ('XP', 'pursuer lv'),
     }
 
     #: What each board actually RANKS, in one line. Beside FIGURES because they answer the same question
@@ -948,7 +951,7 @@ class OverallBadgeLeaderboardsView(TemplateView):
     #: meaning; `trophies` names shovelware explicitly because being the one that INCLUDES it is the only
     #: thing distinguishing it.
     MEANINGS = {
-        'clean': 'Platinums earned on games that are not shovelware. Total trophies settles a tie.',
+        'clean': 'Platinums earned on games that are not shovelware. Clean trophies, also outside shovelware, settle a tie.',
         'rarity': ('Your 1,000 rarest base-game trophies. Rarer scores higher: a 1% trophy is worth 100, '
                'a 10% trophy 10.'),
         'trophies': ('Every game counts, shovelware included. Ranked by platinums, with total trophies '

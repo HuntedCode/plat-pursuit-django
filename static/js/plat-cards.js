@@ -653,7 +653,7 @@
     function boot(first) {
         handledGrid = null;
         if (first && PP.countUp) {
-            document.querySelectorAll('.scard__value[data-countup]').forEach(function (el) { PP.countUp(el, 900); });
+            document.querySelectorAll('.pp-factline [data-countup]').forEach(function (el) { PP.countUp(el, 900); });
         }
         var form = document.getElementById('pc-form');
         if (form) { form.addEventListener('change', onFormChangeDim); }

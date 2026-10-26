@@ -243,8 +243,13 @@
 /* The controller builds these as `.recap-slide` (unchanged, so its six query sites keep working); the
    STAGE owns where they sit. Centred by default, top-aligned when taller than the stage -- a centred
    flex child that overflows clips its own top and becomes unreachable. */
+/* THE FOOT STRIP (review ID-06, 2026-10-26): the bottom 4.25rem of the stage is kept clear of the beat,
+   because the controls live there -- the pause glyph, the hint and, on a phone, the two arrows. They used
+   to sit on top of the beat's last line on a short laptop ("PEAK HOUR 5PM", "26 most in a day") and over
+   quiz answers at mid-height on a phone. A beat taller than what is left top-aligns and scrolls
+   (`.has-overflow`). */
 .rcx .recap-slide {
-    position: absolute; inset: 0.5rem 1rem 1.5rem;
+    position: absolute; inset: 0.5rem 1rem 4.25rem;
     display: flex; flex-direction: column; align-items: center; justify-content: center;
     overflow-y: auto; opacity: 0; pointer-events: none; z-index: 1;
 }
@@ -297,7 +302,12 @@
    glyph that leaned on a transform to centre itself sat half its own width off-axis the moment it lit --
    measured 24px right of centre on a 1280 stage, which is exactly half of its 3rem box. The transform is
    left free to carry the entrance offset alone. */
-.rcx__aim--hold { left: calc(50% - 1.5rem); top: auto; bottom: 3.25rem; margin-top: 0; transform: translateY(6px); }
+.rcx__aim--hold { left: calc(50% - 1.25rem); top: auto; bottom: 1.5rem; width: 2.5rem; height: 2.5rem; margin-top: 0; transform: translateY(6px); }
+/* On a phone the arrows join the pause in the foot strip. At mid-height they sat over the beat's own
+   content, which on 375px fills the width: quiz answers, the first slide's month, a tile's label. */
+@media (max-width: 767px) {
+    .rcx__aim--prev, .rcx__aim--next { top: auto; bottom: 1.5rem; margin-top: 0; width: 2.5rem; height: 2.5rem; }
+}
 .rcx__glyph { width: 1.15rem; height: 1.15rem; grid-area: 1 / 1; }
 .rcx__glyph--play, .rcx.is-pinned .rcx__glyph--pause { display: none; }
 .rcx.is-pinned .rcx__glyph--play { display: block; }
@@ -434,6 +444,10 @@
     .rcx .rcp-clock__track { width: 3.25rem; height: 6rem; }
     .rcx .rcp__mark svg { width: 6rem; height: 6rem; }
 }
+/* A SHORT desktop window (the owner's 1280 x 633 laptop): the calendar is the deck's tallest beat, and with
+   the foot strip and its Continue control it ran past the slide, so its own totals needed a scroll (review
+   ID-06). Height is the constraint here, not width, so the cells give back what the scale-up above took. */
+@media (min-width: 768px) and (max-height: 720px) { .rcx .rcp-cal__cell { width: 2rem; height: 2rem; } }
 
 /* Per-beat choreography, on the SHARED primitive rather than a per-slide animation: the parts of a beat
    arrive in sequence after the beat itself lands (anticipation, then follow-through), which is the whole
@@ -627,7 +641,7 @@
     .rcx__bars { padding: 1rem 1.5rem 0; }
     .rcx__top { padding: 0.85rem 1.5rem; }
     .rcx__stage { padding: 1rem 1.5rem 2rem; }
-    .rcx .recap-slide { inset: 1rem 1.5rem 2rem; }
+    .rcx .recap-slide { inset: 1rem 1.5rem 4.25rem; }
 }
 /* ================================================================
  * The page's terminal states.

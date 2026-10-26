@@ -128,7 +128,7 @@ The duplicate calendar and its `month-selector.js` are gone.
 |---|---|
 | Hero | The newest openable month. Trophy total counts in; Begin / Watch it again reflects `has_been_viewed`. |
 | Archive | Free content (no outer card) per the stacked rule. `staggerReveal` on the same grammar as the browse grids. |
-| Tile | Month, trophy count and platinum count at EQUAL weight, plus a "New" flag when unwatched. |
+| Tile | Month, trophy count and platinum count at EQUAL weight, plus a "New" flag on an unwatched month that finished within the last `RECAP_NEW_MONTHS` (2). "New" means newly available, not merely unwatched: a hunter who joins with years of history had it on every tile (27 of the owner's 28, review ID-15). An older unwatched month still says "not watched" to a screen reader. |
 | Colour | Unwatched = the brand cyan (edge + labelled pill). Platinums = `--color-trophy-platinum`. |
 | Timezone | A header button opens the prompt. That is the ONLY timezone control on the page. |
 
@@ -723,6 +723,17 @@ Shared parts (`.rcp__stamp`, `.rcp__chips`, `.rcp__pair`, `.rcp-quiz__*`, ...) a
   so navigation locked on a slide the hunter had already answered. Both quiz paths record the result
   BEFORE rendering feedback, because the recorded result *is* the flag.
 
+- **Only a first watch is gated by its quizzes** (owner, 2026-10-26, review ID-15). `quizHolds()` is the
+  one gate both `nextSlide` and `prevSlide` ask, and it never holds when the page marks the deck
+  `data-rewatch` (`first_visit` is false). "Watch it again" used to make you answer all four again, with the
+  forward arrow lit while it refused. The quizzes are still there to play.
+
+- **The bottom 4.25rem of the stage is the controls' strip** (review ID-06). `.recap-slide`'s inset keeps
+  the beat out of it; the pause glyph sits in it, and on a phone the two arrows join it. At their old
+  places the pause glyph covered a beat's last line on a short laptop and the arrows sat over quiz answers
+  at mid-height on a phone. A short desktop window (`max-height: 720px`) also shrinks the calendar's cells,
+  the deck's tallest beat, so it fits rather than scrolling.
+
 - **The document-level arrow-key handler must keep yielding.** To form fields and contenteditable (the
   share section below the deck has a `<select>`), to `dialog[open]` (the platinum detail owns the
   keyboard while up), and to modified presses.
@@ -730,6 +741,10 @@ Shared parts (`.rcp__stamp`, `.rcp__chips`, `.rcp__pair`, `.rcp-quiz__*`, ...) a
 - **`.has-overflow` has to be re-checked on resize.** The deck is `clamp(520px, 100vh - 360px, 720px)`,
   so which slides overflow moves with the viewport. `visualViewport` is watched too: mobile browser
   chrome collapsing changes `100vh` without firing `resize`.
+
+- **...and measured as each slide arrives** (`fitSlide` in `goToSlide`, review ID-06). The check after
+  render runs while the stage is still hidden, where every slide measures 0 tall, so no slide was ever
+  marked: a tall beat on a short laptop stayed centred with its top cut off.
 
 - **The platinum-day detail is a native `<dialog>`, and its content is escaped.** The hand-rolled overlay
   it replaced registered a document-level Escape handler and unbound it only on the Escape path, so

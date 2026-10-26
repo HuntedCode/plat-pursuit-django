@@ -234,12 +234,12 @@ site-wide stacked rule -- chrome cards stack (header, hero, timezone), the archi
             </span>
             {% else %}
             <a href="{% url 'recap_view' year=m.year month=m.month %}"
-               class="rca-tile{% if not m.seen %} rca-tile--new{% endif %}"
+               class="rca-tile{% if m.is_new %} rca-tile--new{% endif %}"
                aria-label="{{ m.month_name }} {{ m.year }}, {{ m.total }} trophies, {{ m.platinums }} platinum{{ m.platinums|pluralize }}{% if not m.seen %}, not watched{% endif %}">
-                {% comment %} The accent edge marks an unwatched month; this says what the edge means.
-                aria-hidden because the link's own label already carries "not watched" -- announcing both
-                would read the same fact twice. {% endcomment %}
-                {% if not m.seen %}
+                {% comment %} The accent edge marks a NEW month (unwatched, and finished recently: review
+                ID-15); this says what the edge means. aria-hidden because the link's own label already
+                carries "not watched" -- announcing both would read the same fact twice. {% endcomment %}
+                {% if m.is_new %}
                 <span class="rca-new rca-new--flag" aria-hidden="true"><span class="rca-new__dot"></span>New</span>
                 {% endif %}
                 <span class="rca-tile__month">{{ m.short_month_name }}</span>

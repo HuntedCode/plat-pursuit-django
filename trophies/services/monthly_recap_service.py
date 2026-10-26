@@ -22,6 +22,10 @@ from django.utils import timezone
 logger = logging.getLogger(__name__)
 
 
+#: How many finished months back an unwatched recap still reads NEW in the archive (review ID-15).
+RECAP_NEW_MONTHS = 2
+
+
 class MonthlyRecapService:
     """
     Service for generating and managing monthly recap data.
@@ -1012,7 +1016,7 @@ class MonthlyRecapService:
                 'month_count': int,
                 'year_count': int,
             }
-        where a month is {year, month, month_name, short_month_name, total, platinums, seen, is_latest}.
+        where a month is {year, month, month_name, short_month_name, total, platinums, seen, is_new, is_latest}.
         """
         user_tz = cls._resolve_user_tz(profile)
         now_local = timezone.now().astimezone(user_tz)
@@ -1029,6 +1033,12 @@ class MonthlyRecapService:
 
         totals = cls.month_activity_totals(profile, user_tz=user_tz)
         seen = cls.months_already_seen(profile)
+        # NEW means newly AVAILABLE, not merely unwatched (review ID-15, 2026-10-26). A hunter who joins
+        # with years of history has every month unwatched, so the flag sat on 27 of 28 tiles and said
+        # nothing. It now marks an unwatched month that finished within the last two: the recaps that
+        # arrived recently. An older unwatched month is still "not watched" to a screen reader.
+        floor_index = current[0] * 12 + (current[1] - 1) - RECAP_NEW_MONTHS
+        new_floor = (floor_index // 12, floor_index % 12 + 1)
 
         def _month(year, month):
             t = totals.get((year, month), {'total': 0, 'platinums': 0})
@@ -1040,6 +1050,7 @@ class MonthlyRecapService:
                 'total': t['total'],
                 'platinums': t['platinums'],
                 'seen': (year, month) in seen,
+                'is_new': (year, month) not in seen and (year, month) >= new_floor,
                 'is_latest': (year, month) == active[0],
             }
 

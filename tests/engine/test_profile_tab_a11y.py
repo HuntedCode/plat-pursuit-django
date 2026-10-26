@@ -28,7 +28,7 @@ PAGE = ROOT / 'templates' / 'trophies' / 'profile_detail.html'
 _COMMENT = re.compile(r'\{%\s*comment\s*%\}.*?\{%\s*endcomment\s*%\}', re.S)
 
 #: The switcher markup only, so a chip assertion cannot be satisfied by matching text elsewhere.
-_TAB_BAR = re.compile(r'<div class="pp-switch".*?</div>\s*</div>', re.S)
+_TAB_BAR = re.compile(r'<div class="pp-switch[^"]*" role="tablist".*?</div>\s*</div>', re.S)
 
 #: The panel's opening tag, which is where every attribute under test lives.
 _PANEL = re.compile(r'<div id="tab-content"[^>]*>')

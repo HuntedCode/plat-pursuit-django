@@ -41,7 +41,7 @@ def test_the_banner_says_what_claiming_makes_the_hunter(client):
 
     banner = _region(_career(client, profile), 'claim-banner', '</a>')
 
-    assert 'Claim them to reach <b class="pp-tally text-primary">Level 9</b> &middot; Newbie' in banner
+    assert 'Claim them to reach <b class="pp-tally text-primary">Pursuer Lv 9</b> &middot; Newbie' in banner
     assert re.search(r'Pathfinder <span class="pp-tally">1 &rarr; 7</span>', banner)
     assert re.search(r'Gunslinger <span class="pp-tally">1 &rarr; 3</span>', banner)
     assert '24,000' in banner, 'the XP detail line went'

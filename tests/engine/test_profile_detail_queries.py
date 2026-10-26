@@ -291,8 +291,9 @@ def test_no_headline_figure_is_stated_twice(client):
     html = client.get(f'/hunters/{profile.psn_username}/', **CF).content.decode()
     header = html[:html.index('id="profile-tab-bar"')]
 
-    assert '>Platinums<' not in header, 'the platinum count is back in the stat grid AND the tier row'
-    assert 'Avg. completion' in header, 'average completion has no home again'
+    facts = header[header.index('pp-phero__facts'):]
+    facts = facts[:facts.index('</p>')]
+    assert 'platinum' not in facts, 'the platinum count is back in the facts line AND the tier row'
     # It still has to BE in the tier row -- that row is read as a shape, and dropping its widest-to-
     # narrowest tip would break the shape rather than tidy it.
     tiers = header[header.index('pp-phero__tiers'):]
@@ -333,7 +334,7 @@ def test_the_trophy_shape_sits_across_from_the_identity(client):
         'the trophy shape is back INSIDE the name block -- it should be the column beside it'
     )
 
-    row = html[html.index('pp-phero__dial'):html.index('scard__label')]
+    row = html[html.index('pp-phero__dial'):html.index('pp-phero__facts')]
     for tier in ('platinum', 'gold', 'silver', 'bronze'):
         assert f'data-tier="{tier}"' in row, f'{tier} is missing from the shape'
 
@@ -369,7 +370,7 @@ def test_the_trophy_counts_count_up_like_every_other_figure(client):
                              total_silvers=380, total_bronzes=1400)
 
     html = client.get(f'/hunters/{profile.psn_username}/', **CF).content.decode()
-    tiers = html[html.index('pp-phero__tiers'):html.index('scard__label')]
+    tiers = html[html.index('pp-phero__tiers'):html.index('pp-phero__facts')]
 
     for value in (12, 140, 380, 1400):
         assert f'data-countup="{value}"' in tiers, f'{value} does not count up'
@@ -855,7 +856,7 @@ def test_the_phone_hero_fills_the_corner_beside_the_dial(client):
     # Every element the grid places must actually exist in the rendered header.
     profile = ProfileFactory(is_linked=True)
     body = client.get(f'/hunters/{profile.psn_username}/', **CF).content.decode()
-    for cls in ('pp-phero__id', 'pp-phero__dial', 'pp-phero__who', 'pp-phero__tiers', 'pp-phero__stats'):
+    for cls in ('pp-phero__id', 'pp-phero__dial', 'pp-phero__who', 'pp-phero__tiers', 'pp-phero__facts'):
         assert cls in body, f'{cls} is not rendered, so the phone grid places a element that is not there'
 
 

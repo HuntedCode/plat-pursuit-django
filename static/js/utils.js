@@ -2157,7 +2157,9 @@ function staggerReveal(o) {
     var batchCap = o.batchCap != null ? o.batchCap : 560;
     var appendCap = o.appendCap != null ? o.appendCap : 200;
     grid.classList.add(o.hideClass || 'pp-reveal');   // hides the cards until each is revealed
-    function play(el, delay) {
+    // Starts one card's arrival and returns the element it animates (null if the card had already
+    // arrived). WRITES ONLY: the matching read is `hold`, run for the whole batch after every card has started.
+    function begin(el, delay) {
         // Idempotent: a card reveals exactly once even if re-selected by a re-entrant batch (e.g. a filter
         // swap that also fires a paired OOB afterSwap) or re-observed. `pp-revealing` is set synchronously so
         // the guard holds within the same frame. The VISIBLE resting state (`.is-revealed` -> opacity 1) is
@@ -2166,7 +2168,7 @@ function staggerReveal(o) {
         // the reveal takes hold -- the "flash to black" (the card shows, then the animation yanks it to 0 and
         // fades up). Deferring keeps the base style hidden (pp-reveal) for that first paint; the running
         // animation then masks the resting state, and at its end the backwards fill reverts to .is-revealed.
-        if (el.classList.contains('pp-revealing') || el.classList.contains('is-revealed')) { return; }
+        if (el.classList.contains('pp-revealing') || el.classList.contains('is-revealed')) { return null; }
         el.classList.add('pp-revealing');
         // THE CELL ANIMATES, NOT THE CARD, wherever a cell exists. A card with a control beside it
         // (the game card's wrapper, which holds the anchor and a quick-add button as siblings) has a
@@ -2190,6 +2192,12 @@ function staggerReveal(o) {
         // it is visible, not when its last flourish ends.
         target.classList.add('pp-arriving');
         o.reveal(target, delay);
+        if (window.requestAnimationFrame) { requestAnimationFrame(function () { el.classList.add('is-revealed'); }); }
+        else { el.classList.add('is-revealed'); }
+        return target;
+    }
+    // Hands a cell back once its own arrival has finished.
+    function hold(target) {
         var running = target.getAnimations ? target.getAnimations() : null;
         if (running && running.length && window.Promise) {
             // The `catch` is not a swallow: an animation that is CANCELLED rejects, and a cancelled
@@ -2201,17 +2209,29 @@ function staggerReveal(o) {
             // No WAAPI, or a caller that animates nothing: there is no invisible window to protect.
             target.classList.remove('pp-arriving');
         }
-        if (window.requestAnimationFrame) { requestAnimationFrame(function () { el.classList.add('is-revealed'); }); }
-        else { el.classList.add('is-revealed'); }
+    }
+    // A batch is every write, THEN every read. `getAnimations()` makes the browser bring styles up to date,
+    // and each `begin` has just changed them, so reading inside the per-card loop recalculated the whole
+    // page once per card: a profile's 287-badge tab spent 37 seconds here before it could be used. All the
+    // writes first leave one recalculation for the batch (review ID-01, 2026-10-26).
+    function play(els, delayFor) {
+        var started = [];
+        els.forEach(function (el, i) {
+            var target = begin(el, delayFor(i));
+            if (target) { started.push(target); }
+        });
+        started.forEach(hold);
     }
     // Reveal cards already present in ONE DOM-order batch. DOM order == visual reading order for a row-major
     // grid, independent of the (possibly transitional) column count during a view swap.
-    grid.querySelectorAll(sel + ':not(.pp-revealing):not(.is-revealed)').forEach(function (el, i) { play(el, Math.min(i * step, batchCap)); });
+    play(Array.prototype.slice.call(grid.querySelectorAll(sel + ':not(.pp-revealing):not(.is-revealed)')),
+         function (i) { return Math.min(i * step, batchCap); });
     // The observer ONLY scroll-reveals infinite-scroll-appended cards (call observe() on newly-added nodes).
     var io = new IntersectionObserver(function (entries) {
         var shown = entries.filter(function (e) { return e.isIntersecting; }).map(function (e) { return e.target; });
         shown.sort(function (a, b) { return (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) ? -1 : 1; });
-        shown.forEach(function (el, j) { play(el, Math.min(j * step, appendCap)); io.unobserve(el); });
+        shown.forEach(function (el) { io.unobserve(el); });
+        play(shown, function (j) { return Math.min(j * step, appendCap); });
     }, { rootMargin: '0px 0px -8% 0px', threshold: 0.08 });
     return {
         /**

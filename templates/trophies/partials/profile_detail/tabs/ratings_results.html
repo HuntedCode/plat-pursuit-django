@@ -19,6 +19,13 @@ count-up animations on every sort.
     {% comment %}Named for the SET you are looking at. "No ratings yet" under a DLC chip showing a count
     would contradict the switcher directly above it.{% endcomment %}
     <p class="pp-act__empty-title">{% if rating_set == 'dlc' %}No DLC ratings yet{% else %}No ratings yet{% endif %}</p>
+    {% comment %}Only the OWNER meets the empty base wall now (a visitor's Ratings chip is hidden when there is
+    nothing behind it, review ID-11), so it speaks to them and says where rating happens.{% endcomment %}
+    {% if is_own_profile %}
+    <p class="pp-act__empty-hint">{% if rating_set == 'dlc' %}You haven&rsquo;t rated any DLC packs yet.{% else %}You haven&rsquo;t rated any of your games yet.{% endif %}</p>
+    <a class="pp-cta pp-cta--sm mt-3" href="{% url 'rate_my_games' %}">Rate My Games</a>
+    {% else %}
     <p class="pp-act__empty-hint">{% if rating_set == 'dlc' %}This hunter hasn&rsquo;t scored any DLC packs.{% else %}This hunter hasn&rsquo;t scored any of their platinums.{% endif %}</p>
+    {% endif %}
 </div>
 {% endif %}

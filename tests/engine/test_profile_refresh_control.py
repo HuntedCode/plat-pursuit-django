@@ -495,13 +495,16 @@ def test_hiding_zero_trophy_games_also_keeps_it_static(client):
 
 
 def _trophies_card(body):
-    """The hero's headline Trophies figure, scoped by its own label.
+    """The hero's headline trophies figure: the first item of its facts line (review ID-03 turned the four
+    tiles into one `.pp-factline`, the total leading).
 
     Not via `data-live-total`: that hook is deliberately ABSENT on a settled profile and on any hunter
     with a display filter, so anchoring on it makes the tests that care about its absence unwritable.
     """
-    at = body.index('>Trophies</div>')
-    return body[at:body.index('</div>', body.index('scard__value', at))]
+    at = body.index('<span>', body.index('pp-phero__facts'))
+    item = body[at:body.index('</span>', at)]
+    assert item.endswith(' trophies'), item
+    return item
 
 
 def test_a_failed_sync_shows_the_more_current_figure(client):

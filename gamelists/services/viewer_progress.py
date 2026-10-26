@@ -39,7 +39,7 @@ def progress_by_concept(profile, concept_ids):
 
 def platinumed_by_list(profile, lists):
     """Set `viewer_platinumed` on each list: how many of its games the hunter has platinumed (review AU-02),
-    for the My Lists cards. ONE grouped query for the whole page, counted in the database: an item counts when
+    for the My Lists cards and a profile's Lists tab (review ID-12). ONE grouped query for the whole page, counted in the database: an item counts when
     the hunter holds a platinum on any version of its game."""
     from django.db.models import Count, Exists, OuterRef
 

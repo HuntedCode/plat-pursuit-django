@@ -267,7 +267,7 @@ def test_every_stat_has_a_permanent_home(client, sort):
 
     body = client.get(URL, {'sort': sort}).content.decode()
 
-    for label in ('Level', 'Trophies', 'Platinums', 'Games', 'Last seen', 'Joined'):
+    for label in ('Trophy Lv', 'Trophies', 'Platinums', 'Games', 'Last seen', 'Joined'):
         assert label in body, f'{label} vanished when sorting by {sort}'
 
 
@@ -332,17 +332,31 @@ def test_only_alphabetical_accents_the_name(client, sort):
     assert 'pp-hcard__name--sorted' not in body, f'{sort} accents the name as well as its stat'
 
 
-def test_the_default_sort_is_alphabetical(client):
-    """The form's `selected` fallback hardcodes the default separately from the view's DEFAULT_SORT, so
-    the two can drift into showing one ordering while building the wall with another."""
-    _hunters(2)
+def test_the_default_sort_is_recently_active(client):
+    """Recently active, not A-to-Z (review ID-05, owner 2026-10-26): alphabetical opened the page on
+    whoever's name starts with "a". The control shows the default it is using, and the wall marks it."""
+    from datetime import timedelta
 
-    resp = client.get(URL)
-    body = resp.content.decode()
+    from django.utils import timezone
 
-    assert ProfilesListView.DEFAULT_SORT == 'alpha'
-    assert 'value="alpha" selected' in body, 'the sort control does not show the default it is using'
-    assert 'pp-hcard__name--sorted' in body, 'the default wall does not mark its own axis'
+    old = ProfileFactory(is_linked=True, psn_username='aaa_old', last_synced=timezone.now() - timedelta(days=30))
+    fresh = ProfileFactory(is_linked=True, psn_username='zzz_fresh', last_synced=timezone.now())
+
+    body = client.get(URL).content.decode()
+
+    assert ProfilesListView.DEFAULT_SORT == 'recently_active'
+    assert 'value="recently_active" selected' in body, 'the sort control does not show the default it is using'
+    assert body.index(fresh.psn_username) < body.index(old.psn_username), 'the freshest hunter does not lead'
+    assert 'pp-hcard__val--sorted' in body, 'the default wall does not mark its own axis'
+
+
+def test_a_retired_sort_shows_the_default_it_falls_back_to(client):
+    """The control reads the view's resolved sort, so it can never show one ordering while the wall is
+    built with another (it used to repeat the default as a literal)."""
+    _hunters(1)
+    body = client.get(URL, {'sort': 'rarest_avg_plat'}).content.decode()
+    assert 'value="recently_active" selected' in body
+    assert 'value="alpha" selected' not in body
 
 
 def test_a_supporter_card_is_marked(client):

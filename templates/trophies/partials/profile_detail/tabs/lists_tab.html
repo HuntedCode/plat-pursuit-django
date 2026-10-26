@@ -35,8 +35,8 @@ selector falls through to the default `.card`, which matches nothing here, and
     settle.{% endcomment %}
     <div id="lists-grid" class="pp-gtile-grid{% if request.htmx %} pp-reveal{% endif %}">
         {% for game_list in profile_lists %}
-        {# `mark_index` desyncs the supporter shimmer per tile; the tile explains why it is passed, not inherited. #}
-        {% include 'gamelists/partials/list_tile.html' with game_list=game_list mark_index=forloop.counter0 %}
+        {# `mark_index` desyncs the supporter shimmer per tile; the tile explains why it is passed, not inherited. `hide_owner`: every tile here is this hunter's, so the byline only repeated the page (review ID-12). #}
+        {% include 'gamelists/partials/list_tile.html' with game_list=game_list hide_owner=True mark_index=forloop.counter0 %}
         {% empty %}
         {% comment %}A SAFETY NET, not a designed state, and it should be unreachable in practice:
         the view normalizes `?tab=lists` back to Games whenever the same check that draws the chip
