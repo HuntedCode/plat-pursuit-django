@@ -95,6 +95,11 @@
    them and the actions stay reachable -- the property the previous version's comment claimed and
    did not have, because `overflow-y` sat on the box that contained all three. */
 .gl-dialog__body { flex: 1 1 auto; overflow-y: auto; padding: 16px 20px; }
+/* A <form> WRAPPING THE BODY AND FOOT (the New list dialog) has to pass the column through, or the two are
+   plain blocks inside it: the body never scrolls, the whole dialog does, and the foot's Create button sat
+   under that scroll on a 1280 x 633 laptop and on a phone (review AU-03). `min-height: 0` lets the column
+   shrink below its content, which is what hands the overflow to the body. */
+.gl-dialog > form { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
 
 .gl-dialog__foot {
     flex: none;
@@ -1383,6 +1388,15 @@
 @media (max-width: 519px) {
     .gl-actions__note { flex-basis: 100%; }
 }
+/* Make private belongs to edit mode (review AU-06): `list-detail.js` marks the band while the mode is on. */
+.gl-actions:not(.is-editing) [data-gl-unpublish] { display: none; }
+
+/* The reader's own progress over the list (review AU-02), in the cards' own vocabulary: platinum for the
+   platinums. */
+.gl-you { font-size: 0.78rem; color: var(--pp-text-dim); }
+.gl-you b, .gl-card__done { color: var(--color-trophy-platinum); font-variant-numeric: tabular-nums; }
+/* Delete stays on one line beside Save (review AU-09). */
+.gl-edit__delete { white-space: nowrap; }
 
 /* ============================================================
    The list card

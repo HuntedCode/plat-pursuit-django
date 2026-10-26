@@ -16,7 +16,7 @@ definition in the view (a `?q=` under three characters filters nothing and must 
 second copy in JavaScript is exactly the drift that made the band vanish on the first keystroke of
 live search.{% endcomment %}
 <div id="items-grid" class="pp-gtile-grid{% if request.htmx %} pp-reveal{% endif %}"
-     data-result-count="{{ paginator.count }}" data-has-filters="{% if has_filters %}1{% else %}0{% endif %}">
+     data-result-count="{{ lists_shown }}" data-has-filters="{% if has_filters %}1{% else %}0{% endif %}">
     {% for game_list in object_list %}
     {# `mark_index` desyncs the supporter shimmer per tile; the tile explains why it is passed, not inherited. #}
     {% include 'gamelists/partials/list_tile.html' with game_list=game_list mark_index=forloop.counter0 %}

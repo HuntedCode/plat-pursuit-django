@@ -23,6 +23,7 @@ import pytest
 from django.urls import reverse
 
 from gamelists.services import game_list_service as svc
+from gamelists.models import GameList, GameListFollow
 from tests.factories import ConceptFactory, GameFactory, ProfileFactory, UserFactory
 
 pytestmark = pytest.mark.django_db
@@ -165,7 +166,13 @@ def test_my_lists_passes_the_index_too(staff_client):
     for n in range(2):
         _list(owner, name=f'Mine {n}')
 
-    html = staff_client.get(MINE).content.decode()
+    # FOLLOWING, not Mine: your own lists carry no byline (review AU-07), so the marks that need the index
+    # are the authors of lists you follow.
+    follower = _hunter('follower', tier='backer')
+    for game_list in GameList.objects.filter(owner=owner):
+        GameListFollow.objects.create(game_list=game_list, profile=follower)
+    staff_client.force_login(follower.user)
+    html = staff_client.get(MINE + '?scope=following').content.decode()
     delays = re.findall(r'--sup-delay:\s*(-?\d+ms)', html)
 
     assert len(set(delays)) > 1, f'My Lists rendered every tile with one offset: {delays}'

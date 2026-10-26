@@ -267,18 +267,26 @@
 .rmg__actions { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
 .rmg__actions .rmg__spacer { flex: 1 1 auto; }
 
-/* STICKY below `lg`, the same guarantee the quick-rate modal's actions carry: on a phone the hero, the
- * trophy list and the form stack into one long column, and Skip/Submit ended up under all of it. This is a
- * BULK flow -- the same two decisions, game after game -- so a hunter who has to scroll to the bottom for
- * every one of seventy games is paying that scroll seventy times.
+/* STICKY, the same guarantee the quick-rate modal's actions carry. This is a BULK flow -- the same two
+ * decisions, game after game -- so a hunter who has to scroll to the bottom for every one of seventy games is
+ * paying that scroll seventy times. On a phone the hero, the trophy list and the form stack into one long
+ * column; on a desktop the panels sit side by side, and the row was left unpinned on the claim that it
+ * "already lands in view under them". It did not on the owner's 1280 x 633 laptop: Submit sat at 1,205px
+ * (review AU-05). So it is pinned at every size, 12px off the bottom where there is no tab bar.
  *
- * Cleared above the mobile tab bar, which is `position: fixed` at 56px plus the safe-area inset and would
- * otherwise sit on top of the Submit button. Desktop is left alone: the tab bar is gone, the two panels sit
- * side by side at matched heights, and the row already lands in view under them.
+ * Below `lg` it clears the mobile tab bar, which is `position: fixed` at 56px plus the safe-area inset and
+ * would otherwise sit on top of the Submit button.
  */
+.rmg__actions {
+    position: sticky; z-index: 20; bottom: 12px;
+    padding: 10px 12px;
+    border-radius: var(--pp-radius-lg);
+    background: var(--pp-bg-1);
+    border: 1px solid var(--pp-border);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.34);
+}
 @media (max-width: 1023px) {
     .rmg__actions {
-        position: sticky; z-index: 20;
         /* 3.5rem = the tab bar, in the same unit the rest of the site clears it with (#zoom-wrapper's
            padding, #back-to-top, #toast-container -- all in input.css). Sticky is what makes a collision
            here fatal rather than cosmetic: an unpinned row scrolls, so you can always move it clear of
@@ -287,11 +295,6 @@
            carry a `.has-mobile-ad` variant as well; the ad banner sat at exactly this offset and won
            the stack. Ads were removed in 2026-08.) */
         bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px));
-        padding: 10px 12px;
-        border-radius: var(--pp-radius-lg);
-        background: var(--pp-bg-1);
-        border: 1px solid var(--pp-border);
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.34);
     }
 }
 

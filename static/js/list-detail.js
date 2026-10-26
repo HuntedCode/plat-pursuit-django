@@ -684,6 +684,32 @@
      * had already reported it, which is a coordination signal for exactly the pile-on this feature
      * exists to catch. The server enforces one report per hunter regardless.
      */
+    /**
+     * SHARE (review AU-10). A phone gets the system share sheet, where sending a link is what people do;
+     * everywhere else the link goes to the clipboard and a toast says so. The URL is the server's, rendered
+     * on the button, so a list reads the same link from every page that offers it. Rendered on every
+     * button the page has (the owner's band and a reader's), so it wires them all.
+     */
+    function wireShare() {
+        document.querySelectorAll('[data-gl-share]').forEach(function (btn) {
+            if (wired.has(btn)) { return; }
+            wired.add(btn);
+            btn.addEventListener('click', function () {
+                var url = btn.dataset.shareUrl;
+                var coarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+                if (coarse && navigator.share) {
+                    navigator.share({ title: btn.dataset.shareTitle, url: url }).catch(function () {});
+                    return;
+                }
+                function failed() { if (PP.ToastManager) { PP.ToastManager.show('Could not copy the link.', 'error'); } }
+                if (!navigator.clipboard || !navigator.clipboard.writeText) { failed(); return; }
+                navigator.clipboard.writeText(url).then(function () {
+                    if (PP.ToastManager) { PP.ToastManager.show('Link copied.', 'success'); }
+                }, failed);
+            });
+        });
+    }
+
     function wireReport() {
         var dialog = document.getElementById('gl-report');
         var open = document.querySelector('[data-gl-report-open]');
@@ -1011,9 +1037,16 @@
         }
 
         identityShow = open;
-        identityHide = close;
+        // Leaving edit mode DROPS unsaved changes to the name, description and type (review AU-09): Done is
+        // the one way out, so it does what the Cancel button beside Save used to.
+        // Mid-save it closes WITHOUT the reset, for the reason `dismiss()` gives below.
+        identityHide = function () {
+            var save = form.querySelector('[data-gl-edit-save]');
+            if (!(save && save.dataset.busy === '1')) { reset(); }
+            close();
+        };
 
-        // Both dismissals refuse while a save is in flight. Neither was guarded, and the response
+        // Dismissal refuses while a save is in flight. It was not guarded, and the response
         // does not care that the form closed: press Save then Escape and `reset()` read the
         // PRE-save heading back into the fields, then the response wrote the NEW name into the
         // heading. Heading and form then disagreed, and pressing Save again renamed it back -- so an
@@ -1025,8 +1058,6 @@
             close();
         }
 
-        var cancel = form.querySelector('[data-gl-edit-cancel]');
-        if (cancel) { cancel.addEventListener('click', dismiss); }
 
         form.addEventListener('keydown', function (e) {
             if (e.key === 'Escape') { e.preventDefault(); dismiss(); }
@@ -1550,6 +1581,8 @@
         if (block) { block.hidden = false; }
 
         if (identityShow) { identityShow(); }
+        var band = document.querySelector('[data-gl-actions]');
+        if (band) { band.classList.add('is-editing'); }       // reveals Make private (review AU-06)
         startArranging();
         paintEditToggle();
         setPositionsStatus('');
@@ -1569,6 +1602,8 @@
         if (block) { block.hidden = true; }
 
         if (identityHide) { identityHide(); }
+        var band = document.querySelector('[data-gl-actions]');
+        if (band) { band.classList.remove('is-editing'); }
         stopArranging();
         // EVERYTHING THE MODE PUT ON SCREEN LEAVES WITH IT, and these two do not live inside the
         // gated subtree so the CSS cannot do it for them.
@@ -3165,6 +3200,7 @@
         wireIdentityEditor();
         wireVisibility();
         wireReport();
+        wireShare();
         wireEditToggle();
         wireSections();
         initReveal();

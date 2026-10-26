@@ -599,8 +599,17 @@ def test_the_page_uses_the_shared_primitives():
     html = _markup()
 
     for primitive in ('pp-switch', 'pp-horizon', 'pp-bgal__chip', 'pp-gbrowse__spinner',
-                      'pp-head-cascade', 'pp-tally', 'scard'):
+                      'pp-head-cascade', 'pp-factline'):
         assert primitive in html, f'{primitive} is not used -- something was hand-rolled instead'
+
+
+def test_what_is_left_is_one_line_not_four_tiles():
+    """Review AU-05: four stat tiles ("Games waiting 89", "Games total 89", the same for DLC) filled a phone's
+    first screen and pushed the game to rate under the pinned bar. The waiting counts keep their ids, which
+    `tickWaiting` counts down live."""
+    html = _markup()
+    assert 'scard' not in html, 'the stat tiles are back'
+    assert 'id="rmg-waiting-base"' in html and 'id="rmg-waiting-dlc"' in html
 
 
 def test_the_switcher_follows_the_site_standard():
@@ -1015,20 +1024,24 @@ def test_the_two_wizard_panels_end_level():
 
 def test_the_wizard_form_pairs_its_axes_at_every_width():
     """Same change, same reason as the quick-rate modal: eight stacked fields is more than a 360x740 phone
-    has, and the four scored axes are the only ones that pair. Behind a 1024px breakpoint this was the
-    desktop-only layout, which is backwards -- the narrow screen is the one that needs the pairing."""
-    css = (ROOT / 'static' / 'css' / 'components' / 'rate-wizard.css').read_text(encoding='utf-8')
-
-    rule = css[css.index('.rmg__form .gd-qr {'):]
-    rule = rule[:rule.index('\n}')]
-    assert 'grid-template-columns: minmax(0, 1fr) minmax(0, 1fr)' in rule, (
-        'the pairing is back behind a breakpoint, or back on a bare 1fr'
-    )
-
-
-def test_the_wizard_actions_stay_in_reach_on_a_phone():
+    has, and the four scored axes are the only ones that pair. Behind a 1024px breakpoidef test_the_wizard_actions_stay_in_reach_on_every_screen():
     """A bulk flow charges its scroll cost once per game. Below `lg` the hero, the trophy list and the form
     stack into one column, so Skip/Submit sat under all of it -- seventy times for a hunter with seventy
+    games waiting. On the owner's 1280 x 633 laptop Submit sat at 1,205px too (review AU-05). Sticky at every
+    size, and below `lg` clearing the fixed mobile tab bar that would otherwise cover it."""
+    css = (ROOT / 'static' / 'css' / 'components' / 'rate-wizard.css').read_text(encoding='utf-8')
+    css = re.sub(r'/\*.*?\*/', '', css, flags=re.S)
+
+    base = css[css.index('.rmg__actions {'):]
+    base = base[:base.index('}')]
+    assert 'position: sticky' in base, 'the actions row is not pinned on a desktop'
+
+    block = css[css.index('@media (max-width: 1023px) {'):]
+    block = block[:block.index('\n}\n')]
+    assert '.rmg__actions' in block and 'env(safe-area-inset-bottom' in block, 'nothing clears the fixed mobile tab bar'
+
+
+
     games waiting. Sticky, and clearing the fixed mobile tab bar that would otherwise cover it."""
     css = (ROOT / 'static' / 'css' / 'components' / 'rate-wizard.css').read_text(encoding='utf-8')
 

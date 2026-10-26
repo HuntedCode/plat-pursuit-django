@@ -26,7 +26,10 @@ below with no outer wrapper.
     {# ── Identity ───────────────────────────────────────────────────────────────────────────── #}
     <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
         <div class="card-body p-4 md:p-5 lg:p-6 pp-head-cascade">
-            <div class="flex items-start justify-between gap-3 flex-wrap">
+            {% comment %}A COLUMN ON A PHONE (review AU-06): beside the name, the tallies squeezed it into half the
+            width, so a long name and description ran five or six lines in a narrow column. They sit under it as one
+            line there, and beside it from tablet up.{% endcomment %}
+            <div class="flex flex-col gap-2 md:flex-row md:items-start md:justify-between md:gap-3">
                 {% comment %}Both the read view and the edit form are rendered, and JS swaps which is
                 `hidden`. The owner edits HERE, where the result is visible, which is the whole reason
                 there is no separate edit page.{% endcomment %}
@@ -74,10 +77,19 @@ below with no outer wrapper.
                         its own register (`--sup-t`), and a `link` colour on the anchor would override
                         the very thing the mark exists to say. Unmarked names keep `link` so they still
                         read as a link. This is the comment.html idiom.{% endcomment %}
+                        {% comment %}Not on your own list (review AU-07): "by" you, on a page only you may be able
+                        to see, says nothing.{% endcomment %}
+                        {% if not is_owner %}
                         <p class="text-xs text-base-content/50 mt-2">
                             by <a href="{% url 'profile_detail' game_list.owner.psn_username %}"
                                   class="link-hover font-semibold{% if not game_list.owner.display_mark %} link{% endif %}">{% name_mark name=game_list.owner.display_psn_username|default:game_list.owner.psn_username mark=game_list.owner.display_mark size='sm' %}</a>
                         </p>
+                        {% endif %}
+                        {% comment %}What the READER has done with this list (owner, 2026-10-26, review AU-02), the
+                        sum of the marks on its cards. Absent when they have done nothing with any of it.{% endcomment %}
+                        {% if viewer_summary %}
+                        <p class="gl-you mt-2">You: <b>{{ viewer_summary.platinumed }}</b> of {{ viewer_summary.total }} platinumed{% if viewer_summary.started %} &middot; <b>{{ viewer_summary.started }}</b> started{% endif %}</p>
+                        {% endif %}
                     </div>
 
                     {% if is_owner %}
@@ -137,8 +149,10 @@ below with no outer wrapper.
                         </fieldset>
 
                         <div class="gl-edit__foot">
+                            {% comment %}NO CANCEL (review AU-09). It sat a few rows above the Done toggle and did
+                            half of what Done does; Done (and Escape) now drop unsaved changes here too, so edit
+                            mode has one way out.{% endcomment %}
                             <button type="submit" class="pp-cta" data-gl-edit-save>Save</button>
-                            <button type="button" class="pp-cta pp-cta--ghost" data-gl-edit-cancel>Cancel</button>
                             {% comment %}DELETE, pushed to the far end of the row and styled apart,
                             because it is the one control here that cannot be undone by pressing the
                             same button again.
@@ -172,7 +186,7 @@ below with no outer wrapper.
                 so the name field rendered about eleven characters wide for a 60-character limit.
                 The counts are not what somebody is looking at mid-rename, and they come straight
                 back on save or cancel.{% endcomment %}
-                <div class="flex items-center gap-4 shrink-0 text-right" data-gl-tallies>
+                <div class="flex items-center gap-4 shrink-0 md:text-right" data-gl-tallies>
                     <div>
                         <span class="pp-tally text-primary leading-none font-bold text-xl md:text-3xl" data-game-count>{{ game_list.game_count|intcomma }}</span>
                         <span class="text-xs text-base-content/50 md:mt-1 md:block md:uppercase md:tracking-wider">games</span>
@@ -196,8 +210,18 @@ below with no outer wrapper.
             band, and the explanatory line beside them made it look like a sentence had sprouted
             controls. A rule and its own rhythm separate the two registers, which is what the header
             card wanted all along.{% endcomment %}
-            {% if can_act or is_owner %}
-            <div class="gl-actions">
+            {% comment %}SHARE (review AU-10) for everyone who can read a published list, signed in or not: the
+            owner read "Anyone with the link can read it" with no way to get the link but the address bar.{% endcomment %}
+            {% if can_act or is_owner or game_list.is_public %}
+            <div class="gl-actions" data-gl-actions>
+                {% if not is_owner and game_list.is_public and not can_act %}
+                <button type="button" class="pp-cta pp-cta--ghost" data-gl-share
+                        data-share-url="{{ request.scheme }}://{{ request.get_host }}{% url 'list_detail' game_list.id %}"
+                        data-share-title="{{ game_list.display_name }}">
+                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.59 13.51 6.83 3.98"/><path d="m15.41 6.51-6.82 3.98"/></svg>
+                    <span>Share</span>
+                </button>
+                {% endif %}
                 {% if can_act %}
                 <button type="button" class="pp-cta{% if not viewer_has_liked %} pp-cta--ghost{% endif %}"
                         data-gl-like data-url="{% url 'list_like' game_list.id %}"
@@ -216,6 +240,13 @@ below with no outer wrapper.
                         aria-pressed="{% if viewer_follows %}true{% else %}false{% endif %}">
                     <svg class="w-4 h-4" viewBox="0 0 24 24" fill="{% if viewer_follows %}currentColor{% else %}none{% endif %}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m19 21-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
                     <span data-gl-follow-label>{% if viewer_follows %}Following{% else %}Follow{% endif %}</span>
+                </button>
+
+                <button type="button" class="pp-cta pp-cta--ghost" data-gl-share
+                        data-share-url="{{ request.scheme }}://{{ request.get_host }}{% url 'list_detail' game_list.id %}"
+                        data-share-title="{{ game_list.display_name }}">
+                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.59 13.51 6.83 3.98"/><path d="m15.41 6.51-6.82 3.98"/></svg>
+                    <span>Share</span>
                 </button>
 
                 {% comment %}REPORT, and it comes LAST on purpose. Like and Follow are what this row
@@ -281,7 +312,15 @@ below with no outer wrapper.
                         <span class="gl-actions__note text-xs text-base-content/50">Only you can see this so far.</span>
                     </span>
                     <span class="contents" data-gl-public-state {% if not game_list.is_public %}hidden{% endif %}>
+                        <button type="button" class="pp-cta pp-cta--ghost" data-gl-share
+                                data-share-url="{{ request.scheme }}://{{ request.get_host }}{% url 'list_detail' game_list.id %}"
+                                data-share-title="{{ game_list.display_name }}">
+                            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.59 13.51 6.83 3.98"/><path d="m15.41 6.51-6.82 3.98"/></svg>
+                            <span>Share</span>
+                        </button>
                         <span class="gl-actions__note text-xs text-base-content/50">Published. Anyone with the link can read it.</span>
+                        {% comment %}Make private shows in EDIT MODE only (review AU-06): it is a setting you change
+                        rarely, and on a phone it pushed the owner's actions to three rows.{% endcomment %}
                         <button type="button" class="pp-cta pp-cta--ghost" data-gl-unpublish>
                             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
                             <span>Make private</span>
@@ -338,12 +377,13 @@ below with no outer wrapper.
     {% templatetag closeblock %}`: on an empty list the bar holds just the title and the adder, which
     fit one line at 375px, and reordering would strand "Games" alone on a row above the adder. The one
     state where the adder is the entire point of the page is not the state to spend a row on.{% endcomment %}
-    <div class="pp-toolbar-card pp-gbrowse__toolbar{% if items %} gl-toolbar {% endif %}">
+    {% comment %}A READER'S BAR HOLDS ONLY THE SORT once the "Games" label went (review AU-11), and a full-width
+    card around one select is chrome with nothing in it: the card frames the owner's adder and sort, a reader
+    gets the sort alone on the right.{% endcomment %}
+    <div class="{% if is_owner %}pp-toolbar-card {% else %}mb-3 {% endif %}pp-gbrowse__toolbar{% if items %} gl-toolbar {% endif %}">
         <div class="pp-gbrowse__bar">
-            <span class="pp-ltoolbar__title">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-                Games
-            </span>
+            {% comment %}NO "Games" LABEL (review AU-11): it named nothing the page does not already say. The
+            adder leads the row on your own list; on anyone else's the sort sits on the right alone.{% endcomment %}
 
             {% if is_owner %}
             {% comment %}The adder. One of the three entry points the design conversation settled (the
@@ -419,7 +459,7 @@ below with no outer wrapper.
             the header and the chrome. `innerHTML` into a stable wrapper, the pattern that works on
             this site (the outerHTML variant duplicated the page on My Lists).{% endcomment %}
             {% if items %}
-            <form data-browse-form id="gl-detail-form" class="pp-gbrowse__sort"
+            <form data-browse-form id="gl-detail-form" class="pp-gbrowse__sort ml-auto"
                   hx-get="{% url 'list_detail' game_list.id %}"
                   hx-target="#gl-items-panel"
                   hx-swap="innerHTML"

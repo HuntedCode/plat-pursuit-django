@@ -10,7 +10,7 @@ flash. Same reason the browse partial does it.
      data-scope="{{ scope }}">
     {% for game_list in game_lists %}
     {# `mark_index` desyncs the supporter shimmer per tile; the tile explains why it is passed, not inherited. #}
-    {% include 'gamelists/partials/list_tile.html' with game_list=game_list show_privacy=is_mine mark_index=forloop.counter0 %}
+    {% include 'gamelists/partials/list_tile.html' with game_list=game_list show_privacy=is_mine mine=is_mine mark_index=forloop.counter0 %}
     {% empty %}
     <div class="pp-gtile-empty">
         {% if is_mine %}

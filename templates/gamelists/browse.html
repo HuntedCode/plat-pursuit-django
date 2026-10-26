@@ -45,7 +45,7 @@ the canonical page. `follow` so the tiles still pass authority to the lists them
                 the same optical level as a display number, so the two compete; My lists sits in the left
                 column instead.{% endcomment %}
                 <div class="text-right flex items-baseline gap-1 whitespace-nowrap md:block shrink-0">
-                    <span id="gl-count" class="pp-tally text-primary leading-none font-bold text-sm md:text-3xl" data-countup="{{ paginator.count }}">{{ paginator.count|intcomma }}</span>
+                    <span id="gl-count" class="pp-tally text-primary leading-none font-bold text-sm md:text-3xl" data-countup="{{ lists_shown }}">{{ lists_shown|intcomma }}</span>
                     <span class="text-xs text-base-content/50 md:mt-1 md:block md:uppercase md:tracking-wider">lists shown</span>
                 </div>
             </div>
@@ -59,7 +59,7 @@ the canonical page. `follow` so the tiles still pass authority to the lists them
             <span class="pp-minibar__id">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
                 <span class="pp-minibar__title">Lists</span>
-                <span class="pp-minibar__count" data-minibar-count title="shown">{{ paginator.count|intcomma }}</span>
+                <span class="pp-minibar__count" data-minibar-count title="shown">{{ lists_shown|intcomma }}</span>
             </span>
             <div class="pp-minibar__controls">
                 <span class="pp-minibar__search">
@@ -145,9 +145,9 @@ the canonical page. `follow` so the tiles still pass authority to the lists them
     list whose words a moderator has hidden, so this should be unreachable -- but "should be
     unreachable" is how the `profile_views.py:670` leak happened, and the readers cost nothing.
 
-    A DELIBERATE DUPLICATE. The featured list is public, so it also appears in the grid below. Left
-    that way on purpose: excluding one row mid-pagination drifts the offsets InfiniteScroller pages
-    on, which makes page two skip or repeat a list. A band and a tile read as different objects.
+    NOT REPEATED IN THE GRID (owner, 2026-10-26, review AU-12). While the band shows, the grid's QUERY
+    leaves the featured list out (`BrowseListsView._pick_id`), on every page alike, so InfiniteScroller's
+    offsets stay true. With a filter on, the band collapses and the list is back in the results.
     {% endcomment %}
     {% comment %}THE COLLAPSE WRAPPER exists because the band is outside the swap target.
 
@@ -241,7 +241,7 @@ the canonical page. `follow` so the tiles still pass authority to the lists them
             and the list itself is one click away.
 
             `item.concept` is already joined by `cover_games_for`, so the name is free.{% endcomment %}
-            <img src="{{ item.display_image_url }}" alt=""
+            <img src="{{ item.display_image_url_small }}" alt=""
                  title="{{ item.concept.unified_title }}"
                  loading="{% if has_filters %}lazy{% else %}eager{% endif %}"
                  class="gl-spotlight__cover{% if not item.has_cover_art %} gl-spotlight__cover--icon{% endif %}" />
