@@ -83,6 +83,9 @@ def badge_catalog_stats():
 #: twice on the page). The hero first, so it gets the best-attended piece.
 FORGE_SLOTS = ('hero', 'earned', 'holo', 'mastered', 'ultra', 'legacy')
 
+#: The finishes a showcase peek can be asked to wear (`GroupBadgeInspectView`, `?finish=`).
+SHOWCASE_FINISHES = ('holo', 'mastered')
+
 
 def badge_forge_medallions(subjects):
     """Edition medallions for the how-it-works page. A teaching abstraction, so it composes a REAL badge's
@@ -109,6 +112,8 @@ def badge_forge_medallions(subjects):
             'art_layers': [plate(metal)] + ([subject['src']] if subject else []),
             'is_holographic': holo or mastered,
             'is_mastered': mastered,
+            # The finish this medallion wears, passed to its quick-peek so the badge keeps it when picked up.
+            'finish': 'mastered' if mastered else 'holo' if holo else None,
             'series_name': subject['series'] if subject else 'Platinum Pursuit',
             # The real badge behind the art: tapping the medallion opens its quick-peek (like every other
             # medallion on the page). None for a plate-only slot, which is then non-interactive.
@@ -480,6 +485,13 @@ class GroupBadgeInspectView(View):
             # Anon peek = full-colour display piece (the tier system's showcase), never the greyed unearned art.
             gv.frame['state'] = 'earned'
             gv.frame['owner_name'] = None
+            # ?finish=holo|mastered: the showcase in the finish of the medallion that was tapped. How badges
+            # work shows its holo and Mastery beats on real badges, and a plain peek dropped the very finish
+            # the beat teaches. Showcase only: a hunter's own peek always shows their real state.
+            finish = request.GET.get('finish')
+            if finish in SHOWCASE_FINISHES:
+                gv.frame['is_holographic'] = True
+                gv.frame['is_mastered'] = finish == 'mastered'
 
         return render(request, 'components/group_badge_modal.html', {
             'gv': gv, 'series': gb.series, 'detail': detail,

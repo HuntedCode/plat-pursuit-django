@@ -282,6 +282,40 @@ def test_inspect_view_anon_renders_showcase(client):
     assert 'data-state="earned"' in body            # showcase forces the full-colour medallion
 
 
+@pytest.mark.parametrize('finish, holo, mastered', [
+    ('mastered', True, True),
+    ('holo', True, False),
+    ('', False, False),
+    ('gold', False, False),          # not a finish: ignored
+])
+def test_the_showcase_peek_wears_the_finish_it_is_asked_for(client, finish, holo, mastered):
+    """How badges work's holo and Mastery medallions open the peek in their own finish (owner, 2026-10-26:
+    the Mastery hero lost its rim and crown when picked up)."""
+    series = BadgeSeriesFactory(series_slug='fin', name='Finish')
+    _stage(series, 1, ['PS5'])
+    gb = _group(series, 'ultra-hd', 'Ultra HD', ['PS4', 'PS5'])
+    url = reverse('group_badge_quick_peek', kwargs={'group_badge_id': gb.id})
+    body = client.get(url, {'finish': finish}).content.decode()
+    assert ('pp-med--holographic' in body) is holo
+    assert ('pp-med--mastered' in body) is mastered
+    assert ('pp-med__crown' in body) is mastered
+
+
+def test_a_finish_never_dresses_up_a_hunters_own_peek(client):
+    """The finish is for the showcase only: a hunter's peek shows the state they really hold."""
+    series = BadgeSeriesFactory(series_slug='own', name='Own')
+    s1 = _stage(series, 1, ['PS5'])
+    gb = _group(series, 'ultra-hd', 'Ultra HD', ['PS4', 'PS5'])
+    profile = ProfileFactory()
+    _complete(profile, s1['PS5'])
+    evaluate_and_apply(profile, [gb])               # earned, not holo, not mastered
+    client.force_login(profile.user)
+    url = reverse('group_badge_progress_peek', kwargs={'psn_username': profile.psn_username, 'group_badge_id': gb.id})
+    body = client.get(url, {'finish': 'mastered'}).content.decode()
+    assert 'data-state="earned"' in body
+    assert 'pp-med--mastered' not in body and 'pp-med--holographic' not in body
+
+
 def test_inspect_funder_credit_wears_the_mark_and_walks_to_the_profile(client):
     """The art-funder credit is a person, not a string: a marked funder's name renders through
     the mark system (supporter stars and colour) and links to their public profile."""

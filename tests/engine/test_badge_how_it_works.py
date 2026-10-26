@@ -461,3 +461,27 @@ def test_each_medallion_opens_the_badge_its_art_belongs_to():
     for slot in FORGE_SLOTS:
         med = ctx['forge_meds'][slot]
         assert owner[med['art_layers'][1].rsplit('/', 1)[1]] == med['source_id'], slot
+
+
+@pytest.mark.django_db
+def test_each_medallion_asks_its_peek_for_its_own_finish(client):
+    """The Mastery hero and the holo / Mastery beats open the peek in the finish they wear; the claimed beat
+    asks for none (owner, 2026-10-26: the hero lost its rim and crown when picked up)."""
+    _art_badges(6)
+    _, _, ctx = _page_art()
+    meds = ctx['forge_meds']
+    body = client.get(reverse('badge_how_it_works')).content.decode()
+    for slot, finish in (('hero', 'mastered'), ('earned', None), ('holo', 'holo'), ('mastered', 'mastered')):
+        cell = re.search(rf'data-badge-id="{meds[slot]["source_id"]}"([^>]*)>', body)
+        assert cell, slot
+        got = re.search(r'data-peek-finish="([^"]+)"', cell.group(1))
+        assert (got.group(1) if got else None) == finish, slot
+
+
+def test_the_peek_request_carries_the_finish():
+    page = (ROOT / 'templates' / 'trophies' / 'badge_how_it_works.html').read_text(encoding='utf-8')
+    start = page.index('function openPeek(cell)')
+    open_peek = page[start:page.index('peek.open(url, cell)', start) + len('peek.open(url, cell)')]
+    assert "cell.getAttribute('data-peek-finish')" in open_peek
+    assert "url += '?finish=' + encodeURIComponent(finish)" in open_peek
+    assert open_peek.index("url += '?finish='") < open_peek.index('peek.open(url, cell)')
