@@ -584,8 +584,8 @@ class SupportStorefrontView(TemplateView):
         # is how YOU will appear", and a stand-in silhouette beside a real name half-keeps it.
         context['viewer_avatar'] = profile.avatar_url if profile else None
         context.update(self._support())
-        # The header's artwork. `badge_subject_art` returns the commissioned SUBJECT drawings -- one
-        # per series, avatar submissions skipped, bounded scan -- which is the part an artist actually
+        # The header's artwork. `badge_subject_art` returns the commissioned SUBJECT drawings -- each
+        # piece once, avatar submissions skipped, bounded scan -- which is the part an artist actually
         # drew and the one thing on this page nobody else could show.
         #
         # It is here rather than decorative because visual-identity.md calls the badge artwork the

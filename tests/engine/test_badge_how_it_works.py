@@ -211,10 +211,9 @@ def test_the_page_leads_with_real_badge_artwork(client):
     "if the chrome ever fights the art, the chrome loses" -- so a page teaching the badge system that
     shows no badges is teaching around its subject. The first cut was four captions and a table.
 
-    Every medallion here is composed by `badge_forge_medallions()` from a REAL live badge, shared verbatim
-    with the browse page's first-run modal so the two cannot show different art. It degrades to the bare
-    metal plate on an empty catalog, which is why this asserts the OBJECT renders rather than asserting a
-    particular badge.
+    Every medallion here is composed by `badge_forge_medallions()` from a REAL live badge. It degrades to the
+    bare metal plate on an empty catalog, which is why this asserts the OBJECT renders rather than asserting
+    a particular badge.
     """
     body = client.get(reverse('badge_how_it_works')).content.decode()
 
@@ -335,23 +334,16 @@ def test_the_artwork_strip_shows_the_pieces_not_the_medallions(client):
     assert 'pp-forge-peek' not in craft, 'the artwork strip opens badge detail, answering a different question'
 
 
-def test_the_subject_art_helper_is_one_piece_per_series_and_skips_avatars():
-    """Two rules the claim depends on. One per SERIES, or the strip shows the same drawing four times on
-    different metals. And no avatar subjects: a submitter's profile picture is a real custom image as far
-    as `art_layers()` can tell, but it is not a commissioned piece, and including one would make the
-    handmade claim on this page false."""
+def test_the_subject_art_helper_skips_avatars_and_stays_bounded():
+    """No avatar subjects: a submitter's profile picture is a real custom image as far as `art_layers()` can
+    tell, but it is not a commissioned piece, and including one would make the handmade claim on this page
+    false. (That each PIECE shows once is pinned by behaviour below.)"""
     src = (ROOT / 'trophies' / 'views' / 'badge_views.py').read_text(encoding='utf-8')
     fn = src[src.index('def badge_subject_art('):]
     nxt = fn.find('\ndef ')          # it may be the last function in its block
     fn = fn if nxt == -1 else fn[:nxt]
-
-    # The GUARD itself, not the names it uses. `seen` and `cand.series_id` both survive in `seen.add(...)`
-    # after the skip is deleted, so checking for those passes against a helper that no longer dedupes.
-    assert 'if cand.series_id in seen:' in fn, (
-        'the helper no longer skips repeat series, so the strip can show one drawing four times'
-    )
     assert "art.get('is_avatar')" in fn, 'avatar subjects are no longer excluded from the handmade claim'
-    assert '[:60]' in fn, 'the scan is unbounded, so a large catalog turns this into a table sweep'
+    assert '[:80]' in fn, 'the scan is unbounded, so a large catalog turns this into a table sweep'
 
 
 def test_the_journey_stacks_its_art_above_the_copy_on_a_phone():
@@ -382,3 +374,62 @@ def test_the_journey_stacks_its_art_above_the_copy_on_a_phone():
     assert 'justify-items' not in block, (
         'justify-items on the beat sizes the body to max-content rather than the full track'
     )
+
+
+# -- no artwork twice (owner, 2026-10-26) ---------------------------------------------------------------------
+
+def _art_badges(n, start=0):
+    """`n` live badges with their own art, most-earned first."""
+    from tests.factories import BadgeSeriesFactory, GroupBadgeFactory
+    return [GroupBadgeFactory(series=BadgeSeriesFactory(name=f'Art {i}', badge_image=f'badges/art-{i}.png'),
+                              is_live=True, earned_count=100 - i)
+            for i in range(start, start + n)]
+
+
+def _page_art():
+    """The pieces each slot shows, from the view's own context: (medallion subjects, handmade pieces)."""
+    from django.test import RequestFactory
+    from trophies.views.badge_views import FORGE_SLOTS, BadgeHowItWorksView
+
+    view = BadgeHowItWorksView()
+    view.setup(RequestFactory().get('/'))
+    ctx = view.get_context_data()
+    meds = [ctx['forge_meds'][slot]['art_layers'][1:] for slot in FORGE_SLOTS]   # [] = plate only
+    return [m[0] for m in meds if m], [piece['src'] for piece in ctx['craft_art']], ctx
+
+
+@pytest.mark.django_db
+def test_no_artwork_shows_twice_on_the_page():
+    _art_badges(12)
+    meds, craft, _ = _page_art()
+    assert len(meds) == 6 and len(craft) == 4
+    assert len(set(meds + craft)) == 10, 'a piece shows twice'
+
+
+@pytest.mark.django_db
+def test_a_small_catalog_leaves_slots_on_the_bare_plate_rather_than_repeat():
+    _art_badges(3)
+    meds, craft, ctx = _page_art()
+    assert len(meds) == 3 and craft == [] and len(set(meds)) == 3
+    assert ctx['forge_meds']['hero']['art_layers'][1:], 'the hero gets the first piece'
+
+
+@pytest.mark.django_db
+def test_two_editions_and_sister_series_sharing_one_piece_count_once():
+    from tests.factories import BadgeSeriesFactory, GroupBadgeFactory, PlatformGroupFactory
+    lender = BadgeSeriesFactory(name='Lender', badge_image='badges/art-0.png')
+    GroupBadgeFactory(series=lender, is_live=True, earned_count=100)
+    GroupBadgeFactory(series=lender, is_live=True, earned_count=99, platform_group=PlatformGroupFactory(key='lg'))
+    GroupBadgeFactory(series=BadgeSeriesFactory(name='Borrower', artwork_source=lender), is_live=True,
+                      earned_count=98)
+    meds, craft, _ = _page_art()
+    assert len(meds + craft) == 1
+
+
+@pytest.mark.django_db
+def test_each_medallion_opens_its_own_badge(client):
+    badges = _art_badges(6)
+    body = client.get(reverse('badge_how_it_works')).content.decode()
+    ids = re.findall(r'pp-forge-peek"\s+data-badge-id="(\d+)"', body)
+    assert len(ids) == 4 and len(set(ids)) == 4, ids   # hero + beats 3, 4, 5 are tappable
+    assert set(map(int, ids)) <= {gb.id for gb in badges}

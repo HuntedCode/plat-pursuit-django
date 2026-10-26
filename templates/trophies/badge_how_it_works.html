@@ -40,10 +40,10 @@ quick-peek (`PlatPursuit.Medallion.detailModal`), `.pp-tally`, `.pp-head-cascade
             explicit rather than discoverable. Gated on `source_id`: on an empty catalog the medallions
             are plate-only illustrations with no badge behind them, and a button that opens nothing is
             worse than no button. {% endcomment %}
-            <span class="pp-hiw__medwrap{% if forge_meds.source_id %} pp-forge-peek{% endif %}"
-                  {% if forge_meds.source_id %}data-badge-id="{{ forge_meds.source_id }}" role="button" tabindex="0" aria-label="Inspect this badge"{% endif %}>
-                {% include 'components/badge_medallion.html' with frame=forge_meds.mastered no_id=True %}
-                {% if forge_meds.source_id %}
+            <span class="pp-hiw__medwrap{% if forge_meds.hero.source_id %} pp-forge-peek{% endif %}"
+                  {% if forge_meds.hero.source_id %}data-badge-id="{{ forge_meds.hero.source_id }}" role="button" tabindex="0" aria-label="Inspect this badge"{% endif %}>
+                {% include 'components/badge_medallion.html' with frame=forge_meds.hero no_id=True %}
+                {% if forge_meds.hero.source_id %}
                 <span class="pp-hiw__poke" aria-hidden="true">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11.5V6a2 2 0 1 1 4 0v5"/><path d="M13 11V4.5a2 2 0 1 1 4 0V13"/><path d="M17 12.5V9a2 2 0 1 1 4 0v7a6 6 0 0 1-6 6h-2a7 7 0 0 1-7-7v-4a2 2 0 1 1 4 0"/></svg>
                     Tap to inspect
@@ -134,8 +134,8 @@ quick-peek (`PlatPursuit.Medallion.detailModal`), `.pp-tally`, `.pp-head-cascade
 
         <li class="pp-hiw__step pp-hiw__step--claim">
             <span class="pp-hiw__art pp-hiw__art--med">
-                <span class="pp-hiw__medwrap{% if forge_meds.source_id %} pp-forge-peek{% endif %}"
-                      {% if forge_meds.source_id %}data-badge-id="{{ forge_meds.source_id }}" role="button" tabindex="0" aria-label="Inspect this badge"{% endif %}>
+                <span class="pp-hiw__medwrap{% if forge_meds.earned.source_id %} pp-forge-peek{% endif %}"
+                      {% if forge_meds.earned.source_id %}data-badge-id="{{ forge_meds.earned.source_id }}" role="button" tabindex="0" aria-label="Inspect this badge"{% endif %}>
                     {% include 'components/badge_medallion.html' with frame=forge_meds.earned no_id=True %}
                 </span>
             </span>
@@ -149,17 +149,17 @@ quick-peek (`PlatPursuit.Medallion.detailModal`), `.pp-tally`, `.pp-head-cascade
             </div>
         </li>
 
-        {% comment %} The payoff. Beat 4 is the SAME medallion as beat 3, holographic, and beat 5 the same again,
-        mastered (phase 4: holo plus a gold rim and a crown). The transformation is the teaching, and showing it
-        beats describing it.
+        {% comment %} The payoff. Beat 4 is a medallion gone holographic and beat 5 one mastered (phase 4: holo
+        plus a gold rim and a crown), each a different badge: no artwork shows twice on this page (owner,
+        2026-10-26), so the states read side by side rather than as one badge changing.
 
         A toggle was built here and removed: letting the reader flip it between states sounded better
         than it read. The two beats sitting next to each other already make the comparison, and a control
         asking to be pressed turned the payoff into a chore. {% endcomment %}
         <li class="pp-hiw__step pp-hiw__step--master">
             <span class="pp-hiw__art pp-hiw__art--med">
-                <span class="pp-hiw__medwrap{% if forge_meds.source_id %} pp-forge-peek{% endif %}"
-                      {% if forge_meds.source_id %}data-badge-id="{{ forge_meds.source_id }}" role="button" tabindex="0" aria-label="Inspect this badge"{% endif %}>
+                <span class="pp-hiw__medwrap{% if forge_meds.holo.source_id %} pp-forge-peek{% endif %}"
+                      {% if forge_meds.holo.source_id %}data-badge-id="{{ forge_meds.holo.source_id }}" role="button" tabindex="0" aria-label="Inspect this badge"{% endif %}>
                     {% include 'components/badge_medallion.html' with frame=forge_meds.holo no_id=True %}
                 </span>
             </span>
@@ -174,8 +174,8 @@ quick-peek (`PlatPursuit.Medallion.detailModal`), `.pp-tally`, `.pp-head-cascade
         </li>
         <li class="pp-hiw__step pp-hiw__step--mastery">
             <span class="pp-hiw__art pp-hiw__art--med">
-                <span class="pp-hiw__medwrap{% if forge_meds.source_id %} pp-forge-peek{% endif %}"
-                      {% if forge_meds.source_id %}data-badge-id="{{ forge_meds.source_id }}" role="button" tabindex="0" aria-label="Inspect this badge"{% endif %}>
+                <span class="pp-hiw__medwrap{% if forge_meds.mastered.source_id %} pp-forge-peek{% endif %}"
+                      {% if forge_meds.mastered.source_id %}data-badge-id="{{ forge_meds.mastered.source_id }}" role="button" tabindex="0" aria-label="Inspect this badge"{% endif %}>
                     {% include 'components/badge_medallion.html' with frame=forge_meds.mastered no_id=True %}
                 </span>
             </span>
@@ -206,7 +206,8 @@ quick-peek (`PlatPursuit.Medallion.detailModal`), `.pp-tally`, `.pp-head-cascade
         {% comment %} The pieces themselves, off the medallion. A sentence claiming the art is hand-drawn
         is worth less than four pieces of it sitting underneath, and the medallion form would work against
         the point: the plate, shape and backing are identical across an edition, so it is the SUBJECT that
-        shows a person drew this one. One per series for the same reason (see `badge_subject_art`).
+        shows a person drew this one. Distinct pieces, none of them on a medallion above (see
+        `badge_subject_art`).
 
         Not tappable, deliberately. The peek opens a badge, and this strip is about the ARTWORK; sending
         a reader into a badge detail from here would answer a question they did not ask. {% endcomment %}
