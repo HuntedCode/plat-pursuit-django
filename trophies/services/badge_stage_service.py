@@ -247,3 +247,38 @@ def write_stages(series, plan):
                 title=planned.title,
             )
             stage.concepts.set(planned.concepts)
+
+
+def open_stage_slot(series_slug, number, moving_pk=None) -> int:
+    """Make room for a stage at `number` in `series_slug`: the stage there, and the run of stages straight after
+    it, each move up one, stopping at the first free number, so a gap further down is left alone. Returns how
+    many moved; 0 when the number is free. For the admin's "insert here" (StageAdminForm).
+
+    `moving_pk` is a stage being renumbered INTO the slot (the change form). Its own number counts as free,
+    so moving stage 5 to 3 moves 3 and 4 up into 4 and 5 and leaves no gap; moving a stage further DOWN the
+    list (or to another series) frees its old number. It is parked out of the way first, because the shift
+    can need its number. Rows move one at a time from the top down: `unique_together(series_slug,
+    stage_number)` is checked per row, so a single `stage_number + 1` UPDATE can collide halfway through. The
+    series' rows are locked first, so two curators inserting at once wait for each other instead of one
+    hitting an IntegrityError.
+
+    No badge, hold or XP depends on a stage's number (the badge page renumbers 1..N and the engine keys stages
+    live). The Challenge Optimizer does show authored numbers ("Stage 3") from its 15-minute pool cache, so a
+    plan built just before a renumber can show the old ones until that expires.
+    """
+    with transaction.atomic():
+        series = Stage.objects.select_for_update().filter(series_slug=series_slug)
+        taken = dict(series.filter(stage_number__gte=number).exclude(pk=moving_pk)
+                     .values_list('stage_number', 'pk'))
+        run = []
+        while number + len(run) in taken:
+            run.append(taken[number + len(run)])
+        if not run:
+            return 0
+        if moving_pk is not None:
+            # Above every stage in every series, so it collides in neither its old series nor its new one.
+            top = Stage.objects.aggregate(n=Max('stage_number'))['n'] or 0
+            Stage.objects.filter(pk=moving_pk).update(stage_number=top + 2)
+        for offset in range(len(run) - 1, -1, -1):
+            Stage.objects.filter(pk=run[offset]).update(stage_number=number + offset + 1)
+    return len(run)

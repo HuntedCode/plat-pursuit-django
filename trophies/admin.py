@@ -1448,11 +1448,25 @@ class ConceptBundleInline(admin.TabularInline):
 
 class StageAdminForm(forms.ModelForm):
     """Rejects standalone Stage.concepts that overlap with existing bundle members, and trophy groups whose
-    list is already on the stage another way."""
+    list is already on the stage another way. `insert_here` puts the stage at a number that is taken by moving
+    the stage there, and the ones straight after it, up one (StageAdmin.save_model)."""
+
+    insert_here = forms.BooleanField(
+        required=False, label='Insert here',
+        help_text="If this stage number is taken in this series, move that stage and the ones straight after "
+                  "it up one to make room.",
+    )
 
     class Meta:
         model = Stage
         fields = '__all__'
+
+    def validate_unique(self):
+        """With `insert_here`, a taken number is not an error: save_model makes room before the row is written.
+        `unique_together(series_slug, stage_number)` is the only uniqueness rule a Stage has."""
+        if self.cleaned_data.get('insert_here'):
+            return
+        super().validate_unique()
 
     def clean_concepts(self):
         concepts = self.cleaned_data.get('concepts') or []
@@ -1512,6 +1526,19 @@ class StageAdmin(admin.ModelAdmin):
     autocomplete_fields = ['concepts', 'trophy_groups']
     inlines = [ConceptBundleInline]
     actions = ['duplicate_to_series', 'convert_to_contract']
+
+    def save_model(self, request, obj, form, change):
+        """`insert_here`: make room at the chosen number first (badge_stage_service.open_stage_slot). The admin
+        wraps the whole save in one transaction, so a failure later in it leaves no stage moved."""
+        from trophies.services.badge_stage_service import open_stage_slot
+
+        moved = 0
+        if form.cleaned_data.get('insert_here'):
+            moved = open_stage_slot(obj.series_slug, obj.stage_number, moving_pk=obj.pk)
+        super().save_model(request, obj, form, change)
+        if moved:
+            self.message_user(request, f"Moved {moved} stage{'s' if moved != 1 else ''} in {obj.series_slug} "
+                                       f"up one to make room for stage {obj.stage_number}.")
 
     # The confirm page posts this back so the action can tell "the curator just clicked the dropdown"
     # from "the curator typed a slug and submitted". Without it a blank box would read as a fresh
