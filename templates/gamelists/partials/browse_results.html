@@ -16,11 +16,14 @@ definition in the view (a `?q=` under three characters filters nothing and must 
 second copy in JavaScript is exactly the drift that made the band vanish on the first keystroke of
 live search.{% endcomment %}
 <div id="items-grid" class="pp-gtile-grid{% if request.htmx %} pp-reveal{% endif %}"
-     data-result-count="{{ paginator.count }}" data-has-filters="{% if has_filters %}1{% else %}0{% endif %}">
+     data-result-count="{{ lists_shown }}" data-has-filters="{% if has_filters %}1{% else %}0{% endif %}">
     {% for game_list in object_list %}
     {# `mark_index` desyncs the supporter shimmer per tile; the tile explains why it is passed, not inherited. #}
     {% include 'gamelists/partials/list_tile.html' with game_list=game_list mark_index=forloop.counter0 %}
     {% empty %}
+    {% comment %}`lists_shown`, not the grid: the featured list sits in the band above and is left out of the grid
+    (review AU-12), so a catalogue of ONE public list renders an empty grid that is not an empty catalogue.{% endcomment %}
+    {% if not lists_shown %}
     <div class="pp-gtile-empty">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
         {% if query %}
@@ -43,5 +46,6 @@ live search.{% endcomment %}
             {% endif %}
         </div>
     </div>
+    {% endif %}
     {% endfor %}
 </div>

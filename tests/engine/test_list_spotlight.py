@@ -397,20 +397,26 @@ def test_a_filtered_full_page_pays_one_lookup_and_no_more(viewer):
     ({'HTTP_HX_REQUEST': 'true'}, 'an HTMX filter swap'),
     ({'HTTP_X_REQUESTED_WITH': 'XMLHttpRequest'}, 'an infinite-scroll page fetch'),
 ])
-def test_a_partial_render_does_not_query_for_the_band(viewer, headers, label):
+def test_a_partial_render_never_builds_the_band(viewer, headers, label):
     """THE EXPENSIVE ONE IF IT REGRESSES. Both of these render the grid partial, which does not
     contain the band -- but they run `get_context_data` all the same. Live search fires one per
-    keystroke."""
-    _feature(_list(name='Weekend Platinums'))
+    keystroke.
+
+    An UNFILTERED partial (the next page, a cleared search) asks for the featured list ONCE, because
+    the grid leaves it out of every page alike (review AU-12): that is one indexed row, never the band's
+    covers. A filtered one asks nothing."""
+    pick = _list(name='Weekend Platinums')
+    _feature(pick)
 
     with CaptureQueriesContext(connection) as ctx:
         resp = viewer.get(BROWSE, **headers)
-
     assert resp.status_code == 200
-    # NOT asserting the band is absent from the body: a partial render returns
-    # `browse_results.html`, which contains no band markup whatever the gate does, so that
-    # assertion could never fail. The query is the only observable difference.
-    assert _spotlight_queries(ctx) == [], f'{label} queried for a band it never renders'
+    assert len(_spotlight_queries(ctx)) == 1, f'{label} queried {len(_spotlight_queries(ctx))} times'
+    assert f'/community/lists/{pick.pk}/' not in resp.content.decode(), 'the pick is back in the grid'
+
+    with CaptureQueriesContext(connection) as ctx:
+        viewer.get(BROWSE + '?q=zelda', **headers)
+    assert _spotlight_queries(ctx) == [], f'{label} with a filter on queried for the pick'
 
 
 # ── the structural rule ──────────────────────────────────────────────────────────────────────────
@@ -796,3 +802,36 @@ def test_the_admin_form_cannot_set_featured_at_directly(owner_client):
     assert 'Weekend Platinums' in body, 'the change form did not render'
     assert 'name="featured_at_0"' not in body and 'name="featured_at"' not in body, (
         'featured_at is editable on the change form, which bypasses feature_selected entirely')
+
+
+
+# -- the pick left out of the grid (review AU-12) -------------------------------------------------------------
+
+def _grid_ids(html):
+    grid = html[html.index('id="items-grid"'):] if 'id="items-grid"' in html else html
+    return re.findall(r'href="/community/lists/(\d+)/" class="pp-gcard', grid)
+
+
+def test_paging_past_the_first_page_neither_repeats_nor_skips_a_list(viewer):
+    lists = [_list(name=f'List {n:02d}', games=1) for n in range(30)]
+    pick = lists[5]
+    _feature(pick)
+    first = _grid_ids(viewer.get(BROWSE + '?sort=alpha').content.decode())
+    second = _grid_ids(viewer.get(BROWSE + '?sort=alpha&page=2', HTTP_X_REQUESTED_WITH='XMLHttpRequest').content.decode())
+    seen = first + second
+    assert len(seen) == len(set(seen)) == 29, (len(seen), len(set(seen)))
+    assert str(pick.pk) not in seen
+
+
+def test_a_filter_puts_the_pick_back_in_the_results(viewer):
+    pick = _list(name='Zelda marathon', games=1)
+    _feature(pick)
+    body = viewer.get(BROWSE + '?q=zelda').content.decode()
+    assert str(pick.pk) in _grid_ids(body)
+
+
+def test_a_catalogue_of_one_featured_list_shows_no_empty_state(viewer):
+    _feature(_list(name='The only one', games=1))
+    body = viewer.get(BROWSE).content.decode()
+    assert 'No public lists yet' not in body
+    assert re.search(r'id="gl-count"[^>]*>1<', body), 'the count does not include the pick'

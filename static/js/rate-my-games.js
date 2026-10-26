@@ -60,7 +60,9 @@ window.PlatPursuit = window.PlatPursuit || {};
             this.wireTrophyPanel();
             this.wireForm();
 
-            document.querySelectorAll('.scard__value[data-countup]').forEach(function (n) { PP.countUp(n, 850); });
+            // The header's waiting counts rise into place (review AU-05 made them one line; the ids stayed).
+            document.querySelectorAll('#rmg-waiting-base[data-countup], #rmg-waiting-dlc[data-countup]')
+                .forEach(function (n) { PP.countUp(n, 850); });
 
             this.syncTabs();
             // reset() rather than load(): onPageReady runs this again on an HTMX history restore, where the

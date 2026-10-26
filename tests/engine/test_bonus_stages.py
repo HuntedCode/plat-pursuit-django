@@ -163,7 +163,6 @@ def test_a_bonus_stage_whose_game_went_unobtainable_is_still_a_bonus():
 
 
 def test_admin_shows_and_filters_the_bonus_flag():
-    from trophies.admin import StageAdmin, StageInline
+    from trophies.admin import StageAdmin
 
     assert 'is_bonus' in StageAdmin.list_display and 'is_bonus' in StageAdmin.list_filter
-    assert 'is_bonus' in StageInline.fields

@@ -1,0 +1,15 @@
+{% comment %}THE HUNTER'S MARK (Page Principles rule 1): what the viewer has done with a game, on its cover. A
+progress bar along the cover's bottom edge, and "Platinum" or their percentage on the art just above it. Shared by
+the browse game cards and a game list's cards (review AU-02), so a game reads the same wherever you meet it.
+
+Expects `pg` (`has_plat`, `progress`; a ProfileGame or `gamelists.services.viewer_progress`'s best version) and
+`chase` (the game has a platinum to chase). Renders nothing for a game the viewer has not started. Lives inside
+`.pp-gcard__cover`, which positions it.
+
+The fill colour encodes the state (5): plat + 100% = platinum; plat earned but under 100% (post-plat DLC) = muted
+teal; 100% without a plat = green; a plat available but not yet earned = amber (the hunt); progress with no plat
+to chase = slate.{% endcomment %}
+{% if pg and pg.progress > 0 %}
+<span class="pp-gcard__bar"><span class="pp-gcard__barfill pp-gcard__barfill--{% if pg.has_plat and pg.progress == 100 %}plat{% elif pg.has_plat %}platdlc{% elif pg.progress == 100 %}full{% elif chase %}chase{% else %}prog{% endif %}" style="width: {{ pg.progress }}%"></span></span>
+<span class="pp-gcard__mark{% if pg.has_plat %} pp-gcard__mark--plat{% endif %}">{% if pg.has_plat %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>Platinum{% else %}{{ pg.progress }}%{% endif %}</span>
+{% endif %}

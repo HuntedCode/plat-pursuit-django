@@ -599,8 +599,17 @@ def test_the_page_uses_the_shared_primitives():
     html = _markup()
 
     for primitive in ('pp-switch', 'pp-horizon', 'pp-bgal__chip', 'pp-gbrowse__spinner',
-                      'pp-head-cascade', 'pp-tally', 'scard'):
+                      'pp-head-cascade', 'pp-factline'):
         assert primitive in html, f'{primitive} is not used -- something was hand-rolled instead'
+
+
+def test_what_is_left_is_one_line_not_four_tiles():
+    """Review AU-05: four stat tiles ("Games waiting 89", "Games total 89", the same for DLC) filled a phone's
+    first screen and pushed the game to rate under the pinned bar. The waiting counts keep their ids, which
+    `tickWaiting` counts down live."""
+    html = _markup()
+    assert 'scard' not in html, 'the stat tiles are back'
+    assert 'id="rmg-waiting-base"' in html and 'id="rmg-waiting-dlc"' in html
 
 
 def test_the_switcher_follows_the_site_standard():
@@ -1026,16 +1035,21 @@ def test_the_wizard_form_pairs_its_axes_at_every_width():
     )
 
 
-def test_the_wizard_actions_stay_in_reach_on_a_phone():
+def test_the_wizard_actions_stay_in_reach_on_every_screen():
     """A bulk flow charges its scroll cost once per game. Below `lg` the hero, the trophy list and the form
     stack into one column, so Skip/Submit sat under all of it -- seventy times for a hunter with seventy
-    games waiting. Sticky, and clearing the fixed mobile tab bar that would otherwise cover it."""
+    games waiting. On the owner's 1280 x 633 laptop Submit sat at 1,205px too (review AU-05). Sticky at every
+    size, and below `lg` clearing the fixed mobile tab bar that would otherwise cover it."""
     css = (ROOT / 'static' / 'css' / 'components' / 'rate-wizard.css').read_text(encoding='utf-8')
+    css = re.sub(r'/\*.*?\*/', '', css, flags=re.S)
+
+    # Every top-level `.rmg__actions` rule (column 0, so outside any media query): one of them must pin it.
+    top_level = re.findall(r'^\.rmg__actions \{([^}]*)\}', css, flags=re.M)
+    assert any('position: sticky' in body for body in top_level), 'the actions row is not pinned on a desktop'
 
     block = css[css.index('@media (max-width: 1023px) {'):]
     block = block[:block.index('\n}\n')]
-    assert '.rmg__actions' in block and 'position: sticky' in block
-    assert 'env(safe-area-inset-bottom' in block, 'nothing clears the fixed mobile tab bar'
+    assert '.rmg__actions' in block and 'env(safe-area-inset-bottom' in block, 'nothing clears the fixed mobile tab bar'
 
 
 def test_a_drag_on_a_control_never_dismisses_a_sheet():

@@ -33,7 +33,7 @@ from gamelists.models import (DESCRIPTION_MAX_LENGTH, LIST_TYPE_COLLECTION, LIST
                               GameList, GameListFollow, GameListItem, GameListLike,
                               GameListReport, GameListSection,
                               list_type_options)
-from gamelists.services import game_list_service as svc
+from gamelists.services import game_list_service as svc, viewer_progress
 from gamelists.services.covers import attach_cover_games, cover_games_for
 from trophies.services.flag_badges import work_keys_for_concepts
 from gamelists.services.game_search import (SearchRefused, page_key_expression, page_key_filter,
@@ -167,11 +167,42 @@ class BrowseListsView(HtmxListMixin, ListView):
         query = (self.request.GET.get('q') or '').strip()[:MAX_QUERY_LENGTH]
         return '' if len(query) < self.MIN_QUERY else query
 
+    def _has_filters(self):
+        """Does anything narrow the grid? Read through the SAME parsers the queryset uses, never the raw
+        querystring: `_count_filter` discards junk so `?min_games=abc` narrows nothing, and
+        `_effective_query` discards a one-or-two character `q` for the same reason. Sort is not a filter."""
+        return bool(
+            self._effective_query()
+            or _count_filter(self.request.GET.get('min_games')) is not None
+            or _count_filter(self.request.GET.get('max_games')) is not None
+        )
+
+    def _featured(self):
+        """The featured list, fetched ONCE per request whoever asks (the grid's exclusion, the band)."""
+        if not hasattr(self, '_featured_list'):
+            self._featured_list = GameList.objects.featured().select_related('owner').first()
+        return self._featured_list
+
+    def _pick_id(self):
+        """The Spotlight list's id when the band is showing (no filter on), else None: the grid leaves it
+        out, so the page does not show the same list twice (owner, 2026-10-26, review AU-12).
+
+        Left out IN THE QUERY, for every page of the grid alike, which is what keeps InfiniteScroller's
+        offsets true. (Dropping one tile from a rendered page was the thing that would shift them, and the
+        reason the duplicate was first kept.) So an unfiltered partial render (the next page, a cleared
+        search) asks for it too, though it never renders the band. A filtered one asks nothing."""
+        if self._has_filters():
+            return None
+        featured = self._featured()
+        return featured.pk if featured else None
+
     def get_queryset(self):
         # `.public()` rather than a hand-written `is_public=True, is_deleted=False`: it is the one
         # supported read path for somebody else's list, and it matches the partial index predicate
         # exactly, so the safe way is also the indexed way.
         queryset = GameList.objects.public().select_related('owner')
+        if self._pick_id():
+            queryset = queryset.exclude(pk=self._pick_id())
 
         query = self._effective_query()
         if query:
@@ -258,7 +289,7 @@ class BrowseListsView(HtmxListMixin, ListView):
         if self.is_partial_render():
             return None
 
-        featured = GameList.objects.featured().select_related('owner').first()
+        featured = self._featured()
         if featured is not None:
             # ITS OWN CALL, at a DEEPER slice than the grid's. This was briefly folded into the
             # grid's call to save two queries, which was right while both wanted four covers -- the
@@ -287,16 +318,9 @@ class BrowseListsView(HtmxListMixin, ListView):
         # Does the empty state offer "Clear filters" or "Make a list"? Those are opposite answers to
         # opposite situations -- "you narrowed it to nothing" versus "there is nothing yet" -- and
         # offering the wrong one is worse than offering neither.
-        #
-        # Read through the SAME parsers the queryset uses, never the raw querystring: `_count_filter`
-        # discards junk so `?min_games=abc` narrows nothing, and `_effective_query` discards a
-        # one-or-two character `q` for the same reason. Sort is excluded on purpose -- re-ordering an
-        # empty grid is not what emptied it.
-        context['has_filters'] = bool(
-            self._effective_query()
-            or _count_filter(self.request.GET.get('min_games')) is not None
-            or _count_filter(self.request.GET.get('max_games')) is not None
-        )
+        context['has_filters'] = self._has_filters()
+        # "N lists shown" counts the Spotlight's list too: it is on the page, just above the grid.
+        context['lists_shown'] = context['paginator'].count + (1 if self._pick_id() else 0)
 
         context['spotlight'] = self._spotlight()
 
@@ -406,6 +430,8 @@ class MyListsView(LoginRequiredMixin, _LinkedProfileRequired,
         attach_cover_games(lists, per_list=LIST_TILE_COVERS)
 
         profile = self.request.user.profile
+        # "3 of 8 platinumed" on each card (review AU-02): the hunter's own progress through every list here.
+        viewer_progress.platinumed_by_list(profile, lists)
         scope = self._scope()
         context['scope'] = scope
         context['scopes'] = self.SCOPES
@@ -747,9 +773,13 @@ class GameListDetailView(DetailView):
         # An entry is a whole GAME, so its flag badges are the ones every version carries (owner, 2026-10-24):
         # one more bounded query, the concepts' matches already joined above.
         flags = work_keys_for_concepts(item.concept for item in items)
+        # What the READER has done with each game (review AU-02): one bounded query over these concepts.
+        progress = viewer_progress.progress_by_concept(viewer, [item.concept_id for item in items])
         for item in items:
             item.cover = covers.get(item.concept_id)
             item.flag_keys = flags.get(item.concept_id, ())
+            item.viewer = progress.get(item.concept_id)
+        context['viewer_summary'] = viewer_progress.summarise(progress, len(items))
 
         # ── sections ────────────────────────────────────────────────────────────────────────────
         #
@@ -907,6 +937,12 @@ class GameListDetailView(DetailView):
             {'text': 'Game Lists', 'url': reverse_lazy('lists_browse')},
             {'text': game_list.display_name},
         ]
+        # YOUR OWN LIST STAYS IN MY PURSUIT (review AU-08). My Lists lives there, and opening one of yours
+        # used to switch the sub-nav to Community and the crumb to Game Lists under you. The challenge run page
+        # does the same for its owner (`hub_subnav_override`).
+        if context['is_owner']:
+            self.request.hub_subnav_override = ('my_pursuit', 'my_lists')
+            context['breadcrumb'][1] = {'text': 'My Lists', 'url': reverse_lazy('my_lists')}
 
         # The in-place edit form needs the same ceilings the create dialog uses. Without them
         # `maxlength="{{ name_max_length }}"` renders empty, browsers ignore it, and the character

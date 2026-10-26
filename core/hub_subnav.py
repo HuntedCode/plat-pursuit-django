@@ -451,8 +451,8 @@ def resolve_hub_subnav(request) -> dict | None:
 
     # 0. A VIEW'S OWN ANSWER, for a page whose hub depends on who is looking rather than on its URL. A view
     #    sets `request.hub_subnav_override = (hub_key, slug)`; the context processor reads this after the
-    #    view has run, so the attribute is there in time. The one user so far is a challenge run page, which
-    #    is Community's for a visitor and My Pursuit's for its owner (owner, 2026-10-10). An unknown hub key
+    #    view has run, so the attribute is there in time. Two users so far, each Community's for a visitor and My
+    #    Pursuit's for its owner: a challenge run page (owner, 2026-10-10) and a game list's page (2026-10-26). An unknown hub key
     #    falls through to the URL rules rather than blanking the rail.
     override = getattr(request, 'hub_subnav_override', None)
     if override:

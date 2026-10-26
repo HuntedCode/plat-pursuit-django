@@ -733,10 +733,28 @@ briefly merged, correctly, while both wanted four; merging them now would mean f
 for all twenty-four grid lists to serve one band. The layout splits at **640px**, not the usual
 `md:`, because the stacked layout wastes more width the wider it gets.
 
-The featured list also appears in the grid below, on purpose: excluding one row mid-pagination
-drifts the offsets InfiniteScroller pages on, so page two would skip or repeat a list.
+**The featured list is left out of the grid below** while the band shows (owner, 2026-10-26, review
+AU-12). It is left out in the QUERY (`BrowseListsView._pick_id`), on every page alike, which is what keeps
+InfiniteScroller's offsets true: dropping one tile from a rendered page is what would make page two skip or
+repeat a list, and was the reason it used to stay in. An unfiltered partial render (the next page, a
+cleared search) therefore asks for the pick's id once; a filtered one asks nothing, and the pick is back in
+the results. "N lists shown" counts it (`lists_shown`), and the empty state reads that count too, so a
+catalogue of one featured list does not say "No public lists yet" under the band showing it.
 
 ---
+
+## The reader's view (Authoring review, 2026-10-26)
+
+What `docs/design/reviews/authoring.md` changed about reading and editing a list:
+
+| What | How |
+|---|---|
+| **Your progress** (AU-02) | Each card wears the browse cards' mark (`partials/_hunter_mark.html`, one partial for both): "Platinum" or your percentage over a bar coloured by state. The header says "You: 3 of 8 platinumed · 2 started" (hidden until there is something to say, and recounted from the cards by `paintYou()` after an add or remove). My Lists cards, Mine and Following, read "3 of 8 platinumed". `gamelists/services/viewer_progress.py`: your BEST version of each game (a platinum first, then the furthest along), one bounded query per page; My Lists counts in the database (`Exists` + `Count`) |
+| **Share** (AU-10) | On any published list, for the owner, a reader and a signed-out visitor: the system share sheet on a coarse pointer, else the link is copied (`wireShare`). The URL is the server's, rendered on the button |
+| **Your own list** (AU-07, AU-08) | No "by you" byline (page or My Lists cards); the sub-nav stays on My Pursuit and the crumb reads Home / My Lists (`hub_subnav_override`, as the challenge run page does) |
+| **Make private** (AU-06) | Shown in edit mode only (`.gl-actions.is-editing`); outside it the note says "Edit the list to make it private." `boot()` strips the class on a restore |
+| **One way out** (AU-09) | No Cancel beside Save. Done SAVES what was typed (it submits the form, which sends only what changed and closes when nothing did); a form the browser refuses is reset. Escape still closes the panel without saving |
+| **The toolbar** (AU-11) | No "Games" label. The owner's card holds the adder and the sort; a reader gets the sort alone, without the card |
 
 ## API Endpoints
 
@@ -1029,8 +1047,9 @@ shipped a visible defect.
 7. **The `game_list_create` SiteEvent**, declared since 2019 with its only call site in an unrouted
    module — so a grep found a hit and it had never once fired.
 
-**`game_list_share` is still unwired**, because there is no share affordance yet. It is declared and
-dead, exactly as `game_list_create` was.
+**`game_list_share` is still unwired.** The Share button (2026-10, review AU-10) never reaches the server:
+it opens the system share sheet on a phone and copies the link elsewhere, so there is no request to record
+it on. It is declared and dead, exactly as `game_list_create` was, until a share earns a round trip.
 
 ---
 

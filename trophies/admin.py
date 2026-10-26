@@ -1370,12 +1370,6 @@ class UserConceptRatingAdmin(admin.ModelAdmin):
     raw_id_fields = ('profile', 'concept')
     date_hierarchy = 'created_at'
 
-class StageInline(admin.TabularInline):
-    model = Stage
-    extra = 1
-    fields = ('stage_number', 'title', 'is_bonus', 'concepts')
-    autocomplete_fields = ['concepts']
-
 class ConceptBundleInlineFormSet(BaseInlineFormSet):
     """Validates that no Concept appears in multiple bundles on the same Stage,
     that no bundle Concept is also a standalone qualifier or the list of a
