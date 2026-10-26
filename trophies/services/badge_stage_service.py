@@ -247,3 +247,25 @@ def write_stages(series, plan):
                 title=planned.title,
             )
             stage.concepts.set(planned.concepts)
+
+
+def open_stage_slot(series_slug, number) -> int:
+    """Free `number` in `series_slug` by moving every stage numbered `number` or later down one (+1), so a new
+    stage can be added there. Returns how many moved. For the stage admin's "Make room" action.
+
+    Rows move one at a time from the top down: `unique_together(series_slug, stage_number)` is checked per row,
+    so a single `stage_number + 1` UPDATE can collide halfway through. The series' rows are locked first, so
+    two curators making room at once wait for each other instead of one hitting an IntegrityError.
+
+    No badge, hold or XP depends on a stage's number (the badge page renumbers 1..N and the engine keys stages
+    live). The Challenge Optimizer does show authored numbers ("Stage 3") from its 15-minute pool cache, so a
+    plan built just before a renumber can show the old ones until that expires.
+    """
+    with transaction.atomic():
+        later = list(
+            Stage.objects.select_for_update().filter(series_slug=series_slug, stage_number__gte=number)
+            .order_by('-stage_number').values_list('pk', 'stage_number')
+        )
+        for pk, current in later:
+            Stage.objects.filter(pk=pk).update(stage_number=current + 1)
+    return len(later)

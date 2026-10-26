@@ -1511,7 +1511,27 @@ class StageAdmin(admin.ModelAdmin):
     )
     autocomplete_fields = ['concepts', 'trophy_groups']
     inlines = [ConceptBundleInline]
-    actions = ['duplicate_to_series', 'convert_to_contract']
+    actions = ['make_room', 'duplicate_to_series', 'convert_to_contract']
+
+    @admin.action(description='Make room: move this stage and every later one down one')
+    def make_room(self, request, queryset):
+        """Free the selected stage's number so a new stage can be added there: it and every later stage in its
+        series move down one (badge_stage_service.open_stage_slot). One stage per series: two in the same
+        series would ask for two different numbers at once."""
+        from trophies.services.badge_stage_service import open_stage_slot
+
+        stages = list(queryset.order_by('series_slug', 'stage_number'))
+        slugs = [s.series_slug for s in stages]
+        doubled = sorted({slug for slug in slugs if slugs.count(slug) > 1})
+        if doubled:
+            self.message_user(request, f"Pick one stage per series (more than one in: {', '.join(doubled)}). "
+                                       f"Nothing was moved.", messages.ERROR)
+            return
+        for stage in stages:
+            moved = open_stage_slot(stage.series_slug, stage.stage_number)
+            self.message_user(
+                request, f"{stage.series_slug}: stage {stage.stage_number} is free. Moved {moved} "
+                         f"stage{'s' if moved != 1 else ''} down one.", messages.SUCCESS)
 
     # The confirm page posts this back so the action can tell "the curator just clicked the dropdown"
     # from "the curator typed a slug and submitted". Without it a blank box would read as a fresh
