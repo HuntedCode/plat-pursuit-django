@@ -498,13 +498,13 @@ present on the target slug is SKIPPED and named in the message rather than renum
 quietly produce a stage list that is not the one the curator copied. The slug is re-slugified on the way
 in, because `SlugField` accepts uppercase and `FromSoft` would save fine and then join to nothing.
 
-**Stages insert at a taken number.** Tick "Insert here" on the stage form and a number already used in the
-series is not an error: the stage there and the run straight after it move up one, stopping at the first gap
-(`badge_stage_service.open_stage_slot`). On the change form it moves a stage into place (5 to 2 moves 2-4 up
-to 3-5, with no gap left behind; moving a stage further down frees its old number). Rows move one at a time
-from the top down, because `unique_together(series_slug, stage_number)` is checked per row. Renumbering
-changes no badge, hold or XP: the page renumbers 1..N and the engine keys stages live. The one place a raw
-number shows is the Challenge Optimizer ("Stage 3"), from its 15-minute pool cache.
+**Stages make room for an insert.** To add a stage between two others, select the stage at the number you
+want in the Stages list and run "Make room: move this stage and every later one down one": that number is
+free, and the new stage is added there as normal (`badge_stage_service.open_stage_slot`). One stage per
+series per run. Rows move one at a time from the top down, because `unique_together(series_slug,
+stage_number)` is checked per row. Renumbering changes no badge, hold or XP: the page renumbers 1..N and the
+engine keys stages live. The one place a raw number shows is the Challenge Optimizer ("Stage 3"), from its
+15-minute pool cache.
 
 **Stages can be generated.** For franchise, series and developer badges the stage list follows a formula
 (one stage per origin game, oldest first or by studio; a standalone expansion such as Death of the
