@@ -116,6 +116,10 @@ def test_the_page_teaches_all_five_beats(client):
         assert concept in body.lower(), missing
 
     assert 'no platinum' in body, 'the page does not say how a game without a platinum counts'
+    # Owner, 2026-10-25: "stage 0" is an internal term that means nothing to a hunter. Mastery's extras are
+    # named for what they are (a region-locked game, one you can't buy any more).
+    assert 'stage 0' not in body.lower() and 'bonus stage' not in body.lower()
+    assert 'only one region' in body, 'step 5 no longer says what Mastery asks beyond holo'
     assert 'DLC' in body, 'the page does not say that holo includes DLC'
 
 

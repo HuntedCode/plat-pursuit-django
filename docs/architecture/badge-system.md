@@ -44,12 +44,26 @@ earned. **No points, no titles.** Their reward is that they show.
 
 | Reward | Rule | Stored |
 |---|---|---|
-| **Mastery** (per badge) | every stage IN SCOPE for the edition, **stage 0 and stages that no longer gate included**, at the full bar (100% with DLC, flagged trophies excused) on any one version. Needs the hold, so it always implies holo | `UserGroupBadge.mastered_at` (null = not mastered) |
+| **Mastery** (per badge) | every stage IN SCOPE for the edition, **stage 0 and stages that no longer gate included**, at the full bar (100% with DLC, flagged trophies excused) on any one version. Needs the hold, so it always implies holo. **Offered only when it asks more than holo** (see below) | `UserGroupBadge.mastered_at` (null = not mastered) |
 | **Full Set** (per series) | every live edition **that can be earned** (`gating_count > 0`) held; needs 2+ of them. A dead edition never blocks it, as an unobtainable game never makes a badge harder | `SeriesAward` (`full_set`) |
-| **Series Master** (per series) | every such edition mastered. **Offered only when no single edition's stage scope covers every stage**: when one does, mastering it masters the others too (satisfaction is cross-platform), so it would say nothing | `SeriesAward` (`series_master`) |
+| **Series Master** (per series) | every such edition FINISHED: mastered, or holo where the edition offers no Mastery. **Offered only when no single edition's stage scope covers every stage**: when one does, finishing it finishes the others too (satisfaction is cross-platform), so it would say nothing | `SeriesAward` (`series_master`) |
 
-The rules are pure, in `badge_engine` beside holo (`GroupBadgeResult.mastered` / `mastery_done` /
-`mastery_total` / `mastered_date` / `scope`, and `evaluate_series_rewards`). They read no more than holo
+**Mastery is above and beyond** (owner, 2026-10-25). On most badges every stage gates, so "every stage at
+100%" is exactly holo, and a crown there would be holo under another name. So an edition OFFERS Mastery
+(`GroupBadgeResult.mastery_offered`) only when it has one of:
+
+- a **stage 0** game (in practice a region-locked release, e.g. Japan-only, kept off the badge's requirement)
+- a stage that **no longer gates** it: its qualifying games are unobtainable, delisted on an edition that
+  excludes delisted games (Ultra HD), or every trophy on its bar is flagged unobtainable
+- a **megamix**'s stages past its threshold (`min_required` below the gating count)
+
+An edition with nothing left to gate offers nothing (there is no hold to master). Elsewhere holo is the
+badge's top finish. Either way the edition is **finished** (`finished` /
+`finished_date`) when every in-scope stage is at the full bar, and `mastered` is finished on an edition that
+offers Mastery. Series Master reads `finished`, so an edition without Mastery counts at holo.
+
+The rules are pure, in `badge_engine` beside holo (`GroupBadgeResult.mastered` / `mastery_offered` /
+`finished` / `mastery_done` / `mastery_total` / `mastered_date` / `scope`, and `evaluate_series_rewards`). They read no more than holo
 does, so the engine sends no new per-profile query. `badge_apply` writes them: mastery in `diff` /
 `apply_changes`, series rewards in `apply_series_rewards` after the badges.
 
@@ -63,10 +77,13 @@ mastered plays one moment, its badge moment, crowned ("Badge earned and mastered
 SAME embed as the run's badge earns, so finishing a series is one ping.
 
 **On the page.** The badge hero says "Mastered · since <date>" in place of the holo line (or, on a held badge
-short of it, "Mastery: N of M stages at 100%") and tallies the edition's masters beside its earners; the
+short of it, on an edition that offers Mastery, "Mastery: N of M stages at 100%") and tallies the edition's
+masters beside its earners; the
 Rarity & Community band lists the first few masters (`badge_leaderboards.badge_masters`, verified hunters, no
 rank number: "Master #3" breaks the day a game is added) and carries the series' Full Set / Series Master
-line. The "No longer obtainable" section says those stages count toward Mastery.
+line ("Take both to 100% for Series Master", counting each edition's own finish). The "No longer obtainable"
+section says those stages count toward Mastery. How It Works describes the extras in hunter terms (a game
+released in only one region, one you can't buy any more) and never says "stage 0".
 
 ### Scope, gating, satisfaction
 
@@ -404,6 +421,11 @@ cooldown has expired by the time year-later PSN flux re-triggers the earn.
 **Mastery's date never re-stamps while it holds.** `diff` changes mastery on the TRANSITION only. Comparing
 the date as `earned_at` is compared would re-stamp every master whose stage dates are missing on every run
 (the undated-earn churn above).
+
+**Whether Mastery is offered is a catalogue fact, and it moves.** Marking a game unobtainable (or a delisting
+on Ultra HD) can turn a stage into an extra, and the next evaluation masters everyone who already cleared it,
+silently when the clear is older than `REWARD_RECENCY`. Undoing the flag takes those crowns back, as a new
+stage takes a hold back. Never read `finished` as "mastered": on most badges it is holo.
 
 **Series rewards are scoped by series too.** `apply_series_rewards` reads every live edition's result from
 `desired`, as `recompute_standing` does: hand it one edition of a two-edition series and the Full Set reads as

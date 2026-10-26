@@ -88,10 +88,10 @@ pursuer base, but it drives series_size and the series rank's "of N" -- never th
         a hunter reads where they are. {% endcomment %}
         {% if detail.rewards %}{% with r=detail.rewards %}
         <div class="bd2-comm__set{% if r.series_master %} is-master{% elif r.full_set %} is-held{% endif %}">
-            {% if r.series_master %}<img src="{% static 'images/badges/mastery-crown.svg' %}" alt="" aria-hidden="true" class="bd2-crown"><span><b>Series Master</b> &middot; every edition mastered{% if r.series_master_since %}, since {{ r.series_master_since|date:"M j, Y" }}{% endif %}</span>
-            {% elif r.full_set %}<span><b>Full Set</b> &middot; every edition held{% if r.full_set_since %}, since {{ r.full_set_since|date:"M j, Y" }}{% endif %}{% if r.master_offered %}. Master {% if r.editions == 2 %}both{% else %}all {{ r.editions }}{% endif %} for Series Master{% if r.mastered %} ({{ r.mastered }} so far){% endif %}{% endif %}</span>
+            {% if r.series_master %}<img src="{% static 'images/badges/mastery-crown.svg' %}" alt="" aria-hidden="true" class="bd2-crown"><span><b>Series Master</b> &middot; every edition at 100%{% if r.series_master_since %}, since {{ r.series_master_since|date:"M j, Y" }}{% endif %}</span>
+            {% elif r.full_set %}<span><b>Full Set</b> &middot; every edition held{% if r.full_set_since %}, since {{ r.full_set_since|date:"M j, Y" }}{% endif %}{% if r.master_offered %}. Take {% if r.editions == 2 %}both{% else %}all {{ r.editions }}{% endif %} to 100% for Series Master{% if r.finished %} ({{ r.finished }} so far){% endif %}{% endif %}</span>
             {% elif r.held %}<span><b>Full Set</b> &middot; {{ r.held }} of {{ r.editions }} editions held</span>
-            {% else %}<span><b>Full Set</b> &middot; hold {% if r.editions == 2 %}both editions{% else %}all {{ r.editions }} editions{% endif %}{% if r.master_offered %}, master them all for Series Master{% endif %}</span>{% endif %}
+            {% else %}<span><b>Full Set</b> &middot; hold {% if r.editions == 2 %}both editions{% else %}all {{ r.editions }} editions{% endif %}{% if r.master_offered %}, then take them to 100% for Series Master{% endif %}</span>{% endif %}
         </div>
         {% endwith %}{% endif %}
 

@@ -102,8 +102,9 @@ Collection. No extra wrapper container: a nested one would double the horizontal
                             {% else %}<span class="text-base-content/50 font-medium">Not yet earned</span>{% endif %}
                             {% comment %} `mastery_done` is this pass's; `mastered_at` the stored hold. At N of N
                             the hold has not caught up yet (it does on the next evaluation): say nothing rather
-                            than "3 of 3" under a line that is not "Mastered". {% endcomment %}
-                            {% if g.earned_at and not g.mastered_at and g.mastery_total and g.mastery_done < g.mastery_total %}
+                            than "3 of 3" under a line that is not "Mastered". Only on an edition that offers
+                            Mastery: elsewhere holo is the top finish and there is nothing more to count. {% endcomment %}
+                            {% if g.mastery_offered and g.earned_at and not g.mastered_at and g.mastery_total and g.mastery_done < g.mastery_total %}
                             <span class="block mt-0.5 text-xs font-medium text-base-content/50">Mastery: {{ g.mastery_done }} of {{ g.mastery_total }} stage{{ g.mastery_total|pluralize }} at 100%</span>
                             {% endif %}
                         </div>

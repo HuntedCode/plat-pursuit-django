@@ -109,7 +109,7 @@ One beat per moment, in the earn vocabulary (visual-identity.md), never confetti
 | platinum | the cover is dealt in (a turn and a settle), a platinum glow flares, sparks fly, a light sweeps across it, the number counts up |
 | milestone | the number swells in, a platinum ring pulses out, the biggest burst of sparks |
 | mastered | the mastered medallion is struck, its crown set on as it mints, over GOLD rays, gold sparks; "One of N masters" |
-| full_set / series_master | every edition side by side over one set of rays (gold for a Series Master), minted one after another; each can be picked up |
+| full_set / series_master | every held edition side by side over one set of rays (gold for a Series Master), minted one after another, each as held (a Series Master's crowned only where the edition offers Mastery); each can be picked up |
 
 **The sparks climb a ladder and wear what the rays wear** (owner, 2026-10-25, after phase 4; `BEATS` in
 `moments.js`):

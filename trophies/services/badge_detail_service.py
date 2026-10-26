@@ -87,9 +87,11 @@ class GroupView:
     frame: dict                  # medallion frame dict for components/badge_medallion.html
     #: MASTERY (phase 4): every stage the edition covers at 100% with DLC. `mastered_at` is "Mastered since"
     #: (None = not mastered); `mastery_done` of `mastery_total` stages is the viewer's progress (0 of 0 for anon).
+    #: `mastery_offered`: the edition asks more than holo (badge_engine), so its page speaks of Mastery at all.
     mastered_at: object = None
     mastery_done: int = 0
     mastery_total: int = 0
+    mastery_offered: bool = False
     #: The edition's current masters: how many, and the first few holds (`badge_leaderboards.badge_masters`).
     masters_count: int = 0
     masters: list = field(default_factory=list)
@@ -809,6 +811,7 @@ def _group_view(gb, result, hold, target_profile, series, catalog, games_map, pr
         mastered_at=(hold.mastered_at if hold else None),
         mastery_done=result.mastery_done if result else 0,
         mastery_total=result.mastery_total if result else 0,
+        mastery_offered=bool(result and result.mastery_offered),
     )
     gv.frame = _medallion_frame(gv, series, target_profile)
     return gv
@@ -926,6 +929,12 @@ def get_badge_detail(series, target_profile, *, studio_sections=False, with_rewa
     )
 
 
+def _finished(hold, result):
+    """An edition at its top finish, read off the stored hold: mastered where it offers Mastery, holo where
+    it does not (badge_engine's `finished`, which is what Series Master asks of every edition)."""
+    return hold.mastered_at is not None if result.mastery_offered else hold.is_holo
+
+
 def _series_rewards(series, group_badges, catalog, desired, holds, target_profile):
     """The viewer's Full Set and Series Master for this series, or None with fewer than two editions that can be
     earned. What is HELD is read from the stored holds and `SeriesAward`s, exactly as the hero's Earned / Mastered
@@ -942,7 +951,7 @@ def _series_rewards(series, group_badges, catalog, desired, holds, target_profil
     return {
         'editions': len(earnable),
         'held': sum(1 for gid in earnable if gid in holds),
-        'mastered': sum(1 for gid in earnable if gid in holds and holds[gid].mastered_at is not None),
+        'finished': sum(1 for gid in earnable if gid in holds and _finished(holds[gid], results[gid])),
         'full_set': SeriesAward.KIND_FULL_SET in awards, 'full_set_since': awards.get(SeriesAward.KIND_FULL_SET),
         'master_offered': offered, 'series_master': SeriesAward.KIND_SERIES_MASTER in awards,
         'series_master_since': awards.get(SeriesAward.KIND_SERIES_MASTER),

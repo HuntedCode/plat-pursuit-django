@@ -87,7 +87,7 @@ After the player in the DOM, so it stacks over it.{% endcomment %}
             {% endfor %}
         </div>
         <h2 class="pp-moment__title" id="pp-moments-title">{{ item.series.name }}</h2>
-        <p class="pp-moment__sub">{% if item.kind == 'series_master' %}Every edition mastered{% else %}Every edition held{% endif %}: {{ item.editions_label }}</p>
+        <p class="pp-moment__sub">{% if item.kind == 'series_master' %}Every edition at 100%{% else %}Every edition held{% endif %}: {{ item.editions_label }}</p>
     </div>
     {% else %}
     <div class="pp-moment pp-moment--badge{% if item.frame.is_mastered %} pp-moment--mastered{% endif %}">

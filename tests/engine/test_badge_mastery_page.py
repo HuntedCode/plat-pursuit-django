@@ -29,8 +29,9 @@ def _page(client, series, profile=None):
 
 
 def test_a_mastered_badge_says_so_with_its_date_and_wears_the_crown(client):
-    series, badges, games = _series((1, [ULTRA]), legacy=False)
+    series, badges, games = _series((0, [ULTRA]), (1, [ULTRA]), legacy=False)
     hunter = _hunter()
+    _finish(hunter, games[0][0], ago=timedelta(days=3))
     _finish(hunter, games[1][0], ago=timedelta(days=3))
     evaluate_and_apply(hunter)
 
@@ -51,8 +52,24 @@ def test_a_held_badge_short_of_mastery_shows_how_far(client):
     assert 'Mastery: 1 of 2 stages at 100%' in _page(client, series, hunter)
 
 
+def test_a_badge_with_nothing_beyond_holo_never_mentions_mastery(client):
+    """Holo is the top finish of a badge that asks nothing more, so its page counts no Mastery progress, and a
+    hunter who finished it reads Holographic, not Mastered."""
+    series, _, games = _series((1, [ULTRA]), (2, [ULTRA]), legacy=False)
+    hunter = _hunter()
+    _finish(hunter, games[1][0])
+    _finish(hunter, games[2][0], full=False)
+    evaluate_and_apply(hunter)
+    assert 'Mastery:' not in _page(client, series, hunter), 'short of holo, yet nothing to count toward Mastery'
+
+    _finish(hunter, games[2][0])
+    evaluate_and_apply(hunter)
+    body = _page(client, series, hunter)
+    assert '&#10022; Holographic' in body and 'Mastered &middot;' not in body and 'Mastery:' not in body
+
+
 def test_the_page_counts_and_names_the_current_masters_and_only_when_there_are_any(client):
-    series, badges, games = _series((1, [ULTRA]), legacy=False)
+    series, badges, games = _series((0, [ULTRA]), (1, [ULTRA]), legacy=False)
     assert 'bd2-comm__masters' not in _page(client, series), 'absence is not content'
 
     masters = [ProfileFactory(is_linked=True, psn_username=f'master{i}') for i in range(2)]
@@ -68,7 +85,7 @@ def test_the_page_counts_and_names_the_current_masters_and_only_when_there_are_a
 
 def test_the_set_band_reads_where_the_hunter_is_and_what_it_takes(client):
     series, badges, games = _series((1, [CROSS]), (2, [ULTRA]), (3, [LEGACY]))
-    assert 'hold both editions, master them all for Series Master' in _page(client, series)
+    assert 'hold both editions, then take them to 100% for Series Master' in _page(client, series)
 
     hunter = _hunter()
     _finish(hunter, games[1][0])
@@ -79,8 +96,28 @@ def test_the_set_band_reads_where_the_hunter_is_and_what_it_takes(client):
     _finish(hunter, games[3][0], full=False)
     evaluate_and_apply(hunter)
     body = _page(client, series, hunter)
-    assert '<b>Full Set</b> &middot; every edition held, since' in body and '(1 so far)' in body
+    assert '<b>Full Set</b> &middot; every edition held, since' in body and '(1 so far)' in body, \
+        'Ultra HD asks nothing past holo, so its holo is its finish'
+    assert 'Take both to 100% for Series Master' in body
     assert SeriesAward.objects.filter(profile=hunter, kind=SeriesAward.KIND_FULL_SET).exists()
+
+
+def test_the_set_count_waits_on_the_mastery_an_edition_offers(client):
+    """Ultra HD has a region-locked stage 0, so its finish is Mastery and its holo alone does not count toward
+    Series Master; Legacy HD asks nothing past holo, so its holo does."""
+    series, badges, games = _series((0, [ULTRA]), (1, [CROSS]), (2, [ULTRA]), (3, [LEGACY]))
+    hunter = _hunter()
+    for number in (1, 2, 3):
+        _finish(hunter, games[number][0])
+    _finish(hunter, games[0][0], full=False)
+    evaluate_and_apply(hunter)
+    assert UserGroupBadge.objects.get(profile=hunter, group_badge=badges['ultra-hd']).is_holo
+    body = _page(client, series, hunter)
+    assert 'Take both to 100% for Series Master (1 so far)' in body
+
+    _finish(hunter, games[0][0])
+    evaluate_and_apply(hunter)
+    assert '<b>Series Master</b> &middot; every edition at 100%' in _page(client, series, hunter)
 
 
 def test_a_one_edition_series_has_no_set_band(client):
@@ -111,7 +148,7 @@ def test_mastered_means_mastery_and_holo_says_holographic():
 def test_the_masters_list_names_the_first_few_in_order_and_counts_the_rest(client):
     from trophies.services.badge_leaderboards import MASTERS_SHOWN
 
-    series, badges, _ = _series((1, [ULTRA]), legacy=False)
+    series, badges, _ = _series((0, [ULTRA]), (1, [ULTRA]), legacy=False)
     base = timezone.now() - timedelta(days=60)
     masters = [ProfileFactory(is_linked=True, psn_username=f'm{i:02d}') for i in range(MASTERS_SHOWN + 2)]
     for i, m in enumerate(masters):
@@ -124,8 +161,9 @@ def test_the_masters_list_names_the_first_few_in_order_and_counts_the_rest(clien
 
 
 def test_another_hunters_page_shows_their_mastery_and_set(client):
-    series, badges, games = _series((1, [CROSS]))
+    series, badges, games = _series((0, [CROSS]), (1, [CROSS]))
     other = _hunter(psn_username='Other')
+    _finish(other, games[0][0], ago=timedelta(days=2))
     _finish(other, games[1][0], ago=timedelta(days=2))
     evaluate_and_apply(other)
 
@@ -140,8 +178,9 @@ def test_another_hunters_page_shows_their_mastery_and_set(client):
 def test_a_badge_earned_already_mastered_says_so_in_its_one_moment(rf):
     from django.template import Context, Template
 
-    _, badges, games = _series((1, [ULTRA]), legacy=False)
+    _, badges, games = _series((0, [ULTRA]), (1, [ULTRA]), legacy=False)
     hunter = _hunter()
+    _finish(hunter, games[0][0])
     _finish(hunter, games[1][0])
     evaluate_and_apply(hunter)
     request = rf.get('/career/')
@@ -167,7 +206,7 @@ def test_the_inspector_keeps_rim_and_cast_together_in_every_state():
 def test_the_set_line_reads_the_stored_rewards_like_the_hero_reads_its_hold(client):
     """The hero's Mastered line reads the stored hold; the set line must read the stored award, or between
     evaluations the page says "Mastered" above "hold both editions"."""
-    series, badges, games = _series((1, [CROSS]), (2, [ULTRA]), (3, [LEGACY]))
+    series, badges, games = _series((0, [CROSS]), (1, [CROSS]), (2, [ULTRA]), (3, [LEGACY]))
     hunter = _hunter()                                   # no progress at all: only the stores say otherwise
     for gb in badges.values():
         UserGroupBadge.objects.create(profile=hunter, group_badge=gb, is_holo=True, is_linked=True,
@@ -176,4 +215,4 @@ def test_the_set_line_reads_the_stored_rewards_like_the_hero_reads_its_hold(clie
         SeriesAward.objects.create(profile=hunter, series=series, kind=kind, since=timezone.now())
 
     body = _page(client, series, hunter)
-    assert '<b>Series Master</b> &middot; every edition mastered, since' in body
+    assert '<b>Series Master</b> &middot; every edition at 100%, since' in body

@@ -3,6 +3,9 @@
 The pure rules are pinned in test_badge_mastery.py. These hold down what the DB seam adds: holds that come and
 go with the badge, "Mastered since" that never re-stamps while it holds, a celebration only for what was
 finished recently (a veteran's old mastery seen for the first time is silent), and one Discord ping per run.
+
+Mastery is offered only on an edition that asks more than holo, so the mastery tests give their series a stage 0
+(a region-locked release) the hunter has also cleared; without one, every finished hold here stays holo.
 """
 from datetime import timedelta
 from unittest.mock import patch
@@ -85,11 +88,13 @@ def test_every_stage_at_100_with_stage_zero_masters_the_badge_and_celebrates_it(
 
 
 def test_a_new_stage_takes_mastery_away_and_the_re_clear_brings_it_back_with_a_new_date():
-    series, badges, games = _series((1, [ULTRA]), legacy=False)
+    series, badges, games = _series((0, [ULTRA]), (1, [ULTRA]), legacy=False)
     hunter = _hunter()
+    _finish(hunter, games[0][0], ago=timedelta(days=3))
     _finish(hunter, games[1][0], ago=timedelta(days=3))
     evaluate_and_apply(hunter)
     first = _hold(hunter, badges['ultra-hd']).mastered_at
+    assert first is not None
 
     st = StageFactory(series_slug=series.series_slug, stage_number=2)
     concept = ConceptFactory()
@@ -105,11 +110,13 @@ def test_a_new_stage_takes_mastery_away_and_the_re_clear_brings_it_back_with_a_n
 
 
 def test_mastered_since_does_not_move_while_it_holds():
-    _, badges, games = _series((1, [ULTRA, ULTRA]), legacy=False)
+    _, badges, games = _series((0, [ULTRA]), (1, [ULTRA, ULTRA]), legacy=False)
     hunter = _hunter()
+    _finish(hunter, games[0][0], ago=timedelta(days=5))
     _finish(hunter, games[1][0], ago=timedelta(days=5))
     evaluate_and_apply(hunter)
     since = _hold(hunter, badges['ultra-hd']).mastered_at
+    assert since is not None
 
     _finish(hunter, games[1][1], ago=timedelta(days=9))     # an EARLIER clear of the same stage turns up
     evaluate_and_apply(hunter)
@@ -132,8 +139,9 @@ def test_a_dead_stage_counts_toward_mastery_but_never_toward_the_badge():
 def test_an_old_mastery_seen_for_the_first_time_is_marked_but_not_celebrated():
     """The deploy's veteran case (owner: silent backfill): the hold is marked, dated by the real finish, and
     no ceremony plays for something done long ago."""
-    _, badges, games = _series((1, [ULTRA]), legacy=False)
+    _, badges, games = _series((0, [ULTRA]), (1, [ULTRA]), legacy=False)
     hunter = _hunter()
+    _finish(hunter, games[0][0], ago=timedelta(days=200))
     _finish(hunter, games[1][0], ago=timedelta(days=200))
 
     evaluate_and_apply(hunter)
@@ -145,12 +153,51 @@ def test_an_old_mastery_seen_for_the_first_time_is_marked_but_not_celebrated():
 def test_a_badge_earned_already_mastered_plays_one_moment_not_two():
     """Audit: the badge moment and a mastery moment of the same medallion back to back said one thing twice.
     The badge moment wears the crown instead."""
-    _, badges, games = _series((1, [ULTRA]), legacy=False)
+    _, badges, games = _series((0, [ULTRA]), (1, [ULTRA]), legacy=False)
     hunter = _hunter()
+    _finish(hunter, games[0][0])
     _finish(hunter, games[1][0])
     result = evaluate_and_apply(hunter)
     assert result['mastered'] == [badges['ultra-hd'].id], 'still reported, for the announcement'
     assert [m.kind for m in Moment.objects.filter(profile=hunter)] == [Moment.KIND_BADGE]
+
+
+def test_a_badge_with_nothing_beyond_holo_tops_out_at_holo():
+    """Owner, 2026-10-25: Mastery is above and beyond. On a badge that asks nothing past holo it would be holo
+    under another name, so a hunter who finished everything holds a holo badge, with no crown and no second
+    moment."""
+    _, badges, games = _series((1, [ULTRA]), (2, [ULTRA]), legacy=False)
+    hunter = _hunter()
+    for number in (1, 2):
+        _finish(hunter, games[number][0])
+    result = evaluate_and_apply(hunter)
+    hold = _hold(hunter, badges['ultra-hd'])
+    assert hold.is_holo and hold.mastered_at is None
+    assert result['mastered'] == []
+    assert [m.kind for m in Moment.objects.filter(profile=hunter)] == [Moment.KIND_BADGE]
+
+
+def test_a_stage_that_stops_gating_offers_mastery_to_whoever_cleared_it():
+    """A game marked unobtainable later turns its stage into an extra: the hunter who cleared it while it could
+    be bought is mastered, quietly when the clear is old. Marking it obtainable again takes the crown back."""
+    _, badges, games = _series((1, [ULTRA]), (2, [ULTRA]), legacy=False)
+    hunter = _hunter()
+    for number in (1, 2):
+        _finish(hunter, games[number][0], ago=timedelta(days=60))
+    evaluate_and_apply(hunter)
+    assert _hold(hunter, badges['ultra-hd']).mastered_at is None
+
+    games[2][0].is_obtainable = False
+    games[2][0].save()
+    evaluate_and_apply(hunter)
+    assert _hold(hunter, badges['ultra-hd']).mastered_at is not None
+    assert not Moment.objects.filter(profile=hunter, kind=Moment.KIND_MASTERED).exists(), 'an old clear is silent'
+
+    games[2][0].is_obtainable = True
+    games[2][0].save()
+    evaluate_and_apply(hunter)
+    hold = _hold(hunter, badges['ultra-hd'])
+    assert hold.is_holo and hold.mastered_at is None
 
 
 def test_a_mastery_lost_before_it_played_has_nothing_left_to_celebrate():
@@ -200,7 +247,8 @@ def test_an_edition_that_cannot_be_earned_does_not_block_the_set():
     assert SeriesAward.objects.filter(profile=hunter, series=series, kind=SeriesAward.KIND_FULL_SET).exists()
 
 
-def test_series_master_is_every_edition_mastered_when_no_one_edition_covers_every_stage():
+def test_series_master_is_every_edition_finished_when_no_one_edition_covers_every_stage():
+    """Neither edition here asks more than holo, so each one's top finish is holo, and Series Master reads that."""
     series, badges, games = _series((1, [CROSS]), (2, [ULTRA]), (3, [LEGACY]))
     hunter = _hunter()
     for number in (1, 2):
@@ -215,6 +263,43 @@ def test_series_master_is_every_edition_mastered_when_no_one_edition_covers_ever
     evaluate_and_apply(hunter)
     kinds = set(SeriesAward.objects.filter(profile=hunter, series=series).values_list('kind', flat=True))
     assert kinds == {SeriesAward.KIND_FULL_SET, SeriesAward.KIND_SERIES_MASTER}
+    assert not UserGroupBadge.objects.filter(profile=hunter, mastered_at__isnull=False).exists()
+
+
+def test_a_series_master_moment_draws_each_edition_as_it_is_held(rf):
+    """Audit: the moment drew only MASTERED editions (and every live one, crowned, when none was), so a Series
+    Master finished at holo showed a dead edition crowned under "Every edition mastered"."""
+    from django.template import Context, Template
+
+    series, badges, games = _series((1, [CROSS]), (2, [ULTRA]), (3, [LEGACY]))
+    dead = GroupBadgeFactory(series=series, is_live=True,
+                             platform_group=PlatformGroupFactory(key='ps6', name='PS6', platforms=['PS6'], sort_order=30))
+    hunter = _hunter()
+    for number in (1, 2, 3):
+        _finish(hunter, games[number][0])
+    evaluate_and_apply(hunter)
+    request = rf.get('/career/')
+    request.user = hunter.user
+    html = Template('{% load moments %}{% moments_overlay %}').render(Context({'request': request}))
+    assert 'Every edition at 100%: Ultra HD and Legacy HD' in html
+    assert f'data-badge-id="{dead.id}"' not in html
+    assert 'pp-med--mastered' not in html, 'neither edition offers Mastery: their finish is holo, not a crown'
+
+
+def test_series_master_waits_on_the_mastery_an_edition_offers():
+    """Ultra HD has a stage 0 (region-locked): its top finish is Mastery, so its holo alone is not enough."""
+    series, badges, games = _series((0, [ULTRA]), (1, [CROSS]), (2, [ULTRA]), (3, [LEGACY]))
+    hunter = _hunter()
+    for number in (1, 2, 3):
+        _finish(hunter, games[number][0])
+    _finish(hunter, games[0][0], full=False)
+    evaluate_and_apply(hunter)
+    assert _hold(hunter, badges['ultra-hd']).is_holo
+    assert not SeriesAward.objects.filter(profile=hunter, series=series, kind=SeriesAward.KIND_SERIES_MASTER).exists()
+
+    _finish(hunter, games[0][0])
+    evaluate_and_apply(hunter)
+    assert SeriesAward.objects.filter(profile=hunter, series=series, kind=SeriesAward.KIND_SERIES_MASTER).exists()
 
 
 def test_no_series_master_when_one_edition_already_covers_every_stage():
@@ -239,8 +324,9 @@ def test_the_nightly_batch_applies_series_rewards_too():
 
 @patch('trophies.discord_utils.discord_notifications.queue_webhook_send')
 def test_one_ping_carries_the_badges_and_the_rewards_and_a_reward_is_announced_once_ever(mock_send):
-    series, badges, games = _series((1, [CROSS]))
+    series, badges, games = _series((0, [CROSS]), (1, [CROSS]))
     hunter = _hunter(is_discord_verified=True, discord_id='123')
+    _finish(hunter, games[0][0])
     _finish(hunter, games[1][0])
 
     evaluate_and_apply(hunter, notify=True)
@@ -252,6 +338,7 @@ def test_one_ping_carries_the_badges_and_the_rewards_and_a_reward_is_announced_o
     ProfileTrophyGroup.objects.filter(profile=hunter).update(progress=50)
     ProfileGame.objects.filter(profile=hunter).update(progress=50)
     evaluate_and_apply(hunter, notify=True)
+    _finish(hunter, games[0][0])
     _finish(hunter, games[1][0])
     evaluate_and_apply(hunter, notify=True)
     assert mock_send.call_count == 1
@@ -260,10 +347,12 @@ def test_one_ping_carries_the_badges_and_the_rewards_and_a_reward_is_announced_o
 
 @patch('trophies.discord_utils.discord_notifications.queue_webhook_send')
 def test_an_old_reward_is_not_announced(mock_send):
-    _, badges, games = _series((1, [ULTRA]), legacy=False)
+    _, badges, games = _series((0, [ULTRA]), (1, [ULTRA]), legacy=False)
     hunter = _hunter(is_discord_verified=True, discord_id='123')
+    _finish(hunter, games[0][0], ago=timedelta(days=200))
     _finish(hunter, games[1][0], ago=timedelta(days=200))
     evaluate_and_apply(hunter, notify=True)
+    assert _hold(hunter, badges['ultra-hd']).mastered_at is not None, 'mastered, so the silence means something'
     body = str(mock_send.call_args)
     assert 'Mastered' not in body, 'a veteran\'s old mastery is not news'
 
@@ -339,7 +428,7 @@ def test_the_nightly_batch_reads_series_awards_once_not_per_profile():
 def test_a_bundle_is_mastered_by_its_last_member_to_reach_100():
     from trophies.models import ConceptBundle
 
-    series, badges, _ = _series((1, []), legacy=False)
+    series, badges, games = _series((0, [ULTRA]), (1, []), legacy=False)
     from trophies.models import Stage
     stage = Stage.objects.get(series_slug=series.series_slug, stage_number=1)
     bundle = ConceptBundle.objects.create(stage=stage, label='Episodes')
@@ -347,6 +436,7 @@ def test_a_bundle_is_mastered_by_its_last_member_to_reach_100():
     bundle.concepts.set(members)
     first, last = (GameFactory(concept=c, title_platform=ULTRA) for c in members)
     hunter = _hunter()
+    _finish(hunter, games[0][0], ago=timedelta(days=6))
     _finish(hunter, first, ago=timedelta(days=4))
     _finish(hunter, last, ago=timedelta(days=1))
 

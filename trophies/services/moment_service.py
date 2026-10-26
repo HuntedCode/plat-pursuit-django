@@ -258,19 +258,19 @@ def _badge_card(moment, holo, mastered, participants):
 
 
 def _set_card(moment, editions, holds, participants):
-    """A Full Set / Series Master moment: every edition's medallion side by side. A Series Master's are all
-    mastered by definition; a Full Set's wear what the hunter holds (each is held: that is the set)."""
+    """A Full Set / Series Master moment: every edition's medallion side by side, each wearing what the hunter
+    holds. A Series Master's are all at their top finish, which is a crown only where the edition offers
+    Mastery (badge_engine): elsewhere it is holo."""
     from trophies.services.collection_service import badge_frame
 
     master = moment.kind == Moment.KIND_SERIES_MASTER
-    # The editions the reward is MADE of: held (a Full Set) or mastered (a Series Master). An edition that
-    # cannot be earned is not part of it and is not drawn as if it were. None held is the team's preview.
-    shown = [gb for gb in editions if gb.id in holds and (holds[gb.id][1] or not master)] or editions
+    # The editions the reward is MADE of: the held ones. An edition that cannot be earned is not part of it and
+    # is not drawn as if it were. None held is the team's preview, drawn at the reward's top finish.
+    shown = [gb for gb in editions if gb.id in holds] or editions
     frames = []
     for gb in shown:
-        holo, mastered = holds.get(gb.id, (False, False))
-        frame = badge_frame(gb, {gb.id: holo or master}, {}, participants,
-                            {gb.id} if (mastered or master) else frozenset())
+        holo, mastered = holds.get(gb.id, (master, master))
+        frame = badge_frame(gb, {gb.id: holo}, {}, participants, {gb.id} if mastered else frozenset())
         frame['dom_id'] = f'moment-{moment.id}-{gb.id}'
         frames.append(frame)
     names = [gb.platform_group.name for gb in shown]
