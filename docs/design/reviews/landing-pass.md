@@ -67,7 +67,7 @@ Options:
   itself accepts it; anything else is dropped silently. The claim link carries the server's lowercased name.
   The session's name is forgotten once step 1 is submitted.
 - **allauth's pending login lasts 15 minutes** (`ACCOUNT_LOGIN_TIMEOUT`, allauth's default, not raised here: it
-  governs every login stage). A later confirmation lands on sign-in rather than signing the hunter in; the
+  governs every login stage; owner, 2026-10-26: keep it). A later confirmation lands on sign-in rather than signing the hunter in; the
   session's claimed name is what still fills Link PSN in.
 - **The viewer** is a native `<dialog>` (focus trap, Escape and the inert page come with `showModal()`). Its
   stage is the scroller; the item keeps 1200x630 and centres by `margin: auto`, so an overflowing item starts
@@ -84,4 +84,5 @@ Options:
 
 ## Not in this branch
 
-- The no-JS search (the form posts to a JSON endpoint). Pre-existing, noted for later.
+- The no-JS search (the form posts to a JSON endpoint). Pre-existing. Owner, 2026-10-26: skip it, the page
+  needs JavaScript anyway.
