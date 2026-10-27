@@ -21,7 +21,7 @@ the hand-offs between pages.
 | Authoring | Game Lists (browse, detail, create and edit, My Lists), Rate My Games. Roadmaps out of scope (not live, owner 2026-10-26) | Reviewed and fixed 2026-10-26 | [authoring.md](authoring.md) |
 | Identity and social | Profiles, the site-wide leaderboards, share cards, Monthly Recap | Reviewed and fixed 2026-10-26 | [identity.md](identity.md) |
 | Account | Settings and the account pages it links to (email addresses, password reset, re-authenticate, inactive account, the sign-out confirm), membership and its welcome page, fundraiser, the Support hub and its public roadmap, the beta-access gate | Reviewed and fixed 2026-10-26 | [account.md](account.md) |
-| Odds and ends | What's new, About, Contact, Privacy, Terms, the arcade, the badge-reveal event page, the archived reviews page, goodbye, the 404 and 429 pages, and a 500 page (none exists yet: a server error shows Django's bare "Server Error (500)") | Not started | |
+| Odds and ends | What's new, About, Contact, Privacy, Terms, the arcade, the badge-reveal event page, the archived reviews page, goodbye, the 404 and 429 pages, and a 500 page (none exists yet: a server error shows Django's bare "Server Error (500)") | Reviewed 2026-10-27 | [odds-and-ends.md](odds-and-ends.md) |
 
 The slices run in table order. Progression, Authoring and Odds and ends were added on 2026-10-24, when a walk
 of every live route found pages no slice named: the jobs, collection, milestones and titles pages sat between
