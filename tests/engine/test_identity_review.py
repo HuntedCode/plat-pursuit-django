@@ -320,3 +320,66 @@ def test_the_neighbours_are_two_one_row_lookups(django_assert_num_queries):
         before, after = adjacent_days(hunter, _at(20).date())
     assert (before, after) == (_at(21).date(), _at(19).date())
     assert adjacent_days(hunter, (timezone.now() + timedelta(days=5)).date())[1] is None
+
+
+# -- Average completion is per game (owner, 2026-10-26) ------------------------------------------------------
+
+def _library(profile, *games):
+    """(earned, unearned, progress) per game."""
+    for earned, unearned, progress in games:
+        ProfileGameFactory(profile=profile, game=GameFactory(), earned_trophies_count=earned,
+                           unearned_trophies_count=unearned, progress=progress)
+
+
+def test_average_completion_is_the_mean_of_each_games_percent():
+    """Not earned / total: one 300-trophy list would sink a library of finished games. PSN's own per-game
+    figure, averaged, the number PSN and PSNProfiles show."""
+    from trophies.services.profile_stats_service import update_profile_trophy_counts
+
+    hunter = ProfileFactory(is_linked=True)
+    _library(hunter, (10, 290, 3), (12, 0, 100))
+    update_profile_trophy_counts(hunter)
+    hunter.refresh_from_db()
+    assert round(hunter.avg_progress, 1) == 51.5, 'the library-wide share (7.3%) is back'
+    assert (hunter.total_trophies, hunter.total_unearned) == (22, 290)
+
+
+def test_average_completion_keeps_the_hunters_hide_settings():
+    from trophies.services.profile_stats_service import update_profile_trophy_counts
+
+    hunter = ProfileFactory(is_linked=True, hide_zeros=True)
+    _library(hunter, (0, 50, 0), (12, 0, 100), (5, 5, 50))
+    update_profile_trophy_counts(hunter)
+    hunter.refresh_from_db()
+    assert hunter.avg_progress == 75.0, 'a game with nothing earned still counts under hide_zeros'
+
+
+def test_the_header_says_how_many_of_how_many_trophies(client):
+    hunter = ProfileFactory(is_linked=True, total_trophies=4017, total_unearned=2925, total_bronzes=4017)
+    header = _header(client.get(_profile(hunter), **CF).content.decode())
+    facts = header[header.index('pp-phero__facts'):]
+    assert re.search(r'>4,017</b><span data-live-of="6942"> of 6,942</span> trophies</span>', facts)
+
+    done = ProfileFactory(is_linked=True, total_trophies=40, total_unearned=0, total_bronzes=40)
+    facts = _header(client.get(_profile(done), **CF).content.decode())
+    assert re.search(r'>40</b> trophies</span>', facts), 'a hunter with nothing unearned reads "40 of 40"'
+
+
+def test_mid_sync_the_of_total_hides_once_the_live_total_passes_it(client):
+    """The total is stored earned + unearned, which waits for finalize; a sync bringing new games carries the
+    live (tier-summed) total past it. Hidden at render, and by refresh-control.js as the total ticks."""
+    hunter = ProfileFactory(is_linked=True, sync_status='syncing', total_trophies=100, total_unearned=10,
+                            total_bronzes=150)
+    header = _header(client.get(_profile(hunter), **CF).content.decode())
+    assert '<span data-live-of="110" hidden> of 110</span>' in header
+    js = _read('static/js/refresh-control.js')
+    tally = js[js.index('    function applyTally(stats) {'):]
+    tally = tally[:tally.index('\n    }\n')]
+    assert 'if (ofEl) { ofEl.hidden = total > Number(ofEl.dataset.liveOf); }' in tally
+
+
+def test_the_lobby_shows_one_completion_percentage():
+    """"Earn rate" was earned / total trophies: beside the per-game average completion it was a second,
+    different percentage (owner: a count, not two percentages)."""
+    home = re.sub(r'\{#.*?#\}', '', _read('templates/trophies/home.html'))
+    assert 'Earn rate' not in home and 'snapshot.earn_rate' not in home

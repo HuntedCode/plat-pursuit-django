@@ -46,6 +46,13 @@ row. And the slice uses "Level" for two different numbers.
 - **Twin badges (ID-08):** label the kind on the card and the badge page.
 - **Hunters (ID-05):** open on Recently Active.
 - **Recap rewatch (ID-15):** quizzes gate a first watch only.
+- **Average completion** (raised after the review): it was earned / total trophies across the library, which a few
+  huge lists sink (the owner's dev account read 58% against 68% per game). It is now the mean of each game's PSN %,
+  and the header carries the library-wide share as a count instead: "4,017 of 6,942 trophies". One stored field,
+  so the lobby, the profile card and the Pursuer card follow; `recalculate_profile_counts` after deploy. The
+  lobby's "Earn rate" (earned / total) went: beside the new figure it was a second, different percentage.
+  PSNProfiles works the same way: each game's % weighted by trophy grade (PSN's own `progress`), then a plain
+  mean across games.
 
 ## Checked, not findings
 

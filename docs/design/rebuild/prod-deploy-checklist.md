@@ -1707,3 +1707,10 @@ rebuilds in that window keep labels as they are rather than improving them. That
 - [ ] **3. `python manage.py evaluate_badges --series <slug>`** for each of those 6 series after splitting (or
       wait for the nightly). Nothing about the badges themselves changes: a bonus stage counts exactly as
       stage 0 did, except that each title is now its own stage for Mastery.
+
+## 2026-10-26 - Average completion is per game (branch `review/identity`, PR #271)
+
+- [ ] **1. `python manage.py recalculate_profile_counts`** after the deploy. `Profile.avg_progress` is now the
+      mean of each game's PSN % (the figure PSN and PSNProfiles show), not earned / total trophies. A profile
+      only picks it up at its next sync otherwise, so until this runs some hunters read the old figure and some
+      the new. One aggregate per profile; it walks every profile once. No migration.

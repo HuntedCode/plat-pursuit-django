@@ -209,7 +209,14 @@ The POLISH pass (2026-08) changed three things, and the first is structural rath
         not).{% endcomment %}
         {% with trophies_now=live_trophy_total|default_if_none:header_stats.total_earned_trophies %}
         <p class="pp-factline pp-phero__facts mt-3 md:mt-4">
-            <span><b class="pp-tally"{% if can_derive_trophy_total %} data-live-total{% endif %} data-countup="{{ trophies_now }}">{{ trophies_now|intcomma }}</b> trophies</span>
+            {% comment %}"of 6,942": the library-wide share, as a COUNT beside the per-game average completion
+            (owner, 2026-10-26), so the two never read as two percentages that disagree. The total is the
+            stored earned + unearned, which waits for finalize; mid-sync the live total can climb past it
+            (new games bring new trophies), and then "of" is hidden rather than printed wrong, at render and
+            by `refresh-control.js` as the total ticks (`data-live-of`).{% endcomment %}
+            {% with available=header_stats.total_earned_trophies|add:header_stats.total_unearned_trophies %}
+            <span><b class="pp-tally"{% if can_derive_trophy_total %} data-live-total{% endif %} data-countup="{{ trophies_now }}">{{ trophies_now|intcomma }}</b>{% if header_stats.total_unearned_trophies %}<span data-live-of="{{ available }}"{% if trophies_now > available %} hidden{% endif %}> of {{ available|intcomma }}</span>{% endif %} trophies</span>
+            {% endwith %}
             {% if header_stats.total_games %}<span><b class="pp-tally" data-countup="{{ header_stats.total_games }}">{{ header_stats.total_games|intcomma }}</b> game{{ header_stats.total_games|pluralize }}</span>{% endif %}
             {% if header_stats.total_completions %}<span><b class="pp-tally" data-countup="{{ header_stats.total_completions }}">{{ header_stats.total_completions|intcomma }}</b> completed</span>{% endif %}
             {% with avg=header_stats.average_completion|default:0|floatformat:0 %}{% if avg != '0' %}<span><b class="pp-tally"><span data-countup="{{ avg }}">{{ avg }}</span>%</b> average completion</span>{% endif %}{% endwith %}
