@@ -102,13 +102,13 @@
 .supw-id__mark { display: inline-flex; align-items: center; gap: 2px; flex: none; }
 .supw-id__mark .pp-supstar { width: 16px; height: 16px; }
 
+/* Wraps rather than truncating (AC-07): the level and the billing cycle are the point of the line, and
+   "billed mo..." on a phone cut off the very fact it carries. */
 .supw-id__sub {
     font-size: 0.88rem;
     font-weight: 600;
     color: var(--pp-text-dim);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    text-wrap: pretty;
 }
 
 .supw__lede {

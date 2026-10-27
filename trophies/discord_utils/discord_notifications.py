@@ -212,7 +212,8 @@ def _badge_thumbnail(group_badge):
     # generic default in the announcement -- the two surfaces disagreeing about what a badge looks
     # like, in the one message that goes to the whole server.
     art = group_badge.art_layers()
-    subject = art.get('main') if art.get('has_custom_image') else None
+    # `main_full`: the upload itself, not the 512px display copy medallions draw (SW-06).
+    subject = art.get('main_full') if art.get('has_custom_image') else None
     # art_layers() returns a root-relative static path in a non-request context; Discord needs an
     # absolute URL, so a relative one falls back rather than shipping a broken thumbnail.
     return subject if subject and str(subject).startswith('http') else default_art

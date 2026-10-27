@@ -136,12 +136,11 @@
 
 .supm-who__mark { display: inline-flex; align-items: center; gap: 1px; flex: none; }
 
+/* Wraps rather than truncating (AC-07): "member since ..." on a phone hid the date it exists to show. */
 .supm-who__sub {
     font-size: 0.78rem;
     color: var(--pp-text-dim);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    text-wrap: pretty;
 }
 
 /* ---- the facts ---------------------------------------------------------------------------- */

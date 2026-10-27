@@ -221,28 +221,6 @@ def test_an_unclaimed_series_still_deletes_freely():
     assert not BadgeSeries.objects.filter(series_slug='no-claim').exists()
 
 
-def test_the_tracker_denominator_still_counts_claimed_series():
-    """`include_claimed=True`, and this is why it exists.
-
-    The picker excludes already-claimed series; the tracker must NOT. A claimed-but-pending series has no
-    artwork yet, so it belongs in "how many still need art". Folding the picker's exclusion into the
-    shared helper made the denominator shrink on every claim: the progress bar walked forward before any
-    artwork existed, and "15 of 95 claimed" was measured against a total that moved every time somebody
-    donated. On a live payment page.
-    """
-    unclaimed = _claimable_series(slug='unclaimed')
-    claimed = _claimable_series(slug='claimed')
-    DonationBadgeClaim.objects.create(
-        donation=_donation(), profile=ProfileFactory(), series=claimed,
-        series_slug=claimed.series_slug, series_name=claimed.name,
-    )
-
-    # What a donor can claim right now: one.
-    assert list(DonationService.series_needing_artwork()) == [unclaimed]
-    # What still lacks artwork: both. The claim did not conjure art into existence.
-    assert DonationService.series_needing_artwork(include_claimed=True).count() == 2
-
-
 def test_the_representative_edition_costs_no_query_when_prefetched():
     """`representative_group_badge` sorts in Python off `group_badges.all()` on purpose.
 

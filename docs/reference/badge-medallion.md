@@ -155,6 +155,12 @@ The companion **flip** (to a back face) is still a planned follow-up.
 - **`art_layers` are full URLs and a *filtered* list.** Render raw (`{{ layer }}`, never `{% static %}`
   — double-prefix) and **loop** rather than hardcode 3 `<img>`s (no-custom-art badges have 2 layers).
   State filters target `nth-child(1)` = backdrop, `nth-child(2)` = subject.
+- **The subject layer is a 512px display copy, not the upload** (SW-06, 2026-10-26). `GroupBadge.art_layers()['main']`
+  is `BadgeSeries.badge_thumb` / `GroupBadge.badge_override_thumb` (WebP, sharp at the 260px inspector on a 2x screen)
+  whenever it is current for its source; `main_full` is the upload, for og:image and the Discord embed. The copy is
+  made in `save()` (`trophies/services/badge_thumbs.py`) and backfilled by `make_badge_thumbs`. "Current" is a name
+  check (the copy's name is derived from the source's), so a source changed by a queryset `.update()` falls back to
+  the upload instead of drawing the old picture. Anything new that needs the original reads `main_full`.
 - **The meter cells come from `frame['segments']`, computed server-side** (`build_badge_frame` (DELETED 2026-08)), NOT in
   the template — Django templates can't loop N times without a filter, so the bool list is prebuilt.
   The Frame was replaced by the Badge Medallion; `frame_service` and its `SEGMENT_CAP` were deleted in 2026-08. Medallion composition now lives in `GroupBadge.art_layers()`.

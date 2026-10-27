@@ -3475,6 +3475,8 @@ class BadgeSeries(models.Model):
     title = models.ForeignKey('Title', on_delete=models.SET_NULL, null=True, blank=True, related_name='badge_series', help_text="One title per series; granted when the profile earns ANY of the series' group badges.")
     badge_image = models.ImageField(upload_to='badges/series/', null=True, blank=True, help_text="Default subject artwork for the series (sits on the group background).")
     holo_badge_image = models.ImageField(upload_to='badges/series/', null=True, blank=True, help_text="Default upgraded subject artwork shown when a badge is holo.")
+    # The 512px WebP display copy of badge_image (trophies/services/badge_thumbs.py). Written by save(), never by hand.
+    badge_thumb = models.ImageField(upload_to='badges/thumbs/', blank=True, default='', editable=False)
     funded_by = models.ForeignKey('Profile', on_delete=models.SET_NULL, null=True, blank=True, related_name='funded_badge_series', help_text="Donor credited for the default artwork.")
     artwork_source = models.ForeignKey(
         'self', on_delete=models.SET_NULL, null=True, blank=True, related_name='artwork_dependents',
@@ -3511,6 +3513,21 @@ class BadgeSeries(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.get_badge_type_display()})"
+
+    @classmethod
+    def from_db(cls, db, field_names, values):
+        from trophies.services.badge_thumbs import remember_source
+        instance = super().from_db(db, field_names, values)
+        remember_source(instance, 'badge_image', field_names)
+        return instance
+
+    def save(self, *args, **kwargs):
+        # The display copy of the art (trophies/services/badge_thumbs.py): re-rendered only when the art changed.
+        from trophies.services.badge_thumbs import art_changed, sync_thumb
+        changed = art_changed(self, 'badge_image')
+        super().save(*args, **kwargs)
+        sync_thumb(self, 'badge_image', 'badge_thumb', render=changed)
+        self._loaded_badge_image = self.badge_image.name or ''
 
     def clean(self):
         """Keep `artwork_source` ONE HOP deep and acyclic.
@@ -3614,6 +3631,8 @@ class GroupBadge(models.Model):
     # Overrides (null => inherit the series default).
     badge_image_override = models.ImageField(upload_to='badges/group/', null=True, blank=True, help_text="Per-group subject artwork; null inherits BadgeSeries.badge_image.")
     holo_badge_image_override = models.ImageField(upload_to='badges/group/', null=True, blank=True, help_text="Per-group holo artwork; null inherits BadgeSeries.holo_badge_image.")
+    # The 512px WebP display copy of badge_image_override (trophies/services/badge_thumbs.py). Written by save().
+    badge_override_thumb = models.ImageField(upload_to='badges/thumbs/', blank=True, default='', editable=False)
     funded_by_override = models.ForeignKey('Profile', on_delete=models.SET_NULL, null=True, blank=True, related_name='funded_group_badges', help_text="Per-group art funder; null inherits BadgeSeries.funded_by. Travels with badge_image_override.")
 
     created_at = models.DateTimeField(auto_now_add=True)
@@ -3628,6 +3647,21 @@ class GroupBadge(models.Model):
 
     def __str__(self):
         return f"{self.series.name} - {self.platform_group.name}"
+
+    @classmethod
+    def from_db(cls, db, field_names, values):
+        from trophies.services.badge_thumbs import remember_source
+        instance = super().from_db(db, field_names, values)
+        remember_source(instance, 'badge_image_override', field_names)
+        return instance
+
+    def save(self, *args, **kwargs):
+        # The display copy of the override art (trophies/services/badge_thumbs.py): re-rendered only when it changed.
+        from trophies.services.badge_thumbs import art_changed, sync_thumb
+        changed = art_changed(self, 'badge_image_override')
+        super().save(*args, **kwargs)
+        sync_thumb(self, 'badge_image_override', 'badge_override_thumb', render=changed)
+        self._loaded_badge_image_override = self.badge_image_override.name or ''
 
     def _artwork_origin(self):
         """(series_holding_the_art, is_borrowed) for the MAIN subject image, shared by the properties
@@ -3689,15 +3723,24 @@ class GroupBadge(models.Model):
     def art_layers(self):
         """Single source of truth for the medallion's art composition (group backdrop/backing/shape + the
         resolved subject art). Subject art resolves: per-group override -> series default -> (user badge:
-        submitter avatar) -> static default. Mirrors the legacy Badge.get_badge_layers behavior."""
+        submitter avatar) -> static default. Mirrors the legacy Badge.get_badge_layers behavior.
+
+        `main` is what a medallion DRAWS: the 512px display copy when it is current for the source, else the
+        upload itself (badge_thumbs.py, SW-06). `main_full` is always the upload, for the places that want the
+        original: a link preview's og:image and the Discord embed."""
+        from trophies.services.badge_thumbs import thumb_is_current
         from trophies.util_modules.assets import safe_static
         grp = self.platform_group
-        main_url, is_avatar = None, False
+        main_url, full_url, is_avatar = None, None, False
         origin, _borrowed = self._artwork_origin()
         if self.badge_image_override:
-            main_url = self.badge_image_override.url
+            full_url = self.badge_image_override.url
+            main_url = (self.badge_override_thumb.url
+                        if thumb_is_current(self.badge_image_override, self.badge_override_thumb) else full_url)
         elif origin.badge_image:
-            main_url = origin.badge_image.url
+            full_url = origin.badge_image.url
+            main_url = (origin.badge_thumb.url
+                        if thumb_is_current(origin.badge_image, origin.badge_thumb) else full_url)
         elif self.series.badge_type == 'user':
             submitter = self.series.submitted_by
             if submitter and submitter.avatar_url:
@@ -3715,6 +3758,7 @@ class GroupBadge(models.Model):
         return {
             'backdrop': grp.background_image.url if grp.background_image else None,
             'main': main_url,
+            'main_full': full_url or main_url,
             'backing_key': grp.backing_key,
             'shape': grp.medallion_shape,
             'has_custom_image': has_custom,

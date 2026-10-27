@@ -208,21 +208,25 @@ class FundraiserView(TemplateView):
             context['completed_claims'] = completed_claims
             context['pending_claims'] = pending_claims
 
-            # Badge tracker stats. NOTE the `include_claimed=True`: the tracker counts every series that
-            # still LACKS ARTWORK, claimed or not, because a claimed-but-pending series has no art yet.
-            # The picker's already-claimed exclusion must not leak in here -- with it, the denominator
-            # shrinks each time somebody claims, so the progress bar jumps forward before any artwork
-            # exists and "15 of 95" is measured against a moving total.
-            total_needing_art = DonationService.series_needing_artwork(include_claimed=True).count()
+            # Available series for claiming. The already-claimed exclusion is inside the helper, via
+            # the artwork_claim reverse OneToOne.
+            available_badges = list(
+                DonationService.series_needing_artwork().order_by(Lower('name'))
+            )
 
             claimed_count = len(all_claims)
             completed_count = len(completed_claims)
             pending_count = len(pending_claims)
 
-            # total_needing_art includes claimed-but-pending badges (still no image).
-            # Completed claims have artwork uploaded, so they're no longer in that query.
-            # True total = still needing art + already completed artwork.
-            tracker_total = total_needing_art + completed_count
+            # The tracker's total is this campaign's claims plus what can still be claimed: "N of M
+            # claimed" counts exactly what its label says (AC-02). Claiming moves a series from the
+            # available side to the claimed side and completing its art moves it within the claimed
+            # side, so neither moves the total. It used to be "series lacking art + completed claims",
+            # which also counted a series lacking art that this campaign could not offer (claimed under
+            # another campaign, or a completed claim whose art lives elsewhere): "136 of 137 claimed"
+            # with nothing left to claim.
+            # An ended campaign's total is frozen at what it claimed: series added since are a future campaign's.
+            tracker_total = claimed_count if context['is_ended'] else claimed_count + len(available_badges)
             context['badge_tracker'] = {
                 'total': tracker_total,
                 'claimed': claimed_count,
@@ -235,17 +239,15 @@ class FundraiserView(TemplateView):
                                 if tracker_total else 0),
             }
 
-            # Available series for claiming (logged-in users only). The already-claimed exclusion is
-            # inside the helper, via the artwork_claim reverse OneToOne.
-            available_badges = list(
-                DonationService.series_needing_artwork().order_by(Lower('name'))
-            )
             context['available_badges'] = available_badges
             # The on-page grid shows a bounded preview; the picker modal alone carries the full
             # list (the page used to render every tile TWICE -- ~400 tiles in the DOM). The list
             # is materialized once (bounded, ~100-200 rows), so the count costs nothing.
             context['available_badges_preview'] = available_badges[:18]
             context['available_badges_count'] = len(available_badges)
+            # Every series has a patron (AC-02): the hero says so and the donate copy saves the pick
+            # for the next wave, instead of promising a badge the page cannot offer.
+            context['all_patroned'] = not available_badges and not context.get('is_ended')
 
         # User-specific context
         if self.request.user.is_authenticated:

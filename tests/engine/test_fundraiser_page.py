@@ -55,7 +55,7 @@ def _series_with_edition(slug):
 
 def test_a_live_campaign_page_renders(client):
     """THE NameError regression: rendering a live badge-artwork campaign executes
-    series_needing_artwork twice in the view; before the import fix this was a 500."""
+    series_needing_artwork in the view; before the import fix this was a 500."""
     campaign = _campaign()
     response = client.get(reverse('fundraiser', kwargs={'slug': campaign.slug}))
     assert response.status_code == 200
@@ -348,7 +348,9 @@ def test_the_donor_wall_wears_marks_statically(client):
     root = Path(__file__).resolve().parents[2]
     wall = (root / 'templates' / 'fundraiser' / 'partials' / 'donor_wall.html').read_text(encoding='utf-8')
     css = (root / 'static' / 'css' / 'components' / 'fundraiser.css').read_text(encoding='utf-8')
-    page = (root / 'templates' / 'fundraiser' / 'fundraiser.html').read_text(encoding='utf-8')
+    # The finished-artwork tile is its own partial since the gallery is split into twelve + "Show all" (AC-03).
+    page = (root / 'templates' / 'fundraiser' / 'fundraiser.html').read_text(encoding='utf-8') + (
+        root / 'templates' / 'fundraiser' / 'partials' / '_claim_done.html').read_text(encoding='utf-8')
 
     assert '--don-c' in wall, 'the donor mark colour is not a custom prop'
     assert 'style="color:' not in wall, 'an inline color would beat :hover and kill the affordance'

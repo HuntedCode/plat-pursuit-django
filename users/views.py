@@ -16,7 +16,7 @@ from django.contrib import messages
 from django.contrib.auth import logout, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.contrib.auth.views import redirect_to_login
+from django.contrib.auth.views import LogoutView, redirect_to_login
 from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import render, redirect
 from django.urls import reverse
@@ -56,6 +56,17 @@ class CustomConfirmEmailView(ConfirmEmailView):
         response = super().post(*args, **kwargs)
         logger.info(f"POST response: {response.status_code}")
         return response
+
+
+class SignOutView(LogoutView):
+    """The ONE sign-out: the navbar's POST signs out and renders "Signed out". A GET (a typed or bookmarked
+    /logout/) goes home WITHOUT signing out, because a GET that signs out is a CSRF-shaped hole. Django's
+    POST-only view answered that GET with a bare white 405 page (AC-09)."""
+    http_method_names = ['get', 'post', 'options']
+    template_name = 'account/logout.html'
+
+    def get(self, request, *args, **kwargs):
+        return redirect('home')
 
 
 class VerificationSentView(EmailVerificationSentView):
@@ -1344,10 +1355,17 @@ class SubscriptionManagementView(LoginRequiredMixin, TemplateView):
             context.update(self._preview_context(preview))
             context['preview_active'] = preview
             context['preview_states'] = self.PREVIEW_STATES
+            context['wall_toggle'] = context['has_profile'] and context['membership'].state != 'none'
             return context
 
         membership = SubscriptionService.membership_status(user)
         context['membership'] = membership
+        # The supporter-wall switch, for anyone it can mean something to (AC-10): anyone wearing a level
+        # (the wall lists by `premium_tier`, which a comped level has with no processor subscription), a
+        # member, or a lapsed one keeping the setting for when they return. Somebody who never joined has
+        # nothing to list.
+        context['wall_toggle'] = context['has_profile'] and bool(
+            user.premium_tier or membership.state != 'none' or user.subscription_periods.exists())
 
         # The worn LEVEL, via the one shared shape (the welcome page renders the identical
         # dict; see users/services/marks.worn_level_dict for the legacy-name rule).

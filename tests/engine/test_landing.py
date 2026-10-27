@@ -163,7 +163,7 @@ def test_the_fixture_is_literal_and_complete():
     html = landing_service._fixture_card_html.__wrapped__()
 
     assert 'Warden' in html
-    assert 'PlatPursuit Backer' in html
+    assert 'font-weight: 600;">Backer</span>' in html, 'the level is the level name alone (owner 2026-10-26)'
     assert 'var(--' not in html
 
 

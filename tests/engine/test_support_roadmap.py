@@ -55,7 +55,7 @@ def test_the_roadmap_page_renders_for_everyone(client):
     response = client.get(reverse('support_roadmap'))
     assert response.status_code == 200
     body = ' '.join(response.content.decode().split())
-    assert 'The platinum roadmap for PlatPursuit itself.' in body
+    assert 'The platinum roadmap for Platinum Pursuit itself.' in body
     for _key, tier_name, _sub in ROADMAP_TIERS:
         assert tier_name in body
     assert 'just me!' in body

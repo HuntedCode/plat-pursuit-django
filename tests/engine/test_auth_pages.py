@@ -78,7 +78,11 @@ def test_the_real_logout_is_post_only_and_renders_signed_out(client):
     profile = ProfileFactory(is_linked=True)
     client.force_login(profile.user)
 
-    assert client.get('/logout/').status_code == 405, 'GET logout is a CSRF-shaped hole'
+    # A typed or bookmarked GET goes home and does NOT sign out: a GET that signs out is a CSRF-shaped
+    # hole. It used to be Django's bare white 405 page (AC-09).
+    resp = client.get('/logout/')
+    assert resp.status_code == 302 and resp['Location'] == '/'
+    assert '_auth_user_id' in client.session, 'a GET must never sign anybody out'
 
     resp = client.post('/logout/')
     assert resp.status_code == 200

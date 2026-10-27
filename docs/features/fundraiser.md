@@ -117,11 +117,26 @@ The public fundraiser page surfaces every unclaimed badge series in a dedicated 
 
 - **Query**: Reuses the same `available_badges` queryset built in `FundraiserView.get_context_data` (Tier 1, live, empty `badge_image`, not claimed, not user-type, ordered by `Lower('name')`).
 - **Visibility**: Shown on live and upcoming campaigns; hidden on ended campaigns (claiming is closed, so surfacing unclaimed badges would read as regret).
-- **Layout**: Responsive grid capped at `max-h-[32rem] overflow-y-auto` so large catalogs (50-200+ badges) don't dwarf the page. Uses the shared `_badge_tile.html` partial.
+- **Layout**: a bounded preview of 18 tiles (the shared `_badge_tile.html` partial); the picker modal alone carries the full list.
 - **Interactivity**:
   - Authed user with picks remaining → tile click opens the picker modal pre-selected on that badge, so the donor can confirm without re-searching.
   - Anon or authed-without-picks → tile click scrolls to the donation form (or the sign-up/login CTA section for anonymous viewers).
-- **Empty state**: Celebratory success card ("Every artwork has a patron!") when `available_badges` is empty.
+- **When nothing is claimable** (AC-02, 2026-10-26): the section is not rendered at all (Page Principles rule 3). The hero says
+  "Every badge series has a patron. Donations now fund the next wave." (`all_patroned` in the view), the tracker drops its
+  "Available" key, and the donate copy says a pick is saved for the next wave. The campaign's own `description` is admin
+  data: edit it if it still promises a badge per $10.
+
+## The rest of the page (AC-03, 2026-10-26)
+
+- **Totals**: one `.pp-factline` in the hero (raised, donors, artworks live), zeros left out. The four stat tiles are gone.
+- **Tracker**: "N of M claimed" where M is this campaign's claims plus what can still be claimed
+  (`series_needing_artwork()`), so the total moves only when a series gains art outside the campaign. It used to be
+  "series lacking art + completed claims", which counted a series this campaign could not offer (claimed under another
+  campaign): "136 of 137 claimed" with nothing left to claim.
+- **Artwork complete**: the newest twelve, then a native `<details>` "Show all N" (`_claim_done.html`). Medallion
+  images are lazy, so the closed rest fetch nothing.
+- **In the queue**: a closed `<details>` list of names and patrons, no placeholder medallions.
+- **Donor wall**: six claim chips per donor, then "+N more".
 
 ## Gotchas and Pitfalls
 
@@ -131,7 +146,7 @@ The public fundraiser page surfaces every unclaimed badge series in a dedicated 
 - **Denormalized series data on claims**: `series_name` and `series_slug` are stored at claim time because the Badge/series could theoretically be deleted or renamed later.
 - **No patron award**: donations used to grant a "Badge Artwork Patron" milestone + title. That rode on the legacy milestone engine, retired 2026-08 (Lane 2 Step 3), and was NOT replaced. Existing holders keep the title; new donors get the badge picks + receipt only.
 - **PayPal nested response structure**: Capture data is deeply nested in `purchase_units[0].payments.captures[0]`. The `custom_id` field links back to the Donation.
-- **Claims are per SERIES, not per badge**: a series with no live edition is invisible to the picker (liveness is per-edition); `series_needing_artwork()` is the one claimable predicate (three drifting filter stacks were unified into it).
+- **Claims are per SERIES, not per badge**: a series with no live edition is invisible to the picker (liveness is per-edition); `series_needing_artwork()` is the one claimable predicate (three drifting filter stacks were unified into it). It has no "include claimed" variant any more: the tracker counts claims plus this list instead.
 - **Anonymous donations**: `is_anonymous` hides identity on donor wall but admin dashboard always shows full donor info.
 - **Banner dismiss**: Uses localStorage key `fundraiser_banner_dismissed_{slug}` with configurable dismiss duration.
 - **Cumulative pick calculation**: `badge_picks_earned` is computed cumulatively across all of a user's completed donations to a fundraiser, not per-donation. Remainder dollars carry over (e.g., $25 + $5 = $30 = 3 picks, not 2 + 0). The calculation uses `select_for_update()` to prevent race conditions when two donations complete simultaneously. If a donation is refunded after its remainder contributed to a subsequent donation's picks, the pick counts may become inconsistent (manual correction needed).

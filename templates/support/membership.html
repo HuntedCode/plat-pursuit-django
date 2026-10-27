@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 
-{% block title %}Membership - PlatPursuit{% endblock %}
+{% block title %}Membership{% endblock %}
 
 {% block content %}
 <div class="supm">
@@ -37,7 +37,7 @@
                 controls.{% if membership.state == 'active' %} To change your level or billing cycle, cancel here and re-subscribe at
                 the new one when your paid time runs out. Nothing is lost in between.{% endif %}
                 {% else %}
-                Membership keeps the servers on and the rebuild moving. It is a way to back
+                Membership keeps the servers on and the next thing getting built. It is a way to back
                 the project, and it comes with a little more of what everyone here already gets.
                 {% endif %}
             </p>
@@ -60,7 +60,7 @@
                         <span class="pp-supname">{{ viewer_name }}</span>{% if level %}<span class="supm-who__mark" aria-hidden="true">{% include 'support/_stars.html' with tier=level %}</span>{% endif %}
                     </span>
                     <span class="supm-who__sub">
-                        {% if level %}{% if level.is_legacy %}{{ level.display_name }} &middot; a founding tier, wearing the {{ level.name }} mark{% else %}PlatPursuit {{ level.name }}{% endif %}{% else %}PlatPursuit member{% endif %}
+                        {% if level %}{% if level.is_legacy %}{{ level.display_name }} &middot; a founding tier, wearing the {{ level.name }} mark{% else %}{{ level.name }}{% endif %}{% else %}Member{% endif %}
                         {% if tenure.member_since %} &middot; member since {{ tenure.member_since|date:"M Y" }}{% endif %}
                     </span>
                 </span>
@@ -201,11 +201,11 @@
     {% endif %}
 
     {% comment %} ============================================== the wall toggle ==========
-    Deliberately OUTSIDE the member/non-member branch: show_on_supporter_wall defaults True, so
-    the preference must stay reachable in every state (a grace member is still listed, and a
-    lapsed one keeps control of the setting for when they return -- the wall query itself only
-    lists eligible tiers). {% endcomment %}
-    {% if has_profile %}
+    Outside the member/non-member branch: show_on_supporter_wall defaults True, so the preference
+    stays reachable for a grace member (still listed) and a lapsed one (keeps control of the setting
+    for when they return -- the wall query itself only lists eligible tiers). Not for somebody who
+    never joined (AC-10): `wall_toggle` in the view. {% endcomment %}
+    {% if wall_toggle %}
     <section aria-label="Supporter wall preference" class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral pp-arrive">
         <div class="card-body p-4 md:p-6 supm-wall pp-arrive__it">
             <div class="supm-wall__say">

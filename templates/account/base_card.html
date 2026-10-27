@@ -1,0 +1,22 @@
+{% extends 'base.html' %}
+{% comment %}The account card (static/css/components/auth.css): one centred card with an eyebrow, the page's ONE h1, a
+lede and a body, inside the site's normal chrome. Account pages a signed-in hunter reaches from the site
+(Email addresses, the beta gate) extend this directly and keep the footer and the phone tab bar.
+`account/base_auth.html` extends it for the sign in / sign up / link PSN flows and takes that chrome away.
+
+Blocks: title, auth_eyebrow, auth_title (branch inside it, never add a second h1), auth_lede, auth_body,
+auth_card_class ("auth-card--wide" for link PSN's step 2), card_after (below the card).{% endcomment %}
+{% block robots %}noindex, nofollow{% endblock %}
+
+{% block main_layout %}
+<main id="main-content" class="auth-page" role="main">
+    <div class="auth-card {% block auth_card_class %}{% endblock %} pp-head-cascade">
+        <p class="land-eyebrow"><span class="land-eyebrow__tick" aria-hidden="true"></span>{% block auth_eyebrow %}Platinum Pursuit{% endblock %}</p>
+        <h1 class="auth-card__h1">{% block auth_title %}{% endblock %}</h1>
+        {% block auth_lede %}{% endblock %}
+        {% include 'partials/_messages.html' %}
+        {% block auth_body %}{% endblock %}
+    </div>
+    {% block card_after %}{% endblock %}
+</main>
+{% endblock %}

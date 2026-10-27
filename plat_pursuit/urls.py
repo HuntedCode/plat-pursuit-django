@@ -18,7 +18,6 @@ Including another URLconf
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
-from django.contrib.auth.views import LogoutView
 from django.contrib.sitemaps.views import sitemap, index as sitemap_index
 from django.urls import path, include
 from django.views.generic import RedirectView, TemplateView
@@ -101,7 +100,7 @@ from trophies.views import (ModCenterView, QuickTakeQueueView, GameFlagQueueView
 from trophies.views import GamesListView, GameDetailView, GamePageView, GameLeaderboardView, RandomGameView, ProfilesListView, SearchView, ProfileDetailView, ProfileDayView, BadgeHowItWorksView, BadgeListView, BadgeDetailView, GroupBadgeInspectView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, RequestProfileRefreshView, ProfileSuggestView, SiteSuggestView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeSeriesCreationView, BadgeRanksPanelView, OverallBadgeLeaderboardsView, LeaderboardRowsView, MyTitlesView, RateMyGamesView, ReviewsArchivedView, RoadmapDetailView, RoadmapEditorView, PlatCardsView, RecentlyAddedView, TrophyListsBrowseView, CompanyListView, CompanyDetailView, FranchiseListView, FranchiseDetailView, GenreThemeListView, GenreDetailView, ThemeDetailView, CareerView, JobsBrowseView, JobDetailView, JobRanksPanelView, JobContractsView, ContractsResultsView, ContractModalView, ContractModalPreviewView, CollectionView, CollectionBadgeModalView
 from milestones.views import MilestoneListView   # new milestones app (replaces the legacy trophies view)
 from trophies.recap_views import RecapIndexView, RecapSlideView
-from users.views import CustomConfirmEmailView, VerificationSentView, resend_verification, fix_signup_address, stripe_webhook, paypal_webhook, SupportStorefrontView, SupportRoadmapView, SubscriptionManagementView
+from users.views import CustomConfirmEmailView, SignOutView, VerificationSentView, resend_verification, fix_signup_address, stripe_webhook, paypal_webhook, SupportStorefrontView, SupportRoadmapView, SubscriptionManagementView
 from users.subscription_admin_views import SubscriptionAdminView
 from fundraiser.views import FundraiserView, DonationSuccessView, FundraiserAdminView, BadgeRevealView, FundraiserLandingView
 # Notifications are HIDDEN pending their rebuild (2026-08); every view in `notifications/views.py` is
@@ -683,7 +682,7 @@ urlpatterns = [
     path('reviews/<slug:slug>/', RedirectView.as_view(pattern_name='review_hub', permanent=True, query_string=True)),
 
     path('search/', SearchView.as_view(), name='search'),
-    path('logout/', LogoutView.as_view(template_name='account/logout.html'), name='logout'),
+    path('logout/', SignOutView.as_view(), name='logout'),
 
     # Staff moderation pages (comment + review queues) and the game-family manager were REMOVED in the
     # 2026-08 staff strip-down, pending their rebuild. The data models (CommentReport, ModerationLog,

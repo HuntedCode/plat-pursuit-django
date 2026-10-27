@@ -1,29 +1,19 @@
-{% extends 'base.html' %}
-{% load static %}
+{% extends 'account/base_card.html' %}
 
-{% block title %}Beta Access{% endblock %}
+{% block title %}Beta access{% endblock %}
 {% block robots %}noindex, follow{% endblock %}
-{% block content %}
 {% comment %}`/beta-access/`, KEPT FOR THE NEXT BETA (owner, 2026-10-18). `trophies.mixins.PremiumRequiredMixin` redirects
 here, and nothing uses it while no feature is in a members-first beta, so the page says so plainly instead of claiming
 "the feature you're trying to access is in beta". When a future beta adopts the mixin, give this page that beta's
-copy back (or have the view pass it in).{% endcomment %}
-<div class="container mx-auto p-4 max-w-2xl flex items-center justify-center mt-12">
-    <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral text-center">
-        <div class="card-body p-5 md:p-7">
-            <figure class="mb-4">
-                <img src="{% static 'images/logo.png' %}" alt="Platinum Pursuit logo" class="w-24 mx-auto" decoding="async" />
-            </figure>
-            <h1 class="text-2xl md:text-3xl font-bold mb-3">No betas running right now</h1>
-            <p class="text-sm md:text-base text-base-content/70 mb-6">
-                When the next feature is ready to try, members get in first while it is still taking shape, and
-                everyone gets it when it ships.
-            </p>
-            <div class="flex flex-col gap-3">
-                <a href="{% url 'support_hub' %}" class="pp-cta min-h-11 w-full">See what members get</a>
-                <a href="{% url 'home' %}" class="pp-cta pp-cta--ghost min-h-11 w-full">Back to Home</a>
-            </div>
-        </div>
-    </div>
+copy back (or have the view pass it in). On the account card every account page uses, with the site chrome kept (AC-11).{% endcomment %}
+
+{% block auth_eyebrow %}Members first{% endblock %}
+{% block auth_title %}No betas running right now{% endblock %}
+{% block auth_lede %}<p class="auth-card__lede">When the next feature is ready to try, members get in first while it is still taking shape, and everyone gets it when it ships.</p>{% endblock %}
+
+{% block auth_body %}
+<div class="auth-form">
+    <a href="{% url 'support_hub' %}" class="pp-cta auth-submit">See what members get</a>
+    <a href="{% url 'home' %}" class="pp-cta pp-cta--ghost auth-submit">Back to home</a>
 </div>
 {% endblock %}
