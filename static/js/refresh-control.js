@@ -49,6 +49,10 @@ document.addEventListener('DOMContentLoaded', function () {
     // `total_trophies` is not. Absent here means "leave that figure alone", which is why this is a
     // separate hook rather than a lookup by class.
     var totalEl = document.querySelector('[data-live-total]');
+    // " of 6,942" beside the total (owner, 2026-10-26). Its N is the stored earned + unearned, which waits
+    // for finalize, so a sync that brings new games can carry the live total past it: hide it then, rather
+    // than read "6,960 of 6,942 trophies" (the audit's catch).
+    var ofEl = document.querySelector('[data-live-of]');
     var provisional = document.querySelectorAll('[data-sync-provisional]');
 
     var POLL_MS = 4000;
@@ -157,6 +161,7 @@ document.addEventListener('DOMContentLoaded', function () {
         // renamed payload key is all it would take.
         if (totalEl && resolved > 0 && resolved === tierEls.length) {
             tick(totalEl, total);
+            if (ofEl) { ofEl.hidden = total > Number(ofEl.dataset.liveOf); }
         }
     }
 

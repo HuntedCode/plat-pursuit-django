@@ -65,11 +65,14 @@ above it, and a full filter bar would compete with the strip it sits under.
             <div class="scard__value pp-tally">{{ rating_summary_stats.toughest }}<span class="pp-taste__unit">/10</span></div>
             <div class="scard__sub">{{ rating_summary_stats.toughest|rating_verdict:'difficulty' }} at worst</div>
         </div>
+        {% comment %}Left out at zero (review ID-11): "Quick takes 0 written" is an absence in a tile.{% endcomment %}
+        {% if rating_summary_stats.takes %}
         <div class="scard">
             <div class="scard__label">Quick takes</div>
             <div class="scard__value pp-tally" data-countup="{{ rating_summary_stats.takes }}">{{ rating_summary_stats.takes|intcomma }}</div>
             <div class="scard__sub">written</div>
         </div>
+        {% endif %}
     </div>
 </section>
 

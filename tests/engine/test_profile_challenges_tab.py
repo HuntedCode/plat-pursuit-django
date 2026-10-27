@@ -25,7 +25,7 @@ pytestmark = pytest.mark.django_db
 
 ROOT = Path(__file__).resolve().parents[2]
 CF = {'HTTP_CF_RAY': '8f0000000000abcd-LHR'}
-_TAB_BAR = re.compile(r'<div class="pp-switch".*?</div>', re.S)
+_TAB_BAR = re.compile(r'<div class="pp-switch[^"]*" role="tablist".*?</div>', re.S)
 
 
 def _hunter(psn='runner'):

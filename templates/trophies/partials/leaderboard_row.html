@@ -27,8 +27,11 @@ renders without it is invisible to a virtualized wall. Harmless on the flow wall
     Redis design skipped them, leaving pages of 47 rows with correct numbering and invisible holes) -- but
     `{% url %}` cannot reverse an empty username against `<str:psn_username>`, so honouring that promise
     unconditionally raised NoReverseMatch and took the whole page down with a 500. {% endcomment %}
+    {% comment %} The link uses `profile_slug`, the STORED username (review ID-14): `psn_username` here is the
+    DISPLAY name, PSN's capitals, and linking it sent every row through a 301. A hand-built entry without
+    the slug falls back to the display name lowercased, which is what the profile URL normalizes to. {% endcomment %}
     {% if entry.psn_username %}
-    <a class="lb-row__who" href="{% url 'profile_detail' entry.psn_username %}">
+    <a class="lb-row__who" href="{% url 'profile_detail' entry.profile_slug|default:entry.psn_username|lower %}">
         <span class="lb-row__av">
             {% if entry.avatar_url %}
             <img src="{{ entry.avatar_url }}" alt="" loading="lazy" decoding="async">

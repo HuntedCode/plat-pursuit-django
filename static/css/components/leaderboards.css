@@ -94,7 +94,11 @@
    ~76px and keeps the labels, which is the trade the rebuild standard asks for: shrink what is
    expendable, never what carries the meaning. Restored at md: by the base rule. */
 @media (max-width: 767px) {
-    .lb-bar .pp-switch__chip { padding-inline: 7px; gap: 4px; font-size: 11.5px; letter-spacing: 0.01em; }
+    /* The SUB-row too (review ID-04, 2026-10-26). The pass above was done for the main strip only, so
+       "Shovelware Free", "Rarity Score" and "All Trophies" still wrapped onto two lines each. `nowrap` is
+       the backstop: a label that cannot fit should shrink the airiness, never break the word. */
+    .lb-bar .pp-switch__chip,
+    .lb-subbar .pp-switch__chip { padding-inline: 7px; gap: 4px; font-size: 11.5px; letter-spacing: 0.01em; white-space: nowrap; }
     .lb-bar .pp-switch__chip svg,
     .lb-subbar .pp-switch__chip svg { width: 13px; height: 13px; }
 }
@@ -523,7 +527,12 @@
         position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
         overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0;
     }
-    .lb-controls .lb-jumpbar { margin-top: 8px; }
+    .lb-controls .lb-jumpbar { margin-top: 8px; flex-wrap: nowrap; }
+    /* ONE ROW for the three ways in (review ID-04): the hunter search takes the room the other two leave.
+       The shared search goes full-width below 520px for game detail's toolbar, which put the rank box on a
+       row of its own here, a lone "#" above the search, one more row before the first hunter. */
+    .lb-controls .gd-lb__find { flex: 1 1 0; min-width: 0; order: 0; }
+    .lb-controls .lb-goto { margin-left: 0; }
 }
 
 

@@ -906,6 +906,9 @@ def entry(hydrated, profile_id, rank):
         # empty name cannot be reversed against `<str:psn_username>` and raises NoReverseMatch, which is a
         # 500 for the whole page rather than the blank row `page()` promises below.
         'psn_username': p.get('display_psn_username') or p.get('psn_username') or '',
+        # The LINK's name: the stored username the profile URL is keyed on. Linking the display name (PSN's
+        # capitals) sent every row through a 301 to the lowercase URL (review ID-14).
+        'profile_slug': p.get('psn_username') or '',
         'avatar_url': p.get('avatar_url') or '',
         'flag': p.get('flag') or '',
         'is_premium': p.get('user_is_premium', False),

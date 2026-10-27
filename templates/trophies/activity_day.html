@@ -30,6 +30,15 @@ The sessions are the same partial either way -- only the frame differs.
                 &middot; {{ sessions|length }} game{{ sessions|length|pluralize }}
                 {% if day_platinums %}&middot; {{ day_platinums }} platinum{{ day_platinums|pluralize }}{% endif %}
             </p>
+            {% comment %}The neighbouring days with trophies (review ID-16): seeing the day before used to mean
+            going back to the Trophies tab and finding it. Only the days that exist, so neither link can
+            land on a 404.{% endcomment %}
+            {% if prev_day or next_day %}
+            <nav class="pp-actday__nav mt-3" aria-label="Other days">
+                {% if prev_day %}<a class="pp-cta pp-cta--sm" rel="prev" href="{% url 'profile_day' psn_username=profile.psn_username day=prev_day|date:'Y-m-d' %}"><span aria-hidden="true">&larr;</span> {{ prev_day|date:"M j" }}</a>{% endif %}
+                {% if next_day %}<a class="pp-cta pp-cta--sm ml-auto" rel="next" href="{% url 'profile_day' psn_username=profile.psn_username day=next_day|date:'Y-m-d' %}">{{ next_day|date:"M j" }} <span aria-hidden="true">&rarr;</span></a>{% endif %}
+            </nav>
+            {% endif %}
         </div>
     </section>
 

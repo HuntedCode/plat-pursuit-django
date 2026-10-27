@@ -18,8 +18,8 @@ deliberate: a list card is READ -- name, author, two counts -- where a game card
 columns and gap and carries no tile styling, so reusing it beats duplicating four identical
 breakpoints.
 
-Expects: `game_list` with `cover_items`, `name`, `game_count`, `like_count`, `owner`. Optional: `mine` (the
-reader's own list: no byline, review AU-07), `show_privacy`, and `game_list.viewer_platinumed` (My Lists sets it:
+Expects: `game_list` with `cover_items`, `name`, `game_count`, `like_count`, `owner`. Optional: `hide_owner` (no byline:
+the reader's own list, review AU-07, or a profile's own wall, where every tile is that hunter's, review ID-12), `show_privacy`, and `game_list.viewer_platinumed` (My Lists sets it:
 "3 of 8 platinumed", review AU-02).
 
 `cover_items` is a list of GAME rows -- the cover-representative trophy list per concept, picked in
@@ -38,7 +38,7 @@ also why the loop reads `item.display_image_url` and not `item.game.*`.
    {% comment %}`display_name` HERE TOO. An `aria-label` built from the raw name would read a hidden
    slur aloud to a screen-reader user while everybody else saw the neutral placeholder -- the hiding
    working everywhere except the one surface nobody looks at.{% endcomment %}
-   aria-label="{{ game_list.display_name }}{% if show_privacy and not game_list.is_public %}, private{% endif %}{% if not mine %} by {{ game_list.owner.display_psn_username|default:game_list.owner.psn_username }}{% endif %}, {% if game_list.viewer_platinumed %}{{ game_list.viewer_platinumed }} of {{ game_list.game_count }} platinumed{% else %}{{ game_list.game_count }} game{{ game_list.game_count|pluralize }}{% endif %}{% if game_list.like_count %}, {{ game_list.like_count }} like{{ game_list.like_count|pluralize }}{% endif %}">
+   aria-label="{{ game_list.display_name }}{% if show_privacy and not game_list.is_public %}, private{% endif %}{% if not hide_owner %} by {{ game_list.owner.display_psn_username|default:game_list.owner.psn_username }}{% endif %}, {% if game_list.viewer_platinumed %}{{ game_list.viewer_platinumed }} of {{ game_list.game_count }} platinumed{% else %}{{ game_list.game_count }} game{{ game_list.game_count|pluralize }}{% endif %}{% if game_list.like_count %}, {{ game_list.like_count }} like{{ game_list.like_count|pluralize }}{% endif %}">
     <div class="pp-gcard__cover">
         {% if game_list.cover_items %}
         {% comment %} `is-N` picks the composition: 1 fills, 2 splits down the middle, 3 gives the first a full
@@ -81,7 +81,7 @@ also why the loop reads `item.display_image_url` and not `item.game.*`.
         bare text node inside a flex parent becomes an anonymous flex item at min-content width, which
         cannot ellipsize -- the failure leaderboards.css:203 records. The marked case is handled by
         capping `.pp-markname` instead; see gamelists.css.{% endcomment %}
-        {% if not mine %}<p class="gl-card__author">{% name_mark name=game_list.owner.display_psn_username|default:game_list.owner.psn_username mark=game_list.owner.display_mark size='sm' index=mark_index %}</p>{% endif %}
+        {% if not hide_owner %}<p class="gl-card__author">{% name_mark name=game_list.owner.display_psn_username|default:game_list.owner.psn_username mark=game_list.owner.display_mark size='sm' index=mark_index %}</p>{% endif %}
 
         {% comment %} The shared foot: a hairline above the facts, so the counts read as metadata rather
         than as a third line of the title. {% endcomment %}

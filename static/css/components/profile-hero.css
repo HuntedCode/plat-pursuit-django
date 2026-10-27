@@ -197,7 +197,8 @@
 .pp-phero__sync { flex-wrap: wrap; row-gap: 2px; }
 
 
-.pp-phero__unit { font-size: 0.62em; font-weight: 700; color: var(--pp-text-mute); margin-left: 1px; }
+/* A private history: one quiet sentence where the figures would be (review ID-02). */
+.pp-phero__private { margin-bottom: 0; font-size: 0.85rem; line-height: 1.45; color: var(--pp-text-dim); max-width: 60ch; }
 
 /* ---- Trophy tiers -------------------------------------------------------------------------------- */
 /* The one surface the scoped trophy colour family belongs on -- it IS trophies. Read as a SHAPE (a wide
@@ -293,11 +294,6 @@
     .pp-phero__tier  { font-size: 0.98rem; gap: 5px; }
     .pp-phero__tier i { width: 9px; height: 9px; }
 
-    /* No `.scard` override here any more. This header carried the first copy of the phone squeeze,
-       scoped deliberately because a site-wide change to a primitive on 22 surfaces is its own decision.
-       Browse Games then wanted the identical rule, so it moved into the primitive (elements.css) rather
-       than becoming a second copy. `.pp-phero__stats` stays on the grid as a hook, but nothing styles
-       it -- re-adding a local squeeze here would now be a duplicate that can drift from the primitive. */
 }
 
 
@@ -546,6 +542,8 @@
    span rule, which is exactly how this regressed: the sessions fell back into narrow columns and clipped
    their own trophy cards. */
 .pp-actday__games { display: flex; flex-direction: column; gap: 8px; }
+/* A day page's previous / next day links: one row, the earlier day left and the later one right. */
+.pp-actday__nav { display: flex; align-items: center; gap: 8px; }
 @media (min-width: 768px) { .pp-actday__games { gap: 10px; } }
 
 .pp-actday__link {
@@ -990,7 +988,14 @@
 /* Two columns at 375px rather than four: four `.scard`s across a phone leaves each one narrower than the
    figure it holds. */
 .pp-taste__stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
-@media (min-width: 768px) { .pp-taste__stats { grid-template-columns: repeat(4, 1fr); gap: 12px; } }
+/* Three or four cells, since Quick takes is left out at zero (review ID-11): an odd last cell spans the
+   phone's row rather than leaving half of it empty, and from md: the cells share the row equally rather
+   than leaving a fourth column blank. */
+.pp-taste__stats > :last-child:nth-child(odd) { grid-column: span 2; }
+@media (min-width: 768px) {
+    .pp-taste__stats { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 12px; }
+    .pp-taste__stats > :last-child:nth-child(odd) { grid-column: auto; }
+}
 
 /* ---- The wall ------------------------------------------------------------------------------------
  * WIDE cards, not tall ones. The first cut was a cover-forward portrait card, which borrowed `.pp-gcard`'s
@@ -1268,11 +1273,6 @@
     .pp-rcard__title { min-height: 0; }
     .pp-rcard__take { min-height: 0; }
 }
-
-/* The box is drawn at the same size whether or not there is a take, so the placeholder centres in it --
-   top-left would read as text that failed to arrive rather than as a stated absence. */
-.pp-rcard__take--empty { align-items: center; justify-content: center; }
-.pp-rcard__none { font-size: 0.72rem; font-style: italic; color: var(--pp-text-mute); }
 
 .pp-rcard__take-txt {
     min-width: 0;

@@ -34,7 +34,7 @@ PANEL = Path(ROOT / 'templates' / 'trophies' / 'partials' / 'profile_detail' / '
 #: The switcher markup only, so a chip assertion cannot be satisfied by the word "Lists" appearing
 #: in a tile, a heading, a breadcrumb or the footer. Scoped the way the assertion memo asks: a bare
 #: `'Lists' in html` would pass on a page that renders no chip at all.
-_TAB_BAR = re.compile(r'<div class="pp-switch".*?</div>', re.S)
+_TAB_BAR = re.compile(r'<div class="pp-switch[^"]*" role="tablist".*?</div>', re.S)
 
 #: Django block comments. Source assertions strip these first, because a template's prose routinely
 #: NAMES the thing it deliberately does not do -- so an un-stripped check answers about the

@@ -75,7 +75,9 @@ class ProfilesListView(HtmxListMixin, ListView):
         'trophies': ['-total_trophies', Lower('psn_username')],
         'plats': ['-total_plats', Lower('psn_username')],
     }
-    DEFAULT_SORT = 'alpha'
+    #: Recently active, not alphabetical (review ID-05, owner 2026-10-26): A-to-Z opened the page on whoever's
+    #: name starts with "a", which is no reason to look at anyone; the hunters syncing now are.
+    DEFAULT_SORT = 'recently_active'
 
     def dispatch(self, request, *args, **kwargs):
         if not request.GET and request.user.is_authenticated:
@@ -152,21 +154,6 @@ class ProfilesListView(HtmxListMixin, ListView):
             {'text': 'Hunters'},
         ]
 
-        # Header substance scards from the hourly heartbeat --
-        # ALL four are values the heartbeat already computed for the home ribbon, so this page
-        # costs the cron nothing new. Full page only (guard mirrors HtmxListMixin's template
-        # selection); None until the cron warms the cache, and the template hides the grid.
-        is_xhr = self.request.headers.get('X-Requested-With') == 'XMLHttpRequest'
-        if not getattr(self.request, 'htmx', False) and not is_xhr:
-            from core.services.site_heartbeat import heartbeat_values
-            stats = heartbeat_values(
-                'profiles_total', 'trophies_total', 'platinums_total', 'trophies_24h')
-            # TRUTHY gate, not is-not-None: these route through _community_value(default=0),
-            # so a failed community compute caches ZEROS -- and "Hunters tracked 0" on a live
-            # site is a lie, not a stat (the audit's catch). A real zero-profile site never
-            # renders this page anyway.
-            context['hunters_stats'] = stats if stats['profiles_total'] else None
-
         context['form'] = self.get_filter_form()
         context['selected_country'] = self.request.GET.get('country', '')
 
@@ -186,6 +173,29 @@ class ProfilesListView(HtmxListMixin, ListView):
         )
 
         return context
+
+
+def _is_own(request, profile):
+    return request.user.is_authenticated and getattr(request.user, 'profile', None) == profile
+
+
+#: Your own profile (and its day pages) sits under My Pursuit, with no sub-nav item of its own.
+OWN_PROFILE_HUB = ('my_pursuit', None)
+
+
+def _profile_crumbs(profile, is_own, day=None):
+    """A profile's trail: Home / Hunters / name for a visitor, Home / name for its owner (review ID-13).
+    `day` adds a day page's date, linking the name back."""
+    name = profile.display_psn_username or profile.psn_username
+    crumbs = [{'text': 'Home', 'url': reverse_lazy('home')}]
+    if not is_own:
+        crumbs.append({'text': 'Hunters', 'url': reverse_lazy('profiles_list')})
+    if day is None:
+        crumbs.append({'text': name})
+    else:
+        crumbs += [{'text': name, 'url': reverse('profile_detail', args=[profile.psn_username])},
+                   {'text': day.strftime('%b %d, %Y')}]
+    return crumbs
 
 
 class ProfileDetailView(DetailView):
@@ -619,6 +629,12 @@ class ProfileDetailView(DetailView):
         rows = attach_cover_games(lists)
         for game_list in rows:
             game_list.owner = profile
+        # THE READER'S progress on each list (review ID-12), as the My Lists cards show it: one grouped
+        # query for the whole wall, counted in the database. Signed-out readers have no progress to show.
+        viewer = getattr(self.request.user, 'profile', None) if self.request.user.is_authenticated else None
+        if viewer is not None:
+            from gamelists.services import viewer_progress
+            viewer_progress.platinumed_by_list(viewer, rows)
         return {'profile_lists': rows}
 
     #: Finished runs shown on the Challenges tab, newest first. A guard rather than a feature: runs are
@@ -686,11 +702,17 @@ class ProfileDetailView(DetailView):
         # to work out why. Anything but 'dlc' is games -- a hand-edited `?set=` should land somewhere, not
         # 404.
         rating_set = 'dlc' if self.request.GET.get('set') == 'dlc' else 'games'
+        # Not computed for a scroll append: that response is cards only, and the summary describes the
+        # whole set, so it would be an extra aggregate per appended page that nothing renders.
+        summary = None if self._is_scroll_append() else profile_rating_summary(profile)
+        # A hunter who has rated only DLC opens on the DLC wall when no set is asked for: the Games wall
+        # would be the empty "No ratings yet" a visitor's chip promised was not there (review ID-11).
+        if ('set' not in self.request.GET and summary
+                and not summary.get('base_count') and summary.get('dlc_count')):
+            rating_set = 'dlc'
 
         return {
-            # Not computed for a scroll append: that response is cards only, and the summary describes the
-            # whole set, so it would be an extra aggregate per appended page that nothing renders.
-            'rating_summary_stats': None if self._is_scroll_append() else profile_rating_summary(profile),
+            'rating_summary_stats': summary,
             'profile_ratings': build_profile_ratings_page(
                 profile, sort=sort, page=page, dlc=rating_set == 'dlc',
             ),
@@ -754,6 +776,14 @@ class ProfileDetailView(DetailView):
         self._has_visible_runs = (profile.psn_history_public
                                   and self._visible_runs_for(profile).exists())
         if tab == 'challenges' and not self._has_visible_runs:
+            tab = 'games'
+        # RATINGS, the same rule for a visitor (review ID-11, 2026-10-26): a tab that opens on "No ratings
+        # yet" is a door to an absence. The owner keeps it either way, because for them the empty tab is
+        # where Rate My Games starts. An indexed `.exists()`, like the two above.
+        from trophies.models import UserConceptRating
+        self._shows_ratings = is_own_profile or (profile.psn_history_public
+                                                 and UserConceptRating.objects.filter(profile=profile).exists())
+        if tab == 'ratings' and not self._shows_ratings:
             tab = 'games'
         # And the same normalization for anything that is not a tab at all. The dispatch below
         # already defaults an unknown slug to games, but `_resolved_tab` kept the raw string, and
@@ -823,20 +853,21 @@ class ProfileDetailView(DetailView):
 
         context.update(tab_context)
 
-        # Add shared metadata
-        context['breadcrumb'] = [
-            {'text': 'Home', 'url': reverse_lazy('home')},
-            {'text': 'Hunters', 'url': reverse_lazy('profiles_list')},
-            {'text': f"{profile.display_psn_username}"}
-        ]
+        # Add shared metadata. YOUR OWN PROFILE IS MY PURSUIT'S, a visitor's view of anyone is Community's
+        # (review ID-13, 2026-10-26): opening it from the avatar used to drop the owner into Community /
+        # Hunters, the same hand-off a game list's page fixed for its owner (`hub_subnav_override`).
+        context['breadcrumb'] = _profile_crumbs(profile, is_own_profile)
+        if is_own_profile:
+            self.request.hub_subnav_override = OWN_PROFILE_HUB
         context['current_tab'] = tab
         # The tabs the switcher renders, in order.
         profile_tabs = [
             ('games', 'Games'),
             ('trophies', 'Trophies'),
             ('badges', 'Badges'),
-            ('ratings', 'Ratings'),
         ]
+        if self._shows_ratings:
+            profile_tabs.append(('ratings', 'Ratings'))
         # LISTS, rebuilt against `gamelists` in 2026-09. The legacy tab was removed when the old
         # system was parked, and the note left here asked the revamp to bring its own rather than
         # inherit it; this is that. Before it existed there was no author-scoped view of lists
@@ -1073,9 +1104,15 @@ class ProfileDayView(View):
         # Both templates render every game OPEN, so both need the trophies in the HTML. One grouped query
         # for the whole day rather than one per session -- a day has few games, but "few" is not a reason
         # to write an N+1 into the page crawlers read.
-        from trophies.services.activity_service import attach_day_trophies
+        from trophies.services.activity_service import adjacent_days, attach_day_trophies
         attach_day_trophies(profile, when, sessions)
+
+        own = _is_own(request, profile)
+        if own:
+            request.hub_subnav_override = OWN_PROFILE_HUB
+        # The neighbours are the PAGE's (`activity_day.html`); the modal partial draws no nav.
         htmx = getattr(request, 'htmx', False)
+        prev_day, next_day = (None, None) if htmx else adjacent_days(profile, when)
 
         context = {
             'profile': profile,
@@ -1083,13 +1120,9 @@ class ProfileDayView(View):
             'sessions': sessions,
             'day_trophies': sum(s['trophies'] for s in sessions),
             'day_platinums': sum(1 for s in sessions if s['has_platinum']),
-            'breadcrumb': [
-                {'text': 'Home', 'url': reverse_lazy('home')},
-                {'text': 'Hunters', 'url': reverse_lazy('profiles_list')},
-                {'text': profile.display_psn_username or profile.psn_username,
-                 'url': reverse('profile_detail', args=[profile.psn_username])},
-                {'text': when.strftime('%b %d, %Y')},
-            ],
+            'breadcrumb': _profile_crumbs(profile, own, day=when),
+            'prev_day': prev_day,
+            'next_day': next_day,
         }
         template = ('trophies/partials/profile_detail/activity_day_modal.html'
                     if htmx else 'trophies/activity_day.html')

@@ -134,6 +134,9 @@ def badge_frame(gb, holds, standings, participants, mastered=frozenset()):
         'is_holographic': held and is_holo,
         'is_mastered': held and gb.id in mastered,
         'series_name': series.name,
+        # The badge's KIND ("Series", "Franchise" ...), on the caption: a series and a franchise badge can share a
+        # name, art and edition, and without it the pair read as one badge twice (review ID-08).
+        'badge_kind': series.get_badge_type_display(),
         'franchise': series.franchise.name if series.franchise_id else None,
         'collection': series.collection.name if series.collection_id else None,
         'developer': series.developer.name if series.developer_id else None,

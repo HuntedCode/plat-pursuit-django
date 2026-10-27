@@ -220,6 +220,19 @@ def day_sessions(profile, day):
     return [_session(r, games) for r in rows if r['trophy__game_id'] in games]
 
 
+def adjacent_days(profile, day):
+    """(previous, next): the nearest days either side of `day` with a dated trophy, or None at either end.
+    A day page's way to its neighbours (review ID-16, 2026-10-26). Two one-row lookups on the index range
+    `earnedtrophy_timeline_idx` serves, never a walk of the hunter's days: a whale has thousands."""
+    start, end = _day_bounds(day)
+    dated = profile.earned_trophy_entries.filter(earned=True, earned_date_time__isnull=False)
+    before = (dated.filter(earned_date_time__lt=start).order_by('-earned_date_time')
+              .values_list('earned_date_time', flat=True).first())
+    after = (dated.filter(earned_date_time__gte=end).order_by('earned_date_time')
+             .values_list('earned_date_time', flat=True).first())
+    return tuple(at.astimezone(DAY_TZ).date() if at else None for at in (before, after))
+
+
 def _games_for(rows):
     """The page's games, in ONE query.
 

@@ -86,7 +86,7 @@ page's only job is to start the ceremony, so returning to it after the ceremony 
 a button you have just finished pressing. The archive is where the next choice actually lives.
 
 A data attribute rather than a literal in the controller so the URL stays with `{% url %}`.{% endcomment %}
-<div id="recap-container" class="rcx" data-year="{{ year }}" data-month="{{ month }}"
+<div id="recap-container" class="rcx" data-year="{{ year }}" data-month="{{ month }}"{% if not first_visit %} data-rewatch{% endif %}
      data-exit="{% url 'recap_index' %}"
      role="dialog" aria-modal="true" aria-label="{{ month_name }} {{ year }} recap" hidden>
     <div class="rcx__ground" aria-hidden="true"></div>

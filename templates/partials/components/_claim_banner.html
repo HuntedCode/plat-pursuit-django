@@ -22,7 +22,7 @@ stays as the detail, and as the fallback when the level would not move.{% endcom
         <div class="min-w-0 flex-1">
             <div class="font-bold text-sm md:text-base"><span class="text-primary" data-countup="{{ claimable.count }}">{{ claimable.count }}</span> Contract{{ claimable.count|pluralize }} ready to claim</div>
             {% if projection and projection.level > level %}
-            <div class="text-xs md:text-sm text-base-content/80">Claim {% if claimable.count == 1 %}it{% else %}them{% endif %} to reach <b class="pp-tally text-primary">Level {{ projection.level|intcomma }}</b> &middot; {{ projection.rank.label }}</div>
+            <div class="text-xs md:text-sm text-base-content/80">Claim {% if claimable.count == 1 %}it{% else %}them{% endif %} to reach <b class="pp-tally text-primary">Pursuer Lv {{ projection.level|intcomma }}</b> &middot; {{ projection.rank.label }}</div>
             {% if projection.top %}
             <ul class="claim-banner__jobs" aria-label="Jobs this claim raises most">
                 {% for j in projection.top %}<li>{{ j.name }} <span class="pp-tally">{{ j.from }} &rarr; {{ j.to }}</span></li>{% endfor %}

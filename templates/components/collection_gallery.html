@@ -119,6 +119,7 @@ collection-gallery.css, wired by collection.js (initGallery).
             {% endif %}
             {% include 'components/badge_medallion.html' with frame=badge no_id=True no_count=True always_meter=True %}
             <span class="pp-gallery__caption">
+                {% if badge.badge_kind %}<span class="pp-gallery__kind">{{ badge.badge_kind }}</span>{% endif %}
                 <span class="pp-gallery__name">{{ badge.series_name }}</span>
                 {% comment %}The edition on its own line, in its tier colour. Both editions of a series can
                 sit side by side here, identical but for this word.{% endcomment %}

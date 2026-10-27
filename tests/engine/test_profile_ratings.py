@@ -412,13 +412,11 @@ def test_the_landscape_art_costs_no_extra_query(client):
     assert not any('raw_response' in q['sql'] for q in ctx.captured_queries)
 
 
-def test_every_card_reserves_room_for_a_quick_take(client):
-    """A grid row is as tall as its TALLEST card, so one long take inflates every card beside it and the
-    ones without a take end up mostly blank. Reserving three lines on every card is what removes that --
-    this file's first cut argued the opposite and produced exactly the raggedness it was trying to avoid.
-
-    Three rather than two because the blurb is capped at 140 characters, which is about three lines at
-    this width, so the clamp almost never actually bites."""
+def test_a_card_without_a_take_draws_no_box(client):
+    """No "No thoughts yet" box on a rating without words (review ID-11, 2026-10-26): it was an absence
+    drawn as content on every such card (Page Principles rule 3). The row still lines up, because the card
+    stretches to its row and the footer is pinned to the bottom; a take still reserves its lines so cards
+    WITH takes match each other."""
     profile = ProfileFactory(is_linked=True)
     _rated(profile, title='Silent')                                   # no take at all
     _rated(profile, title='Chatty', blurb='Worth every hour of it.')  # a short one
@@ -427,12 +425,12 @@ def test_every_card_reserves_room_for_a_quick_take(client):
     css = (ROOT / 'static' / 'css' / 'components' / 'profile-hero.css').read_text(encoding='utf-8')
     take = css[css.index('.pp-rcard__take {'):]
     take = take[:take.index('}')]
+    foot = css[css.index('.pp-rcard__foot {'):]
+    foot = foot[:foot.index('}')]
 
-    # The box is drawn on BOTH cards -- reserving nothing on the silent one would defeat the point --
-    # and the silent one SAYS so rather than sitting blank, which reads as content that failed to load.
-    assert 'class="pp-rcard__take"' in body                 # the card with a take
-    assert 'pp-rcard__take--empty' in body                  # the card without one
-    assert 'No thoughts yet' in body
+    assert body.count('class="pp-rcard__take"') == 1, 'a take box is drawn without a take'
+    assert 'No thoughts yet' not in body and 'pp-rcard__take--empty' not in body
+    assert 'margin-top: auto' in foot, 'the footer no longer pins to the bottom, so rows stop lining up'
     assert 'min-height: calc(4 * 1.45em' in take, 'the take no longer reserves its lines'
 
 
@@ -925,13 +923,28 @@ def test_the_scroller_is_told_the_size_of_the_page_it_is_given(client):
     assert f'paginateBy: {RATINGS_PER_PAGE}' in body
 
 
-def test_an_unrated_hunter_gets_an_empty_state_not_a_bare_tab(client):
+def test_an_unrated_hunter_has_no_ratings_tab_for_a_visitor(client):
+    """A door to an absence (review ID-11): no chip, and a typed `?tab=ratings` lands on Games."""
     profile = ProfileFactory(is_linked=True)
 
     body = client.get(_url(profile), **CF).content.decode()
 
-    assert 'No ratings yet' in body
-    assert 'pp-taste' not in body       # nothing to summarize, so no summary at all
+    assert '?tab=ratings' not in body, 'the Ratings chip is offered with nothing behind it'
+    assert 'No ratings yet' not in body and 'pp-taste' not in body
+    assert 'id="profile-tab-games"' in body and 'aria-selected="true"' in body
+
+
+def test_your_own_empty_ratings_tab_points_at_rate_my_games(client):
+    """The owner keeps the tab, because for them it is where rating starts."""
+    profile = ProfileFactory(is_linked=True)
+    client.force_login(profile.user)
+
+    body = client.get(_url(profile), **CF).content.decode()
+
+    assert '?tab=ratings' in body
+    assert 'No ratings yet' in body and 'You haven&rsquo;t rated any of your games yet.' in body
+    assert 'href="/rate-my-games/"' in body
+    assert 'This hunter' not in body, 'your own empty state talks about you in the third person'
 
 
 def test_only_this_hunter_s_ratings_are_on_their_wall(client):
@@ -1040,3 +1053,17 @@ def test_a_rating_card_shows_what_every_version_of_the_game_carries():
                             {'profile_ratings': build_profile_ratings_page(profile), 'profile': profile})
     assert '<use href="#pp-gflag-online"/>' in html and 'pp-gflags--strip' in html
     assert 'pp-gflag-delisted' not in html
+
+
+def test_a_hunter_with_only_dlc_ratings_opens_on_the_dlc_wall(client):
+    """A visitor's chip shows because a rating exists; the tab must not then open on an empty Games wall
+    (review ID-11, the audit's catch). An explicit `?set=games` is still honoured."""
+    profile = ProfileFactory(is_linked=True)
+    concept = ConceptFactory(unified_title='Only DLC')
+    ProfileGameFactory(profile=profile, game=GameFactory(concept=concept))
+    pack = ConceptTrophyGroupFactory(concept=concept, trophy_group_id='001', display_name='The Pack')
+    UserConceptRatingFactory(profile=profile, concept=concept, concept_trophy_group=pack)
+
+    body = client.get(_url(profile), **CF).content.decode()
+    assert 'No ratings yet' not in body and 'The Pack' in body
+    assert client.get(_url(profile, set='games'), **CF).context['rating_set'] == 'games'

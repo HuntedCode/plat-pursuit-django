@@ -64,6 +64,7 @@ what they hold, and the medallion's state treatment already tells the two apart 
             {% endif %}
             {% include 'components/badge_medallion.html' with frame=badge no_id=True no_count=True always_meter=True %}
             <span class="pp-gallery__caption">
+                {% if badge.badge_kind %}<span class="pp-gallery__kind">{{ badge.badge_kind }}</span>{% endif %}
                 <span class="pp-gallery__name">{{ badge.series_name }}</span>
                 {% comment %}The edition on its own line, in its tier colour -- same as the Collection wall.
                 It had been sharing the stat's single line, where it displaced the badge's actual figures.

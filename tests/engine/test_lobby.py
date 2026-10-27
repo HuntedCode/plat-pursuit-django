@@ -89,7 +89,7 @@ def test_the_lobby_leads_with_the_pursuit(client):
     assert body.index(b'claim-banner') < body.index(b'home-moats') < body.index(b'Trophy collection'), (
         'the lobby no longer leads with the Pursuit')
     banner = body[body.rindex(b'<a ', 0, body.index(b'claim-banner')):body.index(b'home-moats')]
-    assert b'Claim it to reach' in banner and b'Level 3<' in banner, 'the claim prompt lost its projection'
+    assert b'Claim it to reach' in banner and b'Pursuer Lv 3<' in banner, 'the claim prompt lost its projection'
     assert b'/career/?view=contracts&amp;status=claimable' in banner
 
 

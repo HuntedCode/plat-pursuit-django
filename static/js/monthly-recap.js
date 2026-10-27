@@ -17,6 +17,8 @@
 class MonthlyRecapManager {
     constructor(containerId, recapData, year, month) {
         this.container = document.getElementById(containerId);
+        // Set by the page when this hunter has watched the month before (`first_visit` is false).
+        this.isRewatch = !!(this.container && this.container.hasAttribute('data-rewatch'));
         this.data = recapData;
         this.year = year;
         this.month = month;
@@ -686,15 +688,12 @@ class MonthlyRecapManager {
         // The deck is over. The summary is mid-fade and the card scene has the stage, so re-boxing a
         // departing slide as scrollable would only make it twitch on its way out.
         if (this.container.classList.contains('is-ending')) return;
-        const slideEls = this.slidesContainer.querySelectorAll('.recap-slide');
-        slideEls.forEach(el => {
-            // Check if content overflows the slide height
-            if (el.scrollHeight > el.clientHeight) {
-                el.classList.add('has-overflow');
-            } else {
-                el.classList.remove('has-overflow');
-            }
-        });
+        this.slidesContainer.querySelectorAll('.recap-slide').forEach(el => this.fitSlide(el));
+    }
+
+    /** Top-align one slide when its content is taller than the slide. */
+    fitSlide(el) {
+        el.classList.toggle('has-overflow', el.scrollHeight > el.clientHeight);
     }
 
     /** Pacing. A quiz holds the deck until it is answered -- the gate already exists, this just stops
@@ -726,7 +725,7 @@ class MonthlyRecapManager {
      * stage still said "waiting", so its bar kept an inline `width: 0` and never ran.
      */
     syncBeatState(type) {
-        const gated = this.quizManager.isQuizSlide(type) && !this.quizManager.canNavigate(type);
+        const gated = this.quizGates(type);
         const manual = this.MANUAL_BEATS.has(type);
         const blocked = gated || manual || Boolean(document.querySelector('dialog[open]'));
         this.container.classList.toggle('is-waiting', blocked);
@@ -938,6 +937,11 @@ class MonthlyRecapManager {
             }
         });
 
+        // MEASURED HERE, as the slide arrives (review ID-06, 2026-10-26). The check after render runs while
+        // the stage is still hidden, where every slide measures 0 tall, so no slide was ever marked and a
+        // tall beat on a short laptop stayed centred with its top cut off ("YOUR ACTIVITY IN" on the
+        // calendar). The active slide is the one that matters, and it is laid out now.
+        this.fitSlide(slideEls[index]);
         this.armBeat(index, slideEls[index]);
         this.applyBeatAccent(slideEls[index]);
 
@@ -1011,18 +1015,20 @@ class MonthlyRecapManager {
      * gets the numbers.
      */
     fillQuizScore(slideEl) {
-        const score = this.quizManager.getScore();
-        // Quizzes gate navigation until answered, so reaching this slide means every quiz before it has
-        // a result. Guard anyway: a deck with no quizzes drops this slide server-side, and a future
-        // change to the gate should degrade to a blank slide, not a broken one.
-        if (!score) return;
+        // A FIRST watch reaches this slide with every quiz answered, because the quizzes gate it. A rewatch
+        // does not (review ID-15), so the total is the deck's quizzes, not the ones answered this sitting:
+        // answering one of four must not read "1 / 1, every single one".
+        const quizzes = this.slides.filter(s => this.quizManager.isQuizSlide(s.type)).length;
+        const score = this.quizManager.getScore() || { correct: 0, total: 0, percentage: 0 };
+        if (!quizzes) return;
+        const skipped = quizzes - score.total;
 
         const set = (sel, text) => {
             const el = slideEl.querySelector(sel);
             if (el) el.textContent = text;
         };
         set('[data-score-correct]', String(score.correct));
-        set('[data-score-total]', `/ ${score.total}`);
+        set('[data-score-total]', `/ ${quizzes}`);
 
         const pips = slideEl.querySelector('[data-score-pips]');
         if (pips) {
@@ -1034,7 +1040,9 @@ class MonthlyRecapManager {
             }));
         }
 
-        set('[data-score-verdict]', this.quizScoreVerdict(score));
+        set('[data-score-verdict]', skipped > 0
+            ? `You skipped ${skipped} this time.`
+            : this.quizScoreVerdict(score));
     }
 
     /** Graded, because "you knew yourself" and "your own month surprised you" are different sentences. */
@@ -1315,17 +1323,7 @@ class MonthlyRecapManager {
     }
 
     nextSlide() {
-        // Check if we're on a quiz slide that hasn't been answered
-        const currentSlideType = this.slides[this.currentSlide]?.type;
-        if (this.quizManager.isQuizSlide(currentSlideType) && !this.quizManager.canNavigate(currentSlideType)) {
-            // Shake the slide to indicate they need to answer
-            const slideEl = this.slidesContainer.querySelectorAll('.recap-slide')[this.currentSlide];
-            if (slideEl) {
-                slideEl.classList.add('animate-shake');
-                setTimeout(() => slideEl.classList.remove('animate-shake'), 500);
-            }
-            return;
-        }
+        if (this.quizHolds()) return;
 
         if (this.currentSlide < this.slides.length - 1) {
             this.goToSlide(this.currentSlide + 1);
@@ -1337,18 +1335,32 @@ class MonthlyRecapManager {
         }
     }
 
-    prevSlide() {
-        // Check if we're on a quiz slide that hasn't been answered
-        const currentSlideType = this.slides[this.currentSlide]?.type;
-        if (this.quizManager.isQuizSlide(currentSlideType) && !this.quizManager.canNavigate(currentSlideType)) {
-            // Shake the slide to indicate they need to answer
-            const slideEl = this.slidesContainer.querySelectorAll('.recap-slide')[this.currentSlide];
-            if (slideEl) {
-                slideEl.classList.add('animate-shake');
-                setTimeout(() => slideEl.classList.remove('animate-shake'), 500);
-            }
-            return;
+    /**
+     * Does an unanswered quiz hold the deck here? Shakes the slide when it does, so a press that does
+     * nothing still answers. A FIRST watch holds, which is the quiz's point; a rewatch never does (review
+     * ID-15, owner 2026-10-26): "Watch it again" made you answer all four again, with the forward arrow
+     * lit the whole time. The quizzes are still there to play.
+     */
+    quizHolds() {
+        if (!this.quizGates(this.slides[this.currentSlide]?.type)) return false;
+        const slideEl = this.slidesContainer.querySelectorAll('.recap-slide')[this.currentSlide];
+        if (slideEl) {
+            slideEl.classList.add('animate-shake');
+            setTimeout(() => slideEl.classList.remove('animate-shake'), 500);
         }
+        return true;
+    }
+
+    /** The one answer to "does this quiz hold the deck?", for the nav, the edge buttons and the beat clock
+     *  alike: never on a rewatch, otherwise until it is answered. Three call sites asked it three ways
+     *  once, and a rewatch freed only one of them (the audit's catch). */
+    quizGates(type) {
+        if (this.isRewatch) return false;
+        return this.quizManager.isQuizSlide(type) && !this.quizManager.canNavigate(type);
+    }
+
+    prevSlide() {
+        if (this.quizHolds()) return;
 
         if (this.currentSlide > 0) {
             this.goToSlide(this.currentSlide - 1);
@@ -1360,12 +1372,8 @@ class MonthlyRecapManager {
      * Disables buttons on unanswered quiz slides
      */
     updateNavigationButtons() {
-        const currentSlideType = this.slides[this.currentSlide]?.type;
-        const isQuizSlide = this.quizManager.isQuizSlide(currentSlideType);
-        const canNavigate = this.quizManager.canNavigate(currentSlideType);
-
         // Disable/enable buttons based on quiz state
-        if (isQuizSlide && !canNavigate) {
+        if (this.quizGates(this.slides[this.currentSlide]?.type)) {
             this.prevBtn.disabled = true;
             this.nextBtn.disabled = true;
             this.prevBtn.classList.add('btn-disabled', 'opacity-30');

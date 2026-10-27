@@ -139,8 +139,8 @@ def hub_subnav(request):
 
         # Ownership-aware Profile chrome was removed with the Profile strip-item (2026-08): the swap
         # existed to put your own profile under a personal strip WITH a Profile tab to highlight, and
-        # with no such tab it would have rendered a strip highlighting nothing. Every profile page now
-        # carries the same chrome whoever is looking, and the avatar menu is the single route to yours.
+        # with no such tab it would have rendered a strip highlighting nothing. Your OWN profile now sits
+        # under My Pursuit with no item lit, set by the view (`hub_subnav_override`, review ID-13).
 
         is_auth = bool(getattr(request, 'user', None) and request.user.is_authenticated)
 

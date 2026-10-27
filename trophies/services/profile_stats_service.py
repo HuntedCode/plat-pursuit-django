@@ -6,7 +6,7 @@ This service manages denormalized profile statistics:
 - Game counts and completion statistics
 - Average progress calculations
 """
-from django.db.models import Sum
+from django.db.models import Avg, Sum
 from django.db.models.functions import Coalesce
 
 
@@ -44,7 +44,7 @@ def update_profile_trophy_counts(profile):
     Updates:
     - total_trophies: Sum of ProfileGame.earned_trophies_count (filtered)
     - total_unearned: Sum of ProfileGame.unearned_trophies_count (filtered)
-    - avg_progress: Derived from the above
+    - avg_progress: The mean of each game's PSN completion % (owner, 2026-10-26)
 
     Respects profile settings:
     - hide_hiddens: Excludes hidden games from totals
@@ -74,15 +74,21 @@ def update_profile_trophy_counts(profile):
     if profile.hide_zeros:
         trophy_totals = trophy_totals.exclude(earned_trophies_count=0)
 
+    # AVERAGE COMPLETION IS PER GAME: the mean of each game's own PSN %, the figure PSN and PSNProfiles
+    # show (owner, 2026-10-26). It used to be earned / (earned + unearned) across the library, which a few
+    # huge lists dominate: on the owner's account four games (Deep Rock Galactic: Survivor, Vampire
+    # Survivors, FFXIV, Sea of Thieves) held over a third of the unearned trophies, and the figure read 58%
+    # against 68% everywhere else. That library-wide share still shows, as the "4,017 of 6,942 trophies"
+    # count in the profile header. One aggregate, so still one query.
     aggregates = trophy_totals.aggregate(
         unearned=Coalesce(Sum('unearned_trophies_count'), 0),
         earned=Coalesce(Sum('earned_trophies_count'), 0),
+        avg_progress=Avg('progress'),
     )
 
     total_earned = aggregates['earned']
     total_unearned = aggregates['unearned']
-    total = total_earned + total_unearned
-    avg_progress = (total_earned / total * 100) if total > 0 else 0.0
+    avg_progress = aggregates['avg_progress'] or 0.0
 
     profile.total_trophies = total_earned
     profile.total_unearned = total_unearned
@@ -119,5 +125,4 @@ def trophy_snapshot(profile):
         'trophy_level': profile.trophy_level,
         'tier': profile.tier,
         'is_plus': profile.is_plus,
-        'earn_rate': round(total_earned / total_all * 100, 1) if total_all else 0,
     }

@@ -478,6 +478,13 @@ use it.
 |--------|-----------|---------|
 | `staggerReveal(opts)` | `{grid, cardSelector, cellSelector?, reveal, step?, batchCap?, appendCap?, hideClass?}` | Staggered WAAPI grid reveal for HTMX-swapped / infinite-scroll grids. `cellSelector`: reveal the WRAPPER rather than the card -- see `InfiniteScroller` above |
 
+> **A batch is every write, then every read** (review ID-01, 2026-10-26). Each card's arrival is started
+> (`begin`: classes, `reveal()`) for the whole batch first; only then is each card's `getAnimations()` read
+> (`hold`) to hand it back when it lands. `getAnimations()` makes the browser bring styles up to date, so
+> reading it inside the per-card loop recalculated the whole page once per card: a profile's 287-badge tab
+> spent 37 seconds there before it could be used (1.5 seconds after). Keep any new per-card read out of
+> the write loop. Pinned in a real browser by `test_stagger_reveal_batch_browser.py`.
+
 > **Never on a virtualized list.** It adds `.pp-reveal` to the container permanently and the paired CSS
 > holds rows at `opacity: 0` until an IntersectionObserver grants `.is-revealed`. Rows mounted and evicted
 > by scroll position never reach that observer, so the list renders as blank space. Use `boardEntrance`.

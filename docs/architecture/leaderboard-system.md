@@ -207,6 +207,16 @@ They are recomputed from scratch each time, so no incremental writer exists to d
 
 ## Gotchas and Pitfalls
 
+- **A row SHOWS the display name and LINKS the stored one** (review ID-14, 2026-10-26). The hydrated
+  entry carries `psn_username` (the DISPLAY name, PSN's capitals, for the text) and `profile_slug` (the
+  stored username the profile URL is keyed on). Linking the display name sent every row click through a
+  301. Do not swap the slug for `psn_username|lower`: the two are not guaranteed to differ only by case.
+
+- **A row's labels say which figure it is** (review ID-07 and ID-09). The Shovelware Free board's tie-break
+  is `clean trophies` (outside shovelware), not `trophies`, which beside a profile's total read as a wrong
+  number; the Career board's level is `pursuer lv`, not `level`, which read as the PSN trophy level a
+  profile shows. `FIGURES` is the one definition the header, the first window and the rows endpoint share.
+
 - **A board's rank and a board's row numbering are two different definitions, and they only agree if the
   ordering is TOTAL.** `page()` numbers by slot; `*_rank()` counts everyone ahead. Every board's canonical
   order therefore ends in `profile_id` (the `*_KEYS` tuples) and the rank count expresses that same full
