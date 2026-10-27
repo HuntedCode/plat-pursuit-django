@@ -321,8 +321,10 @@ class SiteSuggestView(View):
     Title matching is substring (icontains), served sub-ms by the pg_trgm GIN
     indexes on Concept.unified_title / Franchise.name (migration 0257). BadgeSeries.name
     has no such index: it is one row per badge, small enough to scan; nor do Job (25
-    rows) or GameList.name, which is scanned only over the public lists, bounded to
-    PER_GROUP. Hunters stay prefix (istartswith), like ProfileSuggestView.
+    rows) or GameList.name. A query that matches no list scans every public list (the
+    LIMIT bounds the rows returned, not the scan): fine at today's list count, and the
+    place to add a trigram index if lists grow into the tens of thousands. Hunters stay
+    prefix (istartswith), like ProfileSuggestView.
     """
     PER_GROUP = 5
     CACHE_TTL = 60  # seconds; global catalog, a short lag on freshly-synced profiles is fine.
@@ -478,11 +480,13 @@ class SiteSuggestView(View):
         # Public lists only (`.public()`, the one supported read of somebody else's list), and never one a
         # moderator hid the words of: a match would confirm the hidden name contains the query, the leak the
         # browse page's own search closes the same way. The response is cached for every viewer alike, so a
-        # hunter's private lists could not be offered here even to them. Most-liked first.
+        # hunter's private lists could not be offered here even to them. The cache does lag a change by up to
+        # CACHE_TTL: a list made private or deleted can still be offered (its page then 404s), and one a moderator
+        # hides can still show its old name for that minute. Accepted: the browse grid has no such lag only
+        # because it is not cached. Most-liked first.
         rows = (
             GameList.objects.public()
             .filter(name__icontains=q, text_hidden=False)
-            .select_related('owner')
             .order_by('-like_count', '-game_count', 'id')[:self.PER_GROUP]
         )
         items = [

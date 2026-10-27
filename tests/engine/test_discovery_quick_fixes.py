@@ -124,7 +124,7 @@ def test_the_phone_search_button_names_what_it_searches(client):
     content = client.get(reverse('games_list')).content.decode()
     button = re.search(r'<button[^>]*id="navbar-sync-search-btn"[^>]*>', content).group(0)
 
-    assert 'aria-label="Search games, badges, and hunters"' in button
+    assert 'aria-label="Search games, badges, jobs, game lists and hunters"' in button
     assert 'PSN profiles' not in button
 
 

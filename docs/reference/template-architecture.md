@@ -83,6 +83,12 @@ All defined in `plat_pursuit/context_processors.py`:
 
 ## Custom Templatetags
 
+### core/templatetags/chrome_tags.py
+
+| Tag | Purpose |
+|-----|---------|
+| `{% footer_hubs as columns %}` | The footer's hub columns for the viewing user, built from the hub config (`core.hub_subnav.footer_columns`). See [Navigation](../features/navigation.md#footer) |
+
 ### core/templatetags/query_tags.py
 
 | Tag | Purpose |

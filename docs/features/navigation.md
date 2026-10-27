@@ -162,7 +162,8 @@ server's page size breaks the resume arithmetic. Pinned by
 - **The navbar and the tab bar name the hubs by hand.** A hub added or renamed means editing both. The rail and
   the footer read `HUB_SUBNAV_CONFIG` and follow on their own.
 - **Search results are cached for every viewer alike**, so nothing private or moderated may enter them. A new
-  group reads only public rows.
+  group reads only public rows. The cache also lags a change by up to 60s: a list made private can still be
+  offered (its page then 404s), and one a moderator hides can still show its old name for that minute.
 - **Pinned chrome has a budget.** Navbar (~58px) plus rail (~47px) at the top, the tab bar (~56px) at the bottom
   on phones. New sticky chrome (a banner, a status strip) means taking room from something else; a page's own
   mini-bar trades places with the rail rather than stacking under it.

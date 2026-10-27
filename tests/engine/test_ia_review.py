@@ -15,8 +15,8 @@ from django.urls import resolve, reverse
 from core.hub_subnav import HUB_SUBNAV_CONFIG, footer_columns, resolve_hub_subnav
 from gamelists.services import game_list_service as svc
 from gamelists.models import GameList
-from tests.factories import ProfileFactory
-from trophies.models import Job
+from tests.factories import BadgeSeriesFactory, ConceptFactory, GameFactory, GroupBadgeFactory, ProfileFactory
+from trophies.models import Franchise, Job
 
 pytestmark = pytest.mark.django_db
 
@@ -62,6 +62,19 @@ def test_a_hub_with_no_rail_items_is_one_link_to_its_landing():
     assert [(i.label, i.url) for i in col.items] == [('Leaderboards', reverse('overall_badge_leaderboards'))]
 
 
+def test_a_hub_whose_landing_cannot_be_reached_loses_its_column_not_the_site(monkeypatch):
+    """The footer renders on nearly every page, so a reverse that raises would 500 all of them."""
+    import dataclasses
+    from core import hub_subnav
+
+    broken = tuple(dataclasses.replace(h, landing='no_such_page') if h.key == 'leaderboards' else h
+                   for h in HUB_SUBNAV_CONFIG)
+    monkeypatch.setattr(hub_subnav, 'HUB_SUBNAV_CONFIG', broken)
+
+    keys = [c.key for c in hub_subnav.footer_columns(is_authenticated=False)]
+    assert 'leaderboards' not in keys and 'browse' in keys
+
+
 def test_a_visitor_is_never_offered_a_page_that_only_signs_them_in():
     urls = {i.url for c in footer_columns(is_authenticated=False) for i in c.items}
 
@@ -81,7 +94,14 @@ def test_the_rendered_footer_files_each_page_under_its_hub(client):
     my_pursuit = _column(footer, 'My Pursuit')
     assert f'href="{reverse("badges_list")}"' not in my_pursuit, 'Badges is Browse, not My Pursuit'
     assert reverse('career') not in my_pursuit, 'Career only signs a visitor in'
-    assert f'href="{reverse("account_signup")}"' in my_pursuit
+
+
+def test_a_visitor_always_gets_the_way_in(client):
+    """Sign in and Sign up ride the My Pursuit column, which the footer drops if it has nothing to list.
+    Pinned on their own so losing them (Milestones going members-only, say) is loud, not silent."""
+    footer = _footer(client)
+
+    assert f'href="{reverse("account_login")}"' in footer and f'href="{reverse("account_signup")}"' in footer
 
 
 def test_a_signed_in_hunters_footer_lists_their_tools(client):
@@ -139,12 +159,18 @@ def test_search_never_offers_a_private_deleted_or_moderated_list(client):
 
 
 def test_search_groups_run_in_order_with_hunters_last(client):
-    owner = ProfileFactory(is_linked=True, psn_username='slayerfan')
-    svc.create_list(owner, name='Slayer picks', is_public=True)
+    # One match of every kind, under a word nothing seeded carries (the jobs are seeded: one is named for it).
+    Job.objects.filter(slug='slayer').update(name='Zyzzva Slayer')
+    concept = ConceptFactory(unified_title='Zyzzva Quest')
+    GameFactory(concept=concept, played_count=1, np_communication_id='NPWR_ZYZZ_00')
+    GroupBadgeFactory(series=BadgeSeriesFactory(name='Zyzzva Badge', series_slug='zyzzva-badge'))
+    Franchise.objects.create(igdb_id=90210, name='Zyzzva Saga', slug='zyzzva-saga', source_type='franchise')
+    owner = ProfileFactory(is_linked=True, psn_username='zyzzvafan')
+    svc.create_list(owner, name='Zyzzva picks', is_public=True)
 
-    types = [g['type'] for g in client.get(reverse('site_suggest'), {'q': 'slayer'}).json()['groups']]
+    types = [g['type'] for g in client.get(reverse('site_suggest'), {'q': 'zyzzva'}).json()['groups']]
 
-    assert types == ['job', 'list', 'profile']
+    assert types == ['game', 'badge', 'job', 'franchise', 'list', 'profile']
 
 
 def test_the_search_panel_draws_a_glyph_for_jobs_and_lists():
@@ -200,9 +226,14 @@ def test_every_hub_button_opens_its_rails_first_item(client):
     buttons = dict(re.findall(r'href="([^"]+)" class="pp-navhub[^"]*"[^>]*>\s*<svg.*?</svg>\s*([A-Za-z ]+)', nav, re.S))
     by_label = {label.strip(): href for href, label in buttons.items()}
 
+    tabbar = body[body.index('class="mobile-tabbar'):]
+    tabs = {label: href for href, label in re.findall(r'href="([^"]+)"[^>]*aria-label="([A-Za-z ]+)[",]', tabbar)}
+
     for hub in HUB_SUBNAV_CONFIG:
         if hub.items:
-            assert by_label[hub.label] == reverse(hub.items[0].url_name), hub.label
+            first = reverse(hub.items[0].url_name)
+            assert by_label[hub.label] == first, f'{hub.label} button'
+            assert tabs[hub.label] == first, f'{hub.label} tab'
 
 
 def test_hunters_lead_the_community_rail():

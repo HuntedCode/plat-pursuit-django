@@ -1,8 +1,8 @@
 """
 Hub-of-Hubs IA: sub-navigation infrastructure.
 
-PlatPursuit's IA is a personal My Pursuit hub (rooted at the logged-in Home /)
-plus Browse, Leaderboards, Community and Support Us. The global navbar links to
+PlatPursuit's IA is five hubs: a personal My Pursuit hub (opening on Career)
+plus Browse, Leaderboards, Community and Support Us, with the lobby (/) above them. The global navbar links to
 each. A persistent sub-navigation strip below the main navbar surfaces each
 hub's sub-pages on every URL in that hub's family, URL-prefix matched (the
 personal strip is auth-gated).
@@ -18,7 +18,7 @@ This module defines:
 Matching strategy: longest-prefix-wins. The matcher iterates the configured
 prefixes in order of length descending and returns the first match. The bare
 ``/`` root is special-cased to NO hub -- it is the lobby, which sits above the
-four hubs and carries no strip. It only matches when ``request.path == '/'``
+hubs and carries no strip. It only matches when ``request.path == '/'``
 exactly, so deeper paths still fall through to their own hub.
 
 Pages that don't match any hub (settings, auth flows, error pages, staff
@@ -169,11 +169,10 @@ BROWSE_HUB = HubSubnavConfig(
 )
 
 
-# The personal hub is rooted at the logged-in Home (/): the Overview tab IS the Home, and the
-# other personal surfaces now live at ROOT paths (moved from /my-pursuit/* and /dashboard/* in
-# the unify). Profile is appended dynamically by the context processor (its URL needs the viewer's
-# own username). The strip renders for AUTHENTICATED viewers only (the context processor gates it)
-# -- anon sees a hero Home with no strip. Grouped: a gamification core (6) + personal tools.
+# The personal hub. Its pages live at ROOT paths (moved from /my-pursuit/* and /dashboard/* in the
+# unify), it opens on Career, and the lobby (/) sits above it rather than in it. No Profile item: the
+# avatar menu is the one route to your own profile (2026-08). The strip renders for AUTHENTICATED viewers
+# only (the context processor gates it). Grouped: Progress + Tools.
 MY_PURSUIT_HUB = HubSubnavConfig(
     key='my_pursuit',
     label='My Pursuit',
@@ -192,7 +191,7 @@ MY_PURSUIT_HUB = HubSubnavConfig(
         '/my-challenges/',
     ),
     # Grouped rail: Progress = the gamification progression surfaces (Career merges the old Lab +
-    # Research Panel); Tools = personal outputs. Profile is appended to Tools as a dynamic extra.
+    # Research Panel); Tools = personal outputs.
     items=(
         HubSubnavItem('career', 'Career', 'career', 'briefcase', auth_required=True, group='Progress'),
         HubSubnavItem('collection', 'Collection', 'badge_collection', 'award', auth_required=True, group='Progress'),
@@ -465,7 +464,7 @@ def resolve_hub_subnav(request) -> dict | None:
             if hub is not None:
                 return {'hub': hub, 'active_slug': slug}
 
-    # 2. Bare root: the LOBBY. It belongs to no hub -- it sits ABOVE the four of them, which is why it
+    # 2. Bare root: the LOBBY. It belongs to no hub -- it sits ABOVE the hubs, which is why it
     #    carries no sub-nav strip: on a lobby the CTAs are the navigation, and a hub rail underneath them
     #    would be a second, competing set of directions. Returning None here (rather than a hub) is what
     #    makes the strip disappear, via the template's `{% if hub_section %}` guard. The navbar wordmark
@@ -582,7 +581,12 @@ def footer_columns(*, is_authenticated: bool, is_member: bool = False) -> tuple[
         if hub.items:
             items = build_rendered_items(hub, is_authenticated=is_authenticated, is_member=is_member)
         else:
-            items = (RenderedSubnavItem(slug=hub.key, label=hub.label, url=reverse(hub.landing)),)
+            # Skipped rather than raised, as the rail skips an item it cannot reverse: the footer renders on
+            # nearly every page, so a hub with no `landing` (or a renamed one) must lose a link, not 500 the site.
+            try:
+                items = (RenderedSubnavItem(slug=hub.key, label=hub.label, url=reverse(hub.landing)),)
+            except NoReverseMatch:
+                items = ()
         if items:
             columns.append(FooterColumn(hub.key, hub.label, items))
     return tuple(columns)

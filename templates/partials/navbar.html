@@ -63,7 +63,7 @@ data-nav-* hooks + the #nav-sync data-url-* attrs. The sync-search dropdown keep
     fallback). The trigger's label names what the box searches, same as the input's (DS-12). {% endcomment %}
     <div class="pp-navsearch" id="navbar-search">
         {# Mobile trigger: opens the bar as a sheet below the nav (hidden on md+). #}
-        <button type="button" class="pp-navsearch__trigger md:hidden" id="navbar-sync-search-btn" aria-label="Search games, badges, and hunters" aria-expanded="false" aria-controls="navbar-sync-form">
+        <button type="button" class="pp-navsearch__trigger md:hidden" id="navbar-sync-search-btn" aria-label="Search games, badges, jobs, game lists and hunters" aria-expanded="false" aria-controls="navbar-sync-form">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
         </button>
 
@@ -77,7 +77,7 @@ data-nav-* hooks + the #nav-sync data-url-* attrs. The sync-search dropdown keep
                    simply won't offer sync. maxlength widened past the 16-char PSN ceiling and `required`
                    dropped now that this is a general search box (JS owns submit). {% endcomment %}
                 <input type="search" name="psn_username" class="add-sync-input pp-navsearch__input" placeholder="Search games, badges, hunters&hellip;"
-                       aria-label="Search games, badges, and hunters" role="combobox" aria-expanded="false" aria-autocomplete="list" aria-controls="navbar-search-results"
+                       aria-label="Search games, badges, jobs, game lists and hunters" role="combobox" aria-expanded="false" aria-autocomplete="list" aria-controls="navbar-search-results"
                        autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" maxlength="64"
                        data-form-type="other" data-lpignore="true" />
                 {% comment %}aria-hidden, not role=status: the status line at the foot of the panel is
