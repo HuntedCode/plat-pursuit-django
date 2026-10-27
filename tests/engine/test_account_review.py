@@ -83,6 +83,34 @@ def test_a_source_changed_without_a_save_falls_back_to_the_upload(media_root):
     assert art['main'] == art['main_full'] and art['main'].endswith('other.png')
 
 
+def test_badges_with_no_art_draw_the_default_arts_copy(media_root):
+    from django.templatetags.static import static
+    art = _edition(BadgeSeriesFactory(series_slug='souls')).art_layers()
+
+    assert art['main'] == static('images/badges/default.webp')
+    assert art['main_full'] == static('images/badges/default.png')
+    assert art['has_custom_image'] is False
+
+
+def test_the_default_arts_copy_is_the_default_art_at_display_size():
+    """default.webp is committed, not generated: it must stay a display-size render OF default.png, so a
+    redrawn default.png without a fresh copy fails here."""
+    full = Image.open(ROOT / 'static/images/badges/default.png').convert('RGBA')
+    copy = Image.open(ROOT / 'static/images/badges/default.webp')
+    assert copy.format == 'WEBP' and copy.size == (badge_thumbs.THUMB_PX, badge_thumbs.THUMB_PX)
+    assert (ROOT / 'static/images/badges/default.webp').stat().st_size < 100_000
+
+    full.thumbnail((64, 64), Image.Resampling.LANCZOS)
+    small = copy.convert('RGBA').resize(full.size, Image.Resampling.LANCZOS)
+    drift = sum(abs(a - b) for pa, pb in zip(full.getdata(), small.getdata()) for a, b in zip(pa, pb))
+    assert drift / (64 * 64 * 4) < 4
+
+
+def test_the_fundraiser_tile_draws_the_default_arts_copy():
+    tile = _read('templates/fundraiser/partials/_badge_tile.html')
+    assert "images/badges/default.webp" in tile and 'default.png' not in tile
+
+
 def test_a_reupload_under_the_same_name_remakes_the_copy(media_root):
     """S3 overwrites a same-named upload, so the name alone cannot tell; the fresh-upload flag does."""
     series = BadgeSeriesFactory(series_slug='souls', badge_image=_png((200, 40, 40, 255)))

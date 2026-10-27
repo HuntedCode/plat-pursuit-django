@@ -339,13 +339,13 @@ def test_series_tile_shows_the_count_once_earned(client):
 
 
 def test_default_art_resolves_to_a_static_url(client):
-    # A badge with no custom art falls back to default.png -- which must render as a resolved STATIC url, not a
-    # bare relative path (the broken-default-art bug).
+    # A badge with no custom art falls back to the default art's display copy -- which must render as a resolved
+    # STATIC url, not a bare relative path (the broken-default-art bug).
     from django.templatetags.static import static
     _series_groups('nomed', 'No Art', [('ultra-hd', 'Ultra HD')])
     html = client.get(SERIES).content.decode()
-    assert static('images/badges/default.png') in html
-    assert 'src="images/badges/default.png"' not in html
+    assert static('images/badges/default.webp') in html
+    assert 'src="images/badges/default.webp"' not in html
 
 
 def test_user_badge_avatar_subject_is_flagged_for_the_circle_mask(client):

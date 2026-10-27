@@ -161,6 +161,10 @@ The companion **flip** (to a back face) is still a planned follow-up.
   made in `save()` (`trophies/services/badge_thumbs.py`) and backfilled by `make_badge_thumbs`. "Current" is a name
   check (the copy's name is derived from the source's), so a source changed by a queryset `.update()` falls back to
   the upload instead of drawing the old picture. Anything new that needs the original reads `main_full`.
+  The **default art** (badges with no art yet) is a static file, so `make_badge_thumbs` never sees it: its copy is
+  committed as `static/images/badges/default.webp` (583 KB PNG to 52 KB), drawn as `main`, with `default.png` as
+  `main_full`. If `default.png` is ever redrawn, re-render the WebP at `THUMB_PX` / `THUMB_QUALITY`; a test fails
+  until you do.
 - **The meter cells come from `frame['segments']`, computed server-side** (`build_badge_frame` (DELETED 2026-08)), NOT in
   the template — Django templates can't loop N times without a filter, so the bool list is prebuilt.
   The Frame was replaced by the Badge Medallion; `frame_service` and its `SEGMENT_CAP` were deleted in 2026-08. Medallion composition now lives in `GroupBadge.art_layers()`.

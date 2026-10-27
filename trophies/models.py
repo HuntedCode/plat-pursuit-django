@@ -3760,7 +3760,11 @@ class GroupBadge(models.Model):
             # no custom art it is the first `static()` call on the whole medallion path -- and that path
             # is reached from cron as well as from page renders. An unresolvable placeholder degrades to
             # the bare metal plate rather than ending the caller.
-            main_url = safe_static('images/badges/default.png')
+            #
+            # The default art has a committed 512px display copy (default.webp, made with badge_thumbs' size and
+            # quality) for the same reason uploads do: the PNG is 583 KB. The original stays `main_full`.
+            main_url = safe_static('images/badges/default.webp')
+            full_url = safe_static('images/badges/default.png')
         return {
             'backdrop': grp.background_image.url if grp.background_image else None,
             'main': main_url,
