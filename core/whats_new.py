@@ -96,14 +96,6 @@ ENTRIES: tuple[Entry, ...] = (
              'Where a badge asks for more than holo, like a bonus stage, finish every stage at 100% with DLC '
              'to master it: a gold rim and a crown. Hold every edition of a series for a Full Set, and '
              'finish them all to become its Series Master.'),
-            ('Fairer for unobtainable trophies',
-             'Trophies that can no longer be earned stop standing between you and a badge. Earn everything '
-             'still earnable and the list counts as finished for badges.'),
-            # Rides the same release window (game flag badges, 2026-10-24), so it shares the announcement
-            # rather than opening a second modal on the same visit.
-            ('Also new: flags on covers',
-             'Games that need online play, were delisted, can no longer be finished or are shovelware now '
-             'say so with a small badge on their cover, wherever they appear.'),
         ),
         link_label='How badges work',
         link_url='/badges/how-it-works/',

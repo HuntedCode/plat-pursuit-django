@@ -424,6 +424,9 @@ def test_the_newest_announcement_covers_the_badge_rewards():
 
     assert top.id == '2026-10-badge-rewards'
     assert top.safe_link_url == reverse('badge_how_it_works')
+    # The owner's cut (2026-10-27): celebrations and mastery only; unobtainable trophies and cover flags
+    # were dropped from the announcement.
+    assert [label for label, _ in top.beats] == ['Every earn gets its moment', 'Master it']
 
 
 def test_a_card_download_that_trips_a_limit_says_wait_not_retry():
