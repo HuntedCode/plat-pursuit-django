@@ -37,15 +37,6 @@
   "badge": 13,
   "tabs": 3
  },
- "templates/404.html": {
-  "btn": 4
- },
- "templates/429.html": {
-  "btn": 4
- },
- "templates/art_reveal/event.html": {
-  "btn": 8
- },
  "templates/challenges/my_challenges.html": {
   "btn": 4
  },
@@ -106,12 +97,6 @@
   "alert": 4,
   "badge": 13,
   "btn": 32
- },
- "templates/pages/about.html": {
-  "btn": 6
- },
- "templates/pages/contact.html": {
-  "btn": 12
  },
  "templates/partials/anon_profile_banner.html": {
   "btn": 3
@@ -211,9 +196,6 @@
  },
  "templates/trophies/partials/roadmap/trophy_guide_card.html": {
   "badge": 9
- },
- "templates/trophies/reviews_archived.html": {
-  "btn": 8
  },
  "templates/trophies/roadmap_detail.html": {
   "alert": 2,

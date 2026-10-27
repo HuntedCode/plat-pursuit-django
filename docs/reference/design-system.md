@@ -323,6 +323,27 @@ The card itself lives in `account/base_card.html` (2026-10-26, AC-05 / AC-11): a
 hunter reaches from the site (Email addresses, the beta gate) extends it directly, gets the same card and
 keeps the footer and the tab bar. `base_auth.html` is that card plus the focused chrome.
 
+### Info Pages (`.pg`) and Long-Form Text (`.pp-doc`)
+
+About, Contact, Privacy and Terms share one reading column (`static/css/components/pages.css`, 2026-10-27,
+[Odds and ends review](../design/reviews/odds-and-ends.md)): an accented header card (`.pg__eyebrow`, display
+`.pg__h1`, `.pg__lede` or `.pg__meta`), then section cards. Link lists are `.pg-rows` of `.pg-row` (icon tile,
+name, one line, optional `.pg-row__value` that wraps instead of overflowing), one per row on a phone and two
+across from `md`; set a row's accent with `--pg-c`. The community channels are one partial,
+`partials/_social_rows.html` (About and Contact), and the Discord logo is `partials/icons/discord.html`.
+
+Policy text is plain semantic HTML inside `.pp-doc`, which sizes and spaces `h2` / `h3` / lists / links itself.
+Keep classes off the policy's own markup.
+
+### Error Pages (`errors/base_error.html`)
+
+Every error page wears the joke share card ("404: The Lost Page, Sought by <hunter>"),
+`static/css/components/errors.css`. A page fills the card's blocks (tone, banner, title, four `.err-stat`
+cells, pills, tag, lede, actions, random flavour lines). Two shells: the views in `core/error_views.py` pass
+`err_shell='base.html'` so 404 / 403 / 429 / the expired-form page keep the site chrome; Django's own 400 and
+500 renders pass nothing and fall to `errors/standalone.html`, which loads only the stylesheet (a 500 may be the
+database). On a phone the art tiles are left out so the lede and the way out stay on the first screen.
+
 ### Back to Top
 
 `templates/partials/back_to_top.html` (`.pp-totop` on the house icon button, behaviour in
@@ -976,6 +997,10 @@ These are **page-specific** decisions, not site-wide tokens:
 - **Hover glow vs scale**: Prefer colored shadow glow (`hover:shadow-lg hover:shadow-{color}/30`) over `hover:scale-105`. Scale causes layout shifts and feels heavy at tight grid gaps.
 - **Container class at 640px**: Tailwind's `.container` snaps to `max-width: 640px` at the `sm` breakpoint, which can cause a visual jump. The effect is minimal since content is typically narrower than 640px on phones.
 - **Horizontal scroll strips widen the phone page**: A `nowrap` + `overflow-x: auto` row (chip row, tab strip, coin row) clips and scrolls fine, but its full content width still pushes up to the page, and a phone browser answers by widening the layout viewport: iOS Safari zooms the whole page out or lets it pan sideways into empty space. Either let the row wrap, or put `contain: layout size` plus a `contain-intrinsic-height` (the height of one item) on the scroll container itself, scoped to the breakpoints where it scrolls (`contain: none` where it wraps). Both keywords are needed; `min-width: 0`, `max-width`, and `overflow-x: clip` on ancestors do not fix it. Items inside should be `flex-shrink: 0` so their labels never wrap past the fixed height. **A desktop browser at a narrow width cannot reproduce it**: test with real device emulation (Playwright `p.devices['iPhone 12']`) and compare `window.innerWidth` to `document.documentElement.clientWidth`. Two shipped instances: the Plat Calendar crest row and the browse drawer's "Filter by Letter" row (`.pp-gbrowse__fchips--letters`).
+- **`prose` does nothing here**: the Tailwind typography plugin is not installed, so `.prose` is only three
+  DaisyUI colour variables and every `h2` / `h3` inside it renders as a paragraph. This is how About, Privacy and
+  Terms shipped with no visible headings ([OE-03](../design/reviews/odds-and-ends.md)). Long-form text uses
+  `.pp-doc` (Info Pages, above).
 - **Card stacking**: Use `mb-3` between sequential cards on a page. Do not use `mt-6` or larger margins from the old `<section>` wrapper pattern.
 - **One name per action: Sign in / Sign up / Sign out**, sentence case, on every button, link, heading, title and toast. Never "Log in", "Register", "Create a free account" or title-case "Sign In". The 2026-10 fresh-eyes review found sign-up called four things across the journey ([FV-04](../design/reviews/first-visit.md)). `tests/engine/test_action_names.py` reads every template's visible text and every JS string literal, so a retired name fails the suite rather than waiting for the next review.
 

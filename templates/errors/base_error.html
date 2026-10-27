@@ -1,0 +1,67 @@
+{% extends err_shell|default:'errors/standalone.html' %}
+{% load static %}
+{% comment %} THE ERROR CARD every error page wears (Odds and ends review, OE-01 / OE-05): a joke platinum share card
+for a page nobody found. Styles: static/css/components/errors.css.
+
+TWO SHELLS, ONE CARD. The views in core/error_views.py pass `err_shell='base.html'`, so 404, 403, 429 and the
+expired-form page sit inside the site with its navbar. Django renders 400 and 500 itself and passes nothing, so
+they fall to errors/standalone.html, which touches no database (a 500 may BE the database).
+
+A page fills: err_tone (a --pp-* colour), err_icon (the second tile), err_banner, err_title, err_by (optional),
+err_stats (.err-stat cells, two across on a phone), err_pills, err_tag, err_lede, err_actions (optional) and
+err_facts (<li> lines, one picked at random; leave it empty for none). {% endcomment %}
+
+{% block robots %}noindex{% endblock %}
+
+{% block content %}
+<div class="err{% if not err_shell %} err--standalone{% endif %}" style="--err-c: {% block err_tone %}var(--pp-primary){% endblock %};">
+    <div class="err-card">
+        <div class="err-card__frame">
+            <div class="err-card__main">
+                <div class="err-card__art" aria-hidden="true">
+                    <span class="err-card__tile"><img src="{% static 'images/logo.png' %}" alt=""></span>
+                    <span class="err-card__tile">{% block err_icon %}{% endblock %}</span>
+                </div>
+                <div class="err-card__info">
+                    <p class="err-card__banner">{% block err_banner %}{% endblock %}</p>
+                    <h1 class="err-card__title">{% block err_title %}{% endblock %}</h1>
+                    <p class="err-card__by">{% block err_by %}Sought by <b>{% if user.profile %}{{ user.profile.display_psn_username|default:user.profile.psn_username }}{% else %}Trophy Hunter{% endif %}</b>{% endblock %}</p>
+                    <div class="err-card__stats">{% block err_stats %}{% endblock %}</div>
+                    <div class="err-card__pills">{% block err_pills %}{% endblock %}</div>
+                </div>
+            </div>
+            <div class="err-card__foot">
+                <span class="err-card__brand"><img src="{% static 'images/logo.png' %}" alt="">platpursuit.com</span>
+                <span class="err-card__tag">{% block err_tag %}{% endblock %}</span>
+            </div>
+        </div>
+    </div>
+
+    <p class="err__lede">{% block err_lede %}{% endblock %}</p>
+    <div class="err__actions">{% block err_actions %}<a class="pp-cta" href="{% url 'home' %}">Back to Home</a>{% endblock %}</div>
+
+    <p class="err__fact" data-err-fact></p>
+    <ul hidden data-err-facts>{% block err_facts %}{% endblock %}</ul>
+</div>
+{% endblock %}
+
+{% block js_scripts %}
+<script>
+(function () {
+    // One flavour line at random (the <li>s above). With no JS the line simply stays empty and hidden.
+    var pool = document.querySelectorAll('[data-err-facts] li');
+    var out = document.querySelector('[data-err-fact]');
+    if (out && pool.length) {
+        out.textContent = pool[Math.floor(Math.random() * pool.length)].textContent;
+    }
+    // "Go back" (the expired-form page): only offered when there is somewhere to go back to.
+    var back = document.querySelector('[data-err-back]');
+    if (back) {
+        if (window.history.length > 1) {
+            back.hidden = false;
+            back.addEventListener('click', function () { window.history.back(); });
+        }
+    }
+})();
+</script>
+{% endblock %}

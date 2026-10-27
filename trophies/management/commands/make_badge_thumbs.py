@@ -1,6 +1,7 @@
 """Backfill the 512px WebP display copies of badge art (SW-06; trophies/services/badge_thumbs.py).
 
-New uploads get their copy from `BadgeSeries.save()` / `GroupBadge.save()`. This command makes the copies for
+New uploads get their copy from `BadgeSeries.save()` / `GroupBadge.save()` / `ArtRevealItem.save()` (the reveal
+event page's art, Odds and ends review OE-04). This command makes the copies for
 art that predates them, and repairs any row whose source changed without a save (a queryset `.update()`, a data
 fix) or whose render failed. Until a row has a current copy its medallions draw the full upload, so running it is
 a speed-up, never a correctness step.
@@ -15,6 +16,7 @@ safe to rerun any time.
 """
 from django.core.management.base import BaseCommand
 
+from art_reveal.models import ArtRevealItem
 from trophies.models import BadgeSeries, GroupBadge
 from trophies.services.badge_thumbs import sync_thumb, thumb_is_current
 
@@ -22,6 +24,7 @@ from trophies.services.badge_thumbs import sync_thumb, thumb_is_current
 TARGETS = (
     (BadgeSeries, 'badge_image', 'badge_thumb'),
     (GroupBadge, 'badge_image_override', 'badge_override_thumb'),
+    (ArtRevealItem, 'artwork', 'artwork_thumb'),
 )
 
 

@@ -142,6 +142,10 @@ class ArtRevealItem(models.Model):
 
     released = models.BooleanField(default=False)
     released_at = models.DateTimeField(null=True, blank=True)
+    # The 512px WebP the event page draws (trophies/services/badge_thumbs.py, the badge art's own machinery). The
+    # page draws the ITEM's art, not the series': release() never overwrites a series that already had art, so the
+    # badge's copy can be a different picture. Made on save; `make_badge_thumbs` backfills it.
+    artwork_thumb = models.ImageField(upload_to='badges/thumbs/', blank=True, default='', editable=False)
 
     class Meta:
         ordering = ['order']
@@ -152,6 +156,32 @@ class ArtRevealItem(models.Model):
 
     def __str__(self):
         return f"#{self.order} {self.series.name} ({'released' if self.released else 'locked'})"
+
+    @classmethod
+    def from_db(cls, db, field_names, values):
+        from trophies.services.badge_thumbs import remember_source
+        instance = super().from_db(db, field_names, values)
+        remember_source(instance, 'artwork', field_names)
+        return instance
+
+    def save(self, *args, **kwargs):
+        # The display copy of the artwork, re-rendered only when the artwork changed (the BadgeSeries.save() recipe).
+        from trophies.services.badge_thumbs import art_changed, sync_thumb
+        update_fields = kwargs.get('update_fields')
+        if update_fields is not None and 'artwork' not in update_fields:
+            return super().save(*args, **kwargs)
+        changed = art_changed(self, 'artwork')
+        super().save(*args, **kwargs)
+        sync_thumb(self, 'artwork', 'artwork_thumb', render=changed)
+        self._loaded_artwork = self.artwork.name or ''
+
+    @property
+    def art_url(self):
+        """What the event page draws: the display copy when it is current for the artwork, else the upload."""
+        from trophies.services.badge_thumbs import thumb_is_current
+        if thumb_is_current(self.artwork, self.artwork_thumb):
+            return self.artwork_thumb.url
+        return self.artwork.url
 
     @property
     def threshold(self):

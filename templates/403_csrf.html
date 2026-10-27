@@ -1,0 +1,29 @@
+{% extends 'errors/base_error.html' %}
+{% comment %} A form posted with a stale security token (core.error_views.csrf_failure, settings.CSRF_FAILURE_VIEW),
+usually a sign-in page left open past its session. Nothing was sent, so the way out is back and refresh. The
+card: errors/base_error.html. {% endcomment %}
+
+{% block title %}Form Expired{% endblock %}
+
+{% block err_tone %}var(--pp-warning){% endblock %}
+
+{% block err_icon %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>{% endblock %}
+
+{% block err_banner %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>Session Expired{% endblock %}
+
+{% block err_title %}This form expired{% endblock %}
+
+{% block err_stats %}
+<span class="err-stat"><span class="err-stat__label">Form age</span><span class="err-stat__value">Ancient</span></span>
+<span class="err-stat" style="--stat-c: var(--pp-error);"><span class="err-stat__label">Token</span><span class="err-stat__value">Stale</span></span>
+<span class="err-stat" style="--stat-c: var(--pp-primary);"><span class="err-stat__label">Sent</span><span class="err-stat__value">Nothing</span></span>
+<span class="err-stat" style="--stat-c: var(--pp-success);"><span class="err-stat__label">Fix</span><span class="err-stat__value">Refresh</span></span>
+{% endblock %}
+
+{% block err_pills %}<span class="err-pill err-pill--tone">Expired</span><span class="err-pill">Nothing was sent</span>{% endblock %}
+
+{% block err_tag %}Even save files have a shelf life...{% endblock %}
+
+{% block err_lede %}The page sat open long enough for its security check to lapse, so nothing was sent. Go back, refresh the page and try again.{% endblock %}
+
+{% block err_actions %}<button type="button" class="pp-cta" data-err-back hidden>Go back</button><a class="pp-cta pp-cta--ghost" href="{% url 'home' %}">Back to Home</a>{% endblock %}

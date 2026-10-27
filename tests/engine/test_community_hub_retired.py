@@ -85,12 +85,13 @@ def test_nothing_in_the_chrome_or_the_sitemap_points_at_it():
 
 def test_what_remains_under_community_still_answers(client):
     """The prefix is not dead. It was never dead — only the landing page was — and as of 2026-09 it
-    holds a live feature again: `/community/lists/` is the public Game Lists browse, and the reviews
-    tombstone still answers beside it.
+    holds a live feature again: `/community/lists/` is the public Game Lists browse. The reviews
+    tombstone that answered beside it retired 2026-10 (Odds and ends review OE-08): it redirects to
+    Rate My Games.
 
     This asserted the lists path REDIRECTED, which was true only while the system was gated.
     """
-    assert client.get('/community/reviews/').status_code == 200, 'the tombstone stopped answering'
+    assert client.get('/community/reviews/')['Location'] == '/rate-my-games/', 'old review links lost their way'
     assert client.get('/community/lists/').status_code == 200, 'the lists browse is not live'
 
 

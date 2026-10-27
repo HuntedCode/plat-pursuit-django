@@ -152,12 +152,6 @@ def test_the_membership_welcome_page_is_not_indexable(client):
     assert 'content="noindex, nofollow"' in resp.content.decode()
 
 
-def test_the_reviews_archived_page_is_not_indexable(client):
-    body = client.get('/community/reviews/', **CF, follow=True).content.decode()
-
-    assert 'content="noindex, follow"' in body
-
-
 def test_the_roadmap_template_is_noindexed_while_the_system_is_hidden():
     """File-level pin (no roadmap factory exists): the template must not say index,follow while
     nothing links roadmaps and their sitemap is withdrawn. Flip BOTH together on the revamp."""

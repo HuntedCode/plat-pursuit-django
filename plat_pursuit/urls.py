@@ -97,7 +97,7 @@ from trophies.views import (ModCenterView, QuickTakeQueueView, GameFlagQueueView
                             HideBlurbView, DismissBlurbReportView, ApproveGameFlagView,
                             ListReportQueueView, HideListTextView, DismissListReportView,
                             DismissGameFlagView)
-from trophies.views import GamesListView, GameDetailView, GamePageView, GameLeaderboardView, RandomGameView, ProfilesListView, SearchView, ProfileDetailView, ProfileDayView, BadgeHowItWorksView, BadgeListView, BadgeDetailView, GroupBadgeInspectView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, RequestProfileRefreshView, ProfileSuggestView, SiteSuggestView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeSeriesCreationView, BadgeRanksPanelView, OverallBadgeLeaderboardsView, LeaderboardRowsView, MyTitlesView, RateMyGamesView, ReviewsArchivedView, RoadmapDetailView, RoadmapEditorView, PlatCardsView, RecentlyAddedView, TrophyListsBrowseView, CompanyListView, CompanyDetailView, FranchiseListView, FranchiseDetailView, GenreThemeListView, GenreDetailView, ThemeDetailView, CareerView, JobsBrowseView, JobDetailView, JobRanksPanelView, JobContractsView, ContractsResultsView, ContractModalView, ContractModalPreviewView, CollectionView, CollectionBadgeModalView
+from trophies.views import GamesListView, GameDetailView, GamePageView, GameLeaderboardView, RandomGameView, ProfilesListView, SearchView, ProfileDetailView, ProfileDayView, BadgeHowItWorksView, BadgeListView, BadgeDetailView, GroupBadgeInspectView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, RequestProfileRefreshView, ProfileSuggestView, SiteSuggestView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeSeriesCreationView, BadgeRanksPanelView, OverallBadgeLeaderboardsView, LeaderboardRowsView, MyTitlesView, RateMyGamesView, RoadmapDetailView, RoadmapEditorView, PlatCardsView, RecentlyAddedView, TrophyListsBrowseView, CompanyListView, CompanyDetailView, FranchiseListView, FranchiseDetailView, GenreThemeListView, GenreDetailView, ThemeDetailView, CareerView, JobsBrowseView, JobDetailView, JobRanksPanelView, JobContractsView, ContractsResultsView, ContractModalView, ContractModalPreviewView, CollectionView, CollectionBadgeModalView
 from milestones.views import MilestoneListView   # new milestones app (replaces the legacy trophies view)
 from trophies.recap_views import RecapIndexView, RecapSlideView
 from users.views import CustomConfirmEmailView, SignOutView, VerificationSentView, resend_verification, fix_signup_address, stripe_webhook, paypal_webhook, SupportStorefrontView, SupportRoadmapView, SubscriptionManagementView
@@ -596,17 +596,15 @@ urlpatterns = [
     path('community/rate-my-games/', RedirectView.as_view(
         pattern_name='rate_my_games', permanent=True, query_string=True)),
 
-    # Reviews ARCHIVED (2026-05). The former Review Hub URLs now serve a
-    # notice page; the detail route redirects to it. URL names are kept so
-    # the many lingering `{% url 'reviews_landing'/'review_hub' %}` refs
-    # resolve to the notice instead of 500ing. The old hub views remain in
-    # the tree, dormant, for a possible future rebuild.
-    path('community/reviews/', ReviewsArchivedView.as_view(), name='reviews_landing'),
+    # Reviews ARCHIVED (2026-05). Every former Review Hub URL lands on Rate My Games, the ratings that stayed;
+    # the "taking a break" notice that stood here retired 2026-10 (owner, Odds and ends review OE-08). The URL
+    # names are kept so old `reverse()` callers (review_service's notification links) still resolve.
+    path('community/reviews/', RedirectView.as_view(pattern_name='rate_my_games', permanent=True, query_string=True), name='reviews_landing'),
     path('community/reviews/rate-my-games/', RedirectView.as_view(pattern_name='rate_my_games', permanent=True, query_string=True)),
     # Use a literal `url` (not `pattern_name`) so the captured <slug> is
     # dropped. RedirectView forwards URL kwargs into reverse(), and
-    # `reviews_landing` takes no slug → NoReverseMatch → 500 (the archival bug).
-    path('community/reviews/<slug:slug>/', RedirectView.as_view(url='/community/reviews/', permanent=False, query_string=True), name='review_hub'),
+    # `rate_my_games` takes no slug → NoReverseMatch → 500 (the archival bug).
+    path('community/reviews/<slug:slug>/', RedirectView.as_view(url='/rate-my-games/', permanent=True, query_string=True), name='review_hub'),
 
     # Monthly Recap (canonical ROOT paths, moved from /dashboard/recap/).
     path('recap/', RecapIndexView.as_view(), name='recap_index'),
@@ -677,9 +675,9 @@ urlpatterns = [
 
 
     # Reviews
-    path('reviews/', RedirectView.as_view(pattern_name='reviews_landing', permanent=True, query_string=True)),
+    path('reviews/', RedirectView.as_view(pattern_name='rate_my_games', permanent=True, query_string=True)),
     path('reviews/rate-my-games/', RedirectView.as_view(pattern_name='rate_my_games', permanent=True, query_string=True)),
-    path('reviews/<slug:slug>/', RedirectView.as_view(pattern_name='review_hub', permanent=True, query_string=True)),
+    path('reviews/<slug:slug>/', RedirectView.as_view(url='/rate-my-games/', permanent=True, query_string=True)),
 
     path('search/', SearchView.as_view(), name='search'),
     path('logout/', SignOutView.as_view(), name='logout'),
@@ -821,8 +819,6 @@ urlpatterns = [
 
     # Public forum signature images (no auth required)
 
-    # Arcade (mini-games)
-    path('arcade/stellar-circuit/', TemplateView.as_view(template_name='minigames/stellar-circuit.html'), name='stellar_circuit'),
 
     # Design workshops. The 2026-08 staff strip-down removed the one-off exploration labs and
     # staff-gated the four that survive as living references (they were fully public before,
@@ -841,26 +837,8 @@ urlpatterns = [
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
-class NotFoundView(TemplateView):
-    """404 page that actually returns a 404 status (a plain TemplateView renders it at 200)."""
-    template_name = '404.html'
-
-    def render_to_response(self, context, **kwargs):
-        kwargs.setdefault('status', 404)
-        return super().render_to_response(context, **kwargs)
-
-
-handler404 = NotFoundView.as_view()
-
-
-class ThrottledView(TemplateView):
-    """429 page that returns its own status. Previously this template rendered only via
-    allauth's fallback rate-limit handler -- declaring it makes the wiring explicit."""
-    template_name = '429.html'
-
-    def render_to_response(self, context, **kwargs):
-        kwargs.setdefault('status', 429)
-        return super().render_to_response(context, **kwargs)
-
-
-handler429 = ThrottledView.as_view()
+# The error pages, and who reaches each: core/error_views.py. 400 and 500 are Django's own handlers rendering the
+# standalone 400.html / 500.html. handler429 is read by allauth (`respond_429`), not by Django.
+handler403 = 'core.error_views.permission_denied'
+handler404 = 'core.error_views.not_found'
+handler429 = 'core.error_views.throttled'

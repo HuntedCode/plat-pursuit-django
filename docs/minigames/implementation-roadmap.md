@@ -10,7 +10,7 @@
 
 Stellar Circuit is a fully playable top-down space racer built with Phaser 3 (~7,000 lines JS), but it exists as a standalone frontend demo with zero backend infrastructure. This roadmap takes it from "fun tech demo" to a fully integrated PlatPursuit feature with server-backed competition, daily challenges, leaderboards, and eventually gamification rewards.
 
-The game is served at `/arcade/stellar-circuit/` via a simple TemplateView. There is no `minigames` Django app, no database models, no API endpoints, and no Arcade Hub page. The gamification system (Jobs, Stats, XP, PlatCoins) that the Arcade is designed to integrate with also does not exist yet.
+**The page is gone (owner, 2026-10-27, [Odds and ends review](../design/reviews/odds-and-ends.md) OE-06):** `/arcade/stellar-circuit/` and `templates/minigames/stellar-circuit.html` were deleted because the game was keyboard-only, unlinked and broken on a phone. The game code in `static/js/games/driver/` stays for the Arcade; the steps below that edit the template now start by recreating it. Before that, the game was served at `/arcade/stellar-circuit/` via a simple TemplateView. There is no `minigames` Django app, no database models, no API endpoints, and no Arcade Hub page. The gamification system (Jobs, Stats, XP, PlatCoins) that the Arcade is designed to integrate with also does not exist yet.
 
 **Key design decision**: Build the Arcade backend to function independently of gamification. Design reward hooks now, wire them when gamification ships.
 

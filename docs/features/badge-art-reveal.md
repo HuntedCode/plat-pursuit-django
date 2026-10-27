@@ -26,6 +26,11 @@ It is the donation-free sibling of the fundraiser's badge-artwork reveal
 5. A site-wide **banner** shows progress to the next reveal and overall progress,
    with a CTA to the **event page** (`/events/badge-reveal/`): a hero carousel of
    revealed art, a progress-to-next bar, and a full grid with locked placeholders.
+6. **Once every piece is out** (`progress()['complete']`) the event page becomes the event's
+   **gallery**: the header says "All 40 artworks revealed", and the rules, carousel and meter go,
+   leaving the grid (owner, 2026-10-27, [Odds and ends review](../design/reviews/odds-and-ends.md)
+   OE-04). The most recent event is shown when none is active; with **no event ever** the page is a
+   404 rather than a "nothing is running" notice.
 
 ## Counter definition
 
@@ -61,7 +66,7 @@ aggregates must be DB-side, and heavy work must stay off the render path.
 | Model | Key fields | Notes |
 |-------|-----------|-------|
 | `ArtRevealEvent` | `slug`, `is_active`, `started_at`, `ended_at`, `platinums_per_reveal`, `banner_*`, `last_platinum_count`, `last_counted_at` | `is_live()` / `show_banner()` / `progress()` mirror the fundraiser. `progress()` is derived entirely from `last_platinum_count` so the banner never disagrees with the released flags. |
-| `ArtRevealItem` | `event`, `badge`, `order`, `artwork`, `placeholder_label`, `released`, `released_at` | Unique `(event, order)` and `(event, badge)`. `badge` should be the **tier-1** badge of a series (tiers 2-4 inherit art via `base_badge`); the admin inline enforces this. `release()` copies art onto the badge, idempotently, without overwriting existing art. |
+| `ArtRevealItem` | `event`, `series`, `order`, `artwork`, `artwork_thumb`, `placeholder_label`, `released`, `released_at` | Unique `(event, order)` and `(event, series)`. `release()` copies art onto `BadgeSeries.badge_image`, idempotently, without overwriting existing art. `artwork_thumb` is the item's 512px WebP display copy (the badge art's machinery, `trophies/services/badge_thumbs.py`), made on save and backfilled by `make_badge_thumbs`; the page draws it through `art_url`. |
 
 ## Operations
 
@@ -92,5 +97,9 @@ aggregates must be DB-side, and heavy work must stay off the render path.
   idempotent, so any drift self-corrects next run.
 - **One live event at a time.** `get_active_event()` picks the most recent active,
   date-valid event. Overlapping active events aren't supported by the banner.
+- **The page draws the ITEM's art, not the badge's.** `release()` skips a series that already had
+  art or borrows another's, so the badge's own display copy can be a different picture. Each item
+  carries its own copy (`artwork_thumb`), drawn lazily; the full uploads made the finished page
+  9.7 MB on prod.
 - **Tailwind**: the banner + event page introduced new class combos; rerun
   `npm run build` if classes look unstyled.

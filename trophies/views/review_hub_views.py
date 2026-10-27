@@ -1,8 +1,8 @@
 """
 Review Hub views.
 
-The hub itself was archived 2026-05 and its landing and detail views deleted 2026-10.
-ReviewsArchivedView: the notice served at the hub's old URL.
+The hub itself was archived 2026-05 and its landing and detail views deleted 2026-10; its old URLs
+redirect to Rate My Games (plat_pursuit/urls.py), and the notice page that stood there retired 2026-10.
 RateMyGamesView: Wizard for quickly rating/reviewing platinumed games.
 """
 import logging
@@ -14,34 +14,6 @@ from django.views.generic import TemplateView
 from trophies.services.review_hub_service import ReviewHubService
 
 logger = logging.getLogger('psn_api')
-
-
-class ReviewsArchivedView(TemplateView):
-    """Notice page shown where the Review Hub used to live.
-
-    The text-review system was retired in 2026-05 after a data-handling
-    bug during the IGDB-anchoring migration caused some reviews to be
-    lost. Rather than continue on a compromised system we archived
-    reviews (kept dormant for a possible future rebuild) and kept the
-    simpler ratings. This page is served at the former review-hub URLs
-    so bookmarks / links land on an honest explanation instead of a 404.
-    """
-
-    template_name = 'trophies/reviews_archived.html'
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        # No Community crumb: that hub was retired 2026-08 and this notice is a tombstone with no
-        # section to sit under.
-        context['breadcrumb'] = [
-            {'text': 'Home', 'url': reverse('home')},
-            {'text': 'Reviews'},
-        ]
-        context['seo_description'] = (
-            "PlatPursuit's community reviews are temporarily retired. "
-            "Game ratings remain available."
-        )
-        return context
 
 
 class RateMyGamesView(LoginRequiredMixin, TemplateView):

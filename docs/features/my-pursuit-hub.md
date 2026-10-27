@@ -64,7 +64,7 @@ The hub is named and structured to absorb the gamification initiative without an
 | Logbook | `/my-pursuit/logbook/` | New (Hunter Profile / Explorer's Logbook) |
 | Star Chart | `/my-pursuit/star-chart/` | New (constellation progression map) |
 | Quests | `/my-pursuit/quests/` | New (daily/weekly/epic quests) |
-| Arcade | `/my-pursuit/arcade/` | Migration of `/arcade/stellar-circuit/` and future mini-games |
+| Arcade | `/my-pursuit/arcade/` | Stellar Circuit and future mini-games (the old `/arcade/stellar-circuit/` page was deleted 2026-10-27; the game code is kept) |
 | Market | `/my-pursuit/market/` | New (Stellar Market store) |
 | Badges | `/my-pursuit/badges/` | Existing |
 | Milestones | `/my-pursuit/milestones/` | Existing |

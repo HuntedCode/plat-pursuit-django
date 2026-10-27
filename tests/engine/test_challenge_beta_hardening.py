@@ -717,11 +717,12 @@ def test_the_deploy_checklist_carries_the_calendar():
     assert any(ln.startswith('| P |') and '0004' in ln for ln in checklist.splitlines())
 
 
-def test_the_public_release_is_the_newest_announcement():
+def test_the_public_release_follows_the_beta_announcement():
     from core import whats_new
 
-    top, beta = whats_new.ENTRIES[0], whats_new.ENTRIES[1]
-    assert top.id == '2026-10-challenges-open' and beta.id == '2026-10-challenges-beta'
+    ids = [e.id for e in whats_new.ENTRIES]
+    top = whats_new.by_id('2026-10-challenges-open')
+    assert ids.index('2026-10-challenges-open') == ids.index('2026-10-challenges-beta') - 1
     assert top.link_url == '/community/challenges/', 'a signed-out archive reader would be sent to login'
 
 

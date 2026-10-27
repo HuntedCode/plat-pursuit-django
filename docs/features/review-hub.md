@@ -5,7 +5,8 @@
 > **Code deleted 2026-10:** the unrouted `ReviewHubLandingView` / `ReviewHubDetailView`, their templates
 > (`review_hub.html`, `review_hub_detail.html`, `partials/reviews/*`) and `review-hub.js` /
 > `review-hub-landing.js`. Everything below describes the system as it was; the last copies are at commit
-> `24aaf68f`. `ReviewsArchivedView` and `RateMyGamesView` remain live.
+> `24aaf68f`. `RateMyGamesView` remains live. `ReviewsArchivedView` and its notice page were deleted 2026-10
+> ([Odds and ends review](../design/reviews/odds-and-ends.md) OE-08): every old review URL now 301s to Rate My Games.
 >
 > The text-review system was retired after a data-handling bug in
 > `Concept.absorb()` (the `ConceptTrophyGroup` CASCADE trap, fixed in
@@ -18,9 +19,9 @@
 > `ReviewReport` models and the `api/review_views.py` view classes are kept
 > **dormant** in the tree for a possible future rebuild (the landing and
 > detail views were deleted 2026-10, see above). All review routes are
-> unregistered: `/community/reviews/` serves a notice page
-> (`ReviewsArchivedView` → `trophies/reviews_archived.html`),
-> `/community/reviews/<slug>/` 302-redirects to it, and every review API
+> unregistered: `/community/reviews/`, `/community/reviews/<slug>/`, `/reviews/` and
+> `/reviews/<slug>/` 301 to Rate My Games (`/rate-my-games/`; the URL names `reviews_landing` /
+> `review_hub` are kept for old `reverse()` callers), and every review API
 > endpoint 404s. Staff review-moderation routes are intentionally left
 > registered. The sections below describe the system **as it was**.
 >
@@ -59,7 +60,7 @@ The review feed uses **client-side rendering** from JSON API responses (not serv
 | `trophies/token_keeper.py` | Sync hook for `ConceptTrophyGroupService.sync_for_concept()` |
 
 | `api/review_views.py` | 11 view classes covering 15 API endpoints |
-| `trophies/views/review_hub_views.py` | `ReviewsArchivedView`, `RateMyGamesView` (`ReviewHubLandingView` / `ReviewHubDetailView` deleted 2026-10) |
+| `trophies/views/review_hub_views.py` | `RateMyGamesView` (`ReviewHubLandingView` / `ReviewHubDetailView` / `ReviewsArchivedView` deleted 2026-10) |
 | `static/js/review-hub.js` | Detail page logic (ReviewHub class) |
 | `static/js/review-hub-landing.js` | Landing page logic (game search typeahead, recent feed with infinite scroll) |
 | `static/js/rate-my-games.js` | Wizard logic (RateMyGamesWizard class) |

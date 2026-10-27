@@ -13,7 +13,7 @@ from .badge_views import BadgeHowItWorksView, BadgeListView, BadgeDetailView, Gr
 from .sync_views import ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, RequestProfileRefreshView, ProfileSuggestView, SiteSuggestView
 from .admin_views import TokenMonitoringView, BadgeSeriesCreationView
 from .misc_views import SearchView
-from .review_hub_views import RateMyGamesView, ReviewsArchivedView
+from .review_hub_views import RateMyGamesView
 from .title_views import MyTitlesView
 from .roadmap_views import RoadmapDetailView, RoadmapEditorView
 from .shareables_views import PlatCardsView
@@ -44,7 +44,7 @@ __all__ = [
     # Misc views
     'SearchView',
     # Review Hub views
-    'RateMyGamesView', 'ReviewsArchivedView',
+    'RateMyGamesView',
     # Dashboard views
     # Title views
     'MyTitlesView',
