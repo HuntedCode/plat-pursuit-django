@@ -34,7 +34,7 @@
     <link rel="apple-touch-icon" sizes="180x180" href="{% static 'images/apple-touch-icon.png' %}">
     {% comment %} Fonts are self-hosted (SEO Lane 3): faces declared in output.css, files under
     static/fonts/. Preload the two latin variable fonts nearly every page paints with; latin-ext
-    and Poppins (Stellar Circuit only) load lazily via unicode-range. crossorigin is mandatory on
+    and Poppins (share cards only) load lazily via unicode-range. crossorigin is mandatory on
     font preloads even same-origin, or the browser fetches twice. {% endcomment %}
     <link rel="preload" href="{% static 'fonts/bricolage-grotesque-var-latin.woff2' %}" as="font" type="font/woff2" crossorigin>
     <link rel="preload" href="{% static 'fonts/inter-var-latin.woff2' %}" as="font" type="font/woff2" crossorigin>

@@ -4,17 +4,27 @@
 {% block meta_description %}Platinum Pursuit's terms of service. Understand your rights and obligations when using our platform.{% endblock %}
 
 {% block content %}
-<div class="container mx-auto p-4 max-w-4xl">
-    <div class="card bg-base-100 border-2 border-base-300 shadow-lg shadow-neutral">
-        <div class="card-body prose prose-invert max-w-none">
-            <h1 class="card-title text-3xl mb-6">Terms of Service</h1>
-            <p class="text-sm text-base-content/70">Last updated: August 2026</p>
+{% comment %} Rebuilt 2026-10 (Odds and ends review OE-03): the policy text is plain semantic HTML styled by
+.pp-doc (static/css/components/pages.css). It used to sit in `prose`, which does nothing here (no typography
+plugin), so its headings rendered as paragraphs. Keep the text plain: no classes on the headings, lists or links.
+When the policy's substance changes, move "Last updated". {% endcomment %}
+<div class="pg">
+    <section aria-label="Terms of Service" class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral">
+        <div class="card-body p-5 md:p-7 pp-head-cascade">
+            <p class="pg__eyebrow">Legal</p>
+            <h1 class="pg__h1">Terms of Service</h1>
+            <p class="pg__meta">Last updated: October 2026</p>
+        </div>
+    </section>
+
+    <article class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
+        <div class="card-body p-5 md:p-7 pp-doc">
 
             <h2>1. Acceptance of Terms</h2>
             <p>By accessing and using Platinum Pursuit ("the Service"), you agree to be bound by these Terms of Service. If you do not agree to these terms, please do not use our Service.</p>
 
             <h2>2. Description of Service</h2>
-            <p>Platinum Pursuit is a community platform for PlayStation trophy hunters. We provide trophy tracking, badge and career progression, leaderboards, platinum roadmaps, and community game ratings.</p>
+            <p>Platinum Pursuit is a community platform for PlayStation trophy hunters. We provide trophy tracking, badge and career progression, challenges, game lists, leaderboards, and community game ratings.</p>
 
             <h2>3. Disclaimer of Affiliation</h2>
             <p><strong>Platinum Pursuit is not affiliated with, endorsed by, or sponsored by Sony Interactive Entertainment, PlayStation, or any of their subsidiaries.</strong> "PlayStation," "PSN," and related marks are trademarks of Sony Interactive Entertainment. All game titles and related content are the property of their respective owners.</p>
@@ -35,7 +45,7 @@
 
             <h2>5. User-Generated Content</h2>
             <h3>Your Content</h3>
-            <p>When you submit content (game ratings, written quick takes, roadmap contributions) to Platinum Pursuit:</p>
+            <p>When you submit content (game ratings, written quick takes, published game lists) to Platinum Pursuit:</p>
             <ul>
                 <li>You retain ownership of your content.</li>
                 <li>You grant us a non-exclusive, worldwide, royalty-free license to use, display, and distribute your content on our platform.</li>
@@ -94,9 +104,9 @@
             <p>These terms are governed by applicable law. Any disputes shall be resolved through good-faith negotiation or appropriate legal channels.</p>
 
             <h2>13. Contact</h2>
-            <p>For questions about these Terms of Service, reach us on <a href="{{ discord_invite_url }}" target="_blank" rel="noopener noreferrer" class="link link-primary">Discord</a> or by email at <a href="mailto:support@platpursuit.com" class="link link-primary">support@platpursuit.com</a>.</p>
+            <p>For questions about these Terms of Service, reach us on <a href="{{ discord_invite_url }}" target="_blank" rel="noopener noreferrer">Discord</a> or by email at <a href="mailto:support@platpursuit.com">support@platpursuit.com</a>.</p>
         </div>
-    </div>
+    </article>
 </div>
 {% endblock %}
 

@@ -493,7 +493,7 @@ def test_the_square_endpoint_is_metered_by_ip_in_its_own_bucket(client):
         for _ in range(60):
             assert client.head(url).status_code == 200
 
-        assert client.get(url).status_code == 403, (
+        assert client.get(url).status_code == 429, (
             'HEAD requests are not metered -- the budget was drained by 60 of them and GET still '
             "answered, which is the hole `method=('GET', 'HEAD')` closes")
 

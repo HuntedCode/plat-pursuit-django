@@ -715,8 +715,9 @@ def test_both_write_doors_share_one_rate_limit_bucket():
     #   and the writes' 30/m would cut them off mid-word;
     # - REDEEMS arrived with the reward panel, which renders one Claim button PER FINISHED SQUARE, up to 25.
     #   Claiming them one at a time is what the UI invites, so on the write bucket a hunter exhausts 30/m by
-    #   themselves -- and a tripped `block=True` limit renders through the 403 HTML path with no `error`
-    #   key, so the toast goes generic AND assign/clear/hide are locked out for the rest of the minute.
+    #   themselves -- and a tripped `block=True` limit renders the cooldown page (a 429 since 2026-10-27,
+    #   a bare 403 before) with no `error` key for a client that cannot send `Sec-Fetch-*`, so the toast
+    #   goes generic AND assign/clear/hide are locked out for the rest of the minute.
     #
     # An earlier version asserted that EVERY `ratelimit` call in the file was identical, which was true when
     # there were two and went red the moment a read door arrived. The property worth keeping is narrower:

@@ -1,0 +1,28 @@
+{% extends 'errors/base_error.html' %}
+{% comment %} A server error. Django renders this with NO context (no user, no request) through the standalone shell
+(errors/standalone.html), because the failure may be the database. Keep it free of anything that queries. {% endcomment %}
+
+{% block title %}Something Broke{% endblock %}
+
+{% block err_tone %}var(--pp-error){% endblock %}
+
+{% block err_icon %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/></svg>{% endblock %}
+
+{% block err_banner %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>Server Glitch{% endblock %}
+
+{% block err_title %}500: Our Fault, Not Yours{% endblock %}
+
+{% block err_stats %}
+<span class="err-stat"><span class="err-stat__label">Your fault</span><span class="err-stat__value">0%</span></span>
+<span class="err-stat" style="--stat-c: var(--pp-primary);"><span class="err-stat__label">Trophies lost</span><span class="err-stat__value">0</span></span>
+<span class="err-stat" style="--stat-c: var(--pp-success);"><span class="err-stat__label">Error</span><span class="err-stat__value">Logged</span></span>
+<span class="err-stat" style="--stat-c: var(--pp-accent);"><span class="err-stat__label">Fix</span><span class="err-stat__value">Retry</span></span>
+{% endblock %}
+
+{% block err_pills %}<span class="err-pill err-pill--tone">Glitched</span><span class="err-pill">Retry Available</span>{% endblock %}
+
+{% block err_tag %}Even the best runs hit a softlock...{% endblock %}
+
+{% block err_lede %}Something broke on our side while loading this page. Try again in a moment; if it keeps happening, let us know on Discord or at support@platpursuit.com.{% endblock %}
+
+{% block err_actions %}<a class="pp-cta" href="">Try again</a><a class="pp-cta pp-cta--ghost" href="/">Back to Home</a>{% endblock %}

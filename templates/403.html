@@ -1,0 +1,28 @@
+{% extends 'errors/base_error.html' %}
+{% comment %} A refused request (core.error_views.permission_denied): a PermissionDenied raised outside DRF that is not a
+rate limit. The card: errors/base_error.html. {% endcomment %}
+
+{% block title %}403 - Trophy Locked{% endblock %}
+
+{% block err_tone %}var(--pp-error){% endblock %}
+
+{% block err_icon %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>{% endblock %}
+
+{% block err_banner %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>Trophy Locked{% endblock %}
+
+{% block err_title %}403: Off Limits{% endblock %}
+
+{% block err_stats %}
+<span class="err-stat"><span class="err-stat__label">Access</span><span class="err-stat__value">0%</span></span>
+<span class="err-stat" style="--stat-c: var(--pp-accent);"><span class="err-stat__label">Keys held</span><span class="err-stat__value">0</span></span>
+<span class="err-stat" style="--stat-c: var(--pp-primary);"><span class="err-stat__label">Attempts</span><span class="err-stat__value">1</span></span>
+<span class="err-stat" style="--stat-c: var(--pp-secondary);"><span class="err-stat__label">Trophies</span><span class="err-stat__value">Hidden</span></span>
+{% endblock %}
+
+{% block err_pills %}<span class="err-pill err-pill--tone">Locked</span><span class="err-pill">Hidden Trophy</span>{% endblock %}
+
+{% block err_tag %}Not every door opens for every hunter...{% endblock %}
+
+{% block err_lede %}This page isn't open to your account. If you think it should be, get in touch and we'll take a look.{% endblock %}
+
+{% block err_actions %}<a class="pp-cta" href="{% url 'home' %}">Back to Home</a>{% if user.is_authenticated %}<a class="pp-cta pp-cta--ghost" href="{% url 'contact' %}">Contact us</a>{% else %}<a class="pp-cta pp-cta--ghost" href="{% url 'account_login' %}?next={{ request.path|urlencode }}">Sign in</a>{% endif %}{% endblock %}

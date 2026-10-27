@@ -533,9 +533,8 @@ def test_a_nul_byte_in_the_url_key_is_not_a_500(client, door):
 
     resp = client.get(path) if door == 'slot' else client.post(path)
 
-    # 404 for the GET door, 405 for the POST ones -- and the 405 is this project's own documented quirk, not
-    # a surprise: `handler404` is GET-only, so a 404 reached by a POST comes back listing GET/HEAD/OPTIONS.
-    # `_ChallengeActionView`'s docstring records the same thing for `Http404` raised inside a view.
+    # 404 for every door now. The POST ones answered 405 while `handler404` was a GET-only view (until
+    # 2026-10-27, when `core.error_views.not_found` replaced it), so either status is still accepted here.
     #
     # The property under test is that an untrusted URL segment never reaches the database. Either status is a
     # correct way to get there; a 500 is not. My first version of this test asserted `== 404` while its own

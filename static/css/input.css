@@ -66,6 +66,8 @@
 @import "./components/challenge-optimizer.css";
 @import "./components/quick-add.css";
 @import "./components/settings-page.css";
+@import "./components/pages.css";
+@import "./components/errors.css";
 @import "./components/profile-card-tab.css";
 @import "./components/landing.css";
 @import "./components/syncing.css";
@@ -76,8 +78,8 @@
    font origin were two extra connections on every first visit for no
    benefit. Files live in static/fonts/ (url is relative to output.css,
    which sits alongside this file in static/css/). unicode-range keeps
-   latin-ext lazy; Poppins is only ever used by the Stellar Circuit
-   loading screen + canvas, so its faces stay dormant everywhere else. */
+   latin-ext lazy; Poppins is only used by the share cards and the parked
+   Stellar Circuit game code, so its faces stay dormant on every page. */
 
 /* Bricolage Grotesque: variable (wght 200-800, wdth 75-100%, opsz) */
 @font-face {

@@ -1729,3 +1729,16 @@ rebuilds in that window keep labels as they are rather than improving them. That
       it, AC-02), and donations stopped granting the milestone, the title and the role when the legacy milestone
       engine retired in 2026-08 (AC-13). Something like: "Every $10 earns a badge pick, saved for the next wave of
       series, and every donor is thanked on the donor wall." Data, not code, so no deploy carries it.
+
+## 2026-10-27 - The Odds and ends review (branch `review/odds-and-ends`)
+
+- [ ] **1. `migrate`** (art_reveal 0005: `ArtRevealItem.artwork_thumb`, one empty column on a 40-row table).
+- [ ] **2. `python manage.py make_badge_thumbs`** after the deploy, for the reveal page's 40 artworks (the badge
+      rows were copied by the 2026-10-26 run and are skipped). Until it runs, the reveal page draws the full
+      uploads lazily, so the order is safe.
+- [ ] **3. Read the new What's New entry before deploying** (`core/whats_new.py`, `2026-10-badge-rewards`,
+      "Badges go further"). Every signed-in hunter sees it as a modal on their next visit, so the wording is yours
+      to settle in the PR; the deploy is what publishes it.
+- [ ] **4. Check the error pages on prod once** (`DEBUG` is on in dev, so dev shows Django's debug pages): any
+      unknown URL for the 404, and the expired-form page by opening the sign-in page, clearing the site's cookies
+      and submitting it. The 500 and 400 pages are pinned by tests only.

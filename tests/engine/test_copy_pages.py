@@ -49,7 +49,10 @@ def test_privacy_names_both_payment_processors_and_current_ugc(client):
     body = client.get(reverse('privacy')).content.decode()
 
     assert 'PayPal' in body
-    assert 'roadmap contributions' in body
+    assert 'game lists you make' in body
+    # The policy text, not the page: the footer links the Support roadmap, a different thing.
+    src = (ROOT / 'templates' / 'pages' / 'privacy.html').read_text(encoding='utf-8')
+    assert 'roadmap' not in src.lower(), 'roadmaps are not live (owner, 2026-10-27)'
     assert 'guides' not in body.lower(), 'the guides system is deleted; the policy must not name it'
 
 
@@ -69,7 +72,7 @@ def test_terms_covers_deletion_and_the_current_content_licence(client):
     body = client.get(reverse('terms')).content.decode()
 
     assert 'delete your account yourself' in body
-    assert 'quick takes, roadmap contributions' in body
+    assert 'quick takes, published game lists' in body
     assert 'not affiliated with' in body, 'the Sony disclaimer stays'
 
 
@@ -77,8 +80,9 @@ def test_about_markets_real_features_not_deleted_ones(client):
     body = client.get(reverse('about')).content.decode()
 
     assert 'Community Guides' not in body, 'guides are deleted; this marketed a 302'
-    assert 'Roadmaps' in body
-    assert 'Badges &amp; Career' in body
+    assert 'Roadmaps' not in body, 'roadmaps are not live (owner, 2026-10-26)'
+    assert 'Trophy Case' not in body, 'the trophy case page was deleted 2026-08'
+    assert 'Badges' in body and 'Career and Jobs' in body
     assert 'Monthly Recap' in body
 
 
@@ -87,5 +91,5 @@ def test_contact_links_the_public_roadmap(client):
 
 
 @pytest.mark.parametrize('name', ['privacy', 'terms'])
-def test_the_legal_pages_are_dated_august_2026(client, name):
-    assert 'August 2026' in client.get(reverse(name)).content.decode()
+def test_the_legal_pages_are_dated_october_2026(client, name):
+    assert 'Last updated: October 2026' in client.get(reverse(name)).content.decode()

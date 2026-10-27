@@ -15,7 +15,7 @@ PlatPursuit has **110 custom management commands** spread across 8 Django apps: 
 | `populate_profile_plats` | Recalculate platinum counts for all profiles by calling `update_plats()` on each. | (none) | `python manage.py populate_profile_plats` |
 | `populate_profilegame_stats` | Recalculate earned/unearned trophy counts, `has_plat`, and most recent trophy date for a single profile's ProfileGame records. | `--username` (required), `--batch_size` (default: 100) | `python manage.py populate_profilegame_stats --username Jlowe` |
 | `populate_user_titles` | Backfill UserTitle records for existing badge and milestone awards. **LEGACY** (writes `source_type='badge'`); for the new badge system use `sync_series_titles`. | `--dry-run`, `--badges-only`, `--milestones-only` | `python manage.py populate_user_titles --dry-run` |
-| `make_badge_thumbs` | Make the 512px WebP display copy of each badge's art (`BadgeSeries.badge_thumb`, `GroupBadge.badge_override_thumb`) where it is missing or stale. New uploads get theirs on save; this backfills and repairs. Idempotent. | `--dry-run` | `python manage.py make_badge_thumbs` |
+| `make_badge_thumbs` | Make the 512px WebP display copy of each badge's art (`BadgeSeries.badge_thumb`, `GroupBadge.badge_override_thumb`) and of each reveal event item (`ArtRevealItem.artwork_thumb`) where it is missing or stale. New uploads get theirs on save; this backfills and repairs. Idempotent. | `--dry-run` | `python manage.py make_badge_thumbs` |
 | `sync_series_titles` | Reconcile `UserTitle` against the group badges actually held (NEW badge system). Grants titles the one-shot `award` path missed, and adopts rows another system wrote on a shared Title. Fixes under-counted title rarity and "Be the first" on a title you hold. | `--series`, `--dry-run`, `--prune` | `python manage.py sync_series_titles --dry-run` |
 | `populate_banned_words` | Seed the BannedWord table with a default list of inappropriate words and spam indicators. | `--clear`, `--dry-run` | `python manage.py populate_banned_words --dry-run` |
 | `lock_admin_concepts` | Lock `concept_lock` on games whose concept has an admin-duplicate suffix (`-1`, `-2`, etc.) or `PP_` stub prefix. | `--dry-run` | `python manage.py lock_admin_concepts --dry-run` |
@@ -203,7 +203,7 @@ Commands that were run once (or a few times) for data migration. They remain in 
 | `populate_profilegame_stats` | Recalculate per-game stats for a profile |
 | `populate_user_titles` | Backfill UserTitle records from badge/milestone awards (legacy system) |
 | `sync_series_titles` | Reconcile UserTitle against held group badges (new badge system) |
-| `make_badge_thumbs` | Badge art display copies (SW-06, 2026-10-26); run once after the deploy that added the fields, safe to rerun |
+| `make_badge_thumbs` | Badge art display copies (SW-06, 2026-10-26; reveal items added 2026-10-27, OE-04); run after a deploy that adds a copy field, safe to rerun |
 | `populate_banned_words` | Seed banned words for content moderation |
 | `recalculate_profile_counts` | Full profile trophy count recalculation |
 | `recalc_earn_rates` | Recalculate played_count + community stats, earned_count, earn_rate |

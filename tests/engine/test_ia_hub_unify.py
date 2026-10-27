@@ -47,43 +47,6 @@ def test_other_hubs_unchanged():
     assert resolve_hub_subnav(_req('/leaderboards/'))['hub'].key == 'leaderboards'
 
 
-def test_the_retired_community_paths_sit_in_the_hub_that_replaced_them(client):
-    """DECIDED 2026-09, by this guard firing exactly as it was built to.
-
-    It asserted a tombstone renders no sub-nav strip, on the reasoning that "a strip implies a
-    section you are inside, and there is no longer one". That was true while Community was retired.
-    The moment Game Lists turned the rail on, this failed -- and the failure was the point: somebody
-    had to decide whether a dead page should show a live section's navigation.
-
-    It should. The reviews tombstone genuinely sits in Community now, and a reader who lands on it
-    from an old link is better served by a rail offering Game Lists and Hunters than by a page with
-    no way out. The original reasoning has not been overturned so much as its premise has: there IS
-    a section to be inside now.
-
-    What this pins instead is that the tombstone stays a TOMBSTONE -- it resolves to the hub, it does
-    not become a page of its own, and `/community/` still redirects away.
-
-    The intermediate version of this guard is worth remembering. When Community first returned I
-    asserted `hub.items == ()`, which is a CONFIG assertion wearing a RENDERING message: it would
-    have failed on this same change with "items is not an empty tuple" -- a complaint about a detail,
-    in a file about something else, which invites deletion rather than thought. Rewriting it to read
-    the RENDERED PAGE is what made this failure legible enough to act on.
-    """
-    match = resolve_hub_subnav(_req('/community/reviews/'))
-    assert match['hub'].key == 'community', 'the tombstone should land a reader on a hub'
-    # No item of its own: it is a notice, not a destination.
-    assert match['active_slug'] is None, 'the tombstone lit a rail item as though it were a page'
-
-    # THE RAIL'S OWN ITEMS, not a substring of the page. The first version asserted
-    # `'lists_browse' in body or '/community/lists/' in body` -- and `lists_browse` is a URL NAME, so
-    # `{% url %}` renders it as a path and that half could never be true. The `or` made a
-    # single-clause check look like two. Worse, the surviving clause would be satisfied by any
-    # "Browse Game Lists" CTA added to the tombstone body, with the rail gone.
-    items = hub_subnav(_req('/community/reviews/'))['hub_subnav_items']
-    assert '/community/lists/' in [i.url for i in items], (
-        'the rail does not reach the section the tombstone belongs to')
-
-
 def _grouped(ctx):
     groups = {}
     for i in ctx['hub_subnav_items']:

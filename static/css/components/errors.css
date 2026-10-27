@@ -1,0 +1,270 @@
+/* ==========================================================================================
+   ERROR PAGES: 404, 403, 429, the expired-form page, and the standalone 400 / 500
+   (rebuilt 2026-10, Odds and ends review OE-01 / OE-05).
+
+   The joke share card ("404: The Lost Page, Sought by Trophy Hunter, 0 pages found") is the
+   site's error voice, so every error page wears it. It used to be inline styles with fixed
+   140px columns that broke at 375 (the banner cut to "PLATI", the stats stacked one per row);
+   it is now one component in tokens. Each page sets its tone with --err-c.
+
+   PHONE: the art tiles are left out (the logo still signs the card's footer) and the stats sit
+   two across, so the explanation and the way out stay on the first screen. md and up: the share
+   card's two columns, the four stats in one row.
+
+   The three greys are the real share cards' plate, raised plate and ink (the Playwright-rendered
+   platinum cards), named here once so the joke card matches them.
+   ========================================================================================== */
+
+.err {
+    --err-c: var(--pp-primary);
+    --err-plate: oklch(0.27 0.012 255);
+    --err-plate-hi: oklch(0.30 0.012 255);
+    --err-ink: oklch(0.18 0.01 255);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    max-width: 42rem;
+    margin: 12px auto 0;
+}
+
+@media (min-width: 1024px) {
+    .err { margin-top: 32px; }
+}
+
+/* ---- the card ----------------------------------------------------------------------------- */
+.err-card {
+    width: 100%;
+    padding: 10px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, var(--err-plate), var(--err-plate-hi), var(--err-plate));
+}
+
+.err-card__frame {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border: 3px solid var(--err-c);
+    border-radius: 8px;
+    box-shadow: 0 10px 18px -6px color-mix(in oklab, var(--err-c) 30%, transparent);
+}
+
+.err-card__main {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 14px;
+}
+
+.err-card__art {
+    display: none;
+    gap: 8px;
+}
+
+.err-card__tile {
+    display: grid;
+    place-items: center;
+    flex: none;
+    border: 3px solid var(--err-ink);
+    border-radius: 8px;
+    background: linear-gradient(135deg, var(--err-plate-hi), var(--err-plate));
+    box-shadow: 0 8px 14px -6px rgb(0 0 0 / 0.6);
+}
+
+.err-card__tile img { width: 80%; height: 80%; object-fit: contain; }
+
+.err-card__tile svg {
+    width: 45%;
+    height: 45%;
+    color: var(--err-c);
+    opacity: 0.45;
+}
+
+.err-card__info {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex: 1;
+}
+
+.err-card__banner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+    padding: 7px 12px;
+    border-left: 4px solid var(--err-c);
+    border-radius: 0 8px 8px 0;
+    background: linear-gradient(90deg, color-mix(in oklab, var(--err-c) 16%, transparent), color-mix(in oklab, var(--err-c) 5%, transparent));
+    color: var(--err-c);
+    font-weight: 800;
+    font-style: italic;
+    font-size: 0.85rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    line-height: 1.25;
+}
+
+.err-card__banner svg { width: 18px; height: 18px; flex: none; }
+
+.err-card__title {
+    font-family: var(--pp-font-display);
+    font-weight: 800;
+    font-size: 1.3rem;
+    line-height: 1.2;
+    color: var(--pp-text);
+}
+
+.err-card__by {
+    margin-top: 2px;
+    font-size: 0.85rem;
+    font-style: italic;
+    color: var(--pp-text-dim);
+    padding-right: 4px;
+}
+
+.err-card__by b { color: var(--err-c); font-weight: 700; }
+
+.err-card__stats {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.err-stat {
+    padding: 6px 10px;
+    border: 3px solid var(--err-ink);
+    border-radius: 8px;
+    background: color-mix(in oklab, var(--err-plate) 80%, transparent);
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.6);
+}
+
+.err-stat__label {
+    display: block;
+    font-size: 0.66rem;
+    font-weight: 800;
+    font-style: italic;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--stat-c, var(--err-c));
+    padding-right: 2px;
+}
+
+.err-stat__value {
+    display: block;
+    margin-top: 2px;
+    font-family: var(--pp-font-display);
+    font-weight: 800;
+    font-size: 1.1rem;
+    color: var(--pp-text);
+}
+
+.err-card__pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.err-pill {
+    display: inline-block;
+    padding: 5px 12px;
+    border: 2px solid var(--err-ink);
+    border-radius: 9999px;
+    background: color-mix(in oklab, var(--err-plate) 80%, transparent);
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--pp-text-dim);
+}
+
+.err-pill--tone {
+    border-color: var(--err-c);
+    background: color-mix(in oklab, var(--err-c) 10%, transparent);
+    color: var(--err-c);
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+.err-card__foot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px 12px;
+    padding: 10px 14px;
+    border-top: 2px solid var(--err-ink);
+    background: color-mix(in oklab, var(--err-plate) 50%, transparent);
+}
+
+.err-card__brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.85rem;
+    font-weight: 800;
+    font-style: italic;
+    color: var(--err-c);
+    padding-right: 4px;
+}
+
+.err-card__brand img { width: 22px; height: 22px; border-radius: 9999px; }
+
+.err-card__tag {
+    font-size: 0.72rem;
+    font-style: italic;
+    color: var(--pp-text-mute);
+    padding-right: 4px;
+}
+
+@media (min-width: 768px) {
+    .err-card { padding: 12px; }
+    .err-card__main { flex-direction: row; gap: 16px; padding: 16px; }
+    .err-card__art { display: flex; flex-direction: column; }
+    .err-card__tile { width: 112px; height: 112px; border-width: 4px; }
+    .err-card__banner { font-size: 1rem; }
+    .err-card__title { font-size: 1.4rem; }
+    .err-card__stats { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+/* ---- below the card ----------------------------------------------------------------------- */
+.err__lede {
+    margin-top: 20px;
+    max-width: 28rem;
+    text-align: center;
+    font-size: 0.95rem;
+    line-height: 1.55;
+    color: var(--pp-text-dim);
+    text-wrap: pretty;
+}
+
+.err__actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 16px;
+}
+
+.err__fact {
+    max-width: 28rem;
+    margin-top: 20px;
+    padding-top: 14px;
+    border-top: 1px solid var(--pp-divider);
+    text-align: center;
+    font-size: 0.75rem;
+    font-style: italic;
+    color: var(--pp-text-mute);
+    padding-right: 4px;
+}
+
+.err__fact:empty { display: none; }
+
+/* ---- standalone (400, 500): no site chrome, so the page centres itself -------------------- */
+.err--standalone {
+    min-height: 100vh;
+    justify-content: center;
+    margin-top: 0;
+    padding: 24px 16px;
+}

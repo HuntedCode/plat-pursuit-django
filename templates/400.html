@@ -1,0 +1,29 @@
+{% extends 'errors/base_error.html' %}
+{% comment %} A request the server could not read (Django's bad_request: a malformed request, often a bad Host header).
+Rendered through the standalone shell (errors/standalone.html): base.html's absolute URLs read the Host header,
+which may be the very thing that is wrong. {% endcomment %}
+
+{% block title %}Bad Request{% endblock %}
+
+{% block err_tone %}var(--pp-warning){% endblock %}
+
+{% block err_icon %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>{% endblock %}
+
+{% block err_banner %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>Corrupted Save{% endblock %}
+
+{% block err_title %}400: Scrambled Request{% endblock %}
+
+{% block err_stats %}
+<span class="err-stat"><span class="err-stat__label">Readable</span><span class="err-stat__value">0%</span></span>
+<span class="err-stat" style="--stat-c: var(--pp-primary);"><span class="err-stat__label">Sent</span><span class="err-stat__value">Nothing</span></span>
+<span class="err-stat" style="--stat-c: var(--pp-success);"><span class="err-stat__label">Fix</span><span class="err-stat__value">Retry</span></span>
+<span class="err-stat" style="--stat-c: var(--pp-secondary);"><span class="err-stat__label">Trophies</span><span class="err-stat__value">+0</span></span>
+{% endblock %}
+
+{% block err_pills %}<span class="err-pill err-pill--tone">Unreadable</span><span class="err-pill">Try Again</span>{% endblock %}
+
+{% block err_tag %}Even save files get corrupted sometimes...{% endblock %}
+
+{% block err_lede %}Your browser sent a request we couldn't read, so nothing happened. Head back to the home page and try again.{% endblock %}
+
+{% block err_actions %}<a class="pp-cta" href="/">Back to Home</a>{% endblock %}

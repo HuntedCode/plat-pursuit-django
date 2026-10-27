@@ -159,6 +159,8 @@ X_FRAME_OPTIONS = 'DENY'               # Prevent framing entirely
 CSRF_COOKIE_SECURE = True
 CSRF_COOKIE_HTTPONLY = True            # Safari ITP drops non-HttpOnly cookies more aggressively
 CSRF_COOKIE_SAMESITE = 'Lax'
+# A stale-token POST gets the site's own "This form expired" page, not Django's bare one (core/error_views.py).
+CSRF_FAILURE_VIEW = 'core.error_views.csrf_failure'
 SESSION_COOKIE_SECURE = True
 SESSION_COOKIE_SAMESITE = 'Lax'
 

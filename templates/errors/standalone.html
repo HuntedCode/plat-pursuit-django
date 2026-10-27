@@ -1,0 +1,20 @@
+{% load static %}<!doctype html>
+<html lang="en" data-theme="plat-pursuit-dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex" />
+    <title>{% block title %}Error{% endblock %} - Platinum Pursuit</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="{% static 'images/favicon-32x32.png' %}">
+    <link rel="stylesheet" href="{% static 'css/output.css' %}" />
+  </head>
+  {% comment %} THE SHELL FOR ERRORS THAT CANNOT TRUST THE SITE (Odds and ends review, OE-01). Django renders 500.html
+  with no context at all, and the error may be the database being down; a 400 is often a bad Host header that
+  base.html's absolute URLs would raise on again. So this page loads nothing but the stylesheet: no navbar, no
+  context processors' data, no database, no request. errors/base_error.html extends it whenever the view did not
+  hand it `err_shell` (see core/error_views.py). {% endcomment %}
+  <body class="bg-base-100 text-base-content">
+    <main>{% block content %}{% endblock %}</main>
+    {% block js_scripts %}{% endblock %}
+  </body>
+</html>

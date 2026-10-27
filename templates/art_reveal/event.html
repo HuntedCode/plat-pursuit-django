@@ -4,27 +4,28 @@
 {% block title %}{{ event.name|default:"Badge Art Reveal" }}{% endblock %}
 {% block meta_description %}{{ event.name|default:"Badge art reveal" }} on Platinum Pursuit: watch the community unlock the next badge artwork piece by piece.{% endblock %}
 
+{% comment %} The badge art reveal (art_reveal/views.py). Two shapes: WHILE IT RUNS, the rules, a carousel of what is
+out, the meter to the next piece and the full grid; ONCE EVERY PIECE IS OUT (`p.complete`), the event's gallery,
+the grid alone (owner, 2026-10-27, Odds and ends review OE-04). Art is the item's own 512px display copy
+(`ArtRevealItem.art_url`) and loads lazily: the full uploads made this page 9.7 MB. {% endcomment %}
 {% block content %}
 <div class="max-w-6xl mx-auto px-4 md:px-6 lg:px-8 py-6 lg:py-8 space-y-6 lg:space-y-8">
 
-{% if not event %}
-    {# No event configured yet #}
-    <div class="card bg-base-100 border border-base-content/10">
-        <div class="card-body text-center py-12">
-            <h1 class="text-2xl font-bold">No reveal event is running right now</h1>
-            <p class="text-base-content/60">Check back soon!</p>
-        </div>
-    </div>
-{% else %}
     {% with p=progress %}
 
     {# ===== Header ===== #}
     <header class="text-center space-y-2">
-        <p class="text-xs uppercase tracking-[0.2em] text-primary font-semibold">Community Badge Art Reveal</p>
+        <p class="text-xs uppercase tracking-[0.2em] text-primary font-semibold">Community Badge Art Reveal{% if p.complete %} &middot; Complete{% endif %}</p>
         <h1 class="text-3xl lg:text-5xl font-bold">{{ event.name }}</h1>
         {% if event.description %}
             <p class="text-sm lg:text-base text-base-content/70 max-w-2xl mx-auto">{{ event.description }}</p>
         {% endif %}
+        {% if p.complete %}
+        <p class="text-sm text-base-content/60">
+            All <span class="font-bold text-base-content">{{ p.total }}</span> artworks revealed. The community earned
+            <span class="font-bold text-base-content">{{ p.count }}</span> badge platinum{{ p.count|pluralize }} to unlock them.
+        </p>
+        {% else %}
         <p class="text-sm text-base-content/60">
             <span class="font-bold text-base-content">{{ p.revealed }}</span> of
             <span class="font-bold text-base-content">{{ p.total }}</span> artworks revealed
@@ -37,8 +38,10 @@
                      style="width: {{ p.pct_overall }}%"></div>
             </div>
         </div>
+        {% endif %}
     </header>
 
+    {% if not p.complete %}
     {# ===== How it works ===== #}
     <section class="max-w-4xl mx-auto">
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 lg:gap-4 text-left">
@@ -64,7 +67,7 @@
                     <svg class="w-5 h-5 text-primary/70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M5 13l4 4L19 7"/></svg>
                 </div>
                 <p class="font-bold text-sm lg:text-base">Live across the site</p>
-                <p class="text-xs lg:text-sm text-base-content/60 mt-1">Each revealed artwork becomes that badge's <span class="font-semibold text-base-content/80">permanent art</span> everywhere on PlatPursuit.</p>
+                <p class="text-xs lg:text-sm text-base-content/60 mt-1">Each revealed artwork becomes that badge's <span class="font-semibold text-base-content/80">permanent art</span> everywhere on Platinum Pursuit.</p>
             </div>
         </div>
     </section>
@@ -83,7 +86,8 @@
                         {% for item in released_items %}
                         <figure class="w-full shrink-0 flex flex-col items-center px-2">
                             <div class="aspect-square w-full max-w-md bg-gradient-to-b from-base-200/60 to-base-300/40 rounded-xl flex items-center justify-center p-6">
-                                <img src="{{ item.artwork.url }}" alt="{{ item.series.name }} badge artwork"
+                                <img src="{{ item.art_url }}" alt="{{ item.series.name }} badge artwork"
+                                     {% if not forloop.last %}loading="lazy" {% endif %}decoding="async"
                                      class="max-h-full max-w-full object-contain drop-shadow-lg">
                             </div>
                             <figcaption class="text-center mt-4 space-y-0.5">
@@ -107,11 +111,11 @@
 
                 {% if released_items|length > 1 %}
                 <button type="button" data-prev aria-label="Previous artwork"
-                        class="btn btn-circle btn-sm lg:btn-md absolute left-1 lg:left-2 top-1/2 -translate-y-1/2 bg-base-100/80 border-base-content/10">
+                        class="pp-cta pp-cta--icon pp-cta--round absolute left-1 lg:left-2 top-1/2 -translate-y-1/2">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
                 </button>
                 <button type="button" data-next aria-label="Next artwork"
-                        class="btn btn-circle btn-sm lg:btn-md absolute right-1 lg:right-2 top-1/2 -translate-y-1/2 bg-base-100/80 border-base-content/10">
+                        class="pp-cta pp-cta--icon pp-cta--round absolute right-1 lg:right-2 top-1/2 -translate-y-1/2">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
                 </button>
                 {% endif %}
@@ -128,6 +132,8 @@
             {% endif %}
         </div>
     </section>
+
+    {% endif %}{# not p.complete: the rules and the carousel #}
 
     {# ===== Progress to next reveal ===== #}
     {% if not p.complete %}
@@ -150,17 +156,17 @@
     </section>
     {% endif %}
 
-    {# ===== Full grid ===== #}
+    {# ===== Full grid (the whole page once the event is complete) ===== #}
     <section class="space-y-3">
-        <h2 class="text-lg font-bold">All artworks</h2>
-        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 lg:gap-4">
+        <h2 class="text-lg font-bold">{% if p.complete %}The collection{% else %}All artworks{% endif %}</h2>
+        <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3 lg:gap-4">
             {% for item in items %}
             <div class="flex flex-col gap-1.5">
                 <a href="{% url 'badge_detail' item.series.series_slug %}" class="group flex flex-col gap-1.5">
                     {% if item.released %}
                     <div class="aspect-square rounded-lg bg-base-200 border border-base-content/10 group-hover:border-primary/50 transition-colors p-2.5 flex items-center justify-center">
-                        <img src="{{ item.artwork.url }}" alt="{{ item.series.name }} artwork"
-                             class="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform">
+                        <img src="{{ item.art_url }}" alt="{{ item.series.name }} artwork" loading="lazy" decoding="async"
+                             class="max-h-full max-w-full object-contain">
                     </div>
                     {% else %}
                     <div class="relative aspect-square rounded-lg bg-base-200/50 border border-dashed border-base-content/15 group-hover:border-base-content/30 transition-colors flex items-center justify-center text-base-content/30">
@@ -182,10 +188,9 @@
     </section>
 
     {% endwith %}
-{% endif %}
 </div>
 
-{% if event and released_items %}
+{% if released_items and not progress.complete %}
 <script>
 (function() {
     var root = document.getElementById('reveal-carousel');

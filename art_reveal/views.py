@@ -1,12 +1,17 @@
+from django.http import Http404
 from django.views.generic import TemplateView
 
 from .models import ArtRevealEvent
 
 
 class ArtRevealEventView(TemplateView):
-    """Public event page: hero of the most recent reveal, a carousel of all
-    revealed artwork, progress to the next reveal, and a full grid (locked tiles
-    for art not yet revealed). Reads the cheap stored counter, never recomputes."""
+    """Public event page. Reads the cheap stored counter, never recomputes.
+
+    WHILE AN EVENT RUNS: how it works, a carousel of the revealed artwork, progress to the next reveal, and the full
+    grid (locked tiles for art not yet out). ONCE EVERY PIECE IS OUT the page is the event's gallery: the grid alone,
+    with no rules or meter inviting a hunter to unlock what is already unlocked (owner, 2026-10-27, Odds and ends
+    review OE-04). The most recent event is shown when none is active. With no event ever, there is no page (404):
+    a page whose only content is "nothing is running" is absence shown as content (Page Principles rule 3)."""
 
     template_name = 'art_reveal/event.html'
 
@@ -16,9 +21,9 @@ class ArtRevealEventView(TemplateView):
             ArtRevealEvent.objects.filter(is_active=True).order_by('-started_at').first()
             or ArtRevealEvent.objects.order_by('-started_at').first()
         )
-        ctx['event'] = event
         if not event:
-            return ctx
+            raise Http404('No badge art reveal event yet.')
+        ctx['event'] = event
 
         items = list(
             event.items.select_related('series', 'series__funded_by').order_by('order')
@@ -28,7 +33,5 @@ class ArtRevealEventView(TemplateView):
             'progress': event.progress(),
             'items': items,
             'released_items': released,
-            'latest': released[-1] if released else None,
-            'next_item': next((i for i in items if not i.released), None),
         })
         return ctx
