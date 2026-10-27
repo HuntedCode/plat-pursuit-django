@@ -3524,6 +3524,9 @@ class BadgeSeries(models.Model):
     def save(self, *args, **kwargs):
         # The display copy of the art (trophies/services/badge_thumbs.py): re-rendered only when the art changed.
         from trophies.services.badge_thumbs import art_changed, sync_thumb
+        update_fields = kwargs.get('update_fields')
+        if update_fields is not None and 'badge_image' not in update_fields:
+            return super().save(*args, **kwargs)     # the art was not written, so neither is its copy
         changed = art_changed(self, 'badge_image')
         super().save(*args, **kwargs)
         sync_thumb(self, 'badge_image', 'badge_thumb', render=changed)
@@ -3658,6 +3661,9 @@ class GroupBadge(models.Model):
     def save(self, *args, **kwargs):
         # The display copy of the override art (trophies/services/badge_thumbs.py): re-rendered only when it changed.
         from trophies.services.badge_thumbs import art_changed, sync_thumb
+        update_fields = kwargs.get('update_fields')
+        if update_fields is not None and 'badge_image_override' not in update_fields:
+            return super().save(*args, **kwargs)     # the art was not written, so neither is its copy
         changed = art_changed(self, 'badge_image_override')
         super().save(*args, **kwargs)
         sync_thumb(self, 'badge_image_override', 'badge_override_thumb', render=changed)

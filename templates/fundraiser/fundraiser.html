@@ -66,14 +66,15 @@
             {% endif %}
             {% comment %} The campaign's totals as one line of facts (the tiles rule, design-system.md); a
             figure that would read zero is left out. Claimed is the tracker's job, so it is not repeated. An ended
-            campaign's results card already carries these figures, so the line steps aside there. {% endcomment %}
-            {% if not is_ended and total_raised or not is_ended and donor_count or not is_ended and badge_tracker.completed %}
+            campaign's results card already carries these figures, so the line steps aside there (staff viewing
+            an ended campaign get no results card, so they keep the line). {% endcomment %}
+            {% if not is_ended or is_staff_preview %}{% if total_raised or donor_count or badge_tracker.completed %}
             <p class="pp-factline fnd__facts">
                 {% if total_raised %}<span><b class="pp-tally" data-countup="{{ total_raised|floatformat:0 }}" data-countup-prefix="$">${{ total_raised|floatformat:0 }}</b> raised</span>{% endif %}
                 {% if donor_count %}<span><b class="pp-tally" data-countup="{{ donor_count }}">{{ donor_count }}</b> donor{{ donor_count|pluralize }}</span>{% endif %}
                 {% if badge_tracker.completed %}<span><b class="pp-tally" data-countup="{{ badge_tracker.completed }}">{{ badge_tracker.completed }}</b> artwork{{ badge_tracker.completed|pluralize }} live</span>{% endif %}
             </p>
-            {% endif %}
+            {% endif %}{% endif %}
             {% if is_live and user.is_authenticated %}
                 <p class="mt-1"><button type="button" id="hero-donate-cta" class="fnd-cta">
                     <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
@@ -253,7 +254,7 @@
                     <p class="fnd__sub">
                         Every dollar brings a badge to life. Pick your amount and off we go.
                         {% if all_patroned %}
-                            Donate ${{ badge_pick_divisor }} or more and you earn a badge pick, saved for the next wave.
+                            Donate ${{ badge_pick_divisor }} or more and you earn a badge pick, saved for the next wave{% if fundraiser.end_date %} (picks are claimable until {{ fundraiser.end_date|date:"M j, Y" }}){% endif %}.
                         {% elif fundraiser.campaign_type == 'badge_artwork' %}
                             Donate ${{ badge_pick_divisor }} or more to claim a badge series for custom artwork.
                         {% endif %}
@@ -328,7 +329,7 @@
         <section aria-label="Join the hunt" class="card bg-base-200/90 border-2 border-base-300 shadow-md shadow-neutral">
             <div class="card-body p-4 md:p-6 space-y-2">
                 <h2 class="fnd__h2">Join the hunt</h2>
-                <p class="fnd__sub">Create a Platinum Pursuit account to donate{% if not all_patroned %} and claim badge artwork{% endif %}. Your support keeps the pursuit alive.</p>
+                <p class="fnd__sub">Create a Platinum Pursuit account to donate{% if fundraiser.campaign_type == 'badge_artwork' and not all_patroned %} and claim badge artwork{% endif %}. Your support keeps the pursuit alive.</p>
                 <div class="flex gap-3 mt-2">
                     <a href="{% url 'account_login' %}?next={% url 'fundraiser' fundraiser.slug %}" class="fnd-cta">Sign in</a>
                     <a href="{% url 'account_signup' %}?next={% url 'fundraiser' fundraiser.slug %}" class="fnd-cta fnd-cta--ghost">Sign up</a>
@@ -402,7 +403,7 @@
 {% endblock %}
 
 {% block fixed_overlays %}
-{% if is_live and user.is_authenticated and fundraiser.campaign_type == 'badge_artwork' and total_picks_remaining %}
+{% if is_live and user.is_authenticated and fundraiser.campaign_type == 'badge_artwork' and total_picks_remaining and available_badges_count %}
     {% include 'fundraiser/partials/badge_picker_modal.html' %}
 {% endif %}
 {% endblock %}

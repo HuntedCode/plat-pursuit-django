@@ -59,7 +59,7 @@ def test_an_uploaded_series_image_gets_a_512px_webp_copy(media_root):
     series = BadgeSeriesFactory(series_slug='souls', badge_image=_png())
     series.refresh_from_db()
 
-    assert series.badge_thumb.name == badge_thumbs.thumb_name(series.badge_image.name)
+    assert series.badge_thumb.name.startswith(badge_thumbs.thumb_prefix(series.badge_image.name))
     size, fmt, _ = _thumb_pixel(series.badge_thumb)
     assert size == (512, 512) and fmt == 'WEBP'
 
@@ -94,6 +94,57 @@ def test_a_reupload_under_the_same_name_remakes_the_copy(media_root):
     series.refresh_from_db()
 
     assert _thumb_pixel(series.badge_thumb)[2][1] > 150, 'the copy still shows the old picture'
+
+
+def test_a_reupload_gets_a_new_copy_url(media_root):
+    """The copy's name carries a hash of its bytes, so a browser holding yesterday's copy (S3 sends a day of
+    max-age) never shows it for the new picture."""
+    series = BadgeSeriesFactory(series_slug='souls', badge_image=_png((200, 40, 40, 255)))
+    series.refresh_from_db()
+    before = series.badge_thumb.name
+    series.badge_image = _png((20, 200, 40, 255), name='second.png')
+    series.save()
+    series.refresh_from_db()
+
+    assert series.badge_thumb.name != before
+
+
+def test_a_storage_failure_never_fails_the_save(media_root):
+    """An S3 error on the copy must not roll back the save (inside a reveal, every reveal of the run)."""
+    from django.core.files.storage import FileSystemStorage
+    original = FileSystemStorage.save
+
+    def flaky(self, name, content, max_length=None):
+        if name.startswith('badges/thumbs/'):
+            raise OSError('s3 down')
+        return original(self, name, content, max_length=max_length)
+
+    with patch.object(FileSystemStorage, 'save', flaky):
+        series = BadgeSeriesFactory(series_slug='souls', badge_image=_png())
+    series.refresh_from_db()
+
+    assert series.badge_image and not series.badge_thumb
+    art = _edition(series).art_layers()
+    assert art['main'] == art['main_full']
+
+
+def test_a_save_that_leaves_the_art_out_does_not_touch_the_copy(media_root):
+    series = BadgeSeriesFactory(series_slug='souls', badge_image=_png())
+    series = BadgeSeries.objects.get(pk=series.pk)
+    series.badge_image = _png(name='unsaved.png')
+    with patch('trophies.services.badge_thumbs.render_thumb', side_effect=AssertionError('rendered')):
+        series.name = 'Renamed'
+        series.save(update_fields=['name'])
+
+
+def test_a_stale_override_copy_falls_back_to_the_upload(media_root):
+    gb = _edition(BadgeSeriesFactory(series_slug='souls'))
+    gb.badge_image_override = _png(name='override.png')
+    gb.save()
+    GroupBadge.objects.filter(pk=gb.pk).update(badge_image_override='badges/group/other.png')
+    art = GroupBadge.objects.get(pk=gb.pk).art_layers()
+
+    assert art['main'] == art['main_full'] and art['main'].endswith('other.png')
 
 
 def test_clearing_the_image_clears_the_copy(media_root):
@@ -174,7 +225,7 @@ def test_an_edition_override_gets_its_own_copy(media_root):
     gb.save()
     gb = GroupBadge.objects.get(pk=gb.pk)
 
-    assert gb.badge_override_thumb.name == badge_thumbs.thumb_name(gb.badge_image_override.name)
+    assert gb.badge_override_thumb.name.startswith(badge_thumbs.thumb_prefix(gb.badge_image_override.name))
     assert gb.art_layers()['main'] == gb.badge_override_thumb.url
 
 
@@ -294,6 +345,51 @@ def test_an_ended_campaign_freezes_its_tracker_and_drops_the_news(client):
     assert (resp.context['badge_tracker']['claimed'], resp.context['badge_tracker']['total']) == (1, 1)
     assert not resp.context['all_patroned']
     assert 'pp-factline fnd__facts' not in body, 'the totals repeat the results card'
+
+
+def test_patroned_needs_a_live_campaign_with_claims(client):
+    """"Every badge series has a patron" is a claim about a campaign: not about an empty catalogue ("0 of 0
+    claimed") and not about an upcoming one a staff member is previewing."""
+    nothing = _campaign()
+    assert not _fundraiser_page(client, nothing).context['all_patroned']
+
+    upcoming = _campaign()
+    _claim(upcoming, ProfileFactory())
+    Fundraiser.objects.filter(pk=upcoming.pk).update(start_date=timezone.now() + timedelta(days=3))
+    staff = UserFactory(is_staff=True)
+    client.force_login(staff)
+    assert not _fundraiser_page(client, upcoming).context['all_patroned']
+
+
+def test_staff_viewing_an_ended_campaign_still_see_its_totals(client):
+    """The results card is hidden for staff on an ended campaign, so the facts line must not be too."""
+    campaign = _campaign()
+    _claim(campaign, ProfileFactory(), status='completed')
+    Fundraiser.objects.filter(pk=campaign.pk).update(end_date=timezone.now() - timedelta(hours=1))
+    client.force_login(UserFactory(is_staff=True))
+
+    assert 'pp-factline fnd__facts' in _fundraiser_page(client, campaign).content.decode()
+
+
+def test_a_pick_promise_names_the_campaign_end(client):
+    campaign = _campaign()
+    _claim(campaign, ProfileFactory())
+    Fundraiser.objects.filter(pk=campaign.pk).update(end_date=timezone.now() + timedelta(days=30))
+    client.force_login(ProfileFactory().user)
+    body = ' '.join(_fundraiser_page(client, campaign).content.decode().split())
+
+    assert 'saved for the next wave (picks are claimable until' in body
+
+
+def test_no_empty_picker_is_rendered_when_nothing_is_claimable(client):
+    campaign = _campaign()
+    donor = ProfileFactory()
+    _claim(campaign, donor)
+    Donation.objects.filter(profile=donor).update(badge_picks_earned=3, badge_picks_used=1)
+    client.force_login(donor.user)
+    body = _fundraiser_page(client, campaign).content.decode()
+
+    assert 'id="badge-picker-modal"' not in body
 
 
 def test_a_claimable_series_keeps_the_awaiting_grid_and_no_news(client):
@@ -417,6 +513,22 @@ def test_a_secondary_address_offers_only_what_applies(client):
     assert 'name="action_' not in rows[user.email]
 
 
+def test_remove_is_wired_per_row_through_the_dialog(client):
+    """The Remove button is type=button (fails safe without JS); the script arms the hidden submit of the
+    button's OWN row. The old script looked for one list form that no longer exists and would do nothing."""
+    from allauth.account.models import EmailAddress
+    user = UserFactory()
+    EmailAddress.objects.update_or_create(user=user, email=user.email, defaults={'verified': True, 'primary': True})
+    EmailAddress.objects.create(user=user, email='second@example.test', verified=False, primary=False)
+    body = _email_page(client, user)
+    row = body.split('second@example.test</span>', 1)[1].split('</form>', 1)[0]
+
+    assert 'data-email-remove ' in row and 'name="action_remove"' in row and 'data-email-remove-submit' in row
+    script = body.split('email-remove-confirm', 2)[-1]
+    assert "btn.parentElement.querySelector('[data-email-remove-submit]')" in script
+    assert '[data-email-list]' not in script
+
+
 def test_removing_a_secondary_address_still_works(client):
     from allauth.account.models import EmailAddress
     user = UserFactory()
@@ -505,6 +617,7 @@ def test_the_beta_gate_wears_the_account_card_and_keeps_the_chrome(client):
     body = client.get(reverse('beta_access_required')).content.decode()
     assert 'auth-card' in body and 'card-body' not in body
     assert 'mobile-tabbar' in body, 'a visitor bounced here lost the phone tab bar'
+    assert 'content="noindex, follow"' in body
 
 
 def test_the_email_page_keeps_the_chrome_and_sign_in_stays_focused(client):

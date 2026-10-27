@@ -122,8 +122,11 @@ The public fundraiser page surfaces every unclaimed badge series in a dedicated 
   - Authed user with picks remaining → tile click opens the picker modal pre-selected on that badge, so the donor can confirm without re-searching.
   - Anon or authed-without-picks → tile click scrolls to the donation form (or the sign-up/login CTA section for anonymous viewers).
 - **When nothing is claimable** (AC-02, 2026-10-26): the section is not rendered at all (Page Principles rule 3). The hero says
-  "Every badge series has a patron. Donations now fund the next wave." (`all_patroned` in the view), the tracker drops its
-  "Available" key, and the donate copy says a pick is saved for the next wave. The campaign's own `description` is admin
+  "Every badge series has a patron. Donations now fund the next wave." (`all_patroned` in the view: a LIVE campaign
+  with claims and nothing left to claim), the tracker drops its "Available" key, a donor's leftover picks read as
+  "saved for the next wave" with no picker to open, and the donate copy says a pick is saved for the next wave (naming
+  the campaign's end date when it has one: picks are only claimable while their campaign is live). An ended campaign's
+  tracker total is frozen at what it claimed. The campaign's own `description` is admin
   data: edit it if it still promises a badge per $10.
 
 ## The rest of the page (AC-03, 2026-10-26)

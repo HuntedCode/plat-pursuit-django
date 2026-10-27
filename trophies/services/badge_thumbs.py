@@ -5,26 +5,29 @@ surface sent the upload itself: the fundraiser page downloaded 17 MB of art on a
 4.7 MB. A 512px WebP is sharp at the largest medallion (the 260px inspector) on a 2x screen and weighs 25 KB to
 50 KB.
 
-NAMING IS THE STALENESS CHECK FOR READS. A copy's storage name is derived from its SOURCE's name (`thumb_name`),
-and `GroupBadge.art_layers()` serves it only when the stored copy name still matches the source it would be
-made from today. So a source renamed by a path that skipped `save()` (a queryset `.update()`, a data fix) draws
-the full upload until the copy is remade. The check is string comparison, no storage I/O, so it costs nothing
-per render.
+NAMING IS THE STALENESS CHECK FOR READS. A copy's storage name is `<hash of the SOURCE's name>-<hash of the
+copy's own bytes>.webp` (`thumb_prefix`, `write_thumb`). `GroupBadge.art_layers()` serves it only when its name
+starts with the prefix of the source as named today, so a source renamed by a path that skipped `save()` (a
+queryset `.update()`, a data fix) draws the full upload until the copy is remade. The check is string work, no
+storage I/O, so it costs nothing per render. The content hash means a re-uploaded picture gets a NEW url (a
+returning browser never shows the cached old copy), and a file already under that name is by construction the
+same bytes, so it is reused without a delete.
 
 WHEN A COPY IS MADE. `BadgeSeries.save()` / `GroupBadge.save()` re-render when the art CHANGED on that row: its
 source name differs from the one the row was loaded with (`art_changed`). That covers an admin upload (it arrives
 under its bare upload name, never the stored path, even when the S3 storage will overwrite the same key) and
 `ArtRevealItem.release()` (it writes through `FieldFile.save`, which commits the file before the model's save
-runs, but the row was loaded with no art). Every write renders from the source; an existing file under the same
-name is never reused, because on an overwriting storage it may be a copy of an older picture with that name. A save that changes no
+runs, but the row was loaded with no art). Every write renders from the source. A save that changes no
 art does nothing at all, and never retries a render that failed. `python manage.py make_badge_thumbs` backfills
 and repairs the rest.
 
 What stays undetectable: a source file overwritten in storage with no change to the row at all. Nothing in the
 app does that; after a manual S3 upload over an existing name, run `make_badge_thumbs --force`.
 
-FAILURE. A copy is an optimisation. If rendering fails the column is cleared, the full image keeps being served,
-and the failure is logged once; the save that triggered it never fails.
+FAILURE. A copy is an optimisation. If rendering or the storage write fails (an S3 error, a permission), the
+column is cleared, the full image keeps being served, and the failure is logged once; the save that triggered it
+never fails. That matters most inside `ArtRevealItem.release()`, which runs in the reveal's transaction: a raise
+here would roll back every reveal in the run.
 """
 import hashlib
 import logging
@@ -44,16 +47,16 @@ THUMB_QUALITY = 85
 THUMB_DIR = 'badges/thumbs'
 
 
-def thumb_name(source_name):
-    """The storage name a source's display copy lives at. Deterministic, so the name IS the record of which
-    source a copy was made from (see the module docstring)."""
+def thumb_prefix(source_name):
+    """Every display copy of a source starts with this: the name IS the record of which source a copy was made
+    from (see the module docstring)."""
     digest = hashlib.sha1(source_name.encode('utf-8')).hexdigest()[:20]
-    return f'{THUMB_DIR}/{digest}.webp'
+    return f'{THUMB_DIR}/{digest}-'
 
 
 def thumb_is_current(source, thumb):
-    """True when `thumb` is the display copy of `source` as named today. Pure string work: safe per render."""
-    return bool(source) and bool(thumb) and thumb.name == thumb_name(source.name)
+    """True when `thumb` is a display copy of `source` as named today. Pure string work: safe per render."""
+    return bool(source) and bool(thumb) and thumb.name.startswith(thumb_prefix(source.name))
 
 
 def render_thumb(source):
@@ -76,17 +79,22 @@ def render_thumb(source):
 
 
 def write_thumb(source):
-    """Render `source`'s display copy into storage; return its name, or '' when there is none to make."""
+    """Render `source`'s display copy into storage; return its name, or '' when there is none to make. Never
+    raises: a failed render or storage write leaves the full image in use."""
     if not source:
         return ''
     data = render_thumb(source)
     if data is None:
         return ''
-    name = thumb_name(source.name)
-    storage = source.storage
-    if storage.exists(name):
-        storage.delete(name)   # a same-name save would otherwise get a suffixed name on FileSystemStorage
-    return storage.save(name, ContentFile(data))
+    name = f'{thumb_prefix(source.name)}{hashlib.sha1(data).hexdigest()[:12]}.webp'
+    try:
+        storage = source.storage
+        if storage.exists(name):      # same name, same bytes: the content hash guarantees it
+            return name
+        return storage.save(name, ContentFile(data))
+    except Exception:
+        logger.exception('Badge thumbnail write failed for %s; the full image will be served.', source.name)
+        return ''
 
 
 def sync_thumb(instance, source_attr, thumb_attr, *, render):
@@ -120,7 +128,7 @@ def art_changed(instance, source_attr):
 
 
 def remember_source(instance, source_attr, field_names):
-    """Record the source name a row was loaded with, for `art_changed`. Skips a deferred field, so a queryset
-    `.only()` never pays a query for it."""
+    """Record the source name a row was loaded with, for `art_changed`. Skips a deferred field, so loading with
+    `.only()` never pays a query for it (a later save of that instance re-renders once, harmlessly)."""
     if source_attr in field_names:
         setattr(instance, f'_loaded_{source_attr}', getattr(instance, source_attr).name or '')

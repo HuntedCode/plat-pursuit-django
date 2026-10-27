@@ -246,8 +246,11 @@ class FundraiserView(TemplateView):
             context['available_badges_preview'] = available_badges[:18]
             context['available_badges_count'] = len(available_badges)
             # Every series has a patron (AC-02): the hero says so and the donate copy saves the pick
-            # for the next wave, instead of promising a badge the page cannot offer.
-            context['all_patroned'] = not available_badges and not context.get('is_ended')
+            # for the next wave, instead of promising a badge the page cannot offer. Only on a LIVE
+            # campaign that has claims at all: an upcoming preview or a catalogue with nothing lacking
+            # art ("0 of 0 claimed") is not a campaign whose series all found patrons.
+            context['all_patroned'] = (not available_badges and bool(claimed_count)
+                                       and context['is_live'])
 
         # User-specific context
         if self.request.user.is_authenticated:
