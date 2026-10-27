@@ -101,7 +101,7 @@ def test_the_card_wears_the_mark():
     # One star SVG per _mark_glyphs_inline star; the marked name is coloured, not #f0f6fd.
     assert 'M12 2.6l2.6 5.9' in html, 'the supporter star run is missing'
     # And the tier's full name in words, on the identity strip (his call: stars need their words).
-    assert 'PlatPursuit Backer' in html, 'the mark label is missing from the identity strip'
+    assert 'font-weight: 600;">Backer</span>' in html, 'the mark label is missing from the identity strip'
 
 
 def test_a_fresh_profile_still_composes_a_complete_card():

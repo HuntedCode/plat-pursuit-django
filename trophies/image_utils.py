@@ -14,7 +14,7 @@ from PIL import Image, ImageDraw, ImageFont, ImageOps, UnidentifiedImageError
 logger = logging.getLogger('psn_api')
 
 
-# Also the only decoders Pillow may run on an upload (see _open_upload), so its
+# Also the only decoders Pillow may run on an upload (see open_upload), so its
 # other parsers (PSD, EPS, JPEG2000, TIFF, ...) are never reachable from user input.
 ALLOWED_IMAGE_FORMATS = ['JPEG', 'PNG', 'WEBP', 'GIF']
 ALLOWED_FORMATS_TEXT = 'JPEG, PNG, WEBP, or GIF'
@@ -46,7 +46,7 @@ MAX_STORED_STEM_LENGTH = 64
 SIXTEEN_TO_EIGHT_BIT = 1 / 256
 
 
-def _open_upload(image_file):
+def open_upload(image_file):
     """Open an uploaded file with only the allowed decoders.
 
     Without `formats=`, Pillow sniffs the bytes and runs whichever parser
@@ -110,7 +110,7 @@ def optimize_image(image_file, max_width=3840, max_height=3840, quality=85):
             returned in its place (see PROCESSING_FAILED_MESSAGE).
     """
     try:
-        img = _open_upload(image_file)
+        img = open_upload(image_file)
         original_format = img.format
         img = _flatten_to_rgb(img)
 
@@ -161,12 +161,12 @@ def validate_image(image_file, max_size_mb=5, image_type='image'):
 
     # Validate image format and dimensions
     try:
-        img = _open_upload(image_file)
+        img = open_upload(image_file)
         img.verify()  # Verify it's a valid image
 
         # Re-open after verify (verify closes the file)
         image_file.seek(0)
-        img = _open_upload(image_file)
+        img = open_upload(image_file)
 
         # Still needed: a JPEG decoder can hand back a variant such as MPO
         # (multi-picture phone photos), which reports its own format name.
@@ -281,7 +281,7 @@ def process_roadmap_image(image_file, watermark=True, max_dimension=ROADMAP_MAX_
     extension; refusing the upload is the safe failure.
     """
     try:
-        img = _open_upload(image_file)
+        img = open_upload(image_file)
         original_format = img.format
 
         # Auto-rotate based on EXIF orientation BEFORE stripping metadata.

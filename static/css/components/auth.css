@@ -64,6 +64,21 @@
 .pp-cta.auth-submit { width: 100%; min-height: 2.75rem; font-size: 0.9rem; }
 .pp-cta.auth-submit + .pp-cta.auth-submit { margin-top: -0.25rem; }
 
+/* Email addresses: one row per address, carrying only the actions that apply to it (AC-05). */
+.auth-addrs { list-style: none; margin: 1.25rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+.auth-addr {
+    display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem 0.75rem;
+    padding: 0.75rem 0.875rem;
+    border: 1px solid var(--pp-border);
+    border-radius: var(--pp-radius-sm);
+    background: var(--pp-bg-2);
+}
+.auth-addr__who { display: flex; flex-direction: column; min-width: 0; }
+.auth-addr__email { font-size: 0.9rem; font-weight: 600; color: var(--pp-text); overflow-wrap: anywhere; }
+.auth-addr__state { font-size: 0.78rem; color: var(--pp-text-mute); }
+.auth-addr__acts { display: flex; flex-wrap: wrap; gap: 0.375rem; }
+.auth-addrs + .auth-form { margin-top: 1.5rem; }
+
 /* What happens after this page, said once, under the button. */
 .auth-next { font-size: 0.8rem; line-height: 1.5; color: var(--pp-text-mute); text-align: center; }
 

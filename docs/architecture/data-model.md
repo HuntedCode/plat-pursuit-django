@@ -125,7 +125,8 @@ Key fields: `is_live` (default False -- hidden until released) and the engine-ow
 `earned_count`, `required_stages`, `rarity_pct`, `rarity_rank`, `rarity_class`.
 
 Per-edition overrides, each null-means-inherit: `badge_image_override`, `holo_badge_image_override`,
-`funded_by_override`. Resolved by `effective_funded_by`, `effective_holo_image`, and `art_layers()` --
+`funded_by_override`. `badge_override_thumb` (and `BadgeSeries.badge_thumb`) hold the 512px WebP display copy of
+the subject art, written by `save()` and never by hand (`trophies/services/badge_thumbs.py`, SW-06). Resolved by `effective_funded_by`, `effective_holo_image`, and `art_layers()` --
 which is the single source of truth for medallion composition, because backdrop and shape come from the
 `PlatformGroup` and a series alone cannot draw itself.
 

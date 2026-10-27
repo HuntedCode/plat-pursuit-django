@@ -230,6 +230,9 @@ def _medallion_frame(gv: GroupView, series, target_profile) -> dict:
         'engraving_rank': gv.earners_rank,   # live earners position (was a permanent stamp in the legacy frame)
         'owner_name': owner,
         'badge_id': gv.group_badge.id,
+        # The upload itself for the page's og:image: medallions draw the 512px copy (SW-06), a link preview
+        # wants the original.
+        'art_full': gv.art.get('main_full'),
     }
 
 

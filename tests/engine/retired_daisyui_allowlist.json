@@ -43,11 +43,6 @@
  "templates/429.html": {
   "btn": 4
  },
- "templates/account/email.html": {
-  "alert": 4,
-  "btn": 12,
-  "input": 4
- },
  "templates/art_reveal/event.html": {
   "btn": 8
  },

@@ -70,6 +70,10 @@
     color: var(--pp-text-dim);
 }
 
+/* The campaign's news when every series has a patron (AC-02): said where the promise is made. */
+.fnd__news { max-width: 62ch; font-size: 0.92rem; font-weight: 600; line-height: 1.5; color: var(--pp-primary); }
+.fnd__facts { margin-top: 2px; }
+
 .fnd__h2 {
     font-family: var(--pp-font-display);
     font-weight: 800;
@@ -355,14 +359,45 @@
 .fnd-claim__name { font-weight: 600; font-size: 0.8rem; color: var(--pp-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; padding-right: 0.25rem; }
 .fnd-claim__by { font-size: 0.68rem; color: var(--pp-text-mute); }
 
-/* ---- the empty state ----------------------------------------------------------------------- */
-.fnd-empty {
-    padding: 1.5rem;
-    border-radius: var(--pp-radius-sm);
-    border: 1px solid color-mix(in oklab, var(--pp-primary) 30%, var(--pp-border));
-    background: color-mix(in oklab, var(--pp-primary) 5%, transparent);
-    text-align: center;
+/* ---- the claimed galleries: twelve, then the rest on demand (AC-03) --------------------------- */
+.fnd-claims { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem; }
+@media (min-width: 640px) { .fnd-claims { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (min-width: 768px) { .fnd-claims { gap: 0.75rem; } }
+@media (min-width: 1024px) { .fnd-claims { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
+
+.fnd-more > .fnd-claims { margin-top: 0.75rem; }
+.fnd-more__toggle { list-style: none; cursor: pointer; }
+.fnd-more__toggle::-webkit-details-marker { display: none; }
+.fnd-more__hide, .fnd-more[open] .fnd-more__show { display: none; }
+.fnd-more[open] .fnd-more__hide { display: inline; }
+
+/* The queue: names, not 71 copies of one placeholder medallion. Closed by default. */
+.fnd-queue { border-top: 1px solid var(--pp-divider); padding-top: 0.75rem; }
+.fnd-queue__summary {
+    display: flex; align-items: baseline; flex-wrap: wrap; gap: 0.25rem 0.75rem;
+    min-height: 2.75rem; padding-block: 0.5rem; cursor: pointer; list-style: none;
 }
+.fnd-queue__summary::-webkit-details-marker { display: none; }
+.fnd-queue__summary::after {
+    content: ""; width: 0.5rem; height: 0.5rem; margin-left: auto; align-self: center;
+    border-right: 2px solid var(--pp-text-mute); border-bottom: 2px solid var(--pp-text-mute);
+    transform: rotate(45deg); transition: transform var(--pp-dur-fast) var(--pp-ease);
+}
+.fnd-queue[open] > .fnd-queue__summary::after { transform: rotate(-135deg); }
+.fnd-queue__summary:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; border-radius: var(--pp-radius-sm); }
+.fnd-queue__count { font-size: 0.8rem; color: var(--pp-text-mute); }
+.fnd-queue__list {
+    list-style: none; margin: 0.25rem 0 0; padding: 0;
+    display: grid; grid-template-columns: 1fr; gap: 0 1.5rem;
+}
+@media (min-width: 768px) { .fnd-queue__list { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1024px) { .fnd-queue__list { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.fnd-queue__row {
+    display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 0.5rem;
+    padding: 0.45rem 0; border-bottom: 1px solid var(--pp-divider); min-width: 0;
+}
+.fnd-queue__name { font-size: 0.85rem; font-weight: 600; color: var(--pp-text); }
+.fnd-queue__name:hover { color: var(--pp-primary); }
 
 /* ---- donor wall (credits-wall base + donor extensions) ------------------------------------- */
 .fnd-donors {
@@ -423,6 +458,7 @@
 }
 
 .fnd-donor__claim:hover { border-color: var(--pp-accent); }
+.fnd-donor__more { font-size: 0.66rem; font-weight: 600; color: var(--pp-text-mute); padding: 1px 4px; }
 
 /* ---- entrance stagger (tiles, claims, donors) ----------------------------------------------
    The credits-wall pattern: ppRevealIn with a capped per-item delay via --i, gated at source. */

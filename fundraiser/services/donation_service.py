@@ -4,9 +4,8 @@ Donation service: handles one-time donation lifecycle for fundraiser campaigns.
 This service manages:
 - Stripe one-time payment checkout sessions (mode='payment')
 - PayPal Orders API v2 (create order, capture payment)
-- Donation completion (status updates, reward granting)
+- Donation completion (status updates, badge picks)
 - Badge claiming for badge_artwork campaigns
-- Milestone/title/Discord role granting
 - Email notifications (receipt, claim confirmation, artwork complete)
 """
 import logging
@@ -239,9 +238,9 @@ class DonationService:
         """
         Finalize a donation after payment is confirmed.
 
-        Updates status, calculates badge picks (for badge_artwork campaigns),
-        grants the fundraiser milestone, sends receipt email, and posts
-        a Discord webhook notification.
+        Updates status, calculates badge picks (for badge_artwork campaigns), sends the
+        receipt email, and posts a Discord webhook notification. (It no longer grants a
+        milestone or title: that retired with the legacy milestone engine, see below.)
         """
         if donation.status == 'completed':
             logger.info(f"Donation {donation.id} already completed, skipping")
@@ -300,21 +299,14 @@ class DonationService:
     # ──────────────────────────────────────────────
 
     @staticmethod
-    def series_needing_artwork(include_claimed=False):
-        """Badge series that still lack artwork: live, no default art, not user-submitted.
+    def series_needing_artwork():
+        """Badge series a donor can claim right now: live, no default art, not user-submitted, not
+        borrowing another series' art, and not already claimed.
 
         ONE definition, because there used to be three hand-copied filter stacks (picker, tracker, claim
         validation) that could drift -- the picker could offer something the claim path then rejected.
-
-        `include_claimed` is the one axis on which those three legitimately DIFFERED, so it is a
-        parameter rather than a silent default:
-
-        - **False (picker, claim validation):** what a donor can claim right now. Excludes series
-          somebody already holds a claim on.
-        - **True (tracker):** what still LACKS ARTWORK, claimed or not -- a claimed-but-pending series
-          has no art yet, so it belongs in the denominator. Folding the exclusion in here made the
-          total shrink every time somebody claimed, which walks the progress bar forward before any
-          artwork exists.
+        The tracker no longer needs its own variant: its total is this campaign's claims plus this
+        list (`FundraiserView`, AC-02), which a claim cannot move.
 
         Two legacy filters have no successor and are deliberately gone rather than translated: `tier=1`
         (the series IS the row now) and `series_slug` non-empty (unique and required). `is_live` moved --
@@ -322,7 +314,7 @@ class DonationService:
         """
         from trophies.models import BadgeSeries
 
-        qs = (
+        return (
             BadgeSeries.objects.live()
             .filter(Q(badge_image__isnull=True) | Q(badge_image=''))
             .exclude(badge_type='user')
@@ -333,10 +325,8 @@ class DonationService:
             # exactly when a donor would claim it and create the duplicate. Someone who wants this
             # subject drawn claims the SOURCE, and both badges light up.
             .exclude(artwork_source__isnull=False)
+            .exclude(artwork_claim__isnull=False)
         )
-        if not include_claimed:
-            qs = qs.exclude(artwork_claim__isnull=False)
-        return qs
 
     @staticmethod
     def claim_badge(donation, profile, series_id):

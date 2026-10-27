@@ -121,19 +121,13 @@
 
 /* ---- feature cards --------------------------------------------------------------------- */
 
+/* auto-fit, not a fixed column count: a tier's cards always fill the row, so every tier lines up with
+   the next and with the full-width ask below (AC-08). Four fixed columns left two three-card tiers
+   stopping a quarter short of the three-across wishlist. */
 .rm-feats {
     display: grid;
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
     gap: 10px;
-}
-
-@media (min-width: 768px) {
-    .rm-feats { grid-template-columns: repeat(2, 1fr); }
-}
-
-@media (min-width: 1024px) {
-    .rm-feats { grid-template-columns: repeat(4, 1fr); }
-    .rm-tier.is-wishlist .rm-feats { grid-template-columns: repeat(3, 1fr); }
 }
 
 .rm-feat { height: 100%; }

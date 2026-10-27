@@ -1714,3 +1714,18 @@ rebuilds in that window keep labels as they are rather than improving them. That
       mean of each game's PSN % (the figure PSN and PSNProfiles show), not earned / total trophies. A profile
       only picks it up at its next sync otherwise, so until this runs some hunters read the old figure and some
       the new. One aggregate per profile; it walks every profile once. No migration.
+
+## 2026-10-26 - Badge art display copies + the Account review (branch `review/account`)
+
+- [ ] **1. `migrate`** (trophies 0356: `BadgeSeries.badge_thumb`, `GroupBadge.badge_override_thumb`, two empty
+      columns on small tables).
+- [ ] **2. `python manage.py make_badge_thumbs`** after the deploy. It writes a 512px WebP copy of every piece of
+      badge art to S3 (`badges/thumbs/`). Until it runs, medallions keep drawing the 1000px uploads, which is the old
+      behaviour, so the order is safe; it is a speed-up (17 MB of art on the fundraiser page to about 2 MB). Rerun
+      it any time: rows whose copy is current are skipped. `--dry-run` counts first.
+- [ ] **3. Edit the Badge Artwork Fund's description in the admin** (Fundraiser > `badge-artwork-fund`). It says
+      "Every $10 donated is another badge funded! Donations of ANY size receive a special Milestone, Title and
+      Discord role!". Both halves are wrong now: every series has a patron (the page leads with that, right above
+      it, AC-02), and donations stopped granting the milestone, the title and the role when the legacy milestone
+      engine retired in 2026-08 (AC-13). Something like: "Every $10 earns a badge pick, saved for the next wave of
+      series, and every donor is thanked on the donor wall." Data, not code, so no deploy carries it.

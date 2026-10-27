@@ -239,7 +239,7 @@ def test_the_partial_renders_each_register():
 
     patron = _render('Pat', 'patron')
     assert patron.count('pp-supstar') == 2
-    assert 'PlatPursuit Patron' in patron
+    assert 'aria-label="Patron"' in patron
 
     backer = _render('Bea', 'backer')
     assert 'is-outline' in backer, "Backer's single star lost its outline state"
@@ -279,7 +279,7 @@ def test_the_wall_carries_the_service_override(client):
     card = body[body.index('StaffPayer') - 1200:body.index('StaffPayer') + 900]
     assert f"--svc-t: {SERVICE_MARKS['staff']['colour']}" in card
     assert 'Staff' in card, 'the service label did not reach the wall sub-line'
-    assert 'PlatPursuit Patron' not in card, 'the level line should yield to the service label'
+    assert 'Patron' not in card, 'the level line should yield to the service label'
 
 
 def test_the_extended_surfaces_carry_the_mark():
@@ -361,7 +361,8 @@ def test_the_mark_title_joins_the_worn_title_line():
     Service marks wear their label the same way: "Staff" / "Moderator" in the service colour."""
     from users.templatetags.mark_tags import mark_title_label
 
-    assert mark_title_label('patron') == 'PlatPursuit Patron'
+    # The level name alone (owner 2026-10-26): the brand is "Platinum Pursuit", and the stars say whose.
+    assert mark_title_label('patron') == 'Patron'
     assert mark_title_label('staff') == 'Staff'
     assert mark_title_label('mod') == 'Moderator'
     assert mark_title_label('') == ''
@@ -371,7 +372,7 @@ def test_the_mark_title_joins_the_worn_title_line():
                   'avatar_url': '', 'flag': '', 'displayed_title': 'Dragonborn', 'value': 1},
         'board': {'slug': 'x'},
     })
-    assert 'Dragonborn' in row and 'PlatPursuit Patron' in row
+    assert 'Dragonborn' in row and '>Patron</span>' in row
     assert 'pp-marktitle__dot' in row, 'the joining dot is missing between the two titles'
 
     untitled = render_to_string('trophies/partials/leaderboard_row.html', {
@@ -379,7 +380,7 @@ def test_the_mark_title_joins_the_worn_title_line():
                   'avatar_url': '', 'flag': '', 'displayed_title': '', 'value': 1},
         'board': {'slug': 'x'},
     })
-    assert 'PlatPursuit Backer' in untitled, 'an empty title slot should still carry the level'
+    assert '>Backer</span>' in untitled, 'an empty title slot should still carry the level'
     assert 'pp-marktitle__dot' not in untitled
 
     staff_row = render_to_string('trophies/partials/leaderboard_row.html', {

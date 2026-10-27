@@ -56,9 +56,25 @@
             <p class="fnd__eyebrow">Support &middot; Fundraiser</p>
             <h1 class="fnd__h1">{{ fundraiser.name }}</h1>
             <p class="fnd__lede">Every badge tells a story. Help us bring them to life.</p>
+            {% comment %} Every series has a patron (AC-02): say so where the promise is made, rather than
+            two sections down in an empty box under a hero still promising "another badge funded". {% endcomment %}
+            {% if all_patroned %}
+                <p class="fnd__news">Every badge series has a patron. Donations now fund the next wave.</p>
+            {% endif %}
             {% if fundraiser.description %}
                 <p class="fnd__desc">{{ fundraiser.description }}</p>
             {% endif %}
+            {% comment %} The campaign's totals as one line of facts (the tiles rule, design-system.md); a
+            figure that would read zero is left out. Claimed is the tracker's job, so it is not repeated. An ended
+            campaign's results card already carries these figures, so the line steps aside there (staff viewing
+            an ended campaign get no results card, so they keep the line). {% endcomment %}
+            {% if not is_ended or is_staff_preview %}{% if total_raised or donor_count or badge_tracker.completed %}
+            <p class="pp-factline fnd__facts">
+                {% if total_raised %}<span><b class="pp-tally" data-countup="{{ total_raised|floatformat:0 }}" data-countup-prefix="$">${{ total_raised|floatformat:0 }}</b> raised</span>{% endif %}
+                {% if donor_count %}<span><b class="pp-tally" data-countup="{{ donor_count }}">{{ donor_count }}</b> donor{{ donor_count|pluralize }}</span>{% endif %}
+                {% if badge_tracker.completed %}<span><b class="pp-tally" data-countup="{{ badge_tracker.completed }}">{{ badge_tracker.completed }}</b> artwork{{ badge_tracker.completed|pluralize }} live</span>{% endif %}
+            </p>
+            {% endif %}{% endif %}
             {% if is_live and user.is_authenticated %}
                 <p class="mt-1"><button type="button" id="hero-donate-cta" class="fnd-cta">
                     <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
@@ -72,39 +88,6 @@
             {% endif %}
         </div>
     </section>
-
-    {% comment %} ============================================== campaign stats ============
-    Free content: item-level scards, no outer card (the storefront's paid band is the model). {% endcomment %}
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
-        <div class="scard">
-            <div class="scard__label">Total Raised</div>
-            <div class="scard__value pp-tally text-success" data-countup="{{ total_raised|floatformat:0 }}" data-countup-prefix="$">${{ total_raised|floatformat:0 }}</div>
-            <div class="scard__sub">and counting</div>
-        </div>
-        <div class="scard">
-            <div class="scard__label">Donors</div>
-            <div class="scard__value pp-tally text-primary" data-countup="{{ donor_count }}">{{ donor_count }}</div>
-            <div class="scard__sub">trophy hunters strong</div>
-        </div>
-        {% if badge_tracker %}
-        <div class="scard">
-            <div class="scard__label">Badges Claimed</div>
-            <div class="scard__value pp-tally text-secondary" data-countup="{{ badge_tracker.claimed }}">{{ badge_tracker.claimed }}</div>
-            <div class="scard__sub">series adopted</div>
-        </div>
-        <div class="scard">
-            <div class="scard__label">Artworks Complete</div>
-            <div class="scard__value pp-tally text-warning" data-countup="{{ badge_tracker.completed }}">{{ badge_tracker.completed }}</div>
-            <div class="scard__sub">masterpieces live</div>
-        </div>
-        {% else %}
-        <div class="scard col-span-2">
-            <div class="scard__label">Thank You</div>
-            <div class="scard__value text-error">&hearts;</div>
-            <div class="scard__sub">for your support</div>
-        </div>
-        {% endif %}
-    </div>
 
     {% comment %} ============================================== badge tracker ============= {% endcomment %}
     {% if fundraiser.campaign_type == 'badge_artwork' and badge_tracker %}
@@ -147,7 +130,14 @@
                 </div>
 
                 {% if fundraiser.campaign_type == 'badge_artwork' %}
-                    {% if is_live and total_picks_remaining > 0 %}
+                    {% if all_patroned and total_picks_remaining > 0 %}
+                        {% comment %} Nothing to spend a pick on (AC-02): the picker would open empty. {% endcomment %}
+                        <div class="fnd-panel">
+                            <p class="fnd__sub">
+                                You have <span class="fnd__accent">{{ total_picks_remaining }}</span> badge pick{{ total_picks_remaining|pluralize }}, saved for the next wave.
+                            </p>
+                        </div>
+                    {% elif is_live and total_picks_remaining > 0 %}
                         <div class="fnd-panel">
                             <div class="flex items-center justify-between flex-wrap gap-2">
                                 <p class="fnd__sub">
@@ -217,54 +207,40 @@
     FREE content (stacked-page rule): a heading over the tile grid, no outer card. The on-page
     grid is a bounded PREVIEW; the picker modal alone carries the full list (this page used to
     render every tile twice). {% endcomment %}
-    {% if fundraiser.campaign_type == 'badge_artwork' and not is_ended %}
+    {% if fundraiser.campaign_type == 'badge_artwork' and not is_ended and available_badges_count %}
         <section aria-label="Badge series awaiting a patron" class="fnd-free">
             <div>
                 <h2 class="fnd__h2">
                     Artworks awaiting a patron
-                    {% if available_badges_count %}<span class="fnd__count">({{ available_badges_count }})</span>{% endif %}
+                    <span class="fnd__count">({{ available_badges_count }})</span>
                 </h2>
                 <p class="fnd__sub">
-                    {% if available_badges_count %}
-                        These badge series are still waiting for a hunter to bring them to life.
-                        {% if user.is_authenticated and user.profile and total_picks_remaining %}
-                            Tap any badge to claim it.
-                        {% elif user.is_authenticated %}
-                            Donate ${{ badge_pick_divisor }} or more to earn a pick.
-                        {% else %}
-                            Join the hunt and donate ${{ badge_pick_divisor }}+ to claim one.
-                        {% endif %}
+                    These badge series are still waiting for a hunter to bring them to life.
+                    {% if user.is_authenticated and user.profile and total_picks_remaining %}
+                        Tap any badge to claim it.
+                    {% elif user.is_authenticated %}
+                        Donate ${{ badge_pick_divisor }} or more to earn a pick.
                     {% else %}
-                        Every current badge series has a patron. Donate to help commission the next wave.
+                        Join the hunt and donate ${{ badge_pick_divisor }}+ to claim one.
                     {% endif %}
                 </p>
             </div>
 
-            {% if available_badges_count %}
-                <div id="available-badges-grid"
-                     role="region"
-                     aria-label="Badge series awaiting a patron"
-                     class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2"
-                     data-has-picks="{% if user.is_authenticated and user.profile and total_picks_remaining %}1{% else %}0{% endif %}">
-                    {% for badge in available_badges_preview %}
-                        {% include 'fundraiser/partials/_badge_tile.html' with badge=badge index=forloop.counter0 %}
-                    {% endfor %}
-                </div>
-                {% if available_badges_count > 18 and is_live and user.is_authenticated and total_picks_remaining %}
-                    <p><button type="button" id="browse-all-badges-btn" class="fnd-cta fnd-cta--sm" data-picker-open>
-                        Browse all {{ available_badges_count }}
-                    </button></p>
-                {% elif available_badges_count > 18 %}
-                    <p class="fnd__flavour">Plus more series waiting beyond these first 18.</p>
-                {% endif %}
-            {% else %}
-                <div class="fnd-empty">
-                    <svg class="w-10 h-10 mx-auto text-primary" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                        <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
-                    </svg>
-                    <p class="mt-2 text-primary font-semibold">Every current badge series has a patron.</p>
-                    <p class="fnd__flavour">More artworks will open up as the campaign grows. Keep the momentum going.</p>
-                </div>
+            <div id="available-badges-grid"
+                 role="region"
+                 aria-label="Badge series awaiting a patron"
+                 class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2"
+                 data-has-picks="{% if user.is_authenticated and user.profile and total_picks_remaining %}1{% else %}0{% endif %}">
+                {% for badge in available_badges_preview %}
+                    {% include 'fundraiser/partials/_badge_tile.html' with badge=badge index=forloop.counter0 %}
+                {% endfor %}
+            </div>
+            {% if available_badges_count > 18 and is_live and user.is_authenticated and total_picks_remaining %}
+                <p><button type="button" id="browse-all-badges-btn" class="fnd-cta fnd-cta--sm" data-picker-open>
+                    Browse all {{ available_badges_count }}
+                </button></p>
+            {% elif available_badges_count > 18 %}
+                <p class="fnd__flavour">Plus more series waiting beyond these first 18.</p>
             {% endif %}
         </section>
     {% endif %}
@@ -277,7 +253,9 @@
                     <h2 class="fnd__h2">Make a donation</h2>
                     <p class="fnd__sub">
                         Every dollar brings a badge to life. Pick your amount and off we go.
-                        {% if fundraiser.campaign_type == 'badge_artwork' %}
+                        {% if all_patroned %}
+                            Donate ${{ badge_pick_divisor }} or more and you earn a badge pick, saved for the next wave{% if fundraiser.end_date %} (picks are claimable until {{ fundraiser.end_date|date:"M j, Y" }}){% endif %}.
+                        {% elif fundraiser.campaign_type == 'badge_artwork' %}
                             Donate ${{ badge_pick_divisor }} or more to claim a badge series for custom artwork.
                         {% endif %}
                     </p>
@@ -351,7 +329,7 @@
         <section aria-label="Join the hunt" class="card bg-base-200/90 border-2 border-base-300 shadow-md shadow-neutral">
             <div class="card-body p-4 md:p-6 space-y-2">
                 <h2 class="fnd__h2">Join the hunt</h2>
-                <p class="fnd__sub">Create a PlatPursuit account to donate and claim badge artwork. Your support keeps the pursuit alive.</p>
+                <p class="fnd__sub">Create a Platinum Pursuit account to donate{% if fundraiser.campaign_type == 'badge_artwork' and not all_patroned %} and claim badge artwork{% endif %}. Your support keeps the pursuit alive.</p>
                 <div class="flex gap-3 mt-2">
                     <a href="{% url 'account_login' %}?next={% url 'fundraiser' fundraiser.slug %}" class="fnd-cta">Sign in</a>
                     <a href="{% url 'account_signup' %}?next={% url 'fundraiser' fundraiser.slug %}" class="fnd-cta fnd-cta--ghost">Sign up</a>
@@ -370,57 +348,49 @@
                 <p class="fnd__sub">Badges adopted by the community for custom artwork.</p>
             </div>
 
+            {% comment %} Depth on demand (AC-03, rule 4): the newest twelve finished artworks show, the rest
+            wait behind "Show all" (their images are lazy, so a closed <details> fetches none of them), and
+            the queue is a list of names rather than 71 copies of the same placeholder medallion. {% endcomment %}
             {% if completed_claims %}
                 <div class="space-y-2">
                     <h3 class="fnd__h3 text-success">Artwork complete</h3>
                     <p class="fnd__flavour">Brought to life by the community.</p>
-                    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 md:gap-3">
-                        {% for claim in completed_claims %}
-                            <a href="{% url 'badge_detail' claim.series_slug %}"
-                               class="fnd-claim fnd-claim--done" style="--i: {{ forloop.counter0 }}">
-                                <figure class="w-16 h-16 shrink-0 mx-auto">
-                                    {% if claim.medallion %}
-                                        {% include 'components/badge_medallion.html' with frame=claim.medallion no_id=True %}
-                                    {% endif %}
-                                </figure>
-                                <span class="fnd-claim__name">{{ claim.series_name }}</span>
-                                {% comment %} STATIC marked name, the credits wall's treatment,
-                                not name_mark: this is a GRID of names, and a grid of phase-locked
-                                flowing names is the pulsing wall that treatment is banned from.
-                                The caption also drops text-accent -- the mod's amber mark sat
-                                invisible inside an accent-coloured caption. {% endcomment %}
-                                {% if claim.profile %}
-                                    <span class="fnd-claim__by">Funded by <span class="fnd-claim__wearer"{% if claim.mark %} style="color: {{ claim.mark.colour }}"{% endif %}>{{ claim.profile.display_psn_username|default:claim.profile.psn_username }}</span>{% if claim.mark %}<span class="fnd-claim__glyphs" aria-hidden="true">{% include 'components/_mark_glyphs_inline.html' with mark=claim.mark star_px=10 svc_px=11 %}</span>{% endif %}</span>
-                                {% endif %}
-                            </a>
+                    <div class="fnd-claims">
+                        {% for claim in completed_claims|slice:":12" %}
+                            {% include 'fundraiser/partials/_claim_done.html' %}
                         {% endfor %}
                     </div>
+                    {% if completed_claims|length > 12 %}
+                    <details class="fnd-more">
+                        <summary class="pp-cta pp-cta--ghost pp-cta--sm fnd-more__toggle"><span class="fnd-more__show">Show all {{ completed_claims|length }}</span><span class="fnd-more__hide">Show fewer</span></summary>
+                        <div class="fnd-claims">
+                            {% for claim in completed_claims|slice:"12:" %}
+                                {% include 'fundraiser/partials/_claim_done.html' %}
+                            {% endfor %}
+                        </div>
+                    </details>
+                    {% endif %}
                 </div>
             {% endif %}
 
             {% if pending_claims %}
-                <div class="space-y-2">
-                    <h3 class="fnd__h3 text-warning">In the queue</h3>
-                    <p class="fnd__flavour">Claimed and waiting for their glow-up.</p>
-                    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 md:gap-3">
+                <details class="fnd-queue">
+                    <summary class="fnd-queue__summary">
+                        <h3 class="fnd__h3 text-warning">In the queue</h3>
+                        <span class="fnd-queue__count">{{ pending_claims|length }} claimed, art on the way</span>
+                    </summary>
+                    <ul class="fnd-queue__list" role="list">
                         {% for claim in pending_claims %}
-                            <a href="{% url 'badge_detail' claim.series_slug %}"
-                               class="fnd-claim" style="--i: {{ forloop.counter0 }}">
-                                <div class="relative w-14 h-14 mx-auto">
-                                    <img src="{% static 'images/badges/backdrops/1_backdrop.png' %}"
-                                         alt="" class="w-full h-full absolute top-0 left-0 object-contain" loading="lazy">
-                                    <img src="{% static 'images/badges/default.png' %}"
-                                         alt="{{ claim.series_name }}" class="w-full h-full absolute top-0 left-0 object-contain" loading="lazy">
-                                </div>
-                                <span class="fnd-claim__name">{{ claim.series_name }}</span>
-                                {% if claim.profile %}
-                                    <span class="fnd-claim__by">Claimed by <span class="fnd-claim__wearer"{% if claim.mark %} style="color: {{ claim.mark.colour }}"{% endif %}>{{ claim.profile.display_psn_username|default:claim.profile.psn_username }}</span>{% if claim.mark %}<span class="fnd-claim__glyphs" aria-hidden="true">{% include 'components/_mark_glyphs_inline.html' with mark=claim.mark star_px=10 svc_px=11 %}</span>{% endif %}</span>
-                                {% endif %}
-                                <span class="fnd-chip__state{% if claim.status == 'in_progress' %} text-warning{% endif %}">{{ claim.get_status_display }}</span>
-                            </a>
+                        <li class="fnd-queue__row">
+                            <a href="{% url 'badge_detail' claim.series_slug %}" class="fnd-queue__name">{{ claim.series_name }}</a>
+                            {% if claim.profile %}
+                                <span class="fnd-claim__by">Claimed by <span class="fnd-claim__wearer"{% if claim.mark %} style="color: {{ claim.mark.colour }}"{% endif %}>{{ claim.profile.display_psn_username|default:claim.profile.psn_username }}</span>{% if claim.mark %}<span class="fnd-claim__glyphs" aria-hidden="true">{% include 'components/_mark_glyphs_inline.html' with mark=claim.mark star_px=10 svc_px=11 %}</span>{% endif %}</span>
+                            {% endif %}
+                            {% if claim.status == 'in_progress' %}<span class="fnd-chip__state text-warning">{{ claim.get_status_display }}</span>{% endif %}
+                        </li>
                         {% endfor %}
-                    </div>
-                </div>
+                    </ul>
+                </details>
             {% endif %}
         </section>
     {% endif %}
@@ -433,7 +403,7 @@
 {% endblock %}
 
 {% block fixed_overlays %}
-{% if is_live and user.is_authenticated and fundraiser.campaign_type == 'badge_artwork' and total_picks_remaining %}
+{% if is_live and user.is_authenticated and fundraiser.campaign_type == 'badge_artwork' and total_picks_remaining and available_badges_count %}
     {% include 'fundraiser/partials/badge_picker_modal.html' %}
 {% endif %}
 {% endblock %}

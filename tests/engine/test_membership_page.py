@@ -21,6 +21,11 @@ from tests.factories import ProfileFactory, UserFactory
 pytestmark = pytest.mark.django_db
 
 
+def _level_line(body):
+    """The status card's level line ("Patron · member since ..."), whitespace-collapsed."""
+    sub = body.split('class="supm-who__sub">', 1)[1].split('</span>', 1)[0]
+    return ' '.join(sub.split())
+
 def _fake_sub(**stripe_data):
     return type('S', (), {'stripe_data': stripe_data})()
 
@@ -433,7 +438,7 @@ def test_an_active_ladder_member_wears_their_level(client):
     assert body.count(f'--sup-t: {patron_colour}') == 2, 'unexpected extra --sup-t hosts'
     assert 'supm-status' in body
     assert '<dialog id="supm-cancel"' not in body, 'the PayPal cancel dialog leaked to Stripe'
-    assert 'PlatPursuit Patron' in body
+    assert _level_line(body).startswith('Patron')
     assert '$15 / month' in body
     assert 'pp-supname' in body
 
@@ -555,7 +560,7 @@ def test_an_unmapped_tier_renders_without_a_level(client):
     response = _page(client, user, _fake_sub(status='active', current_period_end=4102444800))
     body = response.content.decode()
     assert response.status_code == 200
-    assert 'PlatPursuit member' in body
+    assert _level_line(body).startswith('Member')
     assert '--sup-t' not in body.split('sup-perk')[0], 'no level, no level tint on the status card'
 
 

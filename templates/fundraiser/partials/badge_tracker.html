@@ -1,4 +1,4 @@
-{% comment %} Badge Completion Tracker: claimed vs total series needing artwork, on the site's
+{% comment %} Badge Completion Tracker: this campaign's claims against claims + what is still claimable (AC-02), on the site's
 horizon primitive. Two fills on one track (neither stock horizon form fits): the muted CLAIMED
 underlay spans everything adopted, the success COMPLETED fill rides over it -- so the bar reads
 "this much is done, this much more is spoken for". Percentages come from the view
@@ -34,10 +34,12 @@ underlay spans everything adopted, the success COMPLETED fill rides over it -- s
                 <span class="fnd-horizon__key fnd-horizon__key--claimed"></span>
                 Claimed, art pending
             </span>
+            {% if available_badges_count and not is_ended %}
             <span class="flex items-center gap-1.5">
                 <span class="fnd-horizon__key"></span>
                 Available
             </span>
+            {% endif %}
         </div>
     </div>
 </section>

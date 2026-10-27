@@ -1169,7 +1169,7 @@ def test_the_preview_names_the_level_in_words(client):
     for tier in SUPPORT_TIERS:
         block = body[body.index(f'data-for="{tier["slug"]}"'):]
         block = block[:block.index('</div>', block.index('sup-prev__sub'))]
-        assert f'PlatPursuit {tier["name"]}' in block, (
+        assert f'>{tier["name"]}</span>' in block, (
             f'{tier["slug"]} does not name itself under the name'
         )
         assert f'{tier["name"]} Supporter' not in block, (
@@ -1195,7 +1195,7 @@ def test_a_worn_title_sits_before_the_level(client):
     # so slice a fixed window instead of stopping at the first inner </span>.
     sub = body[body.index('sup-prev__sub'):][:400]
     assert 'The Completionist' in sub
-    assert sub.index('The Completionist') < sub.index('PlatPursuit'), 'the earned title comes first'
+    assert sub.index('The Completionist') < sub.index('pp-marktitle"'), 'the earned title comes first'
     assert 'pp-marktitle' in sub, 'the preview must render the same primitive the live rows do'
 
 
@@ -1547,7 +1547,7 @@ def test_a_legacy_supporter_wears_their_mapped_level(client):
     wall = _wall(_flat(client))
     worn = next(t for t in SUPPORT_TIERS
                 if t['slug'] == LEGACY_TIER_LEVEL_MAP['premium_yearly'])
-    assert f"PlatPursuit {worn['name']}" in wall, 'the legacy card fell back to plain Supporter'
+    assert f">{worn['name']}</span>" in wall, 'the legacy card fell back to plain Supporter'
     assert 'is-legacy' not in wall
 
 
@@ -1693,7 +1693,7 @@ def test_the_wall_shows_faces_and_names_together(client):
     wall = _wall(_flat(client))
     assert 'https://example.test/a.png' in wall, 'the credits are not showing faces'
     assert 'FacedHunter' in wall
-    assert 'PlatPursuit Patron' in wall, 'the card does not name its own level'
+    assert '>Patron</span>' in wall, 'the card does not name its own level'
 
 
 def test_the_wall_does_not_animate_two_hundred_names_at_once(client):
@@ -1831,7 +1831,7 @@ def test_the_wall_survives_a_cache_round_trip(client):
     second = _wall(_flat(client))                    # served from cache
 
     assert 'RoundTrip' in second
-    assert 'PlatPursuit Sponsor' in second, 'the tier did not survive hydration on the cache hit'
+    assert '>Sponsor</span>' in second, 'the tier did not survive hydration on the cache hit'
     assert second.count('<svg class="pp-supstar') == first.count('<svg class="pp-supstar')
 
 

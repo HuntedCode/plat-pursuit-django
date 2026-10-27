@@ -32,7 +32,7 @@ def mark_colour(mark):
 
 @register.filter
 def mark_title_label(mark):
-    """The mark's title-line label ("PlatPursuit Backer" / "Staff" / "Moderator"), or empty
+    """The mark's title-line label ("Backer" / "Staff" / "Moderator"), or empty
     for the unmarked -- for template conditionals; rendering goes through {% mark_title %}."""
     style = mark_style(mark)
     return style['label'] if style else ''

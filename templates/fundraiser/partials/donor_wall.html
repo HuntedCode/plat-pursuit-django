@@ -39,14 +39,17 @@ crown chip and a warning-tint accent, never a heavier border. {% endcomment %}
                     <p class="fnd-donor__msg">"{{ donor.message }}"</p>
                 {% endif %}
 
+                {% comment %} Six chips, then a count (AC-03): the top patron's thirty chips made one card
+                taller than a phone screen, and the full list is the queue and the gallery above. {% endcomment %}
                 {% if donor.badge_claims %}
                     <div class="fnd-donor__claims">
-                        {% for claim in donor.badge_claims %}
+                        {% for claim in donor.badge_claims|slice:":6" %}
                             <a href="{% url 'badge_detail' claim.series_slug %}"
                                class="fnd-donor__claim" title="{{ claim.series_name }}">
                                 {{ claim.series_name }}
                             </a>
                         {% endfor %}
+                        {% if donor.badge_claims|length > 6 %}<span class="fnd-donor__more">+{{ donor.badge_claims|length|add:"-6" }} more</span>{% endif %}
                     </div>
                 {% endif %}
             </li>

@@ -82,7 +82,7 @@ def mark_style(mark):
         return {'colour': m['colour'], 'label': m['label'], 'kind': 'service', 'key': mark}
     for tier in SUPPORT_TIERS:
         if tier['slug'] == mark:
-            return {'colour': tier['colour'], 'label': f"PlatPursuit {tier['name']}",
+            return {'colour': tier['colour'], 'label': tier['name'],
                     'kind': 'supporter', 'key': mark,
                     'stars': tier['stars'], 'star_range': range(tier['stars']),
                     'outline': tier['outline']}

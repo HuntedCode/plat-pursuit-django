@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% load static %}
 
-{% block title %}Settings - PlatPursuit{% endblock %}
+{% block title %}Settings{% endblock %}
 {% block robots %}noindex, nofollow{% endblock %}
 
 {% block content %}
@@ -16,11 +16,11 @@
         <div class="card-body p-5 md:p-7 pp-head-cascade">
             <p class="stg__eyebrow">Account &middot; Settings</p>
             <h1 class="stg__h1">Settings.</h1>
-            <p class="stg__lede">How PlatPursuit fits you: your timezone, your library, your account.</p>
+            <p class="stg__lede">How Platinum Pursuit fits you: your timezone, your library, your account.</p>
             <p class="stg__facts">
                 {% if profile %}<span>{{ profile.display_psn_username|default:profile.psn_username }}</span><span aria-hidden="true">&middot;</span>{% endif %}
                 <span>{{ user.user_timezone }}</span>
-                {% if is_member %}<span aria-hidden="true">&middot;</span><span>PlatPursuit {{ level.name }}</span>{% endif %}
+                {% if is_member %}<span aria-hidden="true">&middot;</span><span>{{ level.name }}</span>{% endif %}
             </p>
         </div>
     </section>
@@ -99,7 +99,7 @@
                     <input type="checkbox" name="play_celebrations"{% if user.play_celebrations %} checked{% endif %}>
                     <span class="stg-toggle__body">
                         <span class="stg-toggle__name">Play celebrations</span>
-                        <span class="stg-toggle__sub">A badge you earn plays on your next My Pursuit page. Off, it waits behind a button with your new platinums.</span>
+                        <span class="stg-toggle__sub">When you earn a badge, its celebration plays by itself the next time you open My Pursuit. Turn this off and it waits for you to tap it.</span>
                     </span>
                 </label>
                 <p class="stg-form__note">Saving recalculates your totals, so the change lands everywhere at once.</p>
@@ -201,7 +201,7 @@
                 <h2 class="stg-sec__h" id="stg-membership-h">Membership</h2>
                 <p class="stg-sec__sub">
                     {% if is_member %}
-                    {% if level.is_legacy %}{{ level.display_name }}, wearing the {{ level.name }} mark.{% else %}PlatPursuit {{ level.name }}.{% endif %}
+                    {% if level.is_legacy %}{{ level.display_name }}, wearing the {{ level.name }} mark.{% else %}{{ level.name }}.{% endif %}
                     Billing, your level and the supporter wall all live on the membership page.
                     {% else %}
                     Not a member. Membership backs the project and comes with a little more of what everyone here already gets.
@@ -281,7 +281,7 @@ is client-side friction; the password is the server-side gate. {% endcomment %}
         </button>
     </div>
     <p class="sup-modal__lede">
-        Your sign-in and personal data are permanently removed from PlatPursuit. Stripe and
+        Your sign-in and personal data are permanently removed from Platinum Pursuit. Stripe and
         PayPal keep their own transaction records, as they are required to.
         {% if profile %}Your PSN profile and trophy history stay public, and your game ratings
         stay with them. If you ever return and relink, your pursuit picks up where it left off.{% endif %}

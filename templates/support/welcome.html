@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 
-{% block title %}Welcome - PlatPursuit{% endblock %}
+{% block title %}Welcome{% endblock %}
 {% block robots %}noindex, nofollow{% endblock %}
 
 {% block content %}
@@ -39,7 +39,7 @@
                         <span class="pp-supname">{{ viewer_name }}</span>{% if level %}<span class="supw-id__mark" aria-hidden="true">{% include 'support/_stars.html' with tier=level %}</span>{% endif %}
                     </span>
                     <span class="supw-id__sub">
-                        {% if level %}{% if level.is_legacy %}{{ level.display_name }} &middot; a founding tier, wearing the {{ level.name }} mark{% else %}PlatPursuit {{ level.name }}{% endif %}{% if interval %} &middot; billed {{ interval }}{% endif %}{% else %}PlatPursuit member{% endif %}
+                        {% if level %}{% if level.is_legacy %}{{ level.display_name }} &middot; a founding tier, wearing the {{ level.name }} mark{% else %}{{ level.name }}{% endif %}{% if interval %} &middot; billed {{ interval }}{% endif %}{% else %}Member{% endif %}
                     </span>
                 </span>
             </div>

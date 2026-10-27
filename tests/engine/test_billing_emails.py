@@ -375,7 +375,7 @@ def test_a_grandfathered_member_keeps_the_tier_name_they_bought():
 
     panel = _mark_panel(_welcome(mark))
     assert 'Supporter' in panel
-    assert 'PlatPursuit Sponsor' not in panel, 'a tier they never bought'
+    assert '>Sponsor</p>' not in panel, 'a tier they never bought'
     assert 'wearing the Sponsor mark' in panel, 'but the mark they wear is still named'
 
 
@@ -384,5 +384,5 @@ def test_a_ladder_member_is_named_for_their_level():
 
     panel = _mark_panel(_welcome(S._welcome_supporter_mark(_User('patron', 'patron'))))
 
-    assert 'PlatPursuit Patron' in panel
+    assert '>Patron</p>' in panel
     assert 'founding tier' not in panel

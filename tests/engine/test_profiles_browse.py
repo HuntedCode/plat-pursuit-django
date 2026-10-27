@@ -368,7 +368,7 @@ def test_a_supporter_card_is_marked(client):
 
     assert 'pp-hcard--supporter' not in body, 'the retired card modifier came back'
     assert 'pp-supname' in body and 'pp-supstar' in body, 'the mark did not reach the card'
-    assert 'PlatPursuit Patron' in body
+    assert '>Patron</span>' in body
 
 
 def test_a_plain_card_is_not_marked_as_a_supporter(client):

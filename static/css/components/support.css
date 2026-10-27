@@ -36,14 +36,27 @@
 .sup-head {
     display: grid;
     grid-template-columns: 1fr;
+    grid-template-areas: "say" "box" "proof";
     gap: 22px;
     align-items: start;
 }
+.sup-head__say { grid-area: say; }
+.sup-head > .sup-box { grid-area: box; }
+.sup-head__proof { grid-area: proof; }
+/* On one column the proof follows the box, so its first block needs no lead-in of its own. */
+.sup-head__proof > :first-child { margin-top: 0; }
 
 /* The ask sits beside the statement rather than below four sections of argument. Slightly narrower
-   than the copy so the eye lands on the words first and the box second. */
+   than the copy so the eye lands on the words first and the box second. On a phone the ask comes
+   straight after the lede (AC-04): the artwork and the site totals are proof, and proof follows. */
 @media (min-width: 900px) {
-    .sup-head { grid-template-columns: 1.15fr 0.85fr; gap: 34px; }
+    .sup-head {
+        grid-template-columns: 1.15fr 0.85fr;
+        grid-template-areas: "say box" "proof box";
+        grid-template-rows: auto 1fr;
+        gap: 0 34px;
+    }
+    .sup-head__proof > :first-child { margin-top: 22px; }
 }
 
 .sup-head__eyebrow {

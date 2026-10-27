@@ -53,10 +53,15 @@ substrate, and an earlier version of this page did, which is most of why it read
                     of as a defence. {% endcomment %}
                     <p class="sup-head__lede">
                         We are trophy hunters making the tools we always wanted to use, and there is a
-                        great deal more we want to build. PlatPursuit stays free for everyone, and
+                        great deal more we want to build. Platinum Pursuit stays free for everyone, and
                         supporters are the reason it keeps growing.
                     </p>
+                </div>
 
+                {% comment %} The proof under the ask: its own grid item so a phone can put the ask
+                straight after the lede (AC-04) while a wide screen keeps it beside the box. {% endcomment %}
+                {% if badge_art or today %}
+                <div class="sup-head__proof">
                     {% comment %} The artwork the whole thing is in aid of. Live rows, so it never
                     goes stale, and omitted entirely on a catalogue with no commissioned art rather
                     than rendering empty frames. {% endcomment %}
@@ -100,6 +105,7 @@ substrate, and an earlier version of this page did, which is most of why it read
                     </div>
                     {% endif %}
                 </div>
+                {% endif %}
 
                 {% comment %} ------------------------------------------- the ask ------------- {% endcomment %}
                 {% if viewer_is_member and not store_preview %}
@@ -225,14 +231,12 @@ substrate, and an earlier version of this page did, which is most of why it read
                                     words, so somebody reading a board can see what a supporter IS
                                     rather than decoding a star count.
 
-                                    "PlatPursuit Patron", not "Patron Supporter": the level names now
-                                    come from the giving register, so they are already supporter-words
-                                    and appending "Supporter" said the same thing twice. Naming the
-                                    site instead removes the ambiguity on a stranger's row and matches
-                                    the "permanent PlatPursuit Supporter credit" wording in the perk
-                                    list. {% endcomment %}
+                                    The level name alone ("Patron"), owner 2026-10-26: the names come
+                                    from the giving register, so they are already supporter-words, and
+                                    the mark's stars beside the name say whose supporter. The brand is
+                                    "Platinum Pursuit", and "PlatPursuit Patron" was neither. {% endcomment %}
                                     <span class="sup-prev__sub">
-                                        {% if viewer_title %}{{ viewer_title }}<span class="pp-marktitle__dot" aria-hidden="true">&middot;</span>{% endif %}<span class="pp-marktitle" style="--mt-c: {{ tier.colour }}">PlatPursuit {{ tier.name }}</span>
+                                        {% if viewer_title %}{{ viewer_title }}<span class="pp-marktitle__dot" aria-hidden="true">&middot;</span>{% endif %}<span class="pp-marktitle" style="--mt-c: {{ tier.colour }}">{{ tier.name }}</span>
                                     </span>
                                 </span>
                                 <span class="sup-prev__score">1,204</span>
@@ -479,7 +483,7 @@ substrate, and an earlier version of this page did, which is most of why it read
                         "Moderator") -- more obvious than a crimson name alone. Everyone else
                         keeps their level line. {% endcomment %}
                         <span class="sup-prev__sub">
-                            {% if person.service_label %}{{ person.service_label }}{% elif person.tier %}<span class="pp-marktitle" style="--mt-c: {{ person.tier.colour }}">PlatPursuit {{ person.tier.name }}</span>{% else %}Supporter{% endif %}
+                            {% if person.service_label %}{{ person.service_label }}{% elif person.tier %}<span class="pp-marktitle" style="--mt-c: {{ person.tier.colour }}">{{ person.tier.name }}</span>{% else %}Supporter{% endif %}
                         </span>
                     </span>
                 </li>
@@ -536,7 +540,7 @@ substrate, and an earlier version of this page did, which is most of why it read
         {% endif %}{% endfor %}
 
         <p class="sup-modal__foot">
-            If you ever find something on PlatPursuit locked behind a payment, we got it wrong.
+            If you ever find something on Platinum Pursuit locked behind a payment, we got it wrong.
         </p>
     </dialog>
 

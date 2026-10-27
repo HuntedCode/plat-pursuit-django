@@ -66,7 +66,7 @@ perk's own colour drives its accent bar, which is the one place that bar carries
                 a grandfathered tier keeps the name it BOUGHT and wears the price-nearest level's
                 mark. Deriving this from the worn slug would call a `supporter` subscriber a
                 "Sponsor", which is a tier they never bought. {% endcomment %}
-                <p style="margin: 9px 0 0; font-size: 15px; line-height: 1.4; font-weight: 700; color: #F0F6FD;">{% if mark.is_legacy %}{{ mark.display_name }}{% else %}PlatPursuit {{ mark.name }}{% endif %}</p>
+                <p style="margin: 9px 0 0; font-size: 15px; line-height: 1.4; font-weight: 700; color: #F0F6FD;">{% if mark.is_legacy %}{{ mark.display_name }}{% else %}{{ mark.name }}{% endif %}</p>
                 <p style="margin: 6px 0 0; font-size: 13px; line-height: 1.5; color: #9FB3C8;">{% if mark.is_legacy %}A founding tier, wearing the {{ mark.name }} mark. It rides{% else %}It rides{% endif %} along everywhere your name appears: leaderboards, comments, your profile.</p>
             </td>
         </tr>

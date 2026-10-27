@@ -1,0 +1,14 @@
+{% comment %} One finished artwork on the fundraiser's "Artwork complete" gallery: the medallion, the series
+and its patron. STATIC marked name, the credits wall's treatment, not name_mark: this is a GRID of names,
+and a grid of phase-locked flowing names is the pulsing wall that treatment is banned from. {% endcomment %}
+<a href="{% url 'badge_detail' claim.series_slug %}" class="fnd-claim fnd-claim--done" style="--i: {{ forloop.counter0 }}">
+    <figure class="w-16 h-16 shrink-0 mx-auto">
+        {% if claim.medallion %}
+            {% include 'components/badge_medallion.html' with frame=claim.medallion no_id=True %}
+        {% endif %}
+    </figure>
+    <span class="fnd-claim__name">{{ claim.series_name }}</span>
+    {% if claim.profile %}
+        <span class="fnd-claim__by">Funded by <span class="fnd-claim__wearer"{% if claim.mark %} style="color: {{ claim.mark.colour }}"{% endif %}>{{ claim.profile.display_psn_username|default:claim.profile.psn_username }}</span>{% if claim.mark %}<span class="fnd-claim__glyphs" aria-hidden="true">{% include 'components/_mark_glyphs_inline.html' with mark=claim.mark star_px=10 svc_px=11 %}</span>{% endif %}</span>
+    {% endif %}
+</a>

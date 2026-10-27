@@ -319,6 +319,10 @@ line ("Already have an account? Sign in"). It drops the site footer and the phon
 and Contact under the card. `input.css` resets the bottom padding and toast offset for any page without
 the tab bar (`body:not(:has(.mobile-tabbar))`).
 
+The card itself lives in `account/base_card.html` (2026-10-26, AC-05 / AC-11): an account page a signed-in
+hunter reaches from the site (Email addresses, the beta gate) extends it directly, gets the same card and
+keeps the footer and the tab bar. `base_auth.html` is that card plus the focused chrome.
+
 ### Back to Top
 
 `templates/partials/back_to_top.html` (`.pp-totop` on the house icon button, behaviour in

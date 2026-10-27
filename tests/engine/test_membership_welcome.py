@@ -20,6 +20,11 @@ pytestmark = pytest.mark.django_db
 URL = '/users/subscribe/success/'
 
 
+def _level_line(body):
+    """The hero's level line ("Patron · billed monthly"), whitespace-collapsed."""
+    sub = body.split('class="supw-id__sub">', 1)[1].split('</span>', 1)[0]
+    return ' '.join(sub.split())
+
 def _fake_session(**over):
     defaults = dict(payment_status='paid', customer='cus_wel_1',
                     metadata={'tier': 'patron', 'interval': 'monthly'})
@@ -45,7 +50,7 @@ def test_an_activated_member_gets_the_hero(client):
     SubscriptionService.activate_subscription(user, 'patron', 'stripe')
     body = client.get(URL).content.decode()
     assert 'NewPatron' in body
-    assert 'PlatPursuit Patron' in body
+    assert _level_line(body).startswith('Patron')
     assert 'pp-supname' in body
     assert 'settling in' not in body
     assert 'Join the Discord' in body and 'discord.gg' in body
@@ -58,7 +63,7 @@ def test_the_stripe_race_renders_the_purchased_tier(client, settings):
     user = _buyer(client)
     with patch('users.views.stripe.checkout.Session.retrieve', return_value=_fake_session()):
         body = client.get(URL + '?session_id=cs_x').content.decode()
-    assert 'PlatPursuit Patron' in body
+    assert _level_line(body).startswith('Patron')
     assert 'settling in' in body
     assert 'billed monthly' in body, 'the interval voice must reach the settling hero'
     user.refresh_from_db()
@@ -97,7 +102,7 @@ def test_an_async_payment_still_settles_not_errors(client, settings):
     pending = _fake_session(payment_status='unpaid')
     with patch('users.views.stripe.checkout.Session.retrieve', return_value=pending):
         body = client.get(URL + '?session_id=cs_x').content.decode()
-    assert 'settling in' in body and 'PlatPursuit Patron' in body
+    assert 'settling in' in body and _level_line(body).startswith('Patron')
 
 
 def test_paypal_verifies_ownership_and_recovers_the_tier(client):
@@ -108,7 +113,7 @@ def test_paypal_verifies_ownership_and_recovers_the_tier(client):
     with patch('users.services.paypal_service.PayPalService.get_subscription_details',
                return_value=details):
         body = client.get(URL + '?provider=paypal&subscription_id=I-NEWPATRON1').content.decode()
-    assert 'PlatPursuit Patron' in body
+    assert _level_line(body).startswith('Patron')
     assert 'settling in' in body
 
 
@@ -118,14 +123,14 @@ def test_a_foreign_paypal_subscription_goes_blind_not_leaked(client):
     with patch('users.services.paypal_service.PayPalService.get_subscription_details',
                return_value=details):
         body = client.get(URL + '?provider=paypal&subscription_id=I-THEIRS').content.decode()
-    assert 'PlatPursuit member' in body, 'ownership mismatch renders the blind hero'
-    assert 'PlatPursuit Patron' not in body
+    assert _level_line(body).startswith('Member'), 'ownership mismatch renders the blind hero'
+    assert 'Patron' not in _level_line(body)
 
 
 def test_a_bare_paypal_return_settles_blind(client):
     _buyer(client)
     body = client.get(URL + '?provider=paypal').content.decode()
-    assert 'PlatPursuit member' in body and 'settling in' in body
+    assert _level_line(body).startswith('Member') and 'settling in' in body
 
 
 def test_a_bare_hit_lands_on_the_storefront(client):
@@ -206,7 +211,7 @@ def test_a_grace_resubscriber_is_welcomed_as_the_new_tier(client, settings):
     upgraded = _fake_session(metadata={'tier': 'cornerstone', 'interval': 'monthly'})
     with patch('users.views.stripe.checkout.Session.retrieve', return_value=upgraded):
         body = client.get(URL + '?session_id=cs_up').content.decode()
-    assert 'PlatPursuit Cornerstone' in body, 'the NEW tier must be the one celebrated'
+    assert _level_line(body).startswith('Cornerstone'), 'the NEW tier must be the one celebrated'
     assert 'settling in' in body
 
 
@@ -248,7 +253,7 @@ def test_a_webhook_landed_revisit_renders_the_full_active_hero(client, settings)
     SubscriptionService.activate_subscription(user, 'patron', 'stripe')
     with patch('users.views.stripe.checkout.Session.retrieve', return_value=_fake_session()):
         body = client.get(URL + '?session_id=cs_x').content.decode()
-    assert 'PlatPursuit Patron' in body
+    assert _level_line(body).startswith('Patron')
     assert 'settling in' not in body
 
 
@@ -272,7 +277,7 @@ def test_an_active_paypal_member_never_sees_the_blind_hero(client):
     user = _buyer(client)
     SubscriptionService.activate_subscription(user, 'patron', 'paypal')
     body = client.get(URL + '?provider=paypal').content.decode()
-    assert 'PlatPursuit Patron' in body
+    assert _level_line(body).startswith('Patron')
     assert 'settling in' not in body
 
 
