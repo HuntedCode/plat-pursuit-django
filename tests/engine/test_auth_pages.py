@@ -108,13 +108,16 @@ def test_django_logout_redirect_stays_unset():
     assert dj_settings.LOGOUT_REDIRECT_URL is None
 
 
-def test_the_429_handler_is_declared_and_returns_429():
-    from plat_pursuit.urls import handler429, ThrottledView  # noqa: F401  (declared, not incidental)
-    from django.test import RequestFactory
+def test_the_429_handler_is_declared_and_returns_429(rf):
+    """allauth's own limits look `handler429` up on the ROOT_URLCONF (`respond_429`); Django never does."""
+    from django.contrib.auth.models import AnonymousUser
+    from django.contrib.sessions.backends.cache import SessionStore
+    from django.utils.module_loading import import_string
+    from plat_pursuit.urls import handler429
 
-    resp = ThrottledView.as_view()(RequestFactory().get('/'))
-    resp.render()
-    assert resp.status_code == 429
+    request = rf.get('/')
+    request.user, request.session = AnonymousUser(), SessionStore()
+    assert import_string(handler429)(request).status_code == 429
 
 
 # ── no reachable route renders allauth's package templates ────────────────────────────────────

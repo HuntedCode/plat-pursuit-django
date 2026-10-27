@@ -93,9 +93,9 @@ ENTRIES: tuple[Entry, ...] = (
              'Earn a badge and its celebration plays the next time you open My Pursuit. New platinums wait '
              'there too, behind a button, as a reel. You can turn auto-play off in Settings.'),
             ('Master it',
-             'Where a badge asks for more than holo, like a bonus stage or a game released in only one '
-             'region, finish every stage at 100% with DLC to master it: a gold rim and a crown. Hold every '
-             'edition of a series for a Full Set, and finish them all to become its Series Master.'),
+             'Where a badge asks for more than holo, like a bonus stage, finish every stage at 100% with DLC '
+             'to master it: a gold rim and a crown. Hold every edition of a series for a Full Set, and '
+             'finish them all to become its Series Master.'),
             ('Fairer for unobtainable trophies',
              'Trophies that can no longer be earned stop standing between you and a badge. Earn everything '
              'still earnable and the list counts as finished for badges.'),

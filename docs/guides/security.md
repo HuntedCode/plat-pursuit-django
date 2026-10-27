@@ -54,7 +54,7 @@ pinned by `tests/engine/test_ads_removed.py`.
 
 Two systems are in play:
 
-- **`django-ratelimit`** handles app-level endpoints, keyed by `user` (most) or `ip` (unauthenticated), with `block=True`. On excess it raises `Ratelimited`, a `PermissionDenied` subclass, so the response is a **403, not a 429** (`RatelimitMiddleware`, the only thing that would turn it into a 429, is not installed).
+- **`django-ratelimit`** handles app-level endpoints, keyed by `user` (most) or `ip` (unauthenticated), with `block=True`. On excess it raises `Ratelimited`, a `PermissionDenied` subclass. `handler403` (`core/error_views.py`, since 2026-10-27) answers it as a **429**: JSON `{"error": ...}` for a fetch (an `/api/` path, `Accept: application/json`, or the browser's `Sec-Fetch-Mode` / `Sec-Fetch-Dest` saying it is not a page load), else the standalone cooldown page, which runs no context processors so a refusal stays cheap. Before that it was Django's bare 403. DRF views are unaffected: DRF renders its own 403.
 - **`ACCOUNT_RATE_LIMITS`** (allauth) handles the auth-flow endpoints (signup, login, password reset, email confirm). Configured in `plat_pursuit/settings.py`.
 - **DRF's throttle** (`core.throttling.VisitorUserRateThrottle`, `DEFAULT_THROTTLE_RATES['user']`, 60/min) covers every DRF view: signed-in callers by user, anonymous ones by visitor IP.
 

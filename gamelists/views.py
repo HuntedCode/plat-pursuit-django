@@ -1014,11 +1014,10 @@ class _ListActionView(LoginRequiredMixin, _LinkedProfileRequired, View):
     def get_list(self, request, list_id):
         """The list, or None -- the caller answers with `self.not_found()`.
 
-        Deliberately NOT `raise Http404`. This project installs a custom `handler404` that is a
-        GET-only view, so an Http404 raised from a POST comes back as a 405 listing GET/HEAD/OPTIONS
-        rather than as a 404. `ContractsResultsView` documents the same workaround for the same
-        reason. A caller checking for 404 would otherwise be told the wrong thing about what went
-        wrong, and a JSON client would get an HTML error page.
+        Deliberately NOT `raise Http404`: `handler404` answers with the HTML 404 page, and a JSON
+        client cannot read it. (Until 2026-10-27 the handler was also GET-only, so an Http404 from a
+        POST came back as a 405; `core.error_views.not_found` now answers any method.)
+        `ContractsResultsView` documents the same workaround for the same reason.
         """
         return GameList.objects.readable_by(self._viewer(request)).filter(pk=list_id).first()
 
@@ -1663,11 +1662,8 @@ class ListGameSearchView(LoginRequiredMixin, _LinkedProfileRequired, View):
         game_list = GameList.objects.readable_by(
             getattr(request.user, 'profile', None)).filter(pk=list_id).first()
         if game_list is None:
-            # JSON rather than Http404: this answers a fetch, and `handler404` is a GET-only
-            # TemplateView, so raising from here would render an HTML page a JSON caller cannot
-            # read. (An earlier version of this comment also claimed that handler renders at 200.
-            # It does not -- `NotFoundView` sets status 404 explicitly. The reason to avoid Http404
-            # is the method, not the status.)
+            # JSON rather than Http404: this answers a fetch, and `handler404`
+            # (`core.error_views.not_found`) renders the HTML 404 page, which a JSON caller cannot read.
             return JsonResponse({'error': 'That list is not available.'}, status=404)
 
         # The catalogue half, cached on the normalized query and shared with every other adder on the

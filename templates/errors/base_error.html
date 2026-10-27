@@ -3,9 +3,10 @@
 {% comment %} THE ERROR CARD every error page wears (Odds and ends review, OE-01 / OE-05): a joke platinum share card
 for a page nobody found. Styles: static/css/components/errors.css.
 
-TWO SHELLS, ONE CARD. The views in core/error_views.py pass `err_shell='base.html'`, so 404, 403, 429 and the
+TWO SHELLS, ONE CARD. The views in core/error_views.py pass `err_shell='base.html'`, so 404, 403 and the
 expired-form page sit inside the site with its navbar. Django renders 400 and 500 itself and passes nothing, so
-they fall to errors/standalone.html, which touches no database (a 500 may BE the database).
+they fall to errors/standalone.html, which touches no database (a 500 may BE the database); the 429 is rendered
+standalone on purpose, so a refused request stays cheap.
 
 A page fills: err_tone (a --pp-* colour), err_icon (the second tile), err_banner, err_title, err_by (optional),
 err_stats (.err-stat cells, two across on a phone), err_pills, err_tag, err_lede, err_actions (optional) and

@@ -77,24 +77,52 @@ def test_a_refused_request_gets_the_locked_trophy_page(client, site_with_doors):
     assert 'id="navbar"' in body or '<nav' in body, 'a site error keeps the site around it'
 
 
+FETCH = {'HTTP_SEC_FETCH_MODE': 'cors', 'HTTP_SEC_FETCH_DEST': 'empty'}
+PAGE_LOAD = {'HTTP_SEC_FETCH_MODE': 'navigate', 'HTTP_SEC_FETCH_DEST': 'document'}
+
+
 def test_a_tripped_rate_limit_is_answered_as_a_429_with_the_cooldown_page(client, site_with_doors):
-    resp = client.get('/oe-test/limited/')
+    resp = client.get('/oe-test/limited/', **PAGE_LOAD)
 
     assert resp.status_code == 429
     assert '429: Too Many Pursuits' in resp.content.decode()
 
 
+def test_a_refusal_stays_cheap_no_site_chrome_on_the_cooldown_page(client, site_with_doors):
+    """A limiter sheds load: the cooldown page must not run base.html's context processors."""
+    body = client.get('/oe-test/limited/').content.decode()
+
+    assert 'err--standalone' in body and '<nav' not in body
+
+
 def test_a_fetch_that_trips_a_limit_gets_json_it_can_read(client, site_with_doors):
-    resp = client.get('/oe-test/limited/', HTTP_ACCEPT='application/json')
+    """The site's fetch helpers send no Accept header; the browser's Sec-Fetch headers are what tell."""
+    resp = client.get('/oe-test/limited/', **FETCH)
 
     assert resp.status_code == 429
     assert resp.json() == {'error': 'Too many requests. Wait a minute and try again.'}
 
 
+def test_an_explicit_json_accept_also_gets_json(client, site_with_doors):
+    assert client.get('/oe-test/limited/', HTTP_ACCEPT='application/json').json()['error']
+
+
+def test_an_image_load_is_not_mistaken_for_a_fetch(client, site_with_doors):
+    resp = client.get('/oe-test/limited/', HTTP_SEC_FETCH_MODE='no-cors', HTTP_SEC_FETCH_DEST='image')
+
+    assert resp['Content-Type'].startswith('text/html')
+
+
 def test_a_refused_fetch_gets_json(client, site_with_doors):
-    resp = client.get('/oe-test/denied/', HTTP_ACCEPT='application/json')
+    resp = client.get('/oe-test/denied/', **FETCH)
 
     assert resp.status_code == 403 and 'error' in resp.json()
+
+
+def test_the_403_offers_a_visitor_sign_in_back_to_the_same_page(client, site_with_doors):
+    body = client.get('/oe-test/denied/', **PAGE_LOAD).content.decode()
+
+    assert f"{reverse('account_login')}?next=/oe-test/denied/" in body
 
 
 def test_allauths_own_limits_reach_the_cooldown_page(rf):
@@ -116,6 +144,13 @@ def test_an_expired_form_says_so_instead_of_djangos_csrf_page():
     assert resp.status_code == 403
     body = resp.content.decode()
     assert 'This form expired' in body and 'CSRF verification failed' not in body
+
+
+def test_an_expired_fetch_gets_json():
+    resp = Client(enforce_csrf_checks=True).post(reverse('account_login'), {'login': 'x'}, **FETCH)
+
+    assert resp.status_code == 403
+    assert resp.json() == {'error': 'This form expired. Refresh the page and try again.'}
 
 
 def test_a_server_error_gets_the_standalone_page(site_with_doors):
@@ -169,26 +204,36 @@ def test_the_error_cards_use_the_component_not_inline_styles(rel):
 
 # ── OE-02 / OE-03 / OE-07: About, Contact and the legal pages ───────────────────────────────
 
+def _between(body, start, end):
+    """The page between two markers: the footer and navbar link most of the same places."""
+    return body[body.index(start):body.index(end)]
+
+
 def test_about_names_only_live_features_and_links_each_one(client):
     body = client.get(reverse('about')).content.decode()
+    features = _between(body, 'id="pg-what-h"', 'id="pg-who-h"')
 
     assert 'Roadmaps' not in body and 'Trophy Case' not in body
-    for name in ('badges_list', 'jobs_browse', 'challenges', 'lists_browse', 'overall_badge_leaderboards',
-                 'recap_index', 'support_hub'):
-        assert f'href="{reverse(name)}"' in body, name
+    for name in ('games_list', 'badges_list', 'jobs_browse', 'challenges', 'lists_browse',
+                 'overall_badge_leaderboards', 'recap_index'):
+        assert f'href="{reverse(name)}"' in features, name
+    assert f'href="{reverse("support_hub")}"' in _between(body, 'id="pg-who-h"', 'Get in touch')
 
 
 def test_about_offers_sign_up_to_a_visitor_only(client):
-    assert reverse('account_signup') in client.get(reverse('about')).content.decode()
+    head = _between(client.get(reverse('about')).content.decode(), 'class="pg__eyebrow"', 'id="pg-what-h"')
+    assert f'href="{reverse("account_signup")}"' in head
 
     client.force_login(UserFactory())
-    assert reverse('account_signup') not in client.get(reverse('about')).content.decode()
+    head = _between(client.get(reverse('about')).content.decode(), 'class="pg__eyebrow"', 'id="pg-what-h"')
+    assert 'pg__actions' not in head and reverse('account_signup') not in head
 
 
 def test_about_rows_stack_on_a_phone():
     """OE-02: the old grid stayed two across at 375 (491px page). One per row below md."""
     css = _read('static/css/components/pages.css')
-    assert '.pg-rows {\n    display: grid;\n    grid-template-columns: minmax(0, 1fr);' in css
+    base_rule = re.search(r'^\.pg-rows \{([^}]*)\}', css, re.M).group(1)
+    assert re.search(r'grid-template-columns:\s*minmax\(0, 1fr\);', base_rule)
     assert 'grid-cols-2' not in _read('templates/pages/about.html')
 
 
@@ -285,6 +330,17 @@ def test_an_item_whose_copy_is_stale_draws_its_upload(media_root):
     assert item.art_url == item.artwork.url
 
 
+def test_a_reupload_remakes_the_items_copy(media_root):
+    item = ArtRevealItem.objects.get(pk=_event(n=1).items.get().pk)
+    before = item.artwork_thumb.name
+    item.artwork = _png(colour=(10, 200, 90, 255), name='new.png')
+    item.save()
+
+    item.refresh_from_db()
+    assert item.artwork_thumb.name != before
+    assert badge_thumbs.thumb_is_current(item.artwork, item.artwork_thumb)
+
+
 def test_saving_an_item_without_touching_its_art_writes_no_copy(media_root):
     item = _event(n=1).items.get()
     before = item.artwork_thumb.name
@@ -318,15 +374,20 @@ def test_every_old_review_url_lands_on_rate_my_games(client, url):
     assert resp.status_code == 301 and resp['Location'] == reverse('rate_my_games')
 
 
+def test_old_review_links_keep_their_query_string(client):
+    assert client.get('/community/reviews/?utm_source=x')['Location'] == reverse('rate_my_games') + '?utm_source=x'
+
+
 def test_old_review_links_built_by_name_still_resolve():
     """review_service builds notification links with reverse('review_hub', slug)."""
     assert reverse('review_hub', kwargs={'slug': 'x'}) == '/community/reviews/x/'
     assert reverse('reviews_landing') == '/community/reviews/'
 
 
-def test_the_unused_badge_pngs_are_gone():
-    left = sorted(p.name for p in (ROOT / 'static/images/badges').glob('*.png'))
-    assert left == ['default.png']
+@pytest.mark.parametrize('name', ['call-of-duty', 'founders', 'goat-simulator', 'kodaka-uchicoshi-creator',
+                                  'little-nightmares', 'saints-row', 'spongebob', 'spyro', 'star-wars'])
+def test_the_unused_badge_pngs_are_gone(name):
+    assert not (ROOT / 'static/images/badges' / f'{name}.png').exists()
 
 
 # ── OE-09 / OE-10 / OE-11: copy ──────────────────────────────────────────────────────────────
@@ -349,3 +410,10 @@ def test_the_newest_announcement_covers_the_badge_rewards():
 
     assert top.id == '2026-10-badge-rewards'
     assert top.safe_link_url == reverse('badge_how_it_works')
+
+
+def test_a_card_download_that_trips_a_limit_says_wait_not_retry():
+    """The share-card PNG doors are plain views, so a tripped limit is a 429 now (the DRF ones stay 403).
+    CardDownload must read both as "too many", or it tells the hunter to retry the thing that caused it."""
+    js = _read('static/js/utils.js')
+    assert "err && (err.message === '403' || err.message === '429')" in js

@@ -19,11 +19,19 @@ WHO REACHES WHAT:
   `base.html`): a 500 renders with no context at all and may be the database being down, and a 400 is often a bad
   Host header, which `base.html`'s absolute URLs would raise on again.
 
-JSON. A caller that wants JSON (an `/api/` path, or `Accept: application/json` from a fetch) gets `{'error': ...}`
-with the same status instead of a page, because the site's fetch clients read `error`.
+JSON. A caller that wants JSON gets `{'error': ...}` with the same status instead of a page, because the site's
+fetch clients read `error`. "Wants JSON" is an `/api/` path, `Accept: application/json`, or a `fetch()` /
+XHR, told apart by the browser's own `Sec-Fetch-Mode` / `Sec-Fetch-Dest` headers (a page load is `navigate` /
+`document`, a fetch is `cors` or `same-origin` / `empty`). The headers are the reliable part: the site's fetch
+helpers (`PlatPursuit.API.request`, `CardDownload`) send no `Accept`, so an Accept check alone almost never fired.
+
+A REFUSAL STAYS CHEAP. The cooldown page renders with no request (`errors/standalone.html`, no context processors,
+no navbar), because a limiter exists to shed load: on a hammered door every refusal through `base.html` would cost
+the thirteen context processors' queries. The other site pages here keep the chrome; they are not hot paths.
 """
-from django.http import JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render
+from django.template.loader import render_to_string
 from django_ratelimit.exceptions import Ratelimited
 
 THROTTLED_MESSAGE = 'Too many requests. Wait a minute and try again.'
@@ -36,7 +44,11 @@ SITE_SHELL = {'err_shell': 'base.html'}
 
 
 def _wants_json(request):
-    return request.path.startswith('/api/') or 'application/json' in request.headers.get('Accept', '')
+    headers = request.headers
+    if request.path.startswith('/api/') or 'application/json' in headers.get('Accept', ''):
+        return True
+    mode = headers.get('Sec-Fetch-Mode')
+    return bool(mode) and mode != 'navigate' and headers.get('Sec-Fetch-Dest', 'empty') == 'empty'
 
 
 def not_found(request, exception=None):
@@ -46,7 +58,8 @@ def not_found(request, exception=None):
 def throttled(request, exception=None):
     if _wants_json(request):
         return JsonResponse({'error': THROTTLED_MESSAGE}, status=429)
-    return render(request, '429.html', SITE_SHELL, status=429)
+    # No request, no SITE_SHELL: the standalone page, so a refusal runs no context processors (docstring).
+    return HttpResponse(render_to_string('429.html'), status=429)
 
 
 def permission_denied(request, exception=None):

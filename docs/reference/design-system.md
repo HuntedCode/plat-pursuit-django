@@ -340,9 +340,10 @@ Keep classes off the policy's own markup.
 Every error page wears the joke share card ("404: The Lost Page, Sought by <hunter>"),
 `static/css/components/errors.css`. A page fills the card's blocks (tone, banner, title, four `.err-stat`
 cells, pills, tag, lede, actions, random flavour lines). Two shells: the views in `core/error_views.py` pass
-`err_shell='base.html'` so 404 / 403 / 429 / the expired-form page keep the site chrome; Django's own 400 and
-500 renders pass nothing and fall to `errors/standalone.html`, which loads only the stylesheet (a 500 may be the
-database). On a phone the art tiles are left out so the lede and the way out stay on the first screen.
+`err_shell='base.html'` so 404 / 403 / the expired-form page keep the site chrome; Django's own 400 and 500
+renders pass nothing and fall to `errors/standalone.html`, which loads only the stylesheet (a 500 may be the
+database). The 429 is standalone on purpose: a rate limit sheds load, so a refusal must not run the context
+processors. On a phone the art tiles are left out so the lede and the way out stay on the first screen.
 
 ### Back to Top
 

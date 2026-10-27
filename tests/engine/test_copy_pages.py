@@ -49,7 +49,7 @@ def test_privacy_names_both_payment_processors_and_current_ugc(client):
     body = client.get(reverse('privacy')).content.decode()
 
     assert 'PayPal' in body
-    assert 'game lists you publish' in body
+    assert 'game lists you make' in body
     # The policy text, not the page: the footer links the Support roadmap, a different thing.
     src = (ROOT / 'templates' / 'pages' / 'privacy.html').read_text(encoding='utf-8')
     assert 'roadmap' not in src.lower(), 'roadmaps are not live (owner, 2026-10-27)'

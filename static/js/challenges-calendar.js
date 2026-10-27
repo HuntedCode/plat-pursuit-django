@@ -327,8 +327,8 @@
             fetch(cell.getAttribute('data-day-url'),
                   { headers: { 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'same-origin' })
                 // `r.ok` FIRST, which the fragment's docstring asks for by name: a hidden run and a
-                // missing square both answer 404, and this project installs a GET-only `handler404`, so
-                // an unchecked `.text()` would inject the 404 PAGE into the sheet.
+                // missing square both answer 404, and `handler404` renders a whole page, so an
+                // unchecked `.text()` would inject the 404 PAGE into the sheet.
                 .then(function (r) { return r.ok ? r.text() : Promise.reject(r); })
                 .then(function (html) {
                     settle();

@@ -771,8 +771,8 @@ def test_both_browse_pages_rate_limit_by_ip_in_their_own_bucket(client):
     exactly the URL the limiter exists to protect. Draining the budget with HEADs and then finding GET
     refused is what proves `method=('GET', 'HEAD')` landed.
 
-    The refusal is 403 and not 429: `Ratelimited` subclasses `PermissionDenied`, and no `RatelimitMiddleware`
-    is installed -- the same thing `SlotPickerView`'s docstring records.
+    The refusal is a 429: `Ratelimited` subclasses `PermissionDenied`, which `handler403`
+    (core/error_views.py) answers as the cooldown page since 2026-10-27. It was a bare 403 before.
     """
     from django.core.cache import cache
 
@@ -786,7 +786,7 @@ def test_both_browse_pages_rate_limit_by_ip_in_their_own_bucket(client):
         for _ in range(60):
             assert client.head(url).status_code == 200
 
-        assert client.get(url, {'q': 'abc'}).status_code == 403, (
+        assert client.get(url, {'q': 'abc'}).status_code == 429, (
             'HEAD requests are not being metered -- the budget was drained by 60 of them and GET still '
             'answered, which is the hole `method=(\'GET\', \'HEAD\')` closes')
 
@@ -824,7 +824,7 @@ def test_the_hall_of_fame_meters_each_caller_separately_and_not_the_whole_intern
         for _ in range(60):
             assert client.get(url, REMOTE_ADDR='10.0.0.7').status_code == 200
 
-        assert client.get(url, REMOTE_ADDR='10.0.0.7').status_code == 403, \
+        assert client.get(url, REMOTE_ADDR='10.0.0.7').status_code == 429, \
             'this page is not metered at all -- 61 requests from one address all answered'
 
         assert client.get(url, REMOTE_ADDR='10.0.0.8').status_code == 200, (

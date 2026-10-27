@@ -86,10 +86,11 @@ RATE_LIMITED_MESSAGE = 'That was a lot at once. Wait a minute and try again.'
 
 
 def _json_when_limited(view_method):
-    """Answer a tripped rate limit as JSON 429 with an `error`, instead of the HTML 403 `block=True` renders.
+    """Answer a tripped rate limit as JSON 429 with an `error`, instead of the page `block=True` renders.
 
     WHY: `Ratelimited` subclasses `PermissionDenied` and no `RatelimitMiddleware` is installed, so a blocked
-    request rendered the HTML 403 page. A fetch got no `error` key and the sheet could only say "That did not
+    request rendered the HTML 403 page (since 2026-10-27, `handler403` renders the 429 cooldown page instead:
+    still HTML for a fetch that does not ask for JSON). A fetch got no `error` key and the sheet could only say "That did not
     save." -- with no hint that waiting would fix it. The door's limiter runs with `block=False` (which sets
     `request.limited` and calls through) and this, directly beneath it, answers.
     """
@@ -769,9 +770,10 @@ class _ChallengeActionView(View):
     for the JSON endpoints. So the mixins moved to the two subclasses that need different answers, and
     `_ChallengeJsonView` records what the redirect actually did.
 
-    `get_challenge` returns None rather than raising `Http404`, deliberately: this project installs a
-    GET-only `handler404`, so an `Http404` raised from a POST comes back as a 405 listing GET/HEAD/OPTIONS
-    instead of a 404. `gamelists._ListActionView` documents the same workaround for the same reason.
+    `get_challenge` returns None rather than raising `Http404`, deliberately: `handler404` answers with the
+    HTML 404 page, which a JSON caller cannot read. (Until 2026-10-27 it was also a GET-only view, so an
+    `Http404` from a POST came back as a 405; `core.error_views.not_found` answers any method.)
+    `gamelists._ListActionView` documents the same workaround for the same reason.
 
     Scoped to the hunter's OWN runs. A challenge is public to read, but every write here is on something
     you own, so resolving through `profile=` means an id alone can never confirm somebody else's run
@@ -861,14 +863,12 @@ class SlotPickerView(_SlotView):
     RATE LIMITED despite being a read: it runs an `icontains` over an unindexed column when a term is
     given, and one open panel per keystroke is the shape that turns a search box into a scan loop.
 
-    A TRIPPED LIMIT ANSWERS 403, NOT 429, and saying otherwise was wrong. `Ratelimited` subclasses
-    `PermissionDenied`; `RatelimitMiddleware` is not installed, and `handler429` is an allauth convention
-    that nothing in Django dispatches to -- so the refusal renders through the 403 path, as HTML, without
-    the `error` key the client reads. `api/game_flag_views.py` already records this and this docstring
-    re-asserted the comfortable version. The client still fails correctly (`response.ok` is false) but says
-    something generic; making these doors answer JSON on a tripped limit needs a `handler403` or the
-    middleware, and belongs with the site's other limiters rather than in this chunk. (These three now meter
-    HEAD as well as GET: Django answers HEAD through `get`, so a HEAD ran the same pool scan unmetered.)
+    A TRIPPED LIMIT ANSWERS JSON 429 with the `error` key the client reads, through `_json_when_limited`
+    (the limiter runs with `block=False`). A `block=True` limiter would raise `Ratelimited`, a
+    `PermissionDenied`: since 2026-10-27 `handler403` (core/error_views.py) answers that as a 429 too, but as
+    the cooldown PAGE unless the fetch sends `Accept: application/json`, and with its own wording -- so these
+    doors keep the decorator. (These three also meter HEAD as well as GET: Django answers HEAD through `get`,
+    so a HEAD ran the same pool scan unmetered.)
     """
 
     @method_decorator(ratelimit(group=CHALLENGE_READ_RATELIMIT_GROUP, key='user', rate='90/m',
@@ -1743,8 +1743,8 @@ class CalendarDayView(View):
     So this asks the same queryset rather than spelling `is_deleted` here.
 
     `Http404` IS SAFE ON THIS ONE, unlike the write doors. `_ChallengeActionView` returns `None` instead
-    of raising because this project installs a GET-only `handler404` and an `Http404` out of a POST comes
-    back as a 405 -- this is a GET, so the handler applies and answers with the 404 page.
+    of raising because the write doors answer JSON callers, and `handler404` answers with an HTML page --
+    this is an HTML fragment fetch, so the handler's 404 page is a fine answer.
 
     WHICH MAKES ONE DEMAND ON THE CALLER THAT DOES NOT EXIST YET: whatever fetches this must check
     `response.ok` before injecting, or a 404 page lands inside the sheet. Stated as a requirement rather

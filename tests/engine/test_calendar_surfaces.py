@@ -669,9 +669,9 @@ def test_the_day_sheet_uses_the_shared_primitives_rather_than_a_fourth_hand_roll
 
 
 def test_the_day_fetch_checks_the_response_before_injecting_it():
-    """THE FRAGMENT ASKS FOR THIS BY NAME. A hidden run and a missing square both answer 404, and this
-    project installs a GET-only `handler404` -- so an unchecked `.text()` would inject the whole 404
-    PAGE into the sheet."""
+    """THE FRAGMENT ASKS FOR THIS BY NAME. A hidden run and a missing square both answer 404, and
+    `handler404` renders a whole page -- so an unchecked `.text()` would inject the whole 404 PAGE into the
+    sheet."""
     js = _script_code()
     assert 'r.ok ? r.text() : Promise.reject(r)' in js
 

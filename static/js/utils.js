@@ -2548,8 +2548,9 @@ const CardDownload = {
                     if (mine !== generation) { return; }
                     fail(
                         // The renderer is rate-limited per user, and "try again" is bad advice for the one
-                        // failure where trying again is exactly what caused it.
-                        err && err.message === '403'
+                        // failure where trying again is exactly what caused it. A tripped limit answers 403
+                        // from the DRF renderers and 429 from the plain views (core/error_views.py).
+                        err && (err.message === '403' || err.message === '429')
                             ? 'Too many cards at once. Give it a minute.'
                             : "Couldn't render that card. Try again in a moment.",
                         err);

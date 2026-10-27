@@ -1,7 +1,10 @@
 {% extends 'errors/base_error.html' %}
 {% comment %} Too many requests (core.error_views.throttled): allauth's own limits (sign-in attempts, sign-up, password
 reset) and every tripped django-ratelimit limit, which arrives as a Ratelimited 403 and is answered as a 429. The
-limits differ, so the card never names a wait. The card: errors/base_error.html. {% endcomment %}
+limits differ, so the card never names a wait. Rendered STANDALONE with no request (core/error_views.throttled),
+so `user` is never set here: the by-line reads "Throttled by The Server" and the only way out is Back to Home
+(the base card's default), never a Sign in a signed-in hunter would be shown too. The card:
+errors/base_error.html. {% endcomment %}
 
 {% block title %}429 - Pursuit Cooldown{% endblock %}
 
@@ -28,7 +31,6 @@ limits differ, so the card never names a wait. The card: errors/base_error.html.
 
 {% block err_lede %}That was a lot of requests in a short window. Wait a minute and try again. Trophies don't go anywhere.{% endblock %}
 
-{% block err_actions %}<a class="pp-cta" href="{% url 'home' %}">Back to Home</a>{% if not user.is_authenticated %}<a class="pp-cta pp-cta--ghost" href="{% url 'account_login' %}">Sign in</a>{% endif %}{% endblock %}
 
 {% block err_facts %}
 <li>Speedrunning the sign-in form? The server appreciates the enthusiasm. Also: please don't.</li>

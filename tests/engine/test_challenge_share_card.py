@@ -428,7 +428,7 @@ def test_head_requests_spend_the_download_budget():
             mock.patch('challenges.services.share_card.ShareImageCache.fetch_and_cache', return_value=''):
         statuses = [client.head(_png_url(run)).status_code for _ in range(21)]
     assert statuses[:20] == [200] * 20
-    assert statuses[20] == 403, 'the 21st HEAD in a minute was not refused'
+    assert statuses[20] == 429, 'the 21st HEAD in a minute was not refused'
 
 
 def test_a_render_failure_is_a_json_500():
