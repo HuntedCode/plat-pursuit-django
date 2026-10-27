@@ -190,7 +190,9 @@ def test_the_404_stays_a_404_for_visitors(client):
     resp = client.get('/no-such-page-oe/')
 
     assert resp.status_code == 404
-    assert 'Sought by <b>Trophy Hunter</b>' in resp.content.decode()
+    body = resp.content.decode()
+    assert 'Sought by <b>Trophy Hunter</b>' in body
+    assert '<nav' in body and 'err--standalone' not in body, 'a lost page keeps the site around it'
 
 
 @pytest.mark.parametrize('rel', ['templates/404.html', 'templates/429.html', 'templates/403.html',
@@ -242,7 +244,7 @@ def test_the_legal_pages_read_in_the_house_long_form_style(client, name):
     assert 'pp-doc' in client.get(reverse(name)).content.decode()
     # The template, not the page: the footer links the Support roadmap, a different thing.
     src = _read(f'templates/pages/{name}.html')
-    assert not re.search(r'class="[^"]*prose', src), 'prose does nothing here: no typography plugin'
+    assert not re.search(r'class="[^"]*\bprose\b', src), 'prose does nothing here: no typography plugin'
     assert 'roadmap' not in src.lower(), 'roadmaps are not live (owner, 2026-10-27)'
 
 
@@ -339,6 +341,18 @@ def test_a_reupload_remakes_the_items_copy(media_root):
     item.refresh_from_db()
     assert item.artwork_thumb.name != before
     assert badge_thumbs.thumb_is_current(item.artwork, item.artwork_thumb)
+
+
+def test_a_save_that_leaves_the_artwork_out_never_copies_unsaved_art(media_root):
+    """`update_fields` without `artwork` writes no artwork, so it must write no copy of one either: a copy of
+    the in-memory art would sit beside the old art in the row."""
+    item = ArtRevealItem.objects.get(pk=_event(n=1).items.get().pk)
+    before = item.artwork_thumb.name
+    item.artwork = _png(colour=(10, 200, 90, 255), name='unsaved.png')
+    item.released = True
+    item.save(update_fields=['released'])
+
+    assert ArtRevealItem.objects.get(pk=item.pk).artwork_thumb.name == before
 
 
 def test_saving_an_item_without_touching_its_art_writes_no_copy(media_root):

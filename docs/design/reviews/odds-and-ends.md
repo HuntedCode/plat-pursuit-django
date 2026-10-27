@@ -49,6 +49,25 @@ downloads 9.7 MB of art for an event that ended in June.
 - The goodbye page's tab read "Goodbye - PlatPursuit - Platinum Pursuit".
 - The retired-DaisyUI allowlist shrank by the `btn` uses on the rebuilt pages.
 
+## Audit (2026-10-27)
+
+An independent audit of the finished branch found, all fixed in the same branch:
+
+- **A refusal had become expensive.** The cooldown page rendered through `base.html`, so every refused request ran
+  the thirteen context processors; a limiter exists to shed load. It now renders standalone with no request.
+- **The JSON answer almost never fired.** The site's fetch helpers send no `Accept` header, so only `/api/` paths
+  (which DRF answers itself) qualified. Fetches are now told apart by the browser's `Sec-Fetch-Mode` /
+  `Sec-Fetch-Dest`.
+- **The share card download said "try again" when rate-limited**, because it only read a 403 as "too many" and
+  the plain-view PNG doors now answer 429.
+- **Pins and comments described the old behaviour**: tests expecting a tripped limit to be a 403, and comments
+  (and `security.md`) describing a GET-only `handler404` that made a POST's `Http404` a 405.
+- **Copy that was not quite true**: the optimizer plans A-Z and Job Coverage only; "Badges" is not a leaderboard;
+  a one-region game counts toward Mastery only as a bonus stage; Privacy now names the lists you make, not only
+  the ones you publish.
+- **Tests that could not fail**: About's link and sign-up checks matched the navbar and footer; they now read only
+  the page's own sections.
+
 ## Checked, not findings
 
 - **Privacy and Terms are current** on what matters: Stripe and PayPal, cookieless Cloudflare analytics, no ads,
