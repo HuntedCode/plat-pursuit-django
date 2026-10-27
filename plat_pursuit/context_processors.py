@@ -119,10 +119,9 @@ def hub_subnav(request):
     ``hub_section=None`` so the ``hub_subnav.html`` template short-circuits
     and renders nothing.
 
-    Dynamic behavior: the personal (My Pursuit) hub appends the viewer's Profile
-    as a dynamic item (its URL needs their username), and the personal strip is
-    auth-gated (hidden for anon). Viewing your OWN profile swaps that page's
-    Community chrome for the personal strip.
+    Dynamic behavior: the personal (My Pursuit) strip is auth-gated (hidden for
+    anon), and a view may name its own hub for the viewer (`hub_subnav_override`):
+    your OWN profile, game list or challenge run sits under My Pursuit.
 
     See ``docs/architecture/ia-and-subnav.md`` for the design rationale and
     the URL prefix matching algorithm.

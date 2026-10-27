@@ -66,8 +66,10 @@ def test_the_rail_turned_on_when_there_was_somewhere_else_to_go():
     #
     # STILL EXACT EQUALITY. Loosening this to `in` when the rail grew would let the next item join
     # unnoticed, which is the one thing this assertion exists to prevent.
+    #
+    # Hunters FIRST since 2026-10-27 (owner, review IA-05), so the nav button opens the rail's first item.
     assert [i.slug for i in hub.items] == [
-        'lists', 'profiles', 'challenges', 'challenges_hall_of_fame']
+        'profiles', 'lists', 'challenges', 'challenges_hall_of_fame']
 
 
 def test_hunters_is_chromed_as_community_everywhere_it_is_reachable():

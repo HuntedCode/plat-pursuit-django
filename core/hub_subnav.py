@@ -110,6 +110,9 @@ class HubSubnavConfig:
     icon: str | None
     prefixes: tuple[str, ...]
     items: tuple[HubSubnavItem, ...]
+    #: The url name the hub's nav button opens. Only the FOOTER reads it, and only for a hub with no rail
+    #: items (Leaderboards), which it lists as one link to this page.
+    landing: str = ''
 
 
 # ---------------------------------------------------------------------------
@@ -232,6 +235,7 @@ LEADERBOARDS_HUB = HubSubnavConfig(
     icon='bar-chart',
     prefixes=('/leaderboards/',),
     items=(),
+    landing='overall_badge_leaderboards',
 )
 
 
@@ -244,16 +248,16 @@ LEADERBOARDS_HUB = HubSubnavConfig(
 # always names itself.
 # Relabelled "Support Us" in 2026-09: "Support" alone reads as a help desk on most of the web, and
 # this is the one place a confused reader would look for one. Naming the ask is also the more earnest
-# form, which is the site's voice. NOTE the rail still reads "Support Us -> Support" because the first
-# ITEM keeps its name -- that one is an open naming question (Tiers? Ways to Help?) and is not being
-# decided by a rename that was about the hub.
+# form, which is the site's voice. The storefront ITEM kept the old name until 2026-10-27, when the
+# owner named it "Supporter Levels" (review IA-06): it names what the page sells, and the rail stopped
+# reading "Support Us -> Support". The slug stays `support`, an internal key.
 SUPPORT_HUB = HubSubnavConfig(
     key='support',
     label='Support Us',
     icon='heart',
     prefixes=('/support/', '/fundraiser/'),
     items=(
-        HubSubnavItem('support', 'Support', 'support_hub', 'heart', group='The project'),
+        HubSubnavItem('support', 'Supporter Levels', 'support_hub', 'heart', group='The project'),
         HubSubnavItem('roadmap', 'Roadmap', 'support_roadmap', 'map', group='The project'),
         HubSubnavItem('fundraiser', 'Badge Art', 'support_fundraiser', 'palette', group='The project'),
         HubSubnavItem('membership', 'My Membership', 'subscription_management', 'star',
@@ -280,7 +284,8 @@ SUPPORT_HUB = HubSubnavConfig(
 # NO LANDING PAGE, and it does not need one. `/community/` 301s permanently to `/leaderboards/` (live
 # since 2026-08 and therefore cached in browsers indefinitely, so it cannot be repointed) -- but a hub
 # here is a nav grouping, not an address, and every page in this one is its own destination. The
-# navbar button points at Hunters until there is a second item.
+# navbar button and tab open Hunters, the FIRST item (owner, 2026-10-27, review IA-05): every hub's
+# button opens its rail's first item, and Game Lists sat ahead of the page the button opened.
 COMMUNITY_HUB = HubSubnavConfig(
     key='community',
     label='Community',
@@ -290,31 +295,11 @@ COMMUNITY_HUB = HubSubnavConfig(
     # `/community/` is here for the Lists and Challenges pages served under it.
     prefixes=('/community/', '/hunters/', '/profiles/'),
     items=(
-        HubSubnavItem('lists', 'Game Lists', 'lists_browse', 'list'),
         HubSubnavItem('profiles', 'Hunters', 'profiles_list', 'user'),
-        # HISTORICAL, AND SUPERSEDED BY THE BLOCK BELOW -- kept only because the reasoning about where a
-    # not-yet item belongs is worth having if this ever happens again. Challenges shipped (2026-09), so
-    # there is no `Soon` tag on this rail and no coming-soon page behind it; the paragraph's "LAST, AND
-    # TAGGED" instruction and its citation of `test_the_unfinished_item_says_so_on_the_pill` are both dead
-    # (that test died with `test_challenges_coming_soon.py`). Read it as a record, not as the rule.
-    #
-    # A COMING-SOON PAGE EARNS A RAIL ITEM, which is not obvious. It is here because the rail is
-        # how somebody learns what this hub contains, and a hub of two while a third is weeks away
-        # reads as the whole offering. The page it points at is real and says so plainly -- the rule
-        # set when Challenges was parked was a page, never a redirect. It keeps its slug and url_name
-        # when the real browse replaces it.
-        #
-        # LAST, AND TAGGED. Last because the two things you can actually use should not sit behind
-        # the one you cannot; tagged because a pill that looks like its neighbours promises a
-        # destination like its neighbours, and somebody clicking it deserves to know before they do.
-        # Dropping the tag is what marks the feature as shipped.
-        # TWO ITEMS, and the `tag='Soon'` is gone (owner, 2026-09-30). Challenges lists the runs IN PROGRESS
-        # and the Hall of Fame the finished ones -- two audiences, two pages, so a visitor can reach the
-        # finished runs without first passing a page of half-filled boards.
-        #
-        # THE TAG HAD TO GO IN THE SAME CHANGE. A chip reading "Soon" outliving the thing it described tells
-        # every visitor the page is not ready, and dropping it is what marks the feature shipped -- which is
-        # exactly what `test_the_unfinished_item_says_so_on_the_pill` was written to hold until this moment.
+        HubSubnavItem('lists', 'Game Lists', 'lists_browse', 'list'),
+        # Two challenge items (owner, 2026-09-30): Challenges lists the runs IN PROGRESS and the Hall of
+        # Fame the finished ones -- two audiences, two pages, so a visitor can reach the finished runs
+        # without first passing a page of half-filled boards.
         HubSubnavItem('challenges', 'Challenges', 'challenges', 'flag'),
         HubSubnavItem('challenges_hall_of_fame', 'Hall of Fame', 'challenges_hall_of_fame', 'award'),
     ),
@@ -357,6 +342,8 @@ _URL_NAME_TO_SLUG_OVERRIDES: dict[str, tuple[str, str]] = {
     'franchise_detail': ('browse', 'franchises'),
     'badge_detail': ('browse', 'badges'),
     'badge_detail_with_profile': ('browse', 'badges'),
+    # The badge system's explainer sits under /badges/ and lit nothing (review IA-04).
+    'badge_how_it_works': ('browse', 'badges'),
     'genre_detail': ('browse', 'genres'),
     'theme_detail': ('browse', 'genres'),
     # Added when Jobs joined the Catalog rail (2026-08) -- and missed at the time, so browsing a job left
@@ -401,7 +388,12 @@ _URL_NAME_TO_SLUG_OVERRIDES: dict[str, tuple[str, str]] = {
     # an owner may call them -- and this map is keyed on the route, so they belong with their siblings here.
     'challenge_redeem': ('my_pursuit', 'my_challenges'),
     'challenge_redeem_all': ('my_pursuit', 'my_challenges'),
+    # The optimizer is a page of My Challenges (its trail says so) and lit nothing (review IA-04). Its
+    # other doors are fetch-only and render no rail.
+    'challenge_optimizer': ('my_pursuit', 'my_challenges'),
     'profile_detail': ('community', 'profiles'),
+    # A visitor's view of a hunter's day; the owner's is set by the view (`hub_subnav_override`).
+    'profile_day': ('community', 'profiles'),
     'trophy_case': ('community', 'profiles'),
     # Reviews archived 2026-05. The notice page matches the COMMUNITY hub by prefix (2026-09) --
     # which is where it would have lived -- and still renders no sub-nav strip, because that hub is
@@ -566,3 +558,31 @@ def build_rendered_items(
             tag_kind=tag_kind if override else ''))
     rendered.extend(extras)
     return tuple(rendered)
+
+
+@dataclass(frozen=True)
+class FooterColumn:
+    """One hub's column in the site footer."""
+    key: str
+    label: str
+    items: tuple[RenderedSubnavItem, ...]
+
+
+def footer_columns(*, is_authenticated: bool, is_member: bool = False) -> tuple[FooterColumn, ...]:
+    """The footer sitemap: every hub in nav order, each listing the rail items this viewer would see.
+
+    BUILT FROM THE CONFIG, NOT COPIED FROM IT. The footer was a hand-kept copy of these rails and drifted
+    every time a rail changed: Hunters under Browse for a commit, then Jobs, Challenges, My Lists and My
+    Challenges missing and Badges filed under My Pursuit (review IA-01). The gating is the rail's own
+    (`build_rendered_items`), so a signed-out visitor is never offered a page that only signs them in. A hub
+    with no rail items (Leaderboards) is one link to its landing.
+    """
+    columns = []
+    for hub in HUB_SUBNAV_CONFIG:
+        if hub.items:
+            items = build_rendered_items(hub, is_authenticated=is_authenticated, is_member=is_member)
+        else:
+            items = (RenderedSubnavItem(slug=hub.key, label=hub.label, url=reverse(hub.landing)),)
+        if items:
+            columns.append(FooterColumn(hub.key, hub.label, items))
+    return tuple(columns)

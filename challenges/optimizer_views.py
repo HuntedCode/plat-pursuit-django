@@ -341,6 +341,7 @@ class OptimizerView(LoginRequiredMixin, _LinkedProfileRequired, TemplateView):
             context.update(allowance_context(profile, self.request.user, state=preview_week(self.request)))
         context['saved_plan'] = saved_plan_context(profile, self.request.user, runs, context['allowance_saved'])
         context['breadcrumb'] = [
+            {'text': 'Home', 'url': reverse('home')},
             {'text': 'My Challenges', 'url': reverse('my_challenges')},
             {'text': 'Optimizer'},
         ]

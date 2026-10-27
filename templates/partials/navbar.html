@@ -48,10 +48,9 @@ data-nav-* hooks + the #nav-sync data-url-* attrs. The sync-search dropdown keep
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>Browse</a>
         <a href="{% url 'overall_badge_leaderboards' %}" class="pp-navhub{% if hub_section == 'leaderboards' %} is-active{% endif %}"{% if hub_section == 'leaderboards' %} aria-current="page"{% endif %}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>Leaderboards</a>
-        {% comment %}Community points at Hunters, its only member today. `/community/` itself 301s
-        to Leaderboards and always will, so the hub button targets a real page rather than a
-        redirect; when Game Lists comes off its gate the rail turns on and this stays as the
-        entry.{% endcomment %}
+        {% comment %}Community opens Hunters, its rail's first item, as every hub button opens its first
+        (review IA-05). `/community/` itself 301s to Leaderboards and always will, so the button targets a
+        real page rather than a redirect.{% endcomment %}
         <a href="{% url 'profiles_list' %}" class="pp-navhub{% if hub_section == 'community' %} is-active{% endif %}"{% if hub_section == 'community' %} aria-current="page"{% endif %}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>Community</a>
         <a href="{% url 'support_hub' %}" class="pp-navhub{% if hub_section == 'support' %} is-active{% endif %}"{% if hub_section == 'support' %} aria-current="page"{% endif %}>
@@ -60,7 +59,7 @@ data-nav-* hooks + the #nav-sync data-url-* attrs. The sync-search dropdown keep
 
     {% comment %} Site search: a persistent typeahead bar on md+ that collapses to an icon trigger
     below md (navbar-search.js drives it: #navbar-sync-form + data-search-* hooks for the typeahead
-    over games, badges, franchises and hunters, and the .add-sync-* hooks for the add-and-sync
+    over games, badges, jobs, franchises, game lists and hunters, and the .add-sync-* hooks for the add-and-sync
     fallback). The trigger's label names what the box searches, same as the input's (DS-12). {% endcomment %}
     <div class="pp-navsearch" id="navbar-search">
         {# Mobile trigger: opens the bar as a sheet below the nav (hidden on md+). #}

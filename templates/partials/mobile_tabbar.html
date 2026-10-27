@@ -83,7 +83,7 @@ See docs/architecture/ia-and-subnav.md for the design rationale.
             <span>Leaderboards</span>
         </a>
 
-        {% comment %}Community. Points at Hunters, its only member today: `/community/` is a
+        {% comment %}Community. Opens Hunters, the rail's first item: `/community/` is a
         permanent redirect, so the tab targets a real page.{% endcomment %}
         <a href="{% url 'profiles_list' %}" class="mobile-tabbar-item {% if hub_section == 'community' %}active{% endif %}" {% if hub_section == 'community' %}aria-current="page"{% endif %} aria-label="Community">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">

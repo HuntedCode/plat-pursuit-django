@@ -100,9 +100,10 @@ def test_hunters_is_a_community_surface_now():
     # `Soon` tag -- the two things you can use should not sit behind the one you cannot. See
     # `test_challenges_live.py`.
     # `challenges_hall_of_fame` joined the rail 2026-09-30 with the real Challenges pages. Exact equality
-    # is kept deliberately -- see the same assertion in `test_community_hub_returned.py`.
+    # is kept deliberately -- see the same assertion in `test_community_hub_returned.py`. Hunters first
+    # since 2026-10-27 (review IA-05).
     assert [i.slug for i in match['hub'].items] == [
-        'lists', 'profiles', 'challenges', 'challenges_hall_of_fame']
+        'profiles', 'lists', 'challenges', 'challenges_hall_of_fame']
     assert match['active_slug'] == 'profiles'
 
     # ...and Browse's Catalog lost exactly one entry. 'jobs' joined in 2026-08 (`/jobs/` is the public

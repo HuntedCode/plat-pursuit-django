@@ -340,10 +340,10 @@ class MyChallengesView(LoginRequiredMixin, _LinkedProfileRequired, TemplateView)
         context.update(intro_context(self.request, may_arm=True))
         # `text`, NOT `label`: `partials/breadcrumb.html` and `seo_tags` both read `text`, so a `label`
         # key rendered two EMPTY crumbs and two blank names in the JSON-LD. Every other caller on the
-        # site passes `text` and starts at Home; this did neither.
+        # site passes `text` and starts at Home; this did neither. No "My Pursuit" crumb: every My Pursuit page
+        # trails Home / page, as Browse trails Home / rail item / page (review IA-03).
         context['breadcrumb'] = [
             {'text': 'Home', 'url': reverse_lazy('home')},
-            {'text': 'My Pursuit', 'url': reverse_lazy('career')},
             {'text': 'My Challenges'},
         ]
         return context
@@ -730,7 +730,6 @@ class ChallengeDetailView(DetailView):
         if context['is_owner']:
             context['breadcrumb'] = [
                 {'text': 'Home', 'url': reverse_lazy('home')},
-                {'text': 'My Pursuit', 'url': reverse_lazy('career')},
                 {'text': 'My Challenges', 'url': reverse_lazy('my_challenges')},
                 {'text': challenge.name},
             ]

@@ -498,7 +498,8 @@ def test_the_breadcrumb_renders_its_labels():
     start = body.index('aria-label="Breadcrumb"')
     crumbs = body[start:body.index('</nav>', start)]
 
-    assert 'My Pursuit' in crumbs
+    # Home / My Challenges: no "My Pursuit" crumb since review IA-03 (My Pursuit trails name no hub).
+    assert 'My Pursuit' not in crumbs
     assert 'My Challenges' in crumbs
     assert 'Home' in crumbs
     assert "></a>" not in crumbs, "a breadcrumb rendered as an empty anchor"

@@ -13,13 +13,14 @@ from django_ratelimit.core import is_ratelimited
 from django_ratelimit.decorators import ratelimit
 
 from core.services.tracking import track_site_event
+from gamelists.models import GameList
 from trophies.psn_manager import PSNManager
 from trophies.services.collection_service import badge_type_label
 from trophies.services.flag_badges import work_keys_for_concepts
 from trophies.services.game_grouping_service import representative_concept_icon_subquery
 from trophies.services.sync_service import RefreshOutcome, SyncService
 from trophies.util_modules.cache import redis_client
-from ..models import BadgeSeries, Concept, Franchise, Game, GroupBadge, Profile
+from ..models import BadgeSeries, Concept, Franchise, Game, GroupBadge, Job, Profile
 
 logger = logging.getLogger("psn_api")
 
@@ -305,8 +306,10 @@ def _badge_art(series):
 
 class SiteSuggestView(View):
     """
-    Universal navbar typeahead. Suggests Games, Badges, Franchises, and tracked
-    Hunters matching the query, grouped by type, each linking to its detail page.
+    Universal navbar typeahead. Suggests Games, Badges, Jobs, Franchises, public Game
+    Lists and tracked Hunters matching the query, grouped by type, each linking to its
+    detail page. (Jobs and Game Lists joined 2026-10-27, review IA-02: neither could be
+    found by name anywhere on the site.)
     Widens the profile-only ProfileSuggestView; the client keeps the add-and-sync
     fallback (SearchSyncProfileView) for Online IDs that aren't tracked yet.
 
@@ -317,8 +320,9 @@ class SiteSuggestView(View):
 
     Title matching is substring (icontains), served sub-ms by the pg_trgm GIN
     indexes on Concept.unified_title / Franchise.name (migration 0257). BadgeSeries.name
-    has no such index: it is one row per badge, small enough to scan. Hunters stay
-    prefix (istartswith), like ProfileSuggestView.
+    has no such index: it is one row per badge, small enough to scan; nor do Job (25
+    rows) or GameList.name, which is scanned only over the public lists, bounded to
+    PER_GROUP. Hunters stay prefix (istartswith), like ProfileSuggestView.
     """
     PER_GROUP = 5
     CACHE_TTL = 60  # seconds; global catalog, a short lag on freshly-synced profiles is fine.
@@ -346,13 +350,14 @@ class SiteSuggestView(View):
 
         # Hash the normalized query so spaces/unicode/length can't produce an invalid
         # or oversized cache key (the response is identical for every viewer).
-        cache_key = f'sitesuggest:v3:{hashlib.md5(q.lower().encode()).hexdigest()}'
+        cache_key = f'sitesuggest:v4:{hashlib.md5(q.lower().encode()).hexdigest()}'
         cached = cache.get(cache_key)
         if cached is not None:
             return JsonResponse(cached)
 
+        # Hunters LAST, beside the add-and-sync row that follows the list.
         groups = [g for g in (
-            self._games(q), self._badges(q), self._franchises(q), self._hunters(q),
+            self._games(q), self._badges(q), self._jobs(q), self._franchises(q), self._lists(q), self._hunters(q),
         ) if g['items']]
         payload = {'groups': groups}
         cache.set(cache_key, payload, self.CACHE_TTL)
@@ -428,6 +433,19 @@ class SiteSuggestView(View):
             })
         return {'type': 'badge', 'label': 'Badges', 'items': items}
 
+    def _jobs(self, q):
+        # The discipline is the type tag, the way a franchise row says Franchise or Series.
+        rows = Job.objects.filter(name__icontains=q).order_by('name')[:self.PER_GROUP]
+        items = [
+            {
+                'label': job.name,
+                'sublabel': job.get_discipline_display(),
+                'url': reverse('job_detail', kwargs={'slug': job.slug}),
+            }
+            for job in rows
+        ]
+        return {'type': 'job', 'label': 'Jobs', 'items': items}
+
     def _franchises(self, q):
         # source_type disambiguates same-named franchise vs collection ("Series").
         # slug is unique + non-null, but guard the empty case for parity so a stray
@@ -455,6 +473,27 @@ class SiteSuggestView(View):
             for r in rows
         ]
         return {'type': 'franchise', 'label': 'Franchises', 'items': items}
+
+    def _lists(self, q):
+        # Public lists only (`.public()`, the one supported read of somebody else's list), and never one a
+        # moderator hid the words of: a match would confirm the hidden name contains the query, the leak the
+        # browse page's own search closes the same way. The response is cached for every viewer alike, so a
+        # hunter's private lists could not be offered here even to them. Most-liked first.
+        rows = (
+            GameList.objects.public()
+            .filter(name__icontains=q, text_hidden=False)
+            .select_related('owner')
+            .order_by('-like_count', '-game_count', 'id')[:self.PER_GROUP]
+        )
+        items = [
+            {
+                'label': gl.display_name,
+                'sublabel': f'{gl.game_count} game{"" if gl.game_count == 1 else "s"}',
+                'url': reverse('list_detail', kwargs={'list_id': gl.pk}),
+            }
+            for gl in rows
+        ]
+        return {'type': 'list', 'label': 'Game Lists', 'items': items}
 
     def _hunters(self, q):
         # Prefix match ranked by trophy weight, as ProfileSuggestView does -- but with an EXACT match

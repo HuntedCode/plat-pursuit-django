@@ -1,398 +1,118 @@
 # Information Architecture and Sub-Navigation
 
-> **Shipped state (IA rebuild, 2026-07).** This replaces the earlier hub-of-hubs model (Home /
-> Browse / Community / My Pursuit with a separate Dashboard). The four-part IA build: personal-hub
-> unify, the Support hub, ownership-aware profile chrome, and the mobile collapse-to-grid strip.
+> **Current as of 2026-10-27** (rewritten by the [IA review](../design/reviews/ia.md), which found this doc
+> describing four hubs, a Profile rail item and the retired hotbar). The chrome that carries this structure
+> (navbar, tab bar, avatar menu, footer, search, trails) is in [Navigation](../features/navigation.md).
 
 ## The hubs
 
-The IA is **four** top-level hubs today, reached from the global navbar (and the mobile bottom tab
-bar), with a **fifth decided and not yet built** (Community, below). Each owns a family of pages; a
-sticky sub-nav strip below the navbar surfaces that hub's pages, URL-matched.
+Five hubs, each answering one question. Every page belongs to at most one, and a sticky sub-nav rail below the
+navbar lists that hub's pages.
 
-| Hub | Landing | Owns | Mental mode |
-|-----|---------|------|-------------|
-| **My Pursuit** (personal) | `/career/` | the personal, login-gated surfaces (at root URLs) | "my identity + progression" |
-| **Browse** | `/games/` | public discovery / list pages | "find content" |
+| Hub | Opens | Question | Rail |
+|-----|-------|----------|------|
+| **My Pursuit** (signed in only) | `/career/` | "how am I doing" | Progress: Career, Collection, Milestones, Titles. Tools: Plat Cards, Recap, Rate My Games, My Lists, My Challenges |
+| **Browse** | `/games/` | "what is there" | Catalog: Games, Trophy Lists, Badges, Jobs, Recently Added. Curation: Franchises, Companies, Genres & Themes |
+| **Leaderboards** | `/leaderboards/` | "where do I stand" | none: one page, with its own board switchers |
+| **Community** | `/hunters/` | "what is everyone doing" | Hunters, Game Lists, Challenges, Hall of Fame |
+| **Support Us** | `/support/` | "how can I help" | The project: Supporter Levels, Roadmap, Badge Art. Yours: My Membership (members only) |
 
-> **2026-08:** Browse's Catalog rail gained **Jobs** (`/jobs/`, + `/jobs/<slug>/`). A catalogue of
-> jobs is a browse surface, not a Leaderboards one -- its relationship to Career's Dossier is the
-> Collection-vs-Browse-Badges split (*scope, not pagination*): Career shows YOUR standing across the
-> 24 jobs, `/jobs/` shows what they are. (2026-08: `/jobs/` was brought onto the shared HTMX browse
-> contract with the rest of the hub, and its wall is five across at `lg` so each discipline occupies
-> one row -- see the rebuild playbook.) Leaderboards briefly gained a sub-nav at the same time
-> (Global / Game / Badge / Job Boards) and **lost it again before the end of the month**: the three
-> board directories were removed as second copies of `/games/`, `/badges/` and `/jobs/`, and the hub is
-> back to `items=()` -- the shape it was designed with, and the one Support runs in. A hub landing is
-> reached by its own navbar entry; a one-pill rail naming the page you are on is not navigation. See
-> [leaderboards-rebuild](../design/rebuild/leaderboards-rebuild.md).
-| **Leaderboards** | `/leaderboards/` | how everyone ranks (PSN-derived) | "where do I stand" |
-| **Community** | `/community/`, `/hunters/` | hunters, and what they make: lists, challenges, the Hall of Fame | "what is everyone doing" |
-| **Support Us** | `/support/` | the membership storefront + `/support/roadmap/` + `/support/membership/` + `/support/fundraiser/` (all live) | "ways to support us" |
+Every hub's nav button opens its rail's first item (Community lined up on 2026-10-27, review IA-05).
 
-**Above the hubs: the lobby (`/`).** Where every login lands (`LOGIN_REDIRECT_URL`), and the one page
-that belongs to NO hub — so it renders no sub-nav strip, because on a lobby the CTAs *are* the navigation
-and a hub rail underneath them would be a second, competing set of directions. Its only nav affordance is
-the navbar wordmark, which takes the same active treatment a hub button does when you are standing on it.
-Its job is narrow and should stay that way: confirm the data is fresh, show the trophy floor (first, since
-it is what everyone arrives for and the one thing that is full on day one), and put the two moats — Career
-and Collection — one click away. **The rule it lives by, and the reason the old dashboard was retired: a
-curated GLANCE that teases and links into a page, never the page's content embedded.** Overview, which
-used to be the personal hub's first tab, was narrowed into this in 2026-08.
+**Above the hubs: the lobby (`/`).** Where every sign-in lands (`LOGIN_REDIRECT_URL`), and the one page that
+belongs to no hub, so it renders no rail: on a lobby the calls to action are the navigation. Its only chrome
+route is the navbar wordmark, which takes a hub button's active state while you stand on it. Its job is narrow:
+confirm the data is fresh, show the trophy floor, and put Career and Collection one click away. A glance that
+links into pages, never a page's content embedded (the reason the old dashboard was retired, 2026-08).
 
-**Organizing principle — "login-gated + mine."** A surface belongs to My Pursuit if it's personal
-AND login-gated. Browse = find; Leaderboards = standings; Support = ways to support.
-Gamification expands My Pursuit's strip; it does not earn its own hub.
+**Outside every hub:** Settings, the auth pages, About, Contact, Privacy, Terms, What's New, the error pages and
+staff pages. They render no rail and no trail.
 
-**The "resist a 5th hub" rule was amended in 2026-09, deliberately and narrowly.** It used to end
-"four mental modes, four hubs — resist a 5th," and that is still the right default. What it missed is
-that the four modes sort by the reader's INTENT (find / rank / mine / support) while there is a second
-axis the nav has to respect: **who authored the thing**.
+## How pages are sorted
 
-Everything in Browse and Leaderboards is content the SITE owns — Games, Trophy Lists and Recently
-Added are PSN; Franchises, Companies and Genres are IGDB; Badges and Jobs are PlatPursuit-authored;
-the boards rank facts derived from PSN. Not one item is something a hunter wrote.
+- **Mine and signed-in only goes to My Pursuit.** Gamification grows My Pursuit's rail; it does not earn a hub.
+- **The private side of a public system is still mine.** My Lists and My Challenges sit in My Pursuit while the
+  public Game Lists and Challenges sit in Community, exactly as Collection sits in My Pursuit while Badges sits
+  in Browse. A hub is a mode, not a feature's address.
+- **Who authored it is the second axis.** Browse and Leaderboards hold only what the site owns: PSN data (games,
+  trophy lists, the boards), IGDB data (franchises, companies, genres) and what the team authored (badges,
+  jobs). What hunters make (lists, challenge runs) is a different class, moderated and restrictable under the
+  `all_ugc` scope, and lives in Community with the hunters themselves. That axis is why Community exists as a
+  fifth hub (2026-09); a surface that is merely new still has to fit one of the five.
+- **A hub with one page carries no rail.** A single pill naming the page you are on is not navigation. That is
+  why Leaderboards has none (its three board directories were removed in 2026-08 as copies of `/games/`,
+  `/badges/` and `/jobs/`; each entity's board lives on its own detail page), and why Support and Community each
+  turned their rail on only when a second destination arrived.
+- **A page whose hub depends on who is looking says so itself.** Your own profile, game list or challenge run
+  sits under My Pursuit; anybody else's sits under Community. The view sets `request.hub_subnav_override`.
 
-User-generated content is a different class, and the codebase already says so: `restriction_service`
-carries an `all_ugc` scope — one switch governing comments, reviews, ratings and game lists — because
-UGC is moderated, reportable, restrictable and removable in ways site-owned content is not. Taking
-down somebody's list is categorically unlike delisting a game. **So the fifth hub exists because of a
-different rule set, not a different intent**, and the default stands for everything else: a surface
-that is merely *new* still has to fit one of the four.
+## Resolution
 
-## Community (decided 2026-09, NOT YET BUILT)
+`core.hub_subnav.resolve_hub_subnav(request)` answers in this order:
 
-> **Built 2026-09-13, except the rail.** `COMMUNITY_HUB` exists, Hunters moved out of Browse,
-> the mobile tab bar swapped Support Us for Community, and the Support hub is relabelled. What is
-> NOT built is the sub-nav rail: the hub runs `items=()` because a single pill naming the page you
-> are already on is not navigation — the same reasoning that emptied the Leaderboards rail. Game
-> Lists joins when it comes off `_DevelopmentGate` (`HubSubnavItem` has no staff gate, so an entry
-> added earlier would show every visitor a link that 302s them), and the rail turns on then.
-> Pinned by `test_community_hub_returned.py`.
+1. **The view's own answer**, `request.hub_subnav_override = (hub_key, slug)`. The context processor runs after
+   the view, so the attribute is there in time. An unknown hub key falls through rather than blanking the rail.
+   Today: a profile and its day pages (`OWN_PROFILE_HUB`, My Pursuit with no item lit), a game list
+   (`my_lists`) and a challenge run (`my_challenges`), each for its owner only.
+2. **`_URL_NAME_TO_SLUG_OVERRIDES`**, for pages whose url name is not a rail item's. Every detail page needs a
+   line here: prefix matching finds the hub, but the lit item is an exact url name match, so a page shipping
+   without a line renders its hub's rail with nothing lit, silently (the `job_detail` failure, and IA-04's
+   optimizer, How badges work and a visitor's day page).
+3. **The bare `/`** returns no hub. An equality check, so no deeper path falls into it.
+4. **Longest prefix wins** across every hub's `prefixes`.
 
-| | |
-|---|---|
-| Will hold | Hunters, Game Lists, Challenges, Hall of Fame / community stats |
-| Prefixes | `/community/`, `/hunters/` |
-| Question it answers | "what is everyone making and doing" |
+The context processor (`plat_pursuit/context_processors.py`, `hub_subnav`) then drops the My Pursuit rail for a
+signed-out viewer (so public members like `/milestones/` sprout no personal rail) and builds the items with
+`build_rendered_items`, which drops `auth_required` items for signed-out viewers and `membership_required`
+items for non-members, except whichever item is the current page, which always names itself.
 
-**Hunters moves back from Browse.** It went there in 2026-08 only because this hub was retired
-("hunters are another thing you browse"), and while a profile is mostly PSN data, you look for a
-community member where the community is. It keeps `/hunters/` — a sub-nav move, not a URL move.
-
-### Challenges: a public page under a hub that does not exist yet
-
-Worth recording because it looks like a mistake and is not. The rebuilt Challenge system ships two
-surfaces, at two prefixes, for two different reasons:
-
-| Surface | Route name | Prefix | Why there |
-|---|---|---|---|
-| My Challenges | `my_challenges`, plus `challenge_start` and the run's write doors | `/my-challenges/` | personal, login-gated, a working surface |
-| A run's own page | `challenge_detail` | `community/challenges/<id>/` | **public.** A finished run is something you show somebody |
-
-`community/challenges/` is now the real browse page (runs in progress), with `community/challenges/hall-of-fame/`
-beside it for the finished ones — both rail items, both public read-only. The coming-soon placeholder that
-held this URL is **deleted** (`ChallengesComingSoonView` and its template are gone, 2026-09), which is what
-it was written for: it held the URL and the route name so the real browse could take both without a single
-link changing.
-
-The run page predates both, and the reason it was given a permanent public address first still stands: it is
-somebody's artefact rather than a hub item, so it needed an address that would not move when the hub around
-it arrived.
-
-**Its rail highlight needs a line in `_URL_NAME_TO_SLUG_OVERRIDES`,** and it shipped without one. Prefix
-matching resolves the *hub*; the active *item* is an exact `url_name` match, so `challenge_detail` lit
-nothing until it was mapped to the `challenges` item — the same silent failure this doc records for
-`job_detail`. Nesting a URL under a hub's prefix never lights an item.
-
-Its trail depends on WHO IS LOOKING (owner, 2026-10-10). A visitor gets the PUBLIC trail and rail, *Home /
-Challenges* under Community: pointing everybody at *My Pursuit → My Challenges* sent anonymous readers to a login
-screen from a page that never asked them to sign in, and sent signed-in visitors to THEIR OWN runs from a page
-about somebody else's. The run's OWNER gets *Home / My Pursuit / My Challenges / <run>*, the My Pursuit rail with
-My Challenges lit, and a "Back to My Challenges" button, because for them the page is a working surface they
-swap to and from. The rail half uses the per-request override below.
-
-**What did NOT move, and why the line holds:**
-
-- **My Lists and My Challenges stay in My Pursuit → Tools.** The private side of a public system is
-  still personal and login-gated, exactly as *Collection* stays in My Pursuit while *Badges* sits in
-  Browse. A hub is not a feature's address; it is a mode. (`/my-challenges/` shipped there in
-  `feature/challenges/rebuild`, so this one is settled rather than planned.)
-- **Leaderboards stays raw PSN standings.** Challenge boards and the Hall of Fame will go to
-  Community, because what they rank is participation in a PlatPursuit activity rather than a PSN
-  fact.
-- **Browse stays the site-owned catalogue**, which is what it was already.
-- **Community challenges** (collective, site-wide goals) follow the Badge Art Reveal shape — a
-  site-wide banner plus an event page — rather than becoming a hub item.
-
-`/community/` itself 301s to `/leaderboards/` and will keep doing so. That is fine because THIS
-hub needs no landing page — its pages are Hunters, Lists and Challenges, each of which is its own
-address. It is not a general rule: the table above has a **Landing** column for a reason, and
-`/support/` in particular is a real page (`SupportStorefrontView`) that is simultaneously the hub
-root, the hub's first rail item and the mobile tab's target.
-
-The redirect is exact-path and was set for inbound links, so `/community/lists/` is unaffected. It
-also cannot be repointed — a permanent redirect live since 2026-08 is cached in browsers
-indefinitely.
-
-### The mobile trade
-
-The tab bar holds four, and five does not fit: items are `flex: 1` at `0.62rem`
-(`chrome.css`), so a fifth takes each from ~93px to ~75px at 375px, while "Leaderboards" alone
-runs ~68-72px of text before padding (measured by eye, not computed — it is close enough to the
-floor to decide the question either way). So **Support leaves the tab bar for the avatar
-dropdown** (its own labelled entry near the top, marked active when `hub_section == 'support'`)
-and Community takes the slot.
-
-**All five appear from `md`, and the mechanism is the tab bar rather than the navbar.** The desktop
-hub row is `hidden lg:flex` and the bar is `lg:hidden`, so `md` never sees the navbar's hubs — the
-fifth tab comes back in the BAR instead, via a `.mobile-tabbar-item--wide` modifier that is
-`display: none` by default and `flex` from 768px. At that width each tab has ~153px, which is ample.
-
-That is what closes the one real cost of the trade: below `md`, no tab highlights while you are in
-Support Us. From `md` up, it does again.
-
-(The tab count runs **3 / 4 / 4 / 5** across anon-below-`md`, anon-from-`md`, auth-below-`md` and
-auth-from-`md` — My Pursuit is auth-gated and Support Us is width-gated.)
-
-Support Us is the right one to demote by frequency: a storefront, a roadmap, a fundraiser page and a
-membership manager are occasional visits, where lists and challenges are habitual. The cost is that
-no tab highlights while you are in Support Us — accepted knowingly, and smaller than it sounds,
-because that hub carries its own sub-nav rail showing which of its four pages you are on. The tab bar
-echo is redundant orientation there, not the only signal.
-
-### "Support Us", not "Support"
-
-Applied 2026-09-13 to the HUB. Its first item is still called "Support", so the rail reads
-"Support Us → Support" — that one is the open naming question below and was deliberately not decided
-by a rename that was about the hub. "Support" alone reads as a help desk on most of the web, and this is the one place a
-confused reader would look for one. Naming the ask is also the more earnest form, which is the site's
-voice. It resolves a small existing oddity too: the hub and its first item were both called Support,
-so the rail read "Support → Support".
-
-> **Open, small:** that first item — the tier storefront — probably wants a truer name now that it
-> sits under "Support Us" beside "My Membership". Something like *Tiers* or *Ways to Help*.
-
-> **Community was retired (2026-08) and returned (2026-09).** It was retired not because community
-> failed but because everything in it had gone somewhere else: Challenges retired, Reviews archived,
-> Lists hidden pending a revamp (since rebuilt and made PUBLIC in 2026-09), Profiles moved to Browse, Rate My Games to My Pursuit → Tools (it
-> makes community DATA, but the act is personal and login-only), and Leaderboards promoted to a hub of
-> their own. What remained was a landing page with nothing of its own to land on.
->
-> It came back when Game Lists was rebuilt and Challenges was scoped with a public browser, a
-> nearest-completion board and a Hall of Fame — i.e. when there was user-generated content again. See
-> **[Community (returned 2026-09)](#community-returned-2026-09)** below for the hub and the amended
-> principle behind it. The question this note used to leave open — "if Lists, Reviews or the Pursuit
-> Feed come back, they need a home" — is answered for Lists and Challenges. **Reviews and the Pursuit
-> Feed are still open**, though the same provenance rule would put both here.
-
-## The personal hub (My Pursuit)
-
-My Pursuit's landing is **Career** (the nav button and mobile tab point there). The logged-in Home (`/`)
-is the lobby above the hubs, not this hub's root. The strip is grouped
-**5 progress + 3 tools** with a divider between:
-
-`Overview · Collection · Career · Milestones · Titles` **|** `Plat Cards · Recap · Profile`
-
-(The Lab + Research Panel merged into **Career**. **My Stats** was pulled for the 1.0 launch — `/stats/`
-redirects to Home; deliberately out of scope for the site-wide rebuild and returning later as its own tool, see [stats-page.md](../design/stats-page.md).)
-
-- **Root URLs.** The personal pages live at root: `/collection/`, `/lab/`, `/research-panel/`,
-  `/milestones/`, `/titles/`, `/shareables/`, `/recap/` (+ `/profile-editor/`). The old
-  `/my-pursuit/*` and `/dashboard/*` paths 301-redirect to them
-  (`RedirectView(pattern_name=…, permanent=True, query_string=True)`). URL `name=`s are unchanged,
-  so no `{% url %}` calls moved. Bare `/my-pursuit/` and `/dashboard/` now redirect to `/`.
-- **Auth-gated strip.** The personal strip is a login-gated wayfinder. For anonymous viewers the
-  context processor returns `hub_section=None`, so `/` reads as a hero with no strip (and public
-  members like `/milestones/` / `/research-panel/` show no personal strip either).
-- **Anon-hidden nav entry.** The My Pursuit navbar button and its mobile tab are wrapped in
-  `{% if user.is_authenticated %}` — a logged-out visitor has no pursuit to show and the logo already
-  reaches `/`, so the entry would be redundant *and* mislabeled (and it wouldn't even highlight,
-  since the anon strip is gated off). Anon therefore sees 3 mobile tabs (Browse / Leaderboards /
-  Support); the tab bar's `justify-around` inner distributes 3 or 4 evenly, no CSS change needed.
-- **No Profile item, and no ownership-aware chrome (both removed 2026-08).** They only ever worked as
-  a pair: the dynamic Profile tab needed the viewer's own username, and the chrome swap existed to put
-  your own profile under the personal strip *so that tab could be highlighted*. Removing the tab alone
-  would have rendered a strip highlighting nothing and naming nothing in the mobile collapse bar. Every
-  profile page now carries the same Browse chrome whoever is viewing, and the avatar menu is the single
-  route to your own.
-
-## Support hub
-
-`/support/` (`users.views.SupportStorefrontView`) **is** the membership storefront, not a landing
-that links to one. Three sections: a **split header** (the statement left; an amount-first purchase
-box right — six supporter levels, Backer → Cornerstone, monthly/yearly cycle radios, a mock
-leaderboard-row preview showing the viewer's own name wearing the level, and a perks `<dialog>`), a
-four-cell **paid band** (supporters / monthly support / months running / ads served), and the
-**Credits** (the consent-gated supporter wall, `Profile.show_on_supporter_wall`). The ladder is
-PLACEHOLDERS until its Stripe/PayPal SKUs exist (`SUPPORT_TIERS_ARE_PLACEHOLDERS`, forced off in
-live mode). `/users/subscribe/` 302s in and its template is deleted.
-
-`/support/roadmap/` shipped 2026-08-22 (`SupportRoadmapView`): forward-only — upcoming features as
-icon cards in three certainty tiers (in the works / up next / the wishlist, `ROADMAP_TIERS` +
-`ROADMAP_FEATURES` in `users/constants.py`), no dates or counts anywhere, test-enforced. The
-storefront carries a roadmap band teasing three features per tier in the same vocabulary.
-
-`/support/membership/` shipped 2026-08 (`SubscriptionManagementView`, moved from
-`/users/subscription-management/`): the manage side of the hub -- level-tinted status card
-(state via `SubscriptionService.membership_status`: active / past_due / grace / none), billing
-facts, tenure, provider-branched actions (Stripe billing portal as a POST action; PayPal cancel
-in a dialog), the perk tiles, and the wall opt-out. The old URL is a PERMANENT 302 (never 301 on
-a payment-adjacent URL -- it is baked into every sent lifecycle email and stored notification);
-the `subscription_management` route NAME moved with the page so every reverse() caller followed.
-Staff (or DEBUG) can eyeball every state via `?preview=<active|cancelling|grace|past-due|paypal|
-paypal-grace|legacy|none>` -- fabricated context, disarmed controls, real name only.
-
-The view lives in `users.views` rather than `core.views` because **it answers this page's checkout
-POST**. The form carries no `action`, so it self-POSTs to whatever URL rendered it; serving the form
-here while the handler stayed at `/users/subscribe/` would mean a redirect on a POST, which browsers
-turn into a GET with the body dropped. Handler and form must share a URL. For the same reason the old
-URL redirects **temporarily** (302): a cached permanent redirect on a payment URL cannot be taken back.
-
-**The Support RAIL is ON (2026-08-22):** Support / Roadmap / Badge Art / My Membership, four
-real destinations, which is what makes the reversal of the Leaderboards-rail removal principled
-("a rail naming the page you're on is not navigation" held because that hub collapsed to ONE
-page; Support grew to four). "Badge Art" names the campaign's content rather than the mechanism.
-"My Membership" is `membership_required` (premium_tier truthiness, the same gate as the navbar's
-own link) and sits in its own `Yours` group -- non-members and anon viewers see three items,
-because a non-member's door is the storefront.
-The slugged campaign pages (`fundraiser` / `fundraiser_success` URL names) light the Fundraiser
-item via `_URL_NAME_TO_SLUG_OVERRIDES`. The paired `LEADERBOARDS_HUB` comment block in
-`hub_subnav.py` was revised with this flip, as both blocks required.
-
-`/support/fundraiser/` (`FundraiserLandingView`, name `support_fundraiser`) is the rail item's
-no-args target: a pure resolver that 302s to the latest STARTED campaign's slug page (live
-first, else most recent by start date, which covers the ended celebration; a drafted upcoming
-campaign is skipped so the public is never bounced home), with a quiet card when no campaign has
-ever run. The campaign itself stays at `/fundraiser/<slug>/` -- the one payment-adjacent surface
-(processor cancel URLs + sent emails land there), which is why the landing redirects instead of
-rendering. Two fundraiser lookups in `fundraiser/models.py`: `get_active_fundraiser()`
-(banner_active + live, for the site-wide banner) vs `get_live_fundraiser()` (live window only,
-the landing's first choice). Both cache a PK for 60s on their own key.
-
-The hub keeps the name **Support** (settled 2026-08-19; it was flagged as a placeholder). It covers
-both halves of what lives here, where "Membership" would name only one of them.
-
-## Sub-nav infrastructure
+## Configuration
 
 | File | Purpose |
 |------|---------|
-| `core/hub_subnav.py` | `HubSubnavConfig` / `HubSubnavItem` dataclasses, `HUB_SUBNAV_CONFIG`, `resolve_hub_subnav(request)`, `build_rendered_items(...)` |
-| `plat_pursuit/context_processors.py` | `hub_subnav(request)` — runs every request; builds the template context |
-| `templates/partials/hub_subnav.html` | the strip (desktop row + mobile collapse-grid) |
-| `templates/partials/navbar.html` | 4 hub buttons + avatar dropdown |
-| `templates/partials/mobile_tabbar.html` | 4 bottom tabs (`<lg`) |
+| `core/hub_subnav.py` | `HubSubnavConfig` / `HubSubnavItem`, `HUB_SUBNAV_CONFIG` (nav order), `resolve_hub_subnav`, `build_rendered_items`, `footer_columns` |
+| `plat_pursuit/context_processors.py` | `hub_subnav(request)`: the rail's template context, plus the attention marks (`_subnav_marks`) |
+| `templates/partials/hub_subnav.html` | The rail: desktop row with More overflow, phone collapse bar and sheet |
+| `core/templatetags/chrome_tags.py` | `{% footer_hubs %}`: the footer's columns, from the same config |
 
-- **Config.** `HubSubnavConfig(key, label, icon, prefixes, items)` + `HubSubnavItem(slug, label,
-  url_name, icon, auth_required, divider_before)` (frozen dataclasses). `HUB_SUBNAV_CONFIG` holds
-  My Pursuit / Browse / Leaderboards / Support.
-- **Resolution.** `resolve_hub_subnav(request)`: (0) a VIEW's own answer, `request.hub_subnav_override =
-  (hub_key, slug)`, for a page whose hub depends on the viewer rather than its URL (the challenge run page and a
-  game list's page, each for its owner); the context processor reads it after the view has run, and an unknown hub key falls through to the
-  rules below rather than blanking the rail; (1) `_URL_NAME_TO_SLUG_OVERRIDES` — sub-pages whose
-  url_name differs from their tab short-circuit here (e.g. `game_detail` → Browse/trophy-lists:
-  the whole `/games/<np>/` list family, roadmaps included, lights the list-level catalogue,
-  while the concept `game_page` lights Games); (2) the
-  **exact `/`** case → My Pursuit + `overview`; (3) **longest-prefix-wins** across every hub's
-  prefixes. The bare-root case is an equality check, so `/profiles/...` never falls into it.
-- **Context processor.** `hub_subnav()` returns `hub_section`, `hub_subnav_label`/`icon`,
-  `hub_subnav_items`, `hub_subnav_active_slug`, and `hub_subnav_active_label` (the current page, for
-  the mobile bar). It also applies the My Pursuit anon auth-gate, the ownership-aware profile swap,
-  and the dynamic Profile extra. `build_rendered_items` drops `auth_required` items for anon and
-  `reverse()`s each url_name (a `NoReverseMatch` skips the item, never 500s).
-- **Dynamic items** resolve their own URL (kwargs) before reaching the template; pass them via the
-  `extras` tuple (the Profile item is the surviving example). Prefer piggybacking existing cache
-  keys over new per-request DB reads.
-- **Attention marks** (2026-09-30) are per-viewer chips on an EXISTING item, so they come through
-  `build_rendered_items(..., tags={slug: (text, kind, aria)})` rather than `extras`. `tags` overrides an
-  item's chip ATOMICALLY {DASH} text, `tag_kind` and `tag_aria` together {DASH} so an entry with no text leaves the
-  config's own `'Soon'` untouched, and a mark can never wear a label's word or vice versa.
-  `RenderedSubnavItem.tag_kind` picks the look: `''` is the amber `'Soon'` chip, `count` the nav's primary
-  number, `xp` its accent lozenge. The marks must NOT borrow amber: on this site amber means "not ready yet",
-  which is the opposite of what a claimable reward says.
-
-  Today's only producer is `_subnav_marks` in `plat_pursuit/context_processors.py`: the My Pursuit strip's
-  Career item carries the claimable-contract count and My Challenges carries the XP mark, because the parent
-  nav item AGGREGATES and, with two pages now paying job XP, could not say which one it meant. It piggybacks
-  the nav's two cached keys (`career:claimable:<pk>`, `career:chalxp:<pk>`) exactly as the bullet above asks,
-  is gated on the `my_pursuit` hub key before any read, honours `?preview=career-markers` the same way the nav
-  does, and fails closed. Note `hub_subnav` is registered BEFORE `career_attention`, so the strip is the one
-  that pays a cold miss.
-- **The moments pill** (2026-10) sits at the END of the My Pursuit strip, after the rail and its More (so the
-  rail's fold still measures only itself), and beside the collapsed bar on phones: "3 new platinums" opens the
-  platinum reel. It is `{% moments_pill %}`, rendered only when `hub_section == 'my_pursuit'`, reading the
-  same once-per-request read as the moment player. See [Celebration Moments](../features/moments.md).
-
-### The strip: desktop row + mobile collapse-to-grid
-
-- **Desktop (lg+):** a single horizontal-scroll row — hub label + icon, the 6+4 divider
-  (`item.divider_before`), pill items. Active pill = filled + primary border + `aria-current`.
-- **Mobile (<lg):** a one-line **collapse bar** (`▦ Hub · current-page ▾`) that taps open an
-  **absolute overlay grid** (`grid-cols-3`, the 6+4 divider preserved) dropping over the content.
-  The panel is `absolute` (z-40, above the hotbar's z-30) so expanding it does not reflow the sticky
-  chrome. A delegated `main.js` handler toggles it (open on the bar, close on outside-click or
-  Escape → focus returns to the toggle). The collapsed panel uses `visibility:hidden` + `aria-hidden`
-  so its links leave the tab order + AT tree; the transitions honor `prefers-reduced-motion`.
-- Support has `items=()`, so its whole `<nav>` is short-circuited by the
-  `{% if hub_section and hub_subnav_items %}` guard — it renders nothing.
-
-### Sticky chrome
-
-Three pinned top-of-viewport elements (all sticky at every breakpoint): navbar `top-0 z-50` (~64px),
-sub-nav `top-16 z-40`, hotbar `top-[7.25rem] z-30` inside a hub family (falls back to `top-[4.5rem]`
-on non-hub pages where the sub-nav is hidden), plus the mobile bottom tab bar `bottom-0 z-40`
-(`<lg`, ~56px). The Tailwind `top-*` classes are first guesses; **`alignStickyChrome()` in
-`main.js`** measures the actual navbar height on load / resize / `fonts.ready` / `hotbar:toggle` and
-inline-styles the sub-nav + hotbar `top:` to match, insulating against font/DPI rounding (which can
-push the navbar 1-2px off 64px and cause a visible shift). The hotbar template branches on
-`hub_section` for its initial fallback offset.
+- `HubSubnavItem(slug, label, url_name, icon, auth_required, membership_required, group, tag, tag_aria)`. Items
+  are listed in group order; the template regroups consecutive runs under a quiet group label. `icon` is not
+  rendered anywhere (the rail draws only the hub's icon).
+- `HubSubnavConfig.landing` names the page a hub with no items opens. Only the footer reads it.
+- **Attention marks** (2026-09-30) are per-viewer chips on an existing item, passed as
+  `build_rendered_items(..., tags={slug: (text, kind, aria)})`. A tag overrides text, kind and spoken form
+  together or not at all. `tag_kind` `count` is the nav's number and `xp` its lozenge; neither borrows amber,
+  which on this site means "not ready yet". The one producer, `_subnav_marks`, puts the claimable count on
+  Career and the XP mark on My Challenges, reading the nav's two cached keys.
+- **The moments pill** sits at the end of the My Pursuit rail and beside the phone collapse bar: "3 new
+  platinums" opens the platinum reel. See [Celebration Moments](../features/moments.md).
 
 ## Gotchas and Pitfalls
 
-- **The sub-nav gives way to a pinned page bar** (2026-10-23). While a page's mini-bar (`.pp-minibar`, revealed
-  by `StickyReveal`) is pinned, `StickyReveal` puts `pp-bar-pinned` on `<html>`; the sub-nav then slides up
-  behind the navbar and turns `visibility: hidden` (its links leave the tab order, and its landmark leaves the
-  accessibility tree until it returns), and the bar moves up into its place with `translate` (not `top`, which
-  would lay out every frame of its 0.28s slide); the art reveal banner shifts the same way. An open mobile sheet or desktop More menu closes on the way out
-  (`subnav.js`, with a CSS backstop for the sheet, which sets its own visibility). Back above the bar's sentinel, the sub-nav returns. `main.js` publishes the sub-nav's share of the
-  stack as `--chrome-rail`; `--rail-shift` (chrome.css) is that while a bar is pinned and 0 otherwise, and
-  anything pinned below the sub-nav subtracts it (the mini-bar, the art reveal banner). The stack starts at the
-  navbar's BOTTOM, its `top` included, so the PSN outage banner (which pins the navbar lower) moves it all
-  down; measuring the height alone pinned the bar behind the navbar during an outage. The navbar's `top` is
-  the banner's MEASURED height (main.js): the banner wraps to about three lines on a phone, past its CSS's
-  one-line 36px guess. `--sticky-top` itself
-  does not change, so StickyReveal's pin threshold stays put and nothing flaps. Why: nav, sub-nav, mini-bar and
-  a sticky group header held 215px of a 1366x657 laptop on a trophy list; mid-scroll the rail is the least
-  needed of them, and the navbar's hub buttons stay.
-- **Longest-prefix-wins + the exact-`/` case are load-bearing.** `/profiles/<u>/` must match Browse,
-  not the personal hub's `/`. The bare-root match is an equality check, separate from prefix
-  `startswith`.
-- **`CloudflareOriginGuardMiddleware` does NOT follow a re-home.** It guards profile pages with a
-  hardcoded PATH REGEX, so unlike every `{% url %}`/`reverse()` reference it stays pointed at the old
-  path when one moves — silently un-guarding the most scraped page type on the site. Moving any
-  guarded surface means editing that regex in the same change (`test_profiles_moved.py` pins it).
-  Related: profile paths are unreachable from the Django test client without a `CF-Ray` header,
-  because the guard runs before the URL conf.
-- **The personal strip is authed-only.** Anon on `/` (or on a public member) gets no strip. The
-  gate lives in the context processor (`hub.key == 'my_pursuit' and not is_auth → hub_section None`),
-  before any item work.
-- **Sub-nav is hidden on non-hub pages** (settings, auth, notifications, `/staff/*`, errors,
-  webhook URLs): `hub_section=None` short-circuits the template. Test these.
-- **Mobile collapse a11y.** The collapsed panel must be `visibility:hidden` (not just
-  `max-height:0`) + `aria-hidden` so its links leave the tab order / AT tree; Escape closes and
-  returns focus to the toggle.
-- **`build_rendered_items` reverses static items** → static `HubSubnavItem`s cannot have required
-  URL kwargs. Kwarg-bearing items go through `extras` with the URL pre-resolved.
-- **Don't add a 5th hub.** Four mental modes. A feature that fits none is a signal to reconsider the
-  IA, not to add a button.
-- **Do NOT inline-style `top:` on `#hotbar-wrapper` from JS** — it overrides the JS-managed sticky
-  offset. The collapse animation touches only `#hotbar-container.style.maxHeight` and
-  `wrapper.style.marginTop` (the `-8px` nudge that closes the `main` `py-2` gap at rest; sticky
-  ignores margins for its own offset, so it's correct in both states).
+- **Anything that mirrors the config must be built from it.** The footer was a hand-kept copy and drifted with
+  every rail change (Hunters under Browse for a commit; later Jobs, Challenges, My Lists and My Challenges
+  missing and Badges under My Pursuit, review IA-01). It now reads `footer_columns`. The navbar and tab bar still
+  name the five hubs by hand, so a hub added or renamed means editing both.
+- **Every detail page needs an overrides line** (see Resolution, step 2). Test that the rail lights, not that it
+  renders: an unlit rail still renders.
+- **`build_rendered_items` reverses each item with no arguments**, so a rail item cannot need URL kwargs.
+- **`CloudflareOriginGuardMiddleware` does not follow a move.** It guards profile pages with a hardcoded path
+  regex, so moving a guarded surface means editing that regex in the same change (`test_profiles_moved.py`).
+  Profile paths are unreachable from the Django test client without a `CF-Ray` header.
+- **`/community/` 301s to `/leaderboards/`** and must keep doing so: a permanent redirect live since 2026-08 is
+  cached in browsers indefinitely. Community needs no landing page; its nav button opens Hunters.
+- **The rail gives way to a pinned page bar** (2026-10-23). While a page's mini-bar (`.pp-minibar`, revealed by
+  `StickyReveal`) is pinned, `pp-bar-pinned` on `<html>` slides the rail up behind the navbar and makes it
+  `visibility: hidden`; the bar moves into its place with `translate`. An open phone sheet or More menu closes on
+  the way out. `main.js` publishes the rail's height as `--chrome-rail`, and `--rail-shift` is that while a bar is
+  pinned; anything pinned below the rail subtracts it. The stack starts at the navbar's bottom, `top` included,
+  so the PSN outage banner moves it all down.
+- **Phone sheet accessibility.** The closed sheet is `visibility: hidden` plus `aria-hidden` (not just zero
+  height), so its links leave the tab order; Escape closes it and returns focus to the bar.
 
 ## Related Docs
 
-- [Navigation](../features/navigation.md): navbar, footer, mobile tab bar, profile tabs
-- [My Pursuit Hub](../features/my-pursuit-hub.md) (the Community Hub doc describes a retired page)
-- [Fundraiser](../features/fundraiser.md): the badge-art campaign the Support hub houses
-- [Template Architecture](../reference/template-architecture.md): base.html, context processors, the hotbar
+- [Navigation](../features/navigation.md): the chrome that carries this structure
+- [Page Principles](../design/page-principles.md): what a page shows, and in what order
+- [Leaderboards rebuild](../design/rebuild/leaderboards-rebuild.md): why Leaderboards is one page
+- [Fundraiser](../features/fundraiser.md): the badge art campaign the Support Us hub houses

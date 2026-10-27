@@ -1,8 +1,8 @@
 """Chrome (nav / sub-nav / footer) rebuild-alignment tests.
 
 The permanent chrome frames every page, so these pin the structural facts that page-level tests
-would otherwise miss: the footer's 4-hub restructure (the pre-unify My Pursuit + Dashboard columns
-merged into one hub sitemap, a Support column added), and its auth-gated visibility.
+would otherwise miss: the footer's hub columns (built from the hub config since 2026-10-27, see
+`test_ia_review.py`) and their auth-gated visibility.
 """
 import re
 from pathlib import Path
@@ -26,15 +26,14 @@ pytestmark = pytest.mark.django_db
 # --- Footer: 4-hub restructure (My Pursuit + Dashboard merged, Support added) ---
 
 def test_footer_has_support_column(client):
-    """The column heading became "Support Us" with the hub in 2026-09, and its first link became
-    "Support" -- matching the sub-nav rail's own first item, where it had said "Support Hub" and
-    named a concept the reader never sees. Both ride the same open naming question; they should at
-    least be wrong in the same words until it is answered."""
+    """The column heading became "Support Us" with the hub in 2026-09. Its first link is the rail's first
+    item, "Supporter Levels" since 2026-10-27 (review IA-06): the footer is built from the rail now, so
+    the two can no longer name it differently."""
     resp = client.get('/support/')
     assert resp.status_code == 200
-    assert b'aria-label="Support pages"' in resp.content
+    assert b'aria-label="Support Us pages"' in resp.content
     assert b'>Support Us</h2>' in resp.content, 'the footer column missed the relabel'
-    assert b'>Support</a>' in resp.content
+    assert b'>Supporter Levels</a>' in resp.content
     assert b'>Support Hub</a>' not in resp.content, 'the pre-rename link text is back'
 
 
@@ -48,8 +47,9 @@ def test_footer_pursuit_column_merged_for_authed(client):
     profile = ProfileFactory(is_linked=True)
     client.force_login(profile.user)
     resp = client.get('/support/')
-    # Personal-hub pages that used to live in the Dashboard column now sit under My Pursuit.
-    assert b'>Home</a>' in resp.content        # the lobby; 'Overview' was renamed with the hub change
+    # Personal-hub pages that used to live in the Dashboard column now sit under My Pursuit. The lobby's
+    # "Home" link left with the hand-kept footer (review IA-01): the lobby is in no hub, and the wordmark
+    # reaches it.
     assert b'>Career</a>' in resp.content
     assert b'>Plat Cards</a>' in resp.content
 
@@ -61,16 +61,20 @@ def test_footer_hides_personal_cockpit_from_anon(client):
     assert b'>My Shareables</a>' not in resp.content
 
 
-def test_footer_support_column_carries_all_four_hub_destinations(client):
-    """2026-08-22: the 'Membership (soon)' placeholder became a live link when the store
-    shipped, and the column mirrors the rail (Hub / Roadmap / Badge Art / Membership) so an
-    anon visitor no longer sees a Support column of exactly one live link."""
+def test_footer_support_column_mirrors_the_rail(client):
+    """The column is the rail (2026-10-27, review IA-01): Supporter Levels, Roadmap and Badge Art for
+    everyone, and My Membership only for a member, as on the rail, because a non-member's door is the
+    storefront."""
     body = client.get('/support/').content
 
     assert b'&middot; soon' not in body and b'\xc2\xb7 soon' not in body
     assert b'>Roadmap</a>' in body
     assert b'>Badge Art</a>' in body
-    assert b'>Membership</a>' in body
+    assert b'>My Membership</a>' not in body
+
+    profile = ProfileFactory(is_linked=True, user__premium_tier='patron')
+    client.force_login(profile.user)
+    assert b'>My Membership</a>' in client.get('/support/').content
 
 
 def test_footer_my_pursuit_includes_rate_my_games_for_authed(client):
