@@ -187,11 +187,13 @@ uses, so the lobby promises exactly what the page delivers.{% endcomment %}
             {% include 'components/horizon.html' with progress=glances.snapshot.avg_progress tone='band' height='8px' %}
         </div>
         {# No "Earn rate": it was earned / total trophies, a second percentage beside the per-game average completion above (owner, 2026-10-26: a count, not two percentages). Unearned carries it. #}
-        <div class="home-secondary grid grid-cols-3 lg:grid-cols-4 gap-x-3 gap-y-2 md:gap-y-3 mt-3 md:mt-4 pt-3 md:pt-4 border-t border-base-content/10 text-center">
+        <div class="home-secondary grid grid-cols-3{% if glances.snapshot.total_hiddens %} lg:grid-cols-4{% endif %} gap-x-3 gap-y-2 md:gap-y-3 mt-3 md:mt-4 pt-3 md:pt-4 border-t border-base-content/10 text-center">
             <div><div class="text-sm md:text-base font-bold pp-tally text-base-content/70">{{ glances.snapshot.total_unearned|intcomma }}</div><div class="text-[0.7rem] text-base-content/50 mt-0.5">Unearned</div></div>
             <div><div class="text-sm md:text-base font-bold pp-tally">{{ glances.snapshot.total_games|intcomma }}</div><div class="text-[0.7rem] text-base-content/50 mt-0.5">Games</div></div>
             <div><div class="text-sm md:text-base font-bold pp-tally text-success">{{ glances.snapshot.total_completes|intcomma }}</div><div class="text-[0.7rem] text-base-content/50 mt-0.5">100%</div></div>
-            <div data-mobile-drop><div class="text-sm md:text-base font-bold pp-tally">{{ glances.snapshot.total_hiddens|intcomma }}</div><div class="text-[0.7rem] text-base-content/50 mt-0.5">Hidden</div></div>
+            {% comment %}Only when the hunter has hidden something (review DL-14): "0 Hidden" is a tile saying a thing is absent,
+            and the row is three across without it.{% endcomment %}
+            {% if glances.snapshot.total_hiddens %}<div data-mobile-drop><div class="text-sm md:text-base font-bold pp-tally">{{ glances.snapshot.total_hiddens|intcomma }}</div><div class="text-[0.7rem] text-base-content/50 mt-0.5">Hidden</div></div>{% endif %}
         </div>
         {# Recent platinums, merged onto the trophy card -- it's the profile at the end of the day #}
         {% if recent %}

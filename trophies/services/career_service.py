@@ -140,6 +140,9 @@ def _build_hero(profile, jobs):
         'dominant_disc': dominant['slug'] if dominant else None,   # ambient-glow tint
         'dominant': dominant,                                      # {slug, label} for the identity chip
         'ring': ring,
+        # The legend keys only the disciplines with levels gained: a "+0" row keys a segment the ring does not
+        # draw (owner, 2026-10-27, review DL-13; it listed all five before). A newcomer's is empty, so no legend.
+        'ring_gained': [f for f in (ring or []) if f.get('total')],
     }
 
 

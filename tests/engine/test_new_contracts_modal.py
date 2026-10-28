@@ -1291,9 +1291,12 @@ def test_a_narrow_screen_stacks_the_row_so_the_title_gets_a_line():
     other layout decision in this modal is pinned and this one was not.
     """
     css = _elements_css()
-    block = re.search(r'@media \(max-width: 639px\) \{(.*?)\n\}', css, re.S)
-    assert block, 'the narrow-screen row rule is gone -- if it moved, move this guard with it'
-    body = re.sub(r'/\*.*?\*/', '', block.group(1), flags=re.S)
+    # THE BLOCK THAT HOLDS THE ROW, not the first 639px block in the file: Career's hero took that position
+    # (2026-10-27) and this guard read the wrong one.
+    blocks = [m.group(1) for m in re.finditer(r'@media \(max-width: 639px\) \{(.*?)\n\}', css, re.S)
+              if '.nc__row' in m.group(1)]
+    assert blocks, 'the narrow-screen row rule is gone -- if it moved, move this guard with it'
+    body = re.sub(r'/\*.*?\*/', '', blocks[0], flags=re.S)
 
     assert re.search(r'\.nc__row\s*\{[^}]*flex-wrap:\s*wrap', body), (
         'the row no longer wraps, so the title is back in a shrinking middle column'

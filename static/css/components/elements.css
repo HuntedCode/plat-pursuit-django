@@ -368,17 +368,54 @@
 .lab-dna-legend__name { white-space: nowrap; }
 .lab-dna-legend__val { font-weight: 700; color: var(--pp-text); font-variant-numeric: tabular-nums; }
 /* The legend's caption: its values are each discipline's levels GAINED ("+7"), what that discipline adds to the
-   Pursuer Level in the ring's centre, so a newcomer reads "+0" five times rather than "Combat 0" beside five
-   Combat jobs at Lv 1. */
+   Pursuer Level in the ring's centre, rather than "Combat 0" beside five Combat jobs at Lv 1. Only disciplines
+   that gained are listed (review DL-13), so a newcomer has no legend. */
 .lab-dna-legend__head { margin: 0 0 5px; font-size: 9px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--pp-text-mute); }
 
 /* ---- The Career summary, folded into the hero under the rank bar (it was a card titled "Career" inside the
-   Career page, DL-09, tall enough to push every view off a desktop's first screen, DL-01). Four quiet facts,
-   rendered only once there is XP to count. */
-.hero-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 16px; margin: 14px 0 0; padding-top: 12px; border-top: 1px solid var(--pp-divider); }
-@media (min-width: 768px) { .hero-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
-.hero-stat dt { font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--pp-text-mute); }
-.hero-stat dd { margin: 3px 0 0; font-size: 20px; line-height: 1.1; color: var(--pp-text); }
+   Career page, DL-09, tall enough to push every view off a desktop's first screen, DL-01). Quiet facts,
+   rendered only once there is XP to count.
+
+   ONE LINE OF FACTS, NOT FOUR TILES (owner, 2026-10-27, review DL-11). The tiles cost about 120px on a phone,
+   enough to push Career's views below the first screen once a hunter had claimed. The number leads its label
+   ("12.0K Career XP"), which is why `dd` is ordered first. */
+.hero-stats { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 20px; margin: 8px 0 0; padding-top: 8px; border-top: 1px solid var(--pp-divider); }
+.hero-stat { display: flex; align-items: baseline; gap: 6px; }
+.hero-stat dt { font-size: 11px; font-weight: 600; letter-spacing: 0.02em; color: var(--pp-text-mute); }
+.hero-stat dd { order: -1; margin: 0; font-size: 15px; line-height: 1.1; color: var(--pp-text); }
+
+/* ---- Career's hero, compacted (owner, 2026-10-27, review DL-11). Mocked on the live page before it was built.
+   PHONE: identity left, the ring beside it, and one row under both holding the identity chip and the levels
+   gained. The pair goes `display: contents` so the ring and the legend become grid items of the top row; the
+   pair's cross-highlight still works, because `:has()` reads the tree, not the boxes. The chip has its own
+   phone copy in that row (`.career-hero__chiprow`): beside a ring big enough for its caption, "Leads with
+   Exploration" wrapped to two lines.
+   THE RING NEVER DROPS BELOW THE SIZE ITS CAPTION FITS. "Pursuer Lv" meets the arcs' glow below 104px at 7px
+   on a phone, and below 132px at 9px on wider screens, which is why the hero ring is 132px from 640px rather
+   than the 116px the shared ring uses (that clipped). */
+/* Doubled class: `.hero-disc-chip`'s own `display` comes later in this file and would win. */
+.hero-disc-chip.career-hero__chiprow { display: none; }
+@media (max-width: 639px) {
+    .career-hero__top { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px 12px; }
+    .career-hero__top .lab-dna-pair { display: contents; }
+    .career-hero__top .lab-dna { width: 104px; height: 104px; }
+    .career-hero__top .lab-dna__level { font-size: 23px; }
+    .career-hero__top .lab-dna__level--d4 { font-size: 19px; }
+    .career-hero__top .lab-dna__level--d5 { font-size: 15px; }
+    .career-hero__top .lab-dna__level--d6 { font-size: 12px; }
+    .career-hero__top .lab-dna__center .lab-dna__cap { font-size: 7px; letter-spacing: 0.08em; margin-top: 1px; }
+    .career-hero__top .lab-dna-legend-wrap { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; }
+    .career-hero__top .lab-dna-legend__head { display: none; }
+    .career-hero__top .lab-dna-legend { display: flex; flex-wrap: wrap; gap: 2px 14px; }
+    .hero-disc-chip.career-hero__chiprow { display: inline-flex; }
+    .career-hero__chip { display: none; }
+    /* The view switcher leads its row, the explainer link follows it: the switcher then clears the tab bar. */
+    .career-viewbar > [role="tablist"] { order: -1; width: 100%; margin-left: 0; }
+}
+@media (min-width: 640px) {
+    .career-hero__top .lab-dna { width: 132px; height: 132px; }
+    .career-hero__top .lab-dna__center .lab-dna__cap { letter-spacing: 0.1em; }
+}
 
 /* ---- Hero identity chip: your strongest discipline. Pays off the ambient hero glow (which is
    tinted by the same discipline) with a label; disc-coloured dot echoes the filter chips + radar. */
@@ -1663,7 +1700,9 @@
  * the tint behind the current division; the words stay on the text tokens.
  * ───────────────────────────────────────────────────────────────────────────────────────────────────────── */
 .pgl-open {
-    display: block; width: calc(100% + 16px); margin: 10px -8px 0; padding: 6px 8px;
+    /* Tight above and inside (review DL-11): the bar's spacing was part of what pushed Career's views off a
+       laptop's first screen. The hover tint still frames it. */
+    display: block; width: calc(100% + 16px); margin: 4px -8px 0; padding: 2px 8px;
     text-align: left; color: inherit; font: inherit; background: none; border: 0; border-radius: 12px;
     cursor: pointer; transition: background-color 0.18s ease, box-shadow 0.18s ease;
 }
