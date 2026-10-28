@@ -409,10 +409,15 @@
     .career-hero__top .lab-dna-legend { display: flex; flex-wrap: wrap; gap: 2px 14px; }
     .hero-disc-chip.career-hero__chiprow { display: inline-flex; }
     .career-hero__chip { display: none; }
-    /* The view switcher leads its row, the explainer link follows it: the switcher then clears the tab bar. */
+    /* The view switcher leads its row, the explainer link follows it: the switcher then clears the tab bar.
+       Full width with its chips sharing it equally, so the bordered control has no empty end. */
     .career-viewbar > [role="tablist"] { order: -1; width: 100%; margin-left: 0; }
+    .career-viewbar > [role="tablist"] > .pp-switch__chip { flex: 1 1 0; justify-content: center; }
 }
 @media (min-width: 640px) {
+    /* A wrap holding only the hidden phone chip (a lead, nothing gained yet) is still a flex item, and the
+       pair's gap would push the ring off the card edge. */
+    .career-hero__top .lab-dna-legend-wrap:not(:has(.lab-dna-legend)) { display: none; }
     .career-hero__top .lab-dna { width: 132px; height: 132px; }
     .career-hero__top .lab-dna__center .lab-dna__cap { letter-spacing: 0.1em; }
 }

@@ -162,7 +162,8 @@ class GameQuerySet(models.QuerySet):
         from django.db.models import Min
 
         pages = (
-            self.filter(np_communication_id__isnull=False).exclude(np_communication_id='')
+            # `.order_by()` first: an ordering would join the GROUP BY and split pages apart.
+            self.order_by().filter(np_communication_id__isnull=False).exclude(np_communication_id='')
             .annotate(_page=self._game_page_key()).values('_page')
             .annotate(_first=Min('created_at'))
         )

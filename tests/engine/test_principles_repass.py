@@ -10,7 +10,7 @@ import pytest
 from django.utils import timezone
 
 from core.services.stats import compute_community_stats
-from tests.factories import ConceptFactory, GameFactory, ProfileFactory
+from tests.factories import ConceptFactory, GameFactory, IGDBMatchFactory, ProfileFactory
 from trophies.models import Game, Job, ProfileJobXP
 
 pytestmark = pytest.mark.django_db
@@ -44,16 +44,27 @@ def test_a_game_on_two_platforms_counts_once():
     assert counts['total'] == 2, 'trophy lists, not games: the PS4 and PS5 lists of one game counted twice'
 
 
-def test_the_count_agrees_with_browse_games():
+def test_the_count_agrees_with_browse_games(client):
+    """Read off the Browse Games page itself, so a change to its own query is caught here too."""
     concept = ConceptFactory()
     GameFactory(concept=concept); GameFactory(concept=concept)
     GameFactory(concept=None)
     GameFactory(concept=ConceptFactory(), np_communication_id='')   # Browse's np floor drops it
 
-    browse = (Game.objects.filter(np_communication_id__isnull=False).exclude(np_communication_id='')
-              .game_page_canonicals().count())
+    page = client.get('/games/').content.decode()
+    browse = int(re.search(r'data-games-count data-countup="(\d+)"', page).group(1))
 
     assert compute_community_stats()['games']['total'] == browse == 2
+
+
+def test_split_concepts_sharing_a_trusted_igdb_id_are_one_game():
+    """Deliberately-split concepts that one IGDB game holds are one game page, so one game."""
+    for _ in range(2):
+        concept = ConceptFactory()
+        IGDBMatchFactory(concept=concept, igdb_id=777001)
+        GameFactory(concept=concept)
+
+    assert Game.objects.all().game_page_counts(since=timezone.now() - timedelta(days=7))['total'] == 1
 
 
 def test_a_new_version_of_an_old_game_is_not_a_new_game_this_week():
@@ -89,7 +100,10 @@ def test_the_ring_never_shrinks_below_the_size_its_caption_fits():
 
 
 def test_on_a_phone_the_switcher_leads_its_row():
-    assert re.search(r'\.career-viewbar > \[role="tablist"\] \{ order: -1;', _media(_css(), 'max-width: 639px'))
+    phone = _media(_css(), 'max-width: 639px')
+    assert re.search(r'\.career-viewbar > \[role="tablist"\] \{ order: -1;', phone)
+    assert '.career-viewbar > [role="tablist"] > .pp-switch__chip { flex: 1 1 0;' in phone, \
+        'a full-width switcher with packed chips leaves an empty bordered end'
 
 
 def test_the_identity_chip_has_one_copy_per_screen(client):
@@ -130,9 +144,17 @@ def test_tiers_earned_shows_once_there_is_one(client):
 # --- DL-13: the legend keys only what the ring draws ---
 
 def test_a_newcomer_has_no_legend(client):
-    body = _career(client, ProfileFactory(is_linked=True))
+    hero = _region(_career(client, ProfileFactory(is_linked=True)), 'data-career-panel="hero"', '</section>')
 
-    assert 'Levels gained' not in _region(body, 'data-career-panel="hero"', '</section>')
+    assert 'class="lab-dna' in hero, 'the ring itself is gone, which would pass this for the wrong reason'
+    assert 'Levels gained' not in hero
+
+
+def test_a_wrap_holding_only_the_hidden_chip_takes_no_room():
+    """A lead with nothing gained renders the wrap for the phone chip alone; wider, the pair's gap would
+    push the ring off the card edge."""
+    wider = _media(_css(), 'min-width: 640px')
+    assert '.career-hero__top .lab-dna-legend-wrap:not(:has(.lab-dna-legend)) { display: none; }' in wider
 
 
 # --- DL-14: no "0 Hidden" on the lobby ---
@@ -141,9 +163,8 @@ def _trophy_row(client, **profile_fields):
     profile = ProfileFactory(is_linked=True, sync_status='synced', **profile_fields)
     client.force_login(profile.user)
     body = client.get('/').content.decode()
-    start = body.index('class="home-secondary')
-    return body[body.rfind('<div', 0, start):body.index('</div>\n', body.index('Unearned'))
-                + body[body.index('Unearned'):].index('\n        </div>') + 20]
+    # From the row's own opening tag to the line that closes it (the row's children are one line each).
+    return _region(body, 'class="home-secondary', '\n        </div>')
 
 
 def test_the_lobby_drops_hidden_when_nothing_is_hidden(client):
