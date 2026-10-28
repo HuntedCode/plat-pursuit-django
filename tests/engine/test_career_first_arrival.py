@@ -83,8 +83,9 @@ def test_the_summary_waits_for_the_first_claim_and_lives_in_the_hero(client):
 
 
 def test_the_legend_reads_as_levels_gained(client):
-    """Each value is what that discipline adds to the Pursuer Level, so it is said as a gain: a newcomer
-    reads "+0" five times under a 1, not "Combat 0" beside five Combat jobs at Lv 1."""
+    """Each value is what that discipline adds to the Pursuer Level, so it is said as a gain, not "Combat 0"
+    beside five Combat jobs at Lv 1. Only the disciplines that gained are listed (owner, 2026-10-27, review
+    DL-13): the four "+0" rows keyed segments the ring does not draw."""
     profile = ProfileFactory(is_linked=True)
     ProfileJobXP.objects.create(profile=profile, job=Job.objects.get(slug='mage'), total_xp=12000, level=5)
 
@@ -92,7 +93,7 @@ def test_the_legend_reads_as_levels_gained(client):
 
     assert 'Levels gained' in legend
     vals = re.findall(r'lab-dna-legend__val">\+<span data-countup="(\d+)">', legend)
-    assert sorted(vals) == ['0', '0', '0', '0', '4']
+    assert vals == ['4']
 
 
 def test_a_new_pursuer_gets_one_line_not_two(client):

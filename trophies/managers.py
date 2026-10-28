@@ -111,19 +111,16 @@ class GameQuerySet(models.QuerySet):
         """
         return self.filter(is_obtainable=True)
 
-    def game_page_canonicals(self):
-        """One Game per GAME PAGE -- the Games/Trophy Lists IA identity, which is broader than
-        the retired per-concept election: deliberately-split concepts sharing a trusted igdb_id are ONE page, so
-        they elect ONE representative between them. Partition key mirrors Concept.game_page_url
-        exactly (trusted igdb id, else concept_id, else the row itself), so the sitemap can never
-        advertise two rows for one page or a page for zero rows. Same election ordering inside the
-        partition; concept-less rows partition on their own id and stand for themselves."""
-        from django.db.models import Case, CharField, Value, When, Window
-        from django.db.models.functions import Cast, Concat, RowNumber
+    @staticmethod
+    def _game_page_key():
+        """The GAME PAGE a row belongs to. Mirrors Concept.game_page_url exactly (trusted igdb id, else
+        concept_id, else the row itself), so everything keyed on it agrees on what one game is."""
+        from django.db.models import Case, CharField, Value, When
+        from django.db.models.functions import Cast, Concat
 
         from trophies.models import IGDBMatch
 
-        page_key = Case(
+        return Case(
             When(
                 concept__igdb_match__status__in=IGDBMatch.TRUSTED_STATUSES,
                 concept__igdb_match__igdb_id__isnull=False,
@@ -134,16 +131,43 @@ class GameQuerySet(models.QuerySet):
             default=Concat(Value('game:'), Cast('id', CharField())),
             output_field=CharField(),
         )
+
+    def game_page_canonicals(self):
+        """One Game per GAME PAGE -- the Games/Trophy Lists IA identity, which is broader than
+        the retired per-concept election: deliberately-split concepts sharing a trusted igdb_id are ONE page, so
+        they elect ONE representative between them. Partitioned on `_game_page_key`, so the sitemap can never
+        advertise two rows for one page or a page for zero rows. Same election ordering inside the
+        partition; concept-less rows partition on their own id and stand for themselves."""
+        from django.db.models import Window
+        from django.db.models.functions import RowNumber
+
         return (
             self.annotate(
                 _election_rank=Window(
                     expression=RowNumber(),
-                    partition_by=[page_key],
+                    partition_by=[self._game_page_key()],
                     order_by=canonical_election_order(),
                 )
             )
             .filter(_election_rank=1)
         )
+
+    def game_page_counts(self, since):
+        """How many GAME PAGES these rows make, and how many of those first appeared at or after `since`.
+
+        The count Browse Games shows (one card per page; the same np floor its grid applies), for figures that
+        must agree with it: the landing's "Games in catalog" counted trophy lists, so a game on PS4 and PS5
+        counted twice (review FV-21). Grouped in the database, two aggregates over one grouping; meant for the
+        hourly cron, never a request path."""
+        from django.db.models import Min
+
+        pages = (
+            # `.order_by()` first: an ordering would join the GROUP BY and split pages apart.
+            self.order_by().filter(np_communication_id__isnull=False).exclude(np_communication_id='')
+            .annotate(_page=self._game_page_key()).values('_page')
+            .annotate(_first=Min('created_at'))
+        )
+        return {'total': pages.count(), 'weekly': pages.filter(_first__gte=since).count()}
 
     def exclude_shovelware(self):
         """

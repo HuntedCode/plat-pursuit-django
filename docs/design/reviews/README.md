@@ -160,8 +160,8 @@ reviewed and fixed. Those two slices get a **re-pass**: the checklist only, not 
 
 | Slice | Pages | Expectation | Status |
 |-------|-------|-------------|--------|
-| First visit | Landing (signed out: rules 2 to 6), sign up and link PSN (focused flows), first arrival on the lobby and Career | Small: the flows already do one job each; the landing is the place site-wide numbers belong | Not started |
-| Daily loop | Lobby, Career (Jobs, Radar, Contracts), contracts board and history, contract modal | Small to medium: branch 4 made the claim lead, but Career and the board carry many systems at once | Not started |
+| First visit | Landing (signed out: rules 2 to 6), sign up and link PSN (focused flows), first arrival on the lobby and Career | Small: the flows already do one job each; the landing is the place site-wide numbers belong | Done 2026-10-27: FV-21 |
+| Daily loop | Lobby, Career (Jobs, Radar, Contracts), contracts board and history, contract modal | Small to medium: branch 4 made the claim lead, but Career and the board carry many systems at once | Done 2026-10-27: DL-11 to DL-14 |
 
 Discovery (2026-10-22) was reviewed before the rules existed but is fixed under them: its fix plan applies
 the rules, and is the pilot.

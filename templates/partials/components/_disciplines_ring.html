@@ -20,13 +20,15 @@ is a four-place edit.
     ring    the `hero.ring` list ({slug, dash, offset, ...})
     level   the Pursuer Level for the centre
     compact optional; adds .lab-dna--sm for the lobby's reduced size
+    neutral optional; draws the track alone, no arcs and no peeks (Career and the lobby, while nothing is
+            gained: owner, 2026-10-27; the plaque keeps the helper's even split)
 {% endcomment %}
 <div class="lab-dna{% if compact %} lab-dna--sm{% endif %}">
     <svg class="lab-dna__ring" viewBox="0 0 120 120" aria-hidden="true">
         <circle class="lab-dna__track" cx="60" cy="60" r="42"></circle>
         <g transform="rotate(-90 60 60)">
             <g class="lab-dna__arcs">
-                {% for f in ring %}<circle class="lab-dna__arc" data-disc="{{ f.slug }}" cx="60" cy="60" r="42" style="--disc: var(--disc-{{ f.slug }}); stroke-dasharray: {{ f.dash }} 999; stroke-dashoffset: {{ f.offset }};"></circle>{% endfor %}
+                {% if not neutral %}{% for f in ring %}<circle class="lab-dna__arc" data-disc="{{ f.slug }}" cx="60" cy="60" r="42" style="--disc: var(--disc-{{ f.slug }}); stroke-dasharray: {{ f.dash }} 999; stroke-dashoffset: {{ f.offset }};"></circle>{% endfor %}{% endif %}
             </g>
         </g>
     </svg>
@@ -54,7 +56,7 @@ is a four-place edit.
     discipline -- what it adds to the Pursuer Level, and the same figure Career's legend prints, not the
     average, said as a gain ("+7") as the legend says it. The five add up to the centre number less the 1 every
     Pursuer starts at.{% endcomment %}
-    {% for f in ring %}
+    {% if not neutral %}{% for f in ring %}
     {% with pd=f.total|stringformat:"d"|length %}
     <div class="lab-dna__peek" data-disc="{{ f.slug }}" aria-hidden="true"
          style="--disc: var(--disc-{{ f.slug }});">
@@ -70,7 +72,7 @@ is a four-place edit.
         <span class="lab-dna__cap">{{ f.short|default:f.label }}</span>
     </div>
     {% endwith %}
-    {% endfor %}
+    {% endfor %}{% endif %}
     <div class="lab-dna__center">
         {% with digits=level|stringformat:"d"|length %}
         <span class="lab-dna__level pp-tally lab-dna__level--d{{ digits }}" data-countup="{{ level }}">{{ level|intcomma }}</span>

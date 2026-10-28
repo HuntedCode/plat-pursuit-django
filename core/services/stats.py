@@ -15,10 +15,9 @@ def compute_community_stats():
         total=Count('id'),
         weekly=Count('id', filter=Q(created_at__gte=week_ago))
     )
-    game_counts = Game.objects.aggregate(
-        total=Count('id'),
-        weekly=Count('id', filter=Q(created_at__gte=week_ago))
-    )
+    # GAMES, each counted once (review FV-21): this counted Game rows, which are trophy lists, so a game on
+    # PS4 and PS5 counted twice and the landing disagreed with Browse Games.
+    game_counts = Game.objects.all().game_page_counts(since=week_ago)
     # Site-wide earned-trophy + platinum TOTALS read from the nightly denorms (Trophy.earned_count /
     # Game.plats_earned_count, kept fresh by recalc_earn_rates) rather than a full-table EarnedTrophy
     # aggregate. The live scan -- especially the platinum variant's join to Trophy -- scales with the

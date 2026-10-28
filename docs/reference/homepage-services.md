@@ -39,6 +39,8 @@ The dict shape is intentionally stable so the template can do simple nested look
 
 The `always` group renders as the four primary stat tiles. The `expanded` group is shown when the ribbon is expanded. `hours_hunted` and `trophies_24h` are computed live in the service from `ProfileGame.play_duration` and `EarnedTrophy` respectively. The other six values are sourced from `core.services.stats.compute_community_stats()` so the heartbeat doesn't double-query the same aggregates.
 
+`games_total` ("Games in catalog") counts **games, each once**: game pages, the identity Browse Games shows one card per (`GameQuerySet.game_page_counts`, the same page key and np floor). It counted `Game` rows until 2026-10-27, which are trophy lists, so a game on PS4 and PS5 counted twice and the landing disagreed with Browse Games (review FV-21). Its `delta` counts games whose page first appeared in the last week, so a new PS5 list of an old game is not a new game.
+
 The heartbeat is also the compute site for the **browse-page stats** that remain (the 2026-08
 consolidation: hourly cron, never the request path). `expanded` additionally carries
 `genres_with_games` / `themes_with_games` (the Genres & Themes tab switcher's counts) and the
