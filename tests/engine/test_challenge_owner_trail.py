@@ -33,8 +33,9 @@ def test_the_owner_trails_back_to_my_challenges(client):
     client.force_login(user)
     resp = client.get(reverse('challenge_detail', args=[run.pk]))
 
-    assert _crumbs(resp) == ['Home', 'My Pursuit', 'My Challenges', run.name]
-    assert str(resp.context['breadcrumb'][2]['url']) == reverse('my_challenges')
+    # No "My Pursuit" crumb: My Pursuit trails run Home / rail item / page (review IA-03).
+    assert _crumbs(resp) == ['Home', 'My Challenges', run.name]
+    assert str(resp.context['breadcrumb'][1]['url']) == reverse('my_challenges')
     assert resp.context['hub_section'] == 'my_pursuit'
     assert resp.context['hub_subnav_active_slug'] == 'my_challenges'
     html = resp.content.decode()

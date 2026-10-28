@@ -3621,7 +3621,8 @@ def test_the_race_is_four_runs_at_most(client):
     for i in range(6):
         _run(_hunter('Racer%d' % i), done=i + 1)
     body = client.get(reverse('challenges_hall_of_fame')).content.decode()
-    race = body[body.index('class="pp-hof-race"'):]
+    # Scoped to the race's own section: the footer links Challenges and the Hall of Fame too (IA-01).
+    race = body[body.index('class="pp-hof-race"'):body.index('</section>', body.index('class="pp-hof-race"'))]
     assert race.count('href="/community/challenges/') == 4
 
 

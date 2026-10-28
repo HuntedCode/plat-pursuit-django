@@ -4,7 +4,7 @@
  * A persistent typeahead bar (md+) that collapses to an icon trigger below md.
  * Two behaviours share one #navbar-sync-form:
  *   1. Typeahead over the catalog (GET site_suggest, debounced) -> a dropdown of
- *      matches GROUPED by type (Games / Badges / Franchises / Hunters), each row
+ *      matches GROUPED by type (Games / Badges / Jobs / Franchises / Game Lists / Hunters), each row
  *      an anchor to its detail page.
  *   2. Add-and-sync fallback for an Online ID that isn't tracked yet: the form
  *      posts to search_sync_profile, then polls add_sync_status until the new
@@ -285,6 +285,9 @@ document.addEventListener('DOMContentLoaded', () => {
         game: '<rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 12h4M8 10v4"/><circle cx="16" cy="11" r="1"/><circle cx="18" cy="14" r="1"/>',
         badge: '<circle cx="12" cy="8" r="6"/><path d="M8.2 13.5 7 22l5-3 5 3-1.2-8.5"/>',
         franchise: '<path d="m12 2 9 5-9 5-9-5 9-5Z"/><path d="m3 12 9 5 9-5"/><path d="m3 17 9 5 9-5"/>',
+        // Jobs and game lists carry no artwork, so these always draw (review IA-02).
+        job: '<rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>',
+        list: '<path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/>',
     };
     function glyphPlaceholder(type) {
         const span = document.createElement('span');

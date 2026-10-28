@@ -233,8 +233,9 @@ class MyTitlesView(LoginRequiredMixin, TemplateView):
             'all_count': len(entries),
             'profile': profile,
             'breadcrumb': [
+                # Home / page, like every My Pursuit page (review IA-03). The "My Pursuit" crumb here led to
+                # the lobby through the old /my-pursuit/ redirect, while My Challenges' led to Career.
                 {'text': 'Home', 'url': reverse_lazy('home')},
-                {'text': 'My Pursuit', 'url': reverse_lazy('my_pursuit_hub')},
                 {'text': 'Titles'},
             ],
         })

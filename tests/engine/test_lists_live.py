@@ -270,11 +270,11 @@ def test_the_chrome_leads_into_lists_from_both_places_that_matter():
     from core.hub_subnav import _URL_NAME_TO_SLUG_OVERRIDES
     assert _URL_NAME_TO_SLUG_OVERRIDES['list_detail'] == ('community', 'lists')
 
-    # COMMENTS STRIPPED, the way this file's other source-reading guards do it. Commenting the
-    # footer link out is the likeliest way it goes missing, and it leaves the string in the file.
-    footer = (ROOT / 'templates' / 'partials' / 'footer.html').read_text(encoding='utf-8')
-    footer = re.sub(r'\{%\s*comment\s*%\}.*?\{%\s*endcomment\s*%\}', '', footer, flags=re.S)
-    assert "url 'lists_browse'" in footer, 'the footer sitemap does not reach Game Lists'
+    # The footer is BUILT from these rails since 2026-10-27 (review IA-01), so the one to check is the
+    # column it builds, not a string in the template.
+    from core.hub_subnav import footer_columns
+    community = next(c for c in footer_columns(is_authenticated=False) if c.key == 'community')
+    assert reverse('lists_browse') in [i.url for i in community.items], 'the footer does not reach Game Lists'
 
 
 def test_nothing_advertises_lists_or_pays_to_build_a_spotlight():
