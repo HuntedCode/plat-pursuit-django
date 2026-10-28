@@ -51,6 +51,29 @@ the contracts waiting to be claimed.
 - **The ring's "25"**: not a rendering bug. It was the sum of job levels by design; whether that was the
   right number to show a newcomer was DL-04 (since redefined: a newcomer is 1).
 
+## Principles re-pass (2026-10-27)
+
+The [Page Principles](../page-principles.md) checklist only, run after the fixes on the lobby, Career's three
+views and the contracts board, at 375 and the owner's laptop (1280 x 633), signed in with the owner's dev account.
+That account has now **claimed a few contracts** (Pursuer Lv 3, 12.0K Career XP, 58 still claimable), which is the
+mid-progress state the original review could not judge.
+
+What passes: the hunter leads on both pages (rule 1); the claim banner is the clearest call to action on each;
+the contracts board shows its sort ("Relevant to you") and its status filter next to the results (rule 6); its
+counts agree ("Claim all (58)", the 58 on the Contracts tab). What fails:
+
+| ID | Sev | Finding | Where | Status |
+|----|-----|---------|-------|--------|
+| DL-11 | Medium | **Career's views start below the first screen again, on a phone and on the owner's laptop.** DL-01 was fixed against a 1440 x 900 desktop. Measured now: at 375 the view switcher sits at y = 733 and the chosen view at 791, in a 667px window whose bottom 56px is the tab bar; at 1280 x 633 they sit at 651 and 711. Once a hunter has claimed, the hero's stat row (four tiles, about 120px on a phone) adds to what DL-01 measured. So Jobs, Radar and Contracts still open on the same first screen, and on a phone the claim banner's "Review & claim" is under the tab bar | `templates/trophies/career.html` (the hero) | open |
+| DL-12 | Low | **"Tiers earned 0".** The hero's stat row appears after the first claim, and its first tile reads 0 until a job reaches its first tier (rule 3: no tile of zeros) | `templates/trophies/career.html` | open |
+| DL-13 | Low | **The "Levels gained" legend lists every discipline, +0 included**: four rows of "+0" for this hunter, five for a newcomer. It keys the ring, so a discipline with no segment has nothing to key. Kept by the owner's DL-04 call (2026-10-21), before the principles existed | `templates/trophies/career.html` | open |
+| DL-14 | Low | **The lobby's trophy card shows "0 Hidden"** on tablet and desktop (it drops on phones). A count of earned trophies the hunter has hidden on PSN, zero for most hunters (rule 3) | `templates/trophies/home.html` | open |
+
+**Owner decisions (2026-10-27):** DL-11, compact the hero (the stat tiles fold into one line; on phones a
+smaller ring beside the name), with live mock-ups at phone and laptop size before anything is built. DL-13, the
+legend lists only disciplines with levels gained, so a newcomer's ring shows none until a first claim (this
+reverses the DL-04 call). DL-12 and DL-14 follow rule 3 as written.
+
 ## Candidate lessons
 
 Second sightings, now ready to promote (see [README.md](README.md#lifecycle-of-a-finding)):

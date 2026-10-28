@@ -111,6 +111,24 @@ first per the [rebuild playbook](../rebuild/rebuild-playbook.md).
 - **The syncing preview opening on "Synced!" with a full bar, and finale numbers that disagree with the
   greeting**: preview-door and simulate-panel artifacts, not reachable by a real first sync.
 
+## Principles re-pass (2026-10-27)
+
+The [Page Principles](../page-principles.md) checklist only, run on every page of the slice after its fixes: the
+landing signed out (on prod, for its cached sections), sign up, sign in, forgot password, the no-PSN welcome, Link
+PSN, the sync card (`?preview=syncing`) and the first arrival (the lobby and Career, judged in the
+[Daily loop re-pass](daily-loop.md#principles-re-pass-2026-10-27)), at 375 and 1280 x 633.
+
+Every page does one job and shows it working on the first screen at 375: the landing's Look up, each auth form,
+Link my PSN account, the sync card's "Usually 10 to 30 minutes". Nothing is shown as absent, no default is
+hidden, and nothing was added. One number fails rule 5:
+
+| ID | Sev | Finding | Where | Status |
+|----|-----|---------|-------|--------|
+| FV-21 | Low | **"Games in catalog" counts trophy lists.** The landing's heartbeat band shows 40,157 under "Games in catalog" (prod), but the figure is `Game.objects.count()`, one row per trophy list: a game on PS4 and PS5, or in two regions, counts twice or more. Browse Games counts each game once, so the landing's number disagrees with the catalogue a visitor clicks into next | `core/services/stats.py` (`game_counts`), `core/services/site_heartbeat.py` | open |
+
+**Owner decision (2026-10-27):** FV-21, count games, each once, the way Browse Games does, rather than relabel
+the trophy-list count.
+
 ## Candidate lessons (promote on a second sighting)
 
 Not rules yet. If another slice shows the same thing, promote it into
