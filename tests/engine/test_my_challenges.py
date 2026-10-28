@@ -10,6 +10,7 @@ both write doors, a 404 (not a 403) for somebody else's run so an id cannot conf
 beta gate rendered as a disabled-but-focusable button with the reason as visible text rather than as an
 attribute nobody can reach.
 """
+import json
 import re
 
 import pytest
@@ -493,16 +494,16 @@ def test_the_breadcrumb_renders_its_labels():
 
     body = client.get(reverse('my_challenges')).content.decode()
 
-    # SCOPED TO THE <nav>, because both labels also appear in the navbar and the page heading -- so a bare
-    # `in body` passed with the bug still present. The third wrong-scope assertion on this branch.
-    start = body.index('aria-label="Breadcrumb"')
-    crumbs = body[start:body.index('</nav>', start)]
+    # READ FROM THE SCHEMA, because a two-crumb trail draws no visible row since 2026-10-28 (it only repeated
+    # the sub-nav), and the schema is built from the same context, so a `label` key still blanks its names.
+    # Parsed rather than searched: both labels also appear in the navbar and the page heading.
+    schema = next(s for s in (json.loads(m) for m in re.findall(
+        r'<script type="application/ld\+json">(.*?)</script>', body, re.S)) if s.get('@type') == 'BreadcrumbList')
+    names = [i['name'] for i in schema['itemListElement']]
 
     # Home / My Challenges: no "My Pursuit" crumb since review IA-03 (My Pursuit trails name no hub).
-    assert 'My Pursuit' not in crumbs
-    assert 'My Challenges' in crumbs
-    assert 'Home' in crumbs
-    assert "></a>" not in crumbs, "a breadcrumb rendered as an empty anchor"
+    assert names == ['Home', 'My Challenges'], names
+    assert 'aria-label="Breadcrumb"' not in body, 'a two-crumb trail drew its row'
 
 
 def test_a_lapsed_member_can_still_continue_a_run_they_already_started():

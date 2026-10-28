@@ -569,7 +569,7 @@ def test_the_breadcrumb_is_visible_not_just_structured_data(client):
 
     content = client.get('/games/995/').content.decode()
 
-    assert 'aria-label="Breadcrumb"' in content or 'breadcrumbs' in content, (
+    assert 'aria-label="Breadcrumb"' in content, (
         'the breadcrumb partial must render visibly, not only as jsonld'
     )
 
