@@ -95,6 +95,10 @@ deliberate exceptions: My Lists trails "Home / Game Lists / My Lists", its only 
 AU); and a page whose hub depends on the viewer gives each viewer the trail of their hub. Pages outside every hub
 carry no trail. The trail is also the page's `BreadcrumbList` schema (`seo_tags`).
 
+What shows is less than what is built: the visible trail is hidden on phones, and wider screens show it only
+with more than two crumbs, since "Home / page" says what the page header does (owner, 2026-10-28; the rule lives in
+`partials/breadcrumb.html`, detail in design-system.md). Views still pass the full trail: the schema reads it.
+
 ## Profile Page Tabs
 
 The profile page has **4 tabs for everyone**, plus three that appear only when there is something behind

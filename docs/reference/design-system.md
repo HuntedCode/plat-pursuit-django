@@ -824,11 +824,18 @@ Use this when cells contain **compact, self-contained data** (numbers, icons, sh
 
 ## Mobile-Specific Patterns
 
-### Breadcrumbs (hidden on phones, site-wide)
+### Breadcrumbs (hidden on phones; wider, only when they name a parent)
 
 `partials/breadcrumb.html` renders `hidden md:flex` (owner call, 2026-10-22): on a phone the sub-nav already
 says where you are, and the trail cost a line above every page's first content. Search engines are unaffected,
 since `BreadcrumbList` JSON-LD is generated from the same `breadcrumb` context by `core/templatetags/seo_tags.py`.
+
+From `md:` up the trail shows only when it has **more than two crumbs** (owner call, 2026-10-28). A two-crumb
+trail is Home plus the page ("Home / Games", "Home / Admin", your own "Home / name"), which the page header and
+any lit sub-nav pill already say; a detail page's "Home / Games / Jak 3 / PS4 trophy list" names parents the
+sub-nav cannot. The row is slim: `py-0` on the `breadcrumbs` nav (DaisyUI pads it 8px above and below) and
+`md:mb-2`, so a trail costs 28px and a page without one starts where every trail-less page does (on
+`<main>`'s `py-2`, or on its own shell's padding, as the staff and mod shells have).
 
 ### Icon-Only Buttons
 

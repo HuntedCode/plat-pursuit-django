@@ -779,11 +779,17 @@ def test_every_admin_page_has_a_way_back_to_the_hub(client):
 
 def test_every_admin_page_carries_a_breadcrumb(client):
     """The breadcrumb is not the way back -- it is the smallest target on the page -- but it is how
-    somebody knows where they are."""
+    somebody knows where they are.
+
+    The VISIBLE trail, not the word: the BreadcrumbList schema says "breadcrumb" on every page. The hub
+    itself is exempt, since its "Home / Admin" trail names no parent and draws no row (2026-10-28)."""
     client.force_login(_user('admin'))
+    hub = reverse('admin_hub')
 
     for url, body in _every_admin_page(client).items():
-        assert 'breadcrumb' in body.lower() or f'href="{reverse("admin_hub")}"' in body, (
+        if url == hub:
+            continue
+        assert 'aria-label="Breadcrumb"' in body or f'href="{hub}"' in body, (
             f'{url} says nothing about where it sits')
 
 
