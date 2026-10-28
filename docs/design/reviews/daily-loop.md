@@ -64,15 +64,21 @@ counts agree ("Claim all (58)", the 58 on the Contracts tab). What fails:
 
 | ID | Sev | Finding | Where | Status |
 |----|-----|---------|-------|--------|
-| DL-11 | Medium | **Career's views start below the first screen again, on a phone and on the owner's laptop.** DL-01 was fixed against a 1440 x 900 desktop. Measured now: at 375 the view switcher sits at y = 733 and the chosen view at 791, in a 667px window whose bottom 56px is the tab bar; at 1280 x 633 they sit at 651 and 711. Once a hunter has claimed, the hero's stat row (four tiles, about 120px on a phone) adds to what DL-01 measured. So Jobs, Radar and Contracts still open on the same first screen, and on a phone the claim banner's "Review & claim" is under the tab bar | `templates/trophies/career.html` (the hero) | open |
-| DL-12 | Low | **"Tiers earned 0".** The hero's stat row appears after the first claim, and its first tile reads 0 until a job reaches its first tier (rule 3: no tile of zeros) | `templates/trophies/career.html` | open |
-| DL-13 | Low | **The "Levels gained" legend lists every discipline, +0 included**: four rows of "+0" for this hunter, five for a newcomer. It keys the ring, so a discipline with no segment has nothing to key. Kept by the owner's DL-04 call (2026-10-21), before the principles existed | `templates/trophies/career.html` | open |
-| DL-14 | Low | **The lobby's trophy card shows "0 Hidden"** on tablet and desktop (it drops on phones). A count of earned trophies the hunter has hidden on PSN, zero for most hunters (rule 3) | `templates/trophies/home.html` | open |
+| DL-11 | Medium | **Career's views start below the first screen again, on a phone and on the owner's laptop.** DL-01 was fixed against a 1440 x 900 desktop. Measured now: at 375 the view switcher sits at y = 733 and the chosen view at 791, in a 667px window whose bottom 56px is the tab bar; at 1280 x 633 they sit at 651 and 711. Once a hunter has claimed, the hero's stat row (four tiles, about 120px on a phone) adds to what DL-01 measured. So Jobs, Radar and Contracts still open on the same first screen, and on a phone the claim banner's "Review & claim" is under the tab bar | `templates/trophies/career.html` (the hero) | fixed: `review/principles-repass` (mocked first, owner-approved: the tiles are one line of facts; on a phone the ring sits beside the name and the chip and gains share a row under them; the switcher leads its row. Measured: the switcher at 550 on a phone, fully above the tab bar, and 571 on the laptop, on the first screen. The ring never goes below the size its caption fits, 104px on phones and 132px from 640px, after the owner saw "Pursuer Lv" clip) |
+| DL-12 | Low | **"Tiers earned 0".** The hero's stat row appears after the first claim, and its first tile reads 0 until a job reaches its first tier (rule 3: no tile of zeros) | `templates/trophies/career.html` | fixed: `review/principles-repass` |
+| DL-13 | Low | **The "Levels gained" legend lists every discipline, +0 included**: four rows of "+0" for this hunter, five for a newcomer. It keys the ring, so a discipline with no segment has nothing to key. Kept by the owner's DL-04 call (2026-10-21), before the principles existed | `templates/trophies/career.html` | fixed: `review/principles-repass` (owner: only disciplines that gained. Then, from the audit: a first claim usually levels nothing, so the ring drew an even split with no key and "Leads with" named whichever discipline came first. Owner: until a level is gained the ring is the plain track, and "Leads with" needs one discipline strictly ahead, on Career and the lobby) |
+| DL-14 | Low | **The lobby's trophy card shows "0 Hidden"** on tablet and desktop (it drops on phones). A count of earned trophies the hunter has hidden on PSN, zero for most hunters (rule 3) | `templates/trophies/home.html` | fixed: `review/principles-repass` |
 
 **Owner decisions (2026-10-27):** DL-11, compact the hero (the stat tiles fold into one line; on phones a
 smaller ring beside the name), with live mock-ups at phone and laptop size before anything is built. DL-13, the
 legend lists only disciplines with levels gained, so a newcomer's ring shows none until a first claim (this
 reverses the DL-04 call). DL-12 and DL-14 follow rule 3 as written.
+
+**Audit (2026-10-27).** An independent audit of the finished branch found, all fixed in it: the even-split ring
+with no key after a first claim (the owner's call above); an empty legend row that pushed the ring off the card
+edge on wide screens (gone with the stricter lead, which needs levels gained); a phone switcher whose chips packed
+left inside a full-width border (they now share it); a stale line in design-system.md about the switcher row; a
+count query hardened against an ordered queryset; and test helpers that read the right region by accident.
 
 ## Candidate lessons
 

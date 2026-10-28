@@ -107,7 +107,7 @@ uses, so the lobby promises exactly what the page delivers.{% endcomment %}
         </div>
         {% if hero.ring %}
         <div class="home-moat__ring">
-            {% include 'partials/components/_disciplines_ring.html' with ring=hero.ring level=hero.pursuer_level compact=True %}
+            {% include 'partials/components/_disciplines_ring.html' with ring=hero.ring level=hero.pursuer_level compact=True neutral=hero.ring_neutral %}
         </div>
         {% endif %}
     </a>

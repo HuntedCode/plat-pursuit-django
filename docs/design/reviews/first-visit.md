@@ -124,7 +124,7 @@ hidden, and nothing was added. One number fails rule 5:
 
 | ID | Sev | Finding | Where | Status |
 |----|-----|---------|-------|--------|
-| FV-21 | Low | **"Games in catalog" counts trophy lists.** The landing's heartbeat band shows 40,157 under "Games in catalog" (prod), but the figure is `Game.objects.count()`, one row per trophy list: a game on PS4 and PS5, or in two regions, counts twice or more. Browse Games counts each game once, so the landing's number disagrees with the catalogue a visitor clicks into next | `core/services/stats.py` (`game_counts`), `core/services/site_heartbeat.py` | open |
+| FV-21 | Low | **"Games in catalog" counts trophy lists.** The landing's heartbeat band shows 40,157 under "Games in catalog" (prod), but the figure is `Game.objects.count()`, one row per trophy list: a game on PS4 and PS5, or in two regions, counts twice or more. Browse Games counts each game once, so the landing's number disagrees with the catalogue a visitor clicks into next | `core/services/stats.py` (`game_counts`), `core/services/site_heartbeat.py` | fixed: `review/principles-repass` (owner: count games. `GameQuerySet.game_page_counts` counts game pages on the key and np floor Browse Games uses; 358 on dev from 375 trophy lists; the weekly figure counts games first seen that week) |
 
 **Owner decision (2026-10-27):** FV-21, count games, each once, the way Browse Games does, rather than relabel
 the trophy-list count.

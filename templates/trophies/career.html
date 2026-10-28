@@ -69,18 +69,19 @@
                 shared CSS ended up doing overlapping work with different dim values (0.16 here vs 0.2
                 everywhere else). `elements.css` carries the rules.{% endcomment %}
                 <div class="lab-dna-pair flex items-center gap-3 md:gap-4 shrink-0">
-                    {% include 'partials/components/_disciplines_ring.html' with ring=hero.ring level=hero.pursuer_level %}
+                    {% include 'partials/components/_disciplines_ring.html' with ring=hero.ring level=hero.pursuer_level neutral=hero.ring_neutral %}
                     {% comment %} LEVELS GAINED, SAID AS GAINS. Each value is what that discipline adds to the
                     Pursuer Level (each job's level - 1), rather than "Combat 0" beside five Combat jobs that each
                     say Lv 1. Only the disciplines that gained (review DL-13): a "+0" row keys a segment the ring
                     does not draw, so a newcomer has no legend at all. {% endcomment %}
-                    {% if hero.ring_gained or hero.dominant %}
+                    {% comment %} `ring_gained` alone gates the row: a lead needs levels gained (career_service), so
+                    there is no chip without a legend beside it. {% endcomment %}
+                    {% if hero.ring_gained %}
                     <div class="lab-dna-legend-wrap">
                         {% comment %} The identity chip's PHONE copy: on a phone this row holds the chip and the gains
                         under the name and ring (the copy above is hidden there, this one everywhere else, so a
                         screen reader meets one). {% endcomment %}
                         {% if hero.dominant %}<span class="hero-disc-chip career-hero__chiprow" style="--disc: var(--disc-{{ hero.dominant.slug }});"><span class="hero-disc-chip__dot" aria-hidden="true"></span>Leads with {{ hero.dominant.label }}</span>{% endif %}
-                        {% if hero.ring_gained %}
                         <p class="lab-dna-legend__head">Levels gained</p>
                         <ul class="lab-dna-legend">
                             {% for f in hero.ring_gained %}
@@ -91,7 +92,6 @@
                             </li>
                             {% endfor %}
                         </ul>
-                        {% endif %}
                     </div>
                     {% endif %}
                 </div>

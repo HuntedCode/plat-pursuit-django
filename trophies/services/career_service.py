@@ -80,6 +80,18 @@ def _compact(n):
 # `_RING_C` here forced that host to choose between importing a private name and copying the constant.
 
 
+def leading_discipline(ring):
+    """The discipline a Pursuer leads with, as {slug, label}, or None.
+
+    The one with the most levels gained, and strictly more than every other: a tie, or nothing gained,
+    leads with nobody (owner, 2026-10-27). `ring` is the hero's ring entries, each carrying `total`.
+    """
+    gains = sorted(((f.get('total') or 0, f) for f in ring or ()), key=lambda g: g[0], reverse=True)
+    if not gains or gains[0][0] <= 0 or (len(gains) > 1 and gains[0][0] == gains[1][0]):
+        return None
+    return {'slug': gains[0][1]['slug'], 'label': gains[0][1]['label']}
+
+
 def _build_hero(profile, jobs):
     """The Pursuer hero: job identity at a glance. Pursuer Level + Total XP come from the jobs
     totals (the single source of truth). The disciplines ring frames the Pursuer Level with a donut
@@ -95,7 +107,8 @@ def _build_hero(profile, jobs):
     if jobs:
         # Each arc is a discipline's share of the levels GAINED (each tile's level - 1), the same quantity
         # the Pursuer Level in the ring's centre counts, so the arcs add up to that number less its
-        # starting 1. A newcomer has gained nothing anywhere, which the helper draws as an even split.
+        # starting 1. A newcomer has gained nothing anywhere, which the helper draws as an even split; Career
+        # and the lobby show that state as the plain track instead (`ring_neutral` below).
         ring = job_render.discipline_ring([
             {'label': d['label'], 'slug': d['slug'], 'avg': d['avg'],
              'total': sum(t['level'] - 1 for t in d['jobs'])}
@@ -119,13 +132,13 @@ def _build_hero(profile, jobs):
     rank_table = pursuer_rank_table(pursuer_level)
     for tier in rank_table['tiers']:
         tier['reached_at'] = reached.get(tier['key'])
-    # Dominant discipline (highest average level): tints the hero's ambient glow AND labels the
-    # identity chip ("Leads with Combat"). Only once you've earned some XP, so a fresh Pursuer stays
-    # neutral (a "New Pursuer" fallback in the template).
-    dominant = None
-    if jobs and jobs.get('total_xp') and jobs.get('disciplines'):
-        d = max(jobs['disciplines'], key=lambda d: d['avg'])
-        dominant = {'slug': d['slug'], 'label': d['label']}
+    # Dominant discipline: tints the hero's ambient glow AND labels the identity chip ("Leads with Combat").
+    # ONLY A DISCIPLINE THAT IS ACTUALLY AHEAD (owner, 2026-10-27): the one with the most levels gained, and
+    # strictly more than every other. It was the highest average as soon as there was any XP, but a first
+    # claim usually levels nothing (6,000 XP split over three or more jobs, 3,000 a level), so every
+    # discipline tied at 1.0 and `max()` named whichever came first. A tie, or nothing gained, leaves a fresh
+    # Pursuer neutral (a "New Pursuer" fallback in the template).
+    dominant = leading_discipline(ring)
     return {
         'pursuer_name': profile.display_psn_username,
         'display_mark': profile.display_mark,
@@ -143,6 +156,10 @@ def _build_hero(profile, jobs):
         # The legend keys only the disciplines with levels gained: a "+0" row keys a segment the ring does not
         # draw (owner, 2026-10-27, review DL-13; it listed all five before). A newcomer's is empty, so no legend.
         'ring_gained': [f for f in (ring or []) if f.get('total')],
+        # NOTHING GAINED, NO ARCS (owner, 2026-10-27): the helper draws an even five-way split there, which
+        # Career and the lobby now show as the plain track around the level. Five equal colours with no key
+        # read as a composition the hunter does not have.
+        'ring_neutral': not any(f.get('total') for f in (ring or [])),
     }
 
 

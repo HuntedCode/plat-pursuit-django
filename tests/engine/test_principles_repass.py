@@ -150,11 +150,64 @@ def test_a_newcomer_has_no_legend(client):
     assert 'Levels gained' not in hero
 
 
-def test_a_wrap_holding_only_the_hidden_chip_takes_no_room():
-    """A lead with nothing gained renders the wrap for the phone chip alone; wider, the pair's gap would
-    push the ring off the card edge."""
-    wider = _media(_css(), 'min-width: 640px')
-    assert '.career-hero__top .lab-dna-legend-wrap:not(:has(.lab-dna-legend)) { display: none; }' in wider
+def _hunter_with(levels):
+    """A Pursuer whose jobs sit at these levels ({job slug: level}); XP to match."""
+    profile = ProfileFactory(is_linked=True)
+    for slug, level in levels.items():
+        ProfileJobXP.objects.create(profile=profile, job=Job.objects.get(slug=slug),
+                                    total_xp=max(level - 1, 0) * 3000 + 1000, level=level)
+    return profile
+
+
+def test_a_first_claim_that_levels_nothing_draws_a_plain_ring_and_no_lead(client):
+    """The usual first claim: XP in a job, no level gained. The helper's even five-way split read as a
+    composition the hunter does not have, and every discipline tied, so "Leads with" named the first one."""
+    hero = _region(_career(client, _hunter_with({'mage': 1})), 'data-career-panel="hero"', '</section>')
+
+    assert 'class="lab-dna' in hero and 'lab-dna__arc"' not in hero and 'lab-dna__peek' not in hero
+    assert 'Leads with' not in hero and 'Levels gained' not in hero
+
+
+def test_a_level_gained_brings_the_arcs_and_the_lead(client):
+    hero = _region(_career(client, _hunter_with({'mage': 3})), 'data-career-panel="hero"', '</section>')
+
+    assert hero.count('lab-dna__arc"') == 5
+    assert f'Leads with {Job.objects.get(slug="mage").get_discipline_display()}' in hero
+
+
+def test_a_tie_leads_with_nobody(client):
+    mind, combat = Job.objects.get(slug='mage').discipline, Job.objects.get(slug='slayer').discipline
+    assert mind != combat
+    hero = _region(_career(client, _hunter_with({'mage': 3, 'slayer': 3})), 'data-career-panel="hero"', '</section>')
+
+    assert 'Leads with' not in hero, 'two disciplines tied on levels gained, and one was named the lead'
+    assert hero.count('lab-dna__arc"') == 5, 'a tie still draws the arcs; only the lead waits'
+
+
+@pytest.mark.parametrize('totals, lead', [
+    ({'combat': 2, 'mind': 1}, 'combat'),
+    ({'combat': 2, 'mind': 2}, None),          # a tie
+    ({'combat': 0, 'mind': 0}, None),          # nothing gained
+    ({'combat': 0}, None),                     # one discipline, nothing gained: still nobody
+    ({}, None),
+])
+def test_the_lead_is_one_discipline_strictly_ahead(totals, lead):
+    from trophies.services.career_service import leading_discipline
+
+    ring = [{'slug': s, 'label': s.title(), 'total': n} for s, n in totals.items()]
+    got = leading_discipline(ring)
+
+    assert (got['slug'] if got else None) == lead
+
+
+def test_the_lobby_ring_goes_plain_too(client):
+    profile = _hunter_with({'mage': 1})
+    profile.sync_status = 'synced'; profile.save(update_fields=['sync_status'])
+    client.force_login(profile.user)
+    body = client.get('/').content.decode()
+    card = _region(body, 'home-moat--career', '</a>')
+
+    assert 'class="lab-dna lab-dna--sm' in card and 'lab-dna__arc"' not in card
 
 
 # --- DL-14: no "0 Hidden" on the lobby ---
