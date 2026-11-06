@@ -242,6 +242,12 @@ The final audit should review every new/modified template and JS file against:
 
 ---
 
+## Testing: Targeted Locally, Full Suite in CI
+
+**Never run the full test suite locally while building, including before opening a PR.** The GitHub Actions CI gate runs the whole suite on every push and blocks the merge while it is red. That is what satisfies the global "full suite must pass before a PR/merge" rule. Locally, run the test files covering what changed (widened with `grep -rl` for shared infrastructure) plus `python manage.py check`. If CI goes red, fix it by running the failing files locally. Details: [docs/guides/testing.md](docs/guides/testing.md).
+
+---
+
 ## Git Commit Scopes
 
 Scopes for this project: `models`, `views`, `templates`, `static`, `sync`, `badges`, `payments`, `notifications`, `admin`, `api`, `commands`

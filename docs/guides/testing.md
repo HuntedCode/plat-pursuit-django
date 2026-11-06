@@ -61,7 +61,8 @@ pytest path/to/test_x.py::test_name   # a single test
 pytest --create-db          # force a fresh test DB (default reuses it for speed)
 ```
 
-**Run the whole suite in parallel** (`pytest-xdist`, in `requirements-dev.txt`). The suite is ~7,500 tests at
+**If you ever run the whole suite, run it in parallel** (`pytest-xdist`, in `requirements-dev.txt`). Day to
+day you should not need to: CI runs it (see "Run what you changed" below). The suite is ~7,500 tests at
 ~0.1s each, nearly all database setup, so it is bound by running one at a time, not by any slow test. Each worker
 gets its own test database (pytest-django names them per worker) and the Django cache is in-memory per process,
 so workers share nothing. 12 workers is the local sweet spot: past that the Postgres container is the bottleneck,
@@ -80,28 +81,27 @@ spend an afternoon re-proving code nobody touched, and it buys no confidence tha
 did not already give.
 
 **Default:** the test files covering what changed, plus `python manage.py check`. That is enough to
-commit on.
+commit on, and enough to push and open a PR on.
 
-**Run the whole suite when one of these is true:**
+**The full suite is CI's job, not a local step (owner, 2026-11-06).** The [CI gate](#the-ci-gate) runs
+the whole suite on every push and blocks the merge while it is red, so that is the "full suite passes
+before merge" check. Do not run `pytest` over everything locally while building, and not as a
+pre-PR step either: it ties up the machine for minutes and proves nothing CI will not prove anyway.
+If CI goes red, run the failing files locally to fix them.
 
-| Trigger | Why |
-|---|---|
-| An audit round's fixes are going in | Audits touch several areas at once, by design |
-| The change is in shared infrastructure | `static/js/utils.js`, a service many pages read, `urls.py`, `settings.py`, a model, a migration |
-| Right before pushing a branch for PR | Once, at the end — not once per commit |
-| A targeted run failed oddly | Something further out may have moved |
+**What changes with BREADTH is how wide the targeted run is, not whether it becomes the full suite.**
+A change to shared infrastructure (`static/js/utils.js`, a service many pages read, `urls.py`,
+`settings.py`, a model, a migration) needs the test files for every area that reads it, found with
+`grep -rl "<symbol>" tests/`. Risk is not the trigger: a change that *feels* dangerous but touches one
+file still only needs its own tests.
 
-**The trigger is BREADTH, not risk.** This is worth stating because the habit creeps back in through
-risk: a change that *feels* dangerous invites a full run even when it touches one file, while a
-boring edit to a shared service is the one that actually needs it. A scary one-file change still only
-needs its own tests.
+Targeted also means **the files covering what changed, not just the file you wrote**. File-wide
+guards (a stylesheet's type floor, every template class reaching the bundle, a subnav's exact
+membership) live in other test files and read what you touched; `grep -rl "<the file you changed>"
+tests/` finds them in seconds.
 
-Not worth a full run: template or copy tweaks, CSS, comments, docs, a single test file, or "the last
-one passed so this probably does too".
-
-If you are not sure which files cover an area, `grep -rl "<symbol>" tests/` answers faster than the
-suite does. The same applies to subagents — an audit agent should be told to run targeted files
-unless it is doing a final pass.
+The same applies to subagents: an audit agent should be told to run targeted files, never the
+whole suite.
 
 ## Conventions
 
