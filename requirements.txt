@@ -52,7 +52,7 @@ pyee==14.0.0
 pykakasi==2.3.0
 pypinyin==0.55.0
 pyrate-limiter==4.5.0
-python-dateutil==2.9.0.post0
+python-dateutil==3.0.0
 python-dotenv==1.2.4
 python-http-client==3.3.7
 pytz==2026.5
