@@ -48,7 +48,7 @@ psycopg==3.3.6
 psycopg-binary==3.3.6
 pycountry==24.6.1
 pycparser==3.11
-pyee==14.0.0
+pyee==16.0.0
 pykakasi==2.3.0
 pypinyin==0.55.0
 pyrate-limiter==4.5.0
