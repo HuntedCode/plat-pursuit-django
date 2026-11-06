@@ -347,8 +347,19 @@ so there is nothing to filter -- the number itself has to be different, which me
 | Rule | `SHOVELWARE_FLAGGED_STATUSES` in `models.py`; `manually_cleared` counts as CLEAN |
 | Reads | `clean_store()` / `clean_rows()` / `clean_rank()` + `CLEAN_KEYS` in `badge_leaderboards.py` |
 | Writer | `recompute_clean_standings`, `nightly` step 2 -- the ONLY writer |
+| Source | `ProfileGame.earned_trophies_count` / `has_plat` on non-flagged games (since 2026-11; it counted `EarnedTrophy` rows before) |
 
-Three things that are easy to get wrong:
+Four things that are easy to get wrong:
+
+- **It reads per-game counters, never EarnedTrophy rows** (2026-11). Counting trophy rows joined millions
+  of them per 200-hunter chunk and ran past the 60s `statement_timeout`. Because the cursor only advances
+  on success, the nightly then failed on the same chunk every night. The ProfileGame counters are the
+  same counts, derived from EarnedTrophy per game at `sync_complete`, at one row per game. The trade:
+  anything that leaves those counters behind leaves this board behind too, the same as the hunter's
+  profile page. A sync that wrote trophies and died before `sync_complete` is repaired the next time the
+  hunter's library is walked, i.e. the next sync after they earn any trophy (see the stale-counter note
+  in [sync-architecture.md](sync-architecture.md)). Pinned by
+  `test_the_aggregate_never_reads_earned_trophy_rows`.
 
 - **It has no incremental path, deliberately.** Shovelware is a property of the GAME, so re-flagging one
   invalidates every hunter who earned a trophy on it -- a fan-out no per-row signal can see. The

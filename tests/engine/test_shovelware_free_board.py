@@ -14,17 +14,39 @@ See docs/design/rebuild/leaderboards-rebuild.md.
 """
 import pytest
 from django.core.management import call_command
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 
-from trophies.models import SHOVELWARE_FLAGGED_STATUSES, EarnedTrophy, Game, ProfileTrophyStanding
-from tests.factories import EarnedTrophyFactory, GameFactory, ProfileFactory, TrophyFactory
+from trophies.models import (
+    SHOVELWARE_FLAGGED_STATUSES, EarnedTrophy, Game, ProfileGame, ProfileTrophyStanding,
+)
+from trophies.services.psn_api_service import PsnApiService
+from tests.factories import (
+    EarnedTrophyFactory, GameFactory, ProfileFactory, ProfileGameFactory, TrophyFactory,
+)
 
 pytestmark = pytest.mark.django_db
 
 
-def _earn(profile, game, tier, n=1):
+def _sync(profile, game):
+    """Refresh the per-game counters exactly as `sync_complete` does. The board reads those counters, so a
+    fixture that wrote EarnedTrophy rows without this would be a sync that never finished."""
+    pg, _ = ProfileGame.objects.get_or_create(profile=profile, game=game)
+    PsnApiService.update_profilegame_stats([pg.id])
+
+
+def _earn(profile, game, tier, n=1, earned=True):
     for _ in range(n):
         EarnedTrophyFactory(profile=profile, trophy=TrophyFactory(game=game, trophy_type=tier),
-                            earned=True)
+                            earned=earned)
+    _sync(profile, game)
+
+
+def _hide_games(profile):
+    """What sync does when PSN stops returning a game. `ProfileGame.user_hidden` is the flag `hide_hiddens`
+    filters on (`update_profile_trophy_counts`); the EarnedTrophy copy is set too so neither can count."""
+    ProfileGame.objects.filter(profile=profile).update(user_hidden=True)
+    EarnedTrophy.objects.filter(profile=profile).update(user_hidden=True)
 
 
 def _standing(profile):
@@ -130,7 +152,7 @@ def test_hidden_games_COUNT_whatever_the_owner_hides_from_their_own_view(hides):
     game = GameFactory(shovelware_status='clean')
     _earn(profile, game, 'platinum')
     _earn(profile, game, 'bronze', 3)
-    EarnedTrophy.objects.filter(profile=profile, trophy__trophy_type='bronze').update(user_hidden=True)
+    _hide_games(profile)
 
     row = _standing(profile)
     assert row.clean_trophies == 4, 'a hidden game stopped counting'
@@ -148,10 +170,11 @@ def test_hide_zeros_cannot_move_an_earned_count():
     game = GameFactory(shovelware_status='clean')
     off = ProfileFactory(is_linked=True, hide_zeros=False)
     on = ProfileFactory(is_linked=True, hide_zeros=True)
+    empty = GameFactory(shovelware_status='clean')
     for p in (off, on):
         _earn(p, game, 'platinum')
         # A game they have opened and earned nothing in -- exactly what hide_zeros is about.
-        EarnedTrophyFactory(profile=p, trophy=TrophyFactory(game=game, trophy_type='gold'), earned=False)
+        _earn(p, empty, 'gold', earned=False)
 
     assert _standing(off).clean_trophies == _standing(on).clean_trophies == 1
 
@@ -166,7 +189,7 @@ def test_toggling_hide_hiddens_does_not_move_a_board_figure():
     profile = ProfileFactory(is_linked=True, hide_hiddens=False)
     game = GameFactory(shovelware_status='clean')
     _earn(profile, game, 'gold', 2)
-    EarnedTrophy.objects.filter(profile=profile).update(user_hidden=True)
+    _hide_games(profile)
     assert _standing(profile).clean_trophies == 2
 
     profile.hide_hiddens = True
@@ -180,8 +203,7 @@ def test_unearned_trophies_do_not_count():
     profile = ProfileFactory(is_linked=True)
     game = GameFactory(shovelware_status='clean')
     _earn(profile, game, 'platinum')
-    EarnedTrophyFactory(profile=profile, trophy=TrophyFactory(game=game, trophy_type='gold'),
-                        earned=False)
+    _earn(profile, game, 'gold', earned=False)
 
     row = _standing(profile)
     assert row.clean_plats == 1 and row.clean_trophies == 1
@@ -201,7 +223,9 @@ def test_the_recompute_is_idempotent_and_self_healing():
     """Recompute-from-scratch is what makes materializing this safe: re-running must not double, and a row
     corrupted by anything else must be CORRECTED rather than added to. Same property, viewed twice."""
     profile = ProfileFactory(is_linked=True)
-    _earn(profile, GameFactory(shovelware_status='clean'), 'platinum', 2)
+    # Two GAMES, one platinum each: a game holds at most one, and the board counts platinum games.
+    for _ in range(2):
+        _earn(profile, GameFactory(shovelware_status='clean'), 'platinum')
 
     assert _standing(profile).clean_plats == 2
     assert _standing(profile).clean_plats == 2, 'a second run doubled the figures'
@@ -319,12 +343,11 @@ def test_a_hunter_who_unlinks_keeps_being_corrected():
 def test_the_country_picker_offers_a_country_that_only_this_board_has():
     """The picker reads FOUR sources, and this board had to become the fourth.
 
-    It looks like it need not be: `clean_trophies > 0` seems to imply `total_trophies > 0`, making its
-    countries a subset of the Trophies board's. It does not, because the two figures are written at
-    different TIMES. `Profile.total_trophies` is updated at `sync_complete` and on the settings POST;
-    this store is rebuilt nightly. A linked hunter whose sync wrote EarnedTrophy rows and then failed
-    before completing sits on this board with `total_trophies` still 0 -- which is what the fixture below
-    represents.
+    It looks like it need not be: `clean_trophies > 0` seems to imply a place on the Trophies board, making
+    its countries a subset of that board's. It does not, because the two figures are written at different
+    TIMES. The Trophies board reads `Profile` live; this store is a nightly snapshot, so it can go stale HIGH.
+    A hunter whose earned rows were removed since the last run still sits on this board while the live
+    board has already dropped them -- which is what the fixture below represents.
 
     Left out, their country was unselectable on the very board they appear on, cached for an hour -- word
     for word the failure `active_countries()`' own docstring already records for the badge store.
@@ -333,7 +356,8 @@ def test_the_country_picker_offers_a_country_that_only_this_board_has():
     from trophies.services import badge_leaderboards as lb
 
     cache.clear()
-    hidden = ProfileFactory(is_linked=True, country_code='NZ', total_trophies=0, total_plats=0)
+    hidden = ProfileFactory(is_linked=True, country_code='NZ', total_trophies=0, total_trophies_raw=0,
+                            total_plats=0)
     ProfileTrophyStanding.objects.create(
         profile=hidden, clean_plats=1, clean_trophies=40, country_code='NZ', is_linked=True)
 
@@ -406,4 +430,48 @@ def test_a_zero_or_negative_chunk_size_does_not_silently_do_nothing():
     call_command('recompute_clean_standings', '--chunk-size', '-5')
     assert ProfileTrophyStanding.objects.filter(profile=profile).exists(), (
         'a negative chunk size wrote nothing and did not complain'
+    )
+
+
+# ---------------------------------------------------------------- the per-game source (2026-11) ---------
+
+def test_the_figures_come_from_the_per_game_counters():
+    """The board reads `ProfileGame.earned_trophies_count` / `has_plat`, not EarnedTrophy rows.
+
+    No EarnedTrophy rows exist here at all, so a recompute that still counted trophy rows would write
+    zeros. Clean games are summed, flagged ones dropped, and a played game with no platinum adds its
+    trophies but no plat.
+    """
+    profile = ProfileFactory(is_linked=True)
+    ProfileGameFactory(profile=profile, game=GameFactory(shovelware_status='clean'),
+                       earned_trophies_count=40, has_plat=True)
+    ProfileGameFactory(profile=profile, game=GameFactory(shovelware_status='manually_cleared'),
+                       earned_trophies_count=7, has_plat=False)
+    ProfileGameFactory(profile=profile, game=GameFactory(shovelware_status='auto_flagged'),
+                       earned_trophies_count=500, has_plat=True)
+
+    row = _standing(profile)
+    assert row.clean_trophies == 47, 'the clean games were not summed, or a flagged one was'
+    assert row.clean_plats == 1
+
+
+def test_the_aggregate_never_reads_earned_trophy_rows():
+    """REGRESSION for the 2026-11 nightly failure. Counting EarnedTrophy rows joined millions of them per
+    200-hunter chunk, ran past the 60s `statement_timeout`, and since the cursor only advances on success
+    the sweep failed on the same chunk every night.
+
+    The timeout cannot be reproduced at test scale, so what is pinned is the cause: no query this command
+    runs may touch the EarnedTrophy table.
+    """
+    profile = ProfileFactory(is_linked=True)
+    _earn(profile, GameFactory(shovelware_status='clean'), 'platinum')
+    table = EarnedTrophy._meta.db_table
+
+    with CaptureQueriesContext(connection) as ctx:
+        call_command('recompute_clean_standings', '--profile-ids', str(profile.id))
+
+    offending = [q['sql'] for q in ctx.captured_queries if table in q['sql']]
+    assert not offending, f'the recompute reads {table} again: {offending}'
+    assert ProfileTrophyStanding.objects.get(profile=profile).clean_plats == 1, (
+        'the fixture did not produce a figure, so the query check above proved nothing'
     )

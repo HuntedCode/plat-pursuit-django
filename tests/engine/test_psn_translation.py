@@ -408,6 +408,70 @@ def test_update_profilegame_stats_no_platinum_means_no_plat():
     assert pg.unearned_trophies_count == 1
 
 
+def test_stale_counters_are_repaired_by_the_refresh_the_touched_list_triggers():
+    """The repair half of the stale-counter heal. A sync that wrote the rows and died before
+    `sync_complete` leaves the counters at their old values; joining the touched list is enough, because
+    `update_profilegame_stats` recomputes them from the rows already here (no re-fetch)."""
+    profile = ProfileFactory()
+    game = GameFactory()
+    pg = ProfileGame.objects.create(profile=profile, game=game, earned_trophies_count=0, has_plat=False)
+    _earned_rows(profile, game, ["bronze", "gold", "platinum"])
+
+    PsnApiService.update_profilegame_stats([pg.id])
+
+    pg.refresh_from_db()
+    assert pg.earned_trophies_count == 3 and pg.has_plat is True
+
+
+def test_the_walk_touches_a_game_whose_counters_trail_its_rows():
+    """The detection half, pinned structurally because importing `token_keeper` runs queries at import
+    time (see test_badge_sync_wiring). `has_drift` compares PSN against our EarnedTrophy ROWS, so a game
+    whose rows are complete but whose counters were never refreshed shows no drift; without this branch
+    its counters, `Profile.total_trophies` and the Shovelware Free board stayed wrong until the game next
+    earned a trophy.
+
+    Asserts the branch is an `elif` of the drift check (so it never re-fetches trophies), compares the
+    counter against `db_earned_total`, and appends the row to the touched list.
+    """
+    import ast
+    import pathlib
+
+    source = pathlib.Path(__file__).resolve().parents[2] / 'trophies' / 'token_keeper.py'
+    tree = ast.parse(source.read_text(encoding='utf-8'))
+    walk = next(n for n in ast.walk(tree)
+                if isinstance(n, ast.FunctionDef) and n.name == '_profile_refresh_slow_path')
+
+    def is_counter_check(test):
+        return (
+            isinstance(test, ast.Compare) and isinstance(test.ops[0], ast.NotEq)
+            and isinstance(test.left, ast.Attribute) and test.left.attr == 'earned_trophies_count'
+            and isinstance(test.comparators[0], ast.Name) and test.comparators[0].id == 'db_earned_total'
+        )
+
+    def appends_to_touched(body):
+        return any(
+            isinstance(c, ast.Call) and isinstance(c.func, ast.Attribute) and c.func.attr == 'append'
+            and isinstance(c.func.value, ast.Name) and c.func.value.id == 'touched_profilegame_ids'
+            for stmt in body for c in ast.walk(stmt)
+        )
+
+    drift_ifs = [
+        n for n in ast.walk(walk)
+        if isinstance(n, ast.If) and isinstance(n.test, ast.BoolOp)
+        and any(isinstance(v, ast.Name) and v.id == 'has_drift' for v in n.test.values)
+    ]
+    assert drift_ifs, 'the `has_drift or pgame_created` check moved; retarget this test'
+
+    def elif_chain(node):
+        while node.orelse and len(node.orelse) == 1 and isinstance(node.orelse[0], ast.If):
+            node = node.orelse[0]
+            yield node
+
+    heals = [n for n in elif_chain(drift_ifs[0]) if is_counter_check(n.test)]
+    assert heals, 'no elif of the drift check compares the counters against the rows'
+    assert appends_to_touched(heals[0].body), 'the stale-counter branch does not join the touched list'
+
+
 # --- get_db_fingerprint -------------------------------------------------------
 
 
