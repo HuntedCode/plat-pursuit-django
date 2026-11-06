@@ -2565,6 +2565,17 @@ class TokenKeeper:
                 # it and `progress == 100` is what they gate on -- otherwise we fix the number a
                 # hunter sees and leave the credit it owes them unawarded.
                 touched_profilegame_ids.append(profile_game.id)
+            elif profile_game.earned_trophies_count != db_earned_total:
+                # Our EarnedTrophy rows match PSN but the per-game counters derived from them do not:
+                # a previous sync wrote the rows and died before `sync_complete` refreshed the counters.
+                # `has_drift` cannot see this (it compares PSN against the ROWS), so without this branch
+                # the counters stayed wrong until the game next earned a trophy -- and with them
+                # `Profile.total_trophies`, the profile page and the Shovelware Free board, which all read
+                # them. Nothing to re-fetch: joining the touched list is enough for `sync_complete` to
+                # recompute them from the rows already here. Costs no query; the row is in hand. Runs
+                # only when the library is WALKED: right after such a failure the fingerprint (built
+                # from the same rows) still matches, so the heal waits for the hunter's next new trophy.
+                touched_profilegame_ids.append(profile_game.id)
 
         # Title observations for the WHOLE walk in one bulk pass (~4 queries), not per title.
         # The per-title update_or_create this replaces cost ~6 statements per game -- roughly

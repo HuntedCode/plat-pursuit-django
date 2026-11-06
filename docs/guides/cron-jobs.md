@@ -441,9 +441,15 @@ historical pass after Phase 3's rematch run.
 - **Command**: `python manage.py recompute_clean_standings` (`--dry-run`, `--chunk-size`,
   `--max-minutes`, `--profile-ids` for ad-hoc repair)
 - **What it does**: Rebuilds `ProfileTrophyStanding` -- the store behind the **Shovelware Free** board,
-  which is the DEFAULT tab at `/leaderboards/` -- by counting each linked hunter's earned trophies
-  excluding games flagged as shovelware. Recompute-from-scratch, so it cannot drift; it skips rows whose
-  figures are unchanged, so a normal night rewrites a small fraction of the table.
+  which is the DEFAULT tab at `/leaderboards/` -- by summing each linked hunter's per-game counters
+  (`ProfileGame.earned_trophies_count` / `has_plat`) over games not flagged as shovelware.
+  Recompute-from-scratch, so a re-flag cannot leave it behind; it skips rows whose figures are unchanged,
+  so a normal night rewrites a small fraction of the table.
+- **Why ProfileGame, not EarnedTrophy** (2026-11): counting trophy rows ran past the 60s
+  `statement_timeout` on chunks holding whales, and since the cursor only advances on success the step
+  failed on the same chunk every night. The per-game counters are the same counts at one row per game.
+  If this step ever times out again, `recompute_clean_standings --dry-run` in a Render shell reproduces
+  it with a full traceback, without writing or moving the cursor.
 - **Why it is a batch job and must stay one**: shovelware status is a property of the GAME, so one
   re-flagged game invalidates every hunter who earned a trophy on it -- a fan-out no per-row signal can
   see. The equivalent aggregate inside a sync seam is what got `ProfileBadgeStanding`'s trophy counts

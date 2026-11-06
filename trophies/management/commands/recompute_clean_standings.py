@@ -1,9 +1,22 @@
-"""Rebuild `ProfileTrophyStanding` -- the Shovelware Free board's store -- from EarnedTrophy ground truth.
+"""Rebuild `ProfileTrophyStanding` -- the Shovelware Free board's store -- from each hunter's per-game counters.
 
 THE ONLY WRITER of this table, and that is the design rather than a convenience. Shovelware status is a
 property of the GAME, so one game being re-flagged invalidates the standing of every hunter who ever
 earned a trophy on it. That fan-out is invisible to a per-row signal, which is why this store has no
-incremental path at all: it is recomputed from scratch, in a batch seam, and can therefore never drift.
+incremental path at all: it is recomputed from scratch, in a batch seam, so a re-flag can never leave it
+behind.
+
+WHY PROFILEGAME AND NOT EARNEDTROPHY (2026-11). This counted `EarnedTrophy` rows until the nightly started
+failing on a `statement_timeout`: one chunk of 200 hunters joined millions of trophy rows (a whale alone is
+~250,000) to Trophy and Game, went past 60s, and because the cursor only advances on success, every night
+resumed at that chunk and failed on it again. `ProfileGame.earned_trophies_count` and `has_plat` are those
+same counts, derived from `EarnedTrophy` per game by `PsnApiService.update_profilegame_stats` at
+`sync_complete`, so reading them visits one row per GAME instead of one per TROPHY. They are the counters
+`Profile.total_trophies` and the profile pages already read. They can trail `EarnedTrophy` when a sync wrote
+trophies and died before `sync_complete`; the sync walk's stale-counter check (`_profile_refresh_slow_path`)
+repairs that the next time the hunter's library is walked, which is the next sync after they earn any
+trophy (docs/architecture/sync-architecture.md). Whatever leaves the counters behind leaves this board behind in the
+same way, and the hunter's profile page with it.
 
 WHY THIS MUST NEVER MOVE INTO SYNC. `ProfileBadgeStanding` used to carry trophy counts and they were
 deleted in 2026-08: maintaining a full-library `EarnedTrophy` aggregate per profile was affordable while
@@ -21,11 +34,12 @@ import time
 from django.core.cache import cache
 from django.core.management.base import BaseCommand
 from django.db import transaction
-from django.db.models import Count, Q
+from django.db.models import Count, Q, Sum
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 
 from trophies.models import (
-    SHOVELWARE_FLAGGED_STATUSES, EarnedTrophy, Profile, ProfileTrophyStanding,
+    SHOVELWARE_FLAGGED_STATUSES, Profile, ProfileGame, ProfileTrophyStanding,
 )
 
 #: Where a budget-capped sweep left off, so the next run resumes rather than restarting. Not a source of
@@ -158,16 +172,19 @@ class Command(BaseCommand):
         # `hide_zeros` could not apply here in any case: it excludes games with ZERO earned trophies,
         # which contribute nothing to a count of EARNED ones. It does not move `Profile.total_trophies`
         # either, for the same reason -- on a profile it only changes `total_unearned` and the average.
+        #
+        # ONE ROW PER GAME, not per trophy: see the module docstring for the timeout this replaced. So the
+        # `hide_hiddens` rule above means no `ProfileGame.user_hidden` filter here (that flag is what
+        # `hide_hiddens` filters on in `update_profile_trophy_counts`). A game holds at most one platinum,
+        # so counting `has_plat` rows is the count of earned platinums.
         rows = (
-            EarnedTrophy.objects
-            .filter(profile_id__in=profile_ids, earned=True)
-            .exclude(trophy__game__shovelware_status__in=SHOVELWARE_FLAGGED_STATUSES)
+            ProfileGame.objects
+            .filter(profile_id__in=profile_ids)
+            .exclude(game__shovelware_status__in=SHOVELWARE_FLAGGED_STATUSES)
             .values('profile_id')
             .annotate(
-                bronze=Count('id', filter=Q(trophy__trophy_type='bronze')),
-                silver=Count('id', filter=Q(trophy__trophy_type='silver')),
-                gold=Count('id', filter=Q(trophy__trophy_type='gold')),
-                platinum=Count('id', filter=Q(trophy__trophy_type='platinum')),
+                plats=Count('id', filter=Q(has_plat=True)),
+                trophies=Coalesce(Sum('earned_trophies_count'), 0),
             )
         )
         counts = {r['profile_id']: r for r in rows}
@@ -191,16 +208,8 @@ class Command(BaseCommand):
             if pid not in owners:
                 continue                     # deleted between the population read and now
             c = counts.get(pid, {})
-            bronze = c.get('bronze', 0)
-            silver = c.get('silver', 0)
-            gold = c.get('gold', 0)
-            plat = c.get('platinum', 0)
-            # The SUM OF THE TIERS. Counted here rather than stored per tier: three tier columns lived on
-            # this model until nothing turned out to read them (`page()` passes only the two figures
-            # `board_window`'s `extra` maps), so they were dropped before they shipped.
-            trophies = bronze + silver + gold + plat
             fields = {
-                'clean_plats': plat, 'clean_trophies': trophies,
+                'clean_plats': c.get('plats', 0), 'clean_trophies': c.get('trophies', 0),
                 'country_code': owners[pid] or '', 'is_linked': pid in linked,
             }
 
