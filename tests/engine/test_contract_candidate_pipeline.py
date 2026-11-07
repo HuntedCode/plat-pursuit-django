@@ -5,7 +5,7 @@ test_report_contract_candidates; this suite pins what the pipeline DOES with its
 from io import StringIO
 
 import pytest
-from django.core.management import call_command
+from django.core.management import CommandError, call_command
 from django.utils import timezone
 
 from tests.factories import ConceptFactory, ConceptGenreFactory, GameFactory, GenreFactory, IGDBMatchFactory
@@ -79,6 +79,69 @@ def test_cap_stages_by_demand_and_rest_waits_in_review():
     # contract (is_live=False) is not a live one, and the staged queue must survive the night.
     assert ContractCandidate.objects.get(igdb_id=95011).status == ContractCandidate.STATUS_STAGED
     assert ContractCandidate.objects.get(igdb_id=95012).status == ContractCandidate.STATUS_STAGED
+
+
+def test_min_players_floor_holds_low_demand_tier_a_in_review():
+    """--min-players: a Tier A game under the floor waits in review (no contract created), one
+    at the floor stages, and the waiting game stages on the run its demand crosses the floor."""
+    _game(95031, 'At The Floor', videos=1, played=100)
+    _, low_match = _game(95032, 'Under The Floor', videos=1, played=99)
+
+    _run(min_players=100)
+
+    assert ContractCandidate.objects.get(igdb_id=95031).status == ContractCandidate.STATUS_STAGED
+    low = ContractCandidate.objects.get(igdb_id=95032)
+    assert low.status == ContractCandidate.STATUS_REVIEW and low.tier == 'A'
+    assert low.contract is None
+    assert not Contract.objects.filter(igdb_id=95032).exists()
+
+    Game.objects.filter(concept=low_match.concept).update(played_count=150)
+    _run(min_players=100)
+    low.refresh_from_db()
+    assert low.status == ContractCandidate.STATUS_STAGED and low.contract is not None
+
+
+def test_min_players_dry_run_reports_the_held_count():
+    """The dry run (how a floor gets picked) says how many Tier A games the floor holds back,
+    and writes nothing."""
+    _game(95034, 'Held One', videos=1, played=5)
+    _game(95035, 'Held Two', videos=1, played=6)
+    _game(95036, 'Clears It', videos=1, played=50)
+
+    out = _run(min_players=10, dry_run=True)
+
+    assert 'would stage 1 ' in out
+    assert '2 held under min players 10' in out
+    assert not ContractCandidate.objects.exists()
+
+
+def test_min_players_rejects_a_negative_floor():
+    with pytest.raises(CommandError, match='--min-players'):
+        _run(min_players=-1)
+
+
+def test_sibling_demand_is_the_max_across_every_list():
+    """Siblings (two concepts, one IGDB game): the Tier A list supplies the verdict, but demand
+    is the busiest sibling's, even a lower-tier one. Under a floor the Tier A list alone would
+    miss, the game still stages, and the stored players (the admin column) is the max."""
+    _game(95045, 'Two Lists', videos=1, played=40)                       # Tier A, quiet
+    _game(95045, 'Two Lists PS5', videos=1, defined=_STACK, played=500)  # Tier B, busy
+
+    _run(min_players=100)
+
+    cand = ContractCandidate.objects.get(igdb_id=95045)
+    assert cand.tier == 'A'
+    assert cand.players == 500
+    assert cand.status == ContractCandidate.STATUS_STAGED
+
+
+def test_min_players_defaults_to_no_floor():
+    """Without the flag, a Tier A game with no players at all still stages (unchanged behavior)."""
+    _game(95033, 'Nobody Yet', videos=1, played=0)
+
+    _run()
+
+    assert ContractCandidate.objects.get(igdb_id=95033).status == ContractCandidate.STATUS_STAGED
 
 
 def test_b_and_c_land_in_their_queues():
