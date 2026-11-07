@@ -44,8 +44,9 @@ PlatPursuit uses **Render Cron Jobs** to run scheduled management commands. Each
 
 Nightly maintenance of the contract-candidate queue (the media-density rule; see
 `trophies/services/contract_candidates.py`). Auto-stages Tier A contracts (`is_live=False`,
-jobs auto-suggested) under `--max-stage 150` per run in player-demand order; review/snooze
-queues live in the ContractCandidate admin. MUST run after `update_shovelware` (04:00): the
+jobs auto-suggested) under `--max-stage 150` per run in player-demand order.
+`--min-players N` (default 0, no floor) holds Tier A games under N players in review until
+they reach it (the summary reports the held count). Review/snooze queues live in the ContractCandidate admin. MUST run after `update_shovelware` (04:00): the
 shovelware exclusion reads the flags it writes. Shovelware-flagged games (any flagged sibling
 excludes the whole IGDB game) are never queued, and their uncontracted non-dismissed rows are
 deleted, so a game flagged after it queued drops out on the next run; clearing the flag

@@ -10,6 +10,7 @@ Per uncontracted IGDB game (siblings vote once):
 - Tier A -> a STAGED Contract is auto-created (is_live=False, jobs auto-suggested via the
   genre/theme detector), in DEMAND ORDER under --max-stage per run so the staged queue grows
   at a publishable pace. Over-cap A games wait as `review` (tier A) and stage on later runs.
+  --min-players sets a demand floor: A games under it wait in `review` the same way.
 - Tier B -> `review` (with the rescued reason recorded for the queue).
 - Tier C -> `snoozed`, re-evaluated every run: IGDB pages gain media late, franchise links
   land late -- snooze is a re-check, never a verdict.
@@ -28,7 +29,7 @@ batch: each staging runs in its own savepoint and a failure leaves that candidat
 """
 import logging
 
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from django.utils import timezone
 from django.utils.text import slugify
@@ -48,6 +49,9 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument('--max-stage', type=int, default=150,
                             help='Max contracts auto-staged per run, demand order (default 150).')
+        parser.add_argument('--min-players', type=int, default=0,
+                            help='Min players a Tier A game needs to auto-stage (default 0, no '
+                                 'floor). Games under it wait in review and stage once they reach it.')
         parser.add_argument('--min-shots', type=int, default=DEFAULT_MIN_SHOTS)
         parser.add_argument('--min-earnable', type=int, default=DEFAULT_MIN_EARNABLE)
         parser.add_argument('--dry-run', action='store_true', help='Report without writing.')
@@ -55,6 +59,9 @@ class Command(BaseCommand):
     def handle(self, *args, **opts):
         dry = opts['dry_run']
         max_stage = opts['max_stage']
+        min_players = opts['min_players']
+        if min_players < 0:
+            raise CommandError('--min-players must be 0 or more.')
         now = timezone.now()
         w = self.stdout.write
 
@@ -66,18 +73,27 @@ class Command(BaseCommand):
         # Dedup siblings to the best-signal row per IGDB game (tier A < B < C lexically; more
         # players wins within a tier) -- and EXCLUDE shovelware at group level: a clean sibling
         # must not launder a flagged game back into the queue (the pre-prod audit's F2).
+        # The best row supplies the verdict (tier/reason/name), but demand is the MAX players
+        # across EVERY sibling: the one contract covers all of them, so a Tier A PS4 list with
+        # 40 players must not hide a Tier B PS5 list with 500 from --min-players, the stage
+        # order, or the admin's players column. Max, not sum: one hunter on both lists is one.
         best = {}
+        group_players = {}
         group_flagged = set()
         for row in scanner.iter_matches():
             if row['contracted']:
                 continue
+            igdb_id = row['igdb_id']
             if row['is_shovelware']:
-                group_flagged.add(row['igdb_id'])
-            cur = best.get(row['igdb_id'])
+                group_flagged.add(igdb_id)
+            group_players[igdb_id] = max(group_players.get(igdb_id, 0), row['players'])
+            cur = best.get(igdb_id)
             if cur is None or (row['tier'], -row['players']) < (cur['tier'], -cur['players']):
-                best[row['igdb_id']] = row
+                best[igdb_id] = row
         for igdb_id in group_flagged:
             best.pop(igdb_id, None)
+        best = {igdb_id: {**row, 'players': group_players[igdb_id]}
+                for igdb_id, row in best.items()}
         # Every non-dismissed row of a flagged game goes (dismissed is a staff verdict, kept).
         # contract__isnull guards a contract staged mid-run; an uncontracted id has none anyway.
         prune_qs = ContractCandidate.objects.filter(
@@ -89,7 +105,7 @@ class Command(BaseCommand):
         status_updates = []      # rows whose STATUS this run changes (targeted saves)
         stage_pool = []
         counts = {'new': 0, 'promoted': 0, 'recovered': 0, 'done': 0, 'staged': 0,
-                  'stage_failed': 0, 'pruned': 0}
+                  'stage_failed': 0, 'pruned': 0, 'held': 0}
 
         for igdb_id, row in best.items():
             cand = existing.get(igdb_id)
@@ -133,11 +149,15 @@ class Command(BaseCommand):
                         field_updates.append(cand)
             # Stage eligibility is checked for EVERY best row -- including unchanged ones, or
             # an over-cap review row (tier A, fields identical since yesterday) would never
-            # stage on later runs.
+            # stage on later runs. Under --min-players it is HELD the same way, and stages on
+            # the run its player count reaches the floor.
             if (row['tier'] == TIER_AUTO
                     and cand.status in (ContractCandidate.STATUS_REVIEW,
                                         ContractCandidate.STATUS_SNOOZED)):
-                stage_pool.append(cand)
+                if row['players'] >= min_players:
+                    stage_pool.append(cand)
+                else:
+                    counts['held'] += 1
 
         # Only a LIVE contract marks done -- a staged (is_live=False) contract keeps its
         # candidate in `staged` awaiting publish (the audit's F1: the full contracted set here
@@ -155,7 +175,8 @@ class Command(BaseCommand):
             w(f"DRY RUN: {counts['new']} new, {counts['promoted']} snooze-promotions, "
               f"{counts['recovered']} recovered, {counts['done']} done, "
               f"{counts['pruned']} shovelware pruned, would stage "
-              f"{len(to_stage)} (cap {max_stage}, pool {len(stage_pool)})")
+              f"{len(to_stage)} (cap {max_stage}, pool {len(stage_pool)}, "
+              f"{counts['held']} held under min players {min_players})")
             for c in to_stage[:10]:
                 w(f'  would stage: {c.name}  ({c.players} players)')
             return
@@ -198,6 +219,7 @@ class Command(BaseCommand):
             f"Evaluated {len(best)} uncontracted games: {counts['new']} new, "
             f"{counts['promoted']} snooze-promotions, {counts['recovered']} recovered, "
             f"{counts['staged']} staged (cap {max_stage}, pool {len(stage_pool)}, "
+            f"{counts['held']} held under min players {min_players}, "
             f"{counts['stage_failed']} failed), {counts['done']} done (went live), "
             f"{counts['pruned']} shovelware pruned."))
 
