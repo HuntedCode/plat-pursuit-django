@@ -3,7 +3,9 @@ import time
 import requests
 import logging
 import os
+from datetime import timedelta
 from django.conf import settings
+from django.utils import timezone
 from dotenv import load_dotenv
 from urllib.parse import urlparse
 
@@ -72,23 +74,196 @@ def queue_webhook_send(payload, webhook_url=settings.DISCORD_PLATINUM_WEBHOOK_UR
     webhook_queue.put((payload, webhook_url))
     logger.info(f"Queued webhook to send to {webhook_url}")
 
-def notify_new_platinum(profile, earned_trophy):
-    """Send Discord webhook embed for new platinum."""
+#: Platinums a sync has earned and not yet announced (a Set of EarnedTrophy ids). Filled per game during
+#: `sync_trophies`, drained ONCE by `sync_complete`, so a hunter who pops twelve platinums in one sync is
+#: one ping, not twelve. A Set, not a List: a retried batch re-queues the same id and must not list it twice.
+_PENDING_PLATS_KEY = 'pending_discord_plats:{profile_id}'
+#: Outlives any real sync, so a sync_complete that re-queues games for a follow-up pass still finds them.
+#: A sync that dies outright drops them after this, which is the right way round: a stale ping is worse
+#: than a missed one.
+_PENDING_PLATS_TTL = 86400
+
+#: Lines in a multi-platinum embed. A platinum line carries a trophy name AND a game title (both PSN free
+#: text), so it runs longer than a badge line; 10 keeps a typical batch readable.
+_MAX_PLATINUM_LINES = 10
+#: Discord 400s a longer description, and `webhook_sender_worker` drops any non-429 whole, which would
+#: lose the entire batch. Both names are `max_length=255` and escaping can double them, so the line cap
+#: alone cannot guarantee a fit; the builder also stops adding lines at this budget.
+_DESCRIPTION_LIMIT = 4096
+#: Room held back for the "…and N more" line.
+_MORE_LINE_RESERVE = 32
+#: How recent a platinum must be to be news. Checked again at flush, so ids left by a sync that died
+#: before flushing cannot ping stale platinums on a later sync.
+PLATINUM_NEWS_WINDOW = timedelta(days=2)
+
+
+def queue_platinum_announcement(profile_id, earned_trophy_id):
+    """Hold a newly earned platinum for this sync's ONE consolidated Discord ping. Never raises: the
+    announcement is the least important thing a trophy save does."""
+    from trophies.util_modules.cache import redis_client
+
+    key = _PENDING_PLATS_KEY.format(profile_id=profile_id)
     try:
-        platinum_emoji = f"<:Platinum_Trophy:{settings.PLATINUM_EMOJI_ID}>" if settings.PLATINUM_EMOJI_ID else "🏆"
-        plat_pursuit_emoji = f"<:PlatPursuit:{settings.PLAT_PURSUIT_EMOJI_ID}>" if settings.PLAT_PURSUIT_EMOJI_ID else "🏆"
-        embed_data = {
-            'title': f"🎉 New Platinum for {profile.display_psn_username}!",
-            'description': f"{plat_pursuit_emoji} <@{profile.discord_id}> has earned a shiny new platinum!\n{platinum_emoji} *{earned_trophy.trophy.trophy_name}* in **{earned_trophy.trophy.game.title_name}**\n🌟 {earned_trophy.trophy.trophy_earn_rate}% (PSN)",
-            'color': 0x003791,
-            'thumbnail': {'url': earned_trophy.trophy.trophy_icon_url},
-            'footer': {'text': f"Powered by Plat Pursuit | Earned: {earned_trophy.earned_date_time.strftime('%Y-%m-%d')}"}
-        }
-        payload = {'embeds': [embed_data]}
+        pipe = redis_client.pipeline()
+        pipe.sadd(key, earned_trophy_id)
+        pipe.expire(key, _PENDING_PLATS_TTL)
+        pipe.execute()
+    except Exception:
+        logger.exception("Failed to queue platinum announcement: profile=%s et=%s", profile_id, earned_trophy_id)
+
+
+def flush_platinum_announcements(profile):
+    """Send everything `queue_platinum_announcement` held for this profile as ONE embed, and clear it.
+
+    Read and delete in one MULTI, so a platinum queued between the two lands in the next flush rather than
+    vanishing. Each id is re-checked against the DB at send time: still earned (a rolled-back batch can
+    leave a queued id whose earn never committed) and still recent. Never raises.
+
+    Shovelware is INCLUDED: one ping per sync means it can no longer flood the channel, and ordering
+    rarest first sinks it (shovelware platinums run common) into the "…and N more" tail.
+    """
+    from django.db.models import Case, IntegerField, Value, When
+
+    from trophies.models import EarnedTrophy
+    from trophies.util_modules.cache import redis_client
+
+    if not profile:
+        return
+    key = _PENDING_PLATS_KEY.format(profile_id=profile.id)
+    try:
+        pipe = redis_client.pipeline(transaction=True)
+        pipe.smembers(key)
+        pipe.delete(key)
+        raw_ids, _ = pipe.execute()
+        if not raw_ids or not profile.discord_id:
+            return
+        earned = list(
+            EarnedTrophy.objects
+            .filter(id__in=[int(i) for i in raw_ids], profile=profile, earned=True,
+                    earned_date_time__gte=timezone.now() - PLATINUM_NEWS_WINDOW)
+            # concept + igdb_match feed the headliner's art (`_game_art_url`: both chains read the match's
+            # image-id columns); raw_response is the ~30 KB IGDB blob neither reads (project CLAUDE.md,
+            # Image Styling Conventions).
+            .select_related('trophy__game__concept__igdb_match')
+            .defer('trophy__game__concept__igdb_match__raw_response')
+            # Rarest PSN earn rate first. 0.0 is the model default for "PSN has not reported a rate yet",
+            # not a real 0%, so those sort after every known rate rather than headlining the message.
+            .annotate(rate_unknown=Case(When(trophy__trophy_earn_rate__lte=0, then=Value(1)),
+                                        default=Value(0), output_field=IntegerField()))
+            .order_by('rate_unknown', 'trophy__trophy_earn_rate', '-earned_date_time', '-id')
+        )
+        send_platinums_earned_notification(profile, earned)
+    except Exception:
+        logger.exception("Platinum announcement flush failed: profile=%s", profile.id)
+
+
+def _game_art_url(game):
+    """The headliner's art for the embed's large image: the site's shared landscape chain
+    (`Concept.get_landscape_url`: trusted IGDB screenshots, then artworks, then PSN `bg_url`), which fills
+    the embed's width, else the portrait cover chain (`display_image_url_large`): the same two chains the
+    contract modal pairs, at the larger cover size. Never hand-roll either chain here. None when neither is an absolute URL, so the
+    caller omits the image rather than sending a bad one. Never raises: art is decoration, and a failure
+    here must not cost the ping."""
+    try:
+        url = (game.concept.get_landscape_url() if game.concept_id else None) or game.display_image_url_large
+    except Exception:
+        logger.exception("Platinum embed art lookup failed: game=%s", getattr(game, 'id', None))
+        return None
+    return url if url and str(url).startswith('http') else None
+
+
+def _platinum_line(platinum_emoji, earned_trophy):
+    """One list line; `earned_trophy` is a stack's rarest member, so the rate shown is the stack's best."""
+    trophy = earned_trophy.trophy
+    return (f"{platinum_emoji} *{escape_md(trophy.trophy_name)}* in **{escape_md(trophy.game.title_name)}**"
+            f" · 🌟 {trophy.trophy_earn_rate}%")
+
+
+def _utf16_len(text):
+    """Length as Discord may count it (UTF-16 code units): 🌟 and any emoji in a PSN title count as two,
+    so measuring in Python code points could pass a description Discord then rejects."""
+    return len(text.encode('utf-16-le')) // 2
+
+
+def _stacks(earned_trophies):
+    """Group platinums by concept, so the 4+ regional/platform stacks of one game a hunter pops together
+    read as ONE line, not four near-identical ones. A game with no concept stands alone. Groups keep the
+    input order, so a rarest-first list yields groups ordered by each one's rarest member."""
+    groups = {}
+    for et in earned_trophies:
+        game = et.trophy.game
+        groups.setdefault(game.concept_id or ('game', game.id), []).append(et)
+    return list(groups.values())
+
+
+def send_platinums_earned_notification(profile, earned_trophies):
+    """ONE Discord embed for every platinum a profile earned this sync, in the order given (the flush passes
+    them rarest first, so the first is the headliner: its trophy icon is the thumbnail and its game's art is
+    the large image).
+
+    A single platinum keeps the message hunters already know (its trophy icon, its PSN rarity, its date).
+    Several become one list under a count, one line per game (stacks collapse to "×N", see `_stacks`), capped
+    at `_MAX_PLATINUM_LINES` with the remaining PLATINUMS counted, so a shovelware-heavy whale's sync can
+    neither flood the channel nor overflow the embed. The title and "…and N more" both count platinums, so
+    the numbers add up however the lines are grouped.
+    """
+    if not profile or not earned_trophies or not profile.discord_id:
+        return
+
+    platinum_emoji = f"<:Platinum_Trophy:{settings.PLATINUM_EMOJI_ID}>" if settings.PLATINUM_EMOJI_ID else "🏆"
+    plat_pursuit_emoji = f"<:PlatPursuit:{settings.PLAT_PURSUIT_EMOJI_ID}>" if settings.PLAT_PURSUIT_EMOJI_ID else "🏆"
+    count = len(earned_trophies)
+    headliner = earned_trophies[0]
+    dates = sorted({et.earned_date_time.strftime('%Y-%m-%d') for et in earned_trophies if et.earned_date_time})
+    earned_on = dates[0] if len(dates) == 1 else f"{dates[0]} to {dates[-1]}" if dates else ''
+
+    if count == 1:
+        trophy = headliner.trophy
+        title = f"🎉 New Platinum for {profile.display_psn_username}!"
+        description = (
+            f"{plat_pursuit_emoji} <@{profile.discord_id}> has earned a shiny new platinum!\n"
+            f"{platinum_emoji} *{escape_md(trophy.trophy_name)}* in **{escape_md(trophy.game.title_name)}**\n"
+            f"🌟 {trophy.trophy_earn_rate}% (PSN)"
+        )
+    else:
+        header = f"{plat_pursuit_emoji} <@{profile.discord_id}> has earned {count} shiny new platinums!\n\n"
+        budget = _DESCRIPTION_LIMIT - _utf16_len(header) - _MORE_LINE_RESERVE
+        lines, listed = [], 0
+        for stack in _stacks(earned_trophies)[:_MAX_PLATINUM_LINES]:
+            line = _platinum_line(platinum_emoji, stack[0])
+            if len(stack) > 1:
+                line += f" (×{len(stack)})"
+            if _utf16_len(line) + 1 > budget:
+                break
+            lines.append(line)
+            listed += len(stack)
+            budget -= _utf16_len(line) + 1
+        if count > listed:
+            lines.append(f"…and {count - listed} more")
+        title = f"🎉 {count} New Platinums for {profile.display_psn_username}!"
+        description = header + "\n".join(lines)
+
+    embed = {
+        'title': title,
+        'description': description,
+        'color': 0x003791,
+        'footer': {'text': "Powered by Plat Pursuit" + (f" | Earned: {earned_on}" if earned_on else '')},
+    }
+    # Omitted rather than `{'url': None}`, which Discord can reject, taking the whole batch with it.
+    if headliner.trophy.trophy_icon_url:
+        embed['thumbnail'] = {'url': headliner.trophy.trophy_icon_url}
+    art = _game_art_url(headliner.trophy.game)
+    if art:
+        embed['image'] = {'url': art}
+    payload = {'embeds': [embed],
+        # Trophy names and game titles are PSN free text in a message that carries a live `<@id>`.
+        'allowed_mentions': {'users': [str(profile.discord_id)]},
+    }
+    try:
         queue_webhook_send(payload)
-        logger.info(f"Queued notification of new badge for {profile.psn_username}")
+        logger.info(f"Queued platinum notification ({count}) for {profile.psn_username}")
     except Exception as e:
-        logger.error(f"Failed to queue badge notification: {e}")
+        logger.error(f"Failed to queue platinum notification: {e}")
 
 _BADGE_TIER_LABELS = {1: 'Bronze', 2: 'Silver', 3: 'Gold', 4: 'Platinum'}
 
@@ -155,12 +330,15 @@ def send_badge_earned_notification(profile, badges):
 # nobody scans a 40-line list anyway.
 _MAX_BADGE_LINES = 15
 
-#: Markdown characters that would let one admin-authored series name reformat the lines after it.
-_MD_ESCAPE = str.maketrans({c: f'\\{c}' for c in '*_`~|[]()>'})
+#: Markdown characters that would let one admin-authored series name, or one PSN trophy/game name, reformat
+#: the lines after it. `\` so a trailing backslash cannot escape the closing `*` around it; `<` so text
+#: shaped like `<#id>` stays text instead of rendering as a channel link.
+_MD_ESCAPE = str.maketrans({c: f'\\{c}' for c in '\\*_`~|[]()<>'})
 
 
 def escape_md(text):
-    """Escape Discord markdown in staff/curator-authored text bound for an embed. PUBLIC because
+    """Escape Discord markdown in free text bound for an embed (staff/curator-authored names, PSN trophy
+    and game names). PUBLIC because
     every webhook sender needs it: the contract announcer reimplemented this before noticing it was
     already here, which is one definition of the escape set too many."""
     return str(text or '').translate(_MD_ESCAPE)

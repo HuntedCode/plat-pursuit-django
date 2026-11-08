@@ -105,8 +105,9 @@ Workers consume from all 5 queues via priority-ordered `brpop`.
 |-------------|------|-----|---------|
 | `pending_platinum:{profile_id}:{game_id}` | String (JSON) | 7200s (2h) | Queued platinum notification; created at sync completion |
 | `pending_badges:{profile_id}` | List (JSON items) | 3600s (1h) | Badge context dicts queued for consolidation |
+| `pending_discord_plats:{profile_id}` | Set (EarnedTrophy ids) | 86400s (24h) | Platinums earned this sync awaiting the ONE Discord ping. Added per game by `queue_platinum_announcement`; read and deleted in one MULTI by `flush_platinum_announcements` in `sync_complete` |
 
-**Files**: `notifications/services/deferred_notification_service.py`
+**Files**: `notifications/services/deferred_notification_service.py`, `trophies/discord_utils/discord_notifications.py`
 
 ### Site-Wide Flags
 

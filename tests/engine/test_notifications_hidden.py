@@ -205,7 +205,7 @@ def test_the_chokepoint_still_writes():
 # The producer call sites, by the file that owns them. This is the half of the system a rebuild KEEPS,
 # and the whole justification for hiding rather than deleting -- so it is the half worth pinning.
 PRODUCERS = [
-    ('trophies/services/psn_api_service.py', 'notify_new_platinum'),
+    ('trophies/services/psn_api_service.py', 'queue_platinum_announcement'),
     ('fundraiser/services/donation_service.py', '_send_donation_notification'),
     ('users/services/subscription_service.py', 'NotificationService.create_notification'),
     ('notifications/signals.py', 'notify_platinum_earned'),

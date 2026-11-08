@@ -30,6 +30,7 @@ from trophies.util_modules.language import detect_asian_language
 from trophies.services import region_service
 from trophies.services.profile_stats_service import update_profile_games, update_profile_trophy_counts
 from trophies.services.badge_apply import evaluate_for_sync
+from trophies.discord_utils.discord_notifications import flush_platinum_announcements
 from trophies.services.concept_anchor_service import try_anchor_new_game
 from trophies.services.psn_metadata_service import (
     capture_psn_concept_data,
@@ -1439,6 +1440,11 @@ class TokenKeeper:
             _set_phase('stats_badges')
             profile.update_plats()
             PsnApiService.update_profilegame_stats(touched_profilegame_ids)
+            # Every platinum this sync earned, as ONE Discord ping (queued per game by `sync_trophies`).
+            # Here, past the completeness re-queue above, so a follow-up pass still sends them together;
+            # ahead of the badge announcement, so a sync that earns both reads platinums first.
+            # Never raises.
+            flush_platinum_announcements(profile)
             # The badge subsystem (GroupBadge/UserGroupBadge + the standings that back the leaderboards).
             # Scoped to the series the touched games belong to; see evaluate_for_touched_games.
             #
