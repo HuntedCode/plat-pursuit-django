@@ -11,7 +11,7 @@ from trophies.services.psn_metadata_service import capture_title_stats_observati
 from trophies.models import Profile, Game, ProfileGame, ProfileTrophyGroup, Trophy, EarnedTrophy, Concept, TrophyGroup
 from psnawp_api.models.title_stats import TitleStats
 from psnawp_api.models.trophies import TrophyTitle, TrophyGroupSummary
-from trophies.discord_utils.discord_notifications import notify_new_platinum
+from trophies.discord_utils.discord_notifications import PLATINUM_NEWS_WINDOW, queue_platinum_announcement
 
 logger = logging.getLogger("psn_api")
 
@@ -637,7 +637,7 @@ class PsnApiService:
 
         notify = False
         if is_new_earn:
-            threshold = timezone.now() - timedelta(days=2)
+            threshold = timezone.now() - PLATINUM_NEWS_WINDOW
             notify = (
                 profile.discord_id
                 and earned_trophy.trophy.trophy_type == 'platinum'
@@ -670,10 +670,10 @@ class PsnApiService:
             from trophies.services.moment_service import record_platinum
             record_platinum(profile, earned_trophy, trophy_data.earned_date_time)
 
+        # Held, not sent: `sync_complete` announces the whole sync's platinums as ONE Discord ping, rarest
+        # first (see `flush_platinum_announcements`).
         if notify:
-            earned_trophy.refresh_from_db()
-            if not earned_trophy.trophy.game.is_shovelware:
-                notify_new_platinum(profile, earned_trophy)
+            queue_platinum_announcement(profile.id, earned_trophy.id)
 
         # During sync with pre_save suppressed, the post_save signal won't detect earned
         # flips (it relies on _previous_earned from pre_save). Queue the deferred platinum

@@ -301,11 +301,21 @@ The signal handler checks `is_sync_signal_suppressed()` and skips the expensive 
 
 ### Shovelware Detection
 
-When a platinum trophy is created or updated, `ShovelwareDetectionService.evaluate_game(game)` is called to classify the game. The game object is then refreshed from DB (`game.refresh_from_db()`) because the service uses queryset `.update()` which does not modify the in-memory instance. Downstream notification logic checks `game.is_shovelware` to suppress notifications for shovelware titles.
+When a platinum trophy is created or updated, `ShovelwareDetectionService.evaluate_game(game)` is called to classify the game. The game object is then refreshed from DB (`game.refresh_from_db()`) because the service uses queryset `.update()` which does not modify the in-memory instance. Downstream in-app notification logic checks `game.is_shovelware` to suppress notifications for shovelware titles. (Discord platinum pings include shovelware; see below.)
 
 ### Discord Notifications
 
-`notify_new_platinum(profile, earned_trophy)` sends a Discord webhook notification when a platinum is earned. This is called directly during trophy sync (not deferred) but only for profiles with a linked Discord account, non-shovelware games, and platinums earned within the last 2 days.
+Platinum pings are **one consolidated embed per sync**, not one per platinum (a hunter clearing a stack of short games used to ping the channel a dozen times in one sync).
+
+1. During `sync_trophies`, `create_or_update_earned_trophy_from_trophy_data()` calls `queue_platinum_announcement(profile_id, earned_trophy_id)` for each newly earned platinum on a profile with a `discord_id`, earned within the last 2 days. It adds the id to the `pending_discord_plats:{profile_id}` Redis Set.
+2. In `sync_complete` (`stats_badges` phase, after the completeness re-queue and before `evaluate_for_sync`), `flush_platinum_announcements(profile)` reads and deletes the Set in one MULTI, re-checks each id against the DB (still earned, owned by this profile, earned within the last 2 days) and sends ONE embed via `send_platinums_earned_notification()`. A single platinum keeps the classic message. Several become one list:
+
+   - **Order**: rarest first by PSN earn rate.
+   - **Stacks**: one line per concept; regional/platform stacks of one game collapse to a single line marked "(×N)" showing the stack's rarest rate.
+   - **Cap**: 10 lines, and Discord's 4096-character description limit (measured in UTF-16 units), plus "…and N more". The title and the "N more" both count platinums, not lines.
+   - **Art** (single or batched): the rarest platinum is the headliner. Its trophy icon is the thumbnail; its game's landscape art from the shared chain, `Concept.get_landscape_url()` (trusted IGDB screenshots, then artworks, then PSN `bg_url`), falling back to the cover chain, is the large image.
+
+**Gotchas**: shovelware platinums are INCLUDED (they used to be dropped when every platinum was its own ping); rarest-first ordering sinks them, since shovelware runs common, into the "…and N more" tail. An earn rate of `0.0` is the model default for "PSN has not reported one yet", so those sort after every known rate. A completeness re-queue returns before the flush, so the follow-up `sync_complete` sends the whole batch together. A sync that dies before flushing leaves the Set behind; the flush re-applies the 2-day window (`PLATINUM_NEWS_WINDOW`), so a later sync never pings stale platinums, and the Set expires after 24h with no new platinums.
 
 ### ConceptTrophyGroup Sync
 
