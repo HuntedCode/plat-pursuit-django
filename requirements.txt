@@ -63,7 +63,7 @@ scipy==1.18.1
 sendgrid==6.12.5
 six==1.17.0
 sqlparse==0.6.0
-stripe==15.6.1
+stripe==15.6.2
 tenacity==9.2.1
 typing_extensions==4.16.0
 tzdata==2026.5
