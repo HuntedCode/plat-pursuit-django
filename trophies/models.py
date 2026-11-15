@@ -723,10 +723,16 @@ class Game(models.Model):
         migration command and the `ConceptJoinReview` admin actions) pass
         `force=True` to override the lock, since the lock was meant to keep
         automation out, not to block deliberate migration moves.
+
+        The lock guards an EXISTING assignment only. A locked Game with no
+        concept (its concept was deleted out from under it: `Game.concept` is
+        SET_NULL) must still accept one, or every placement path no-ops on it
+        forever: sync_complete mints a stub per sync that never attaches, and
+        the profile is forced onto the slow path on every sync.
         """
         if not concept:
             return
-        if self.concept_lock and not force:
+        if self.concept_lock and self.concept_id is not None and not force:
             return
         if self.concept == concept:
             if self.concept_stale:
@@ -1335,6 +1341,13 @@ class Concept(models.Model):
         """Template-friendly landscape banner URL (default sizes)."""
         return self.get_landscape_url()
 
+    @staticmethod
+    def default_stub_title(game):
+        """The `<title> (<platforms>)` name a PP_* stub takes from its Game. One rule, shared by
+        stub creation and `repair_blank_titles`, which renames the stubs a blank title produced."""
+        platforms = ', '.join(game.title_platform) if game.title_platform else 'Unknown'
+        return f"{game.title_name} ({platforms})"
+
     @classmethod
     def create_default_concept(cls, game):
         """Create a stub Concept for games that couldn't be looked up via PSN API.
@@ -1344,7 +1357,6 @@ class Concept(models.Model):
         """
         from trophies.util_modules.cache import redis_client
 
-        platforms = ', '.join(game.title_platform) if game.title_platform else 'Unknown'
         counter_key = "pp_concept_counter"
 
         # Initialize counter from DB if it doesn't exist yet
@@ -1363,7 +1375,7 @@ class Concept(models.Model):
             try:
                 return cls.objects.create(
                     concept_id=f"PP_{next_id}",
-                    unified_title=f"{game.title_name} ({platforms})",
+                    unified_title=cls.default_stub_title(game),
                     concept_icon_url=game.title_icon_url or None,
                 )
             except IntegrityError:

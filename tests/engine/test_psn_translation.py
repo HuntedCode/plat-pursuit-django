@@ -120,6 +120,43 @@ def test_create_or_update_game_respects_lock_title():
     assert game.title_name == "Curated Name"  # lock_title preserved the admin value
 
 
+@pytest.mark.parametrize("blank", ["", "   ", None])
+def test_a_blank_psn_title_never_overwrites_a_real_one(blank):
+    # PSN intermittently sends a blank trophyTitleName; copying it wiped good titles (Nov 2026).
+    game = GameFactory(np_communication_id="NPWR00001_00", title_name="Rising Dusk")
+
+    PsnApiService.create_or_update_game(fake_trophy_title(title_name=blank))
+
+    game.refresh_from_db()
+    assert game.title_name == "Rising Dusk"
+
+
+def test_a_real_rename_still_goes_through():
+    game = GameFactory(np_communication_id="NPWR00001_00", title_name="Old Name")
+
+    PsnApiService.create_or_update_game(fake_trophy_title(title_name="New Name"))
+
+    game.refresh_from_db()
+    assert game.title_name == "New Name"
+
+
+def test_a_blank_title_is_filled_by_the_next_walk_that_names_it():
+    game = GameFactory(np_communication_id="NPWR00001_00", title_name="")
+
+    PsnApiService.create_or_update_game(fake_trophy_title(title_name="Rising Dusk"))
+
+    game.refresh_from_db()
+    assert game.title_name == "Rising Dusk"
+
+
+def test_a_none_title_creates_a_blank_game_instead_of_crashing():
+    # psnawp types title_name `str | None`; the column is NOT NULL.
+    game, created, _ = PsnApiService.create_or_update_game(fake_trophy_title(title_name=None))
+
+    assert created is True
+    assert game.title_name == ""
+
+
 # --- ProfileGame translation --------------------------------------------------
 
 

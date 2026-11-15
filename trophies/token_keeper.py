@@ -31,7 +31,7 @@ from trophies.services import region_service
 from trophies.services.profile_stats_service import update_profile_games, update_profile_trophy_counts
 from trophies.services.badge_apply import evaluate_for_sync
 from trophies.discord_utils.discord_notifications import flush_platinum_announcements
-from trophies.services.concept_anchor_service import try_anchor_new_game
+from trophies.services.concept_anchor_service import place_profile_orphan_games, try_anchor_new_game
 from trophies.services.psn_metadata_service import (
     capture_psn_concept_data,
     capture_title_page_bulk,
@@ -1245,26 +1245,9 @@ class TokenKeeper:
             # before the drain below so newly-deferred enrichments are picked
             # up in the same pass.
             _set_phase('igdb_enrich')
-            orphan_games = list(
-                Game.objects.filter(
-                    played_by__profile=profile, concept__isnull=True,
-                ).distinct()
+            reconciled = place_profile_orphan_games(
+                profile, on_stub=lambda stub: self._defer_igdb_enrich(profile_id, stub),
             )
-            reconciled = 0
-            for game in orphan_games:
-                try:
-                    # Try canonical anchor first; if no clean IGDB match,
-                    # fall through to the historical PP_* stub path.
-                    if try_anchor_new_game(game) is None:
-                        stub = Concept.create_default_concept(game)
-                        game.add_concept(stub)
-                        self._defer_igdb_enrich(profile_id, stub)
-                    reconciled += 1
-                except Exception:
-                    logger.exception(
-                        f"sync_complete orphan reconcile failed "
-                        f"game={game.np_communication_id}"
-                    )
             if reconciled:
                 logger.warning(
                     f"[profile {profile_id}] health check reconciled "
@@ -2396,10 +2379,52 @@ class TokenKeeper:
             self._profile_refresh_fast_path(profile_id)
             return
 
-        self._profile_refresh_slow_path(
-            profile_id, profile, first_page, total_item_count, page_size,
-            last_sync, had_existing_games,
-        )
+        try:
+            self._profile_refresh_slow_path(
+                profile_id, profile, first_page, total_item_count, page_size,
+                last_sync, had_existing_games,
+            )
+        except Exception:
+            # The walk SAVES new Games before anything places them; placement is sync_complete's
+            # job. An abort after the walk (a private profile, a PSN NotFound, an outage) never
+            # queues sync_complete, and neither recovery path runs it: the stuck-sync sweep only
+            # looks at 'syncing' profiles, and outage recovery resets the status without it. That
+            # stranded 722 Games concept-less in Nov 2026. Place them now, then let the error
+            # reach the worker loop exactly as before.
+            self._place_stranded_games(profile, profile_id)
+            raise
+
+    #: Games one aborted walk places inline. Each costs IGDB calls on a worker that is holding
+    #: the original error, and an initial sync that dies can strand its WHOLE library. The rest
+    #: wait for the next sync's concept-less safety net or `trigger_concept_health_checks`.
+    STRANDED_PLACEMENT_LIMIT = 100
+
+    def _place_stranded_games(self, profile, profile_id):
+        """Abort-path twin of sync_complete's orphan reconcile: DB + IGDB only, no PSN calls, so it
+        works mid-outage. Leaves sync_status alone (the abort's own handling owns that). Never
+        raises: it runs inside an except block and must not replace the original error."""
+        try:
+            placed = place_profile_orphan_games(
+                profile, on_stub=lambda stub: self._defer_igdb_enrich(profile_id, stub),
+                limit=self.STRANDED_PLACEMENT_LIMIT,
+            )
+            if placed:
+                logger.warning(
+                    f"[profile {profile_id}] slow path aborted: placed {placed} stranded game(s)"
+                )
+            if Game.objects.filter(played_by__profile=profile, concept__isnull=True).exists():
+                logger.warning(
+                    f"[profile {profile_id}] slow path aborted: concept-less games remain past the "
+                    f"cap of {self.STRANDED_PLACEMENT_LIMIT}; the next sync or "
+                    f"trigger_concept_health_checks --profile-id {profile_id} places them"
+                )
+            # The deferred set also holds concepts that in-flight sync_title_id jobs queued, and
+            # draining runs IGDB matching before those jobs attach their sibling Games. Only drain
+            # when nothing else is running for this profile; otherwise sync_complete owns it.
+            if self._get_current_jobs_for_profile(profile_id) <= 0:
+                self._drain_deferred_igdb_enrich(profile_id)
+        except Exception:
+            logger.exception(f"[profile {profile_id}] stranded-game placement failed")
 
     def _profile_refresh_fast_path(self, profile_id: int):
         """Fingerprint matched: schedule sync_complete with no per-game work."""
