@@ -18,7 +18,9 @@ from tests.factories import (
 
 pytestmark = pytest.mark.django_db
 
-ANCHOR_TARGET = "trophies.management.commands.trigger_concept_health_checks.try_anchor_new_game"
+# The command places through concept_anchor_service.place_concept_less_game, which looks the
+# anchor up in its own module namespace, so that is where the fake has to go.
+ANCHOR_TARGET = "trophies.services.concept_anchor_service.try_anchor_new_game"
 
 
 @pytest.fixture

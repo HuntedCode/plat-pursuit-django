@@ -511,6 +511,81 @@ def try_anchor_new_game(game):
         return None
 
 
+#: place_concept_less_game outcomes.
+PLACED_ANCHORED = 'anchored'
+PLACED_STUBBED = 'stubbed'
+PLACED_ELSEWHERE = 'placed_elsewhere'
+
+
+def place_concept_less_game(game):
+    """Give a concept-less Game a Concept: its IGDB anchor when the match is clean, else a PP_ stub.
+
+    Anchor-or-stub recovery shared by sync_complete's orphan reconcile, the slow path's abort
+    handler and `trigger_concept_health_checks`. (The sync_title_id and legacy-platform
+    fallbacks in token_keeper still carry their own inline copies.)
+
+    The stub attaches under a row lock, re-checking the FK: the abort handler can run while
+    sync_title_id jobs the walk already queued are placing these same Games, and an unlocked
+    attach would overwrite the PSN concept a job had just set. A stub that loses that race is
+    deleted rather than left behind empty. It is minted BEFORE the lock because
+    create_default_concept retries on IntegrityError, which cannot recover inside an atomic block.
+
+    Returns `(outcome, concept)`, outcome one of PLACED_ANCHORED / PLACED_STUBBED /
+    PLACED_ELSEWHERE. Raises on a failure; callers isolate per game.
+    """
+    from django.db import transaction
+
+    from trophies.models import Concept, Game
+
+    anchored = try_anchor_new_game(game)
+    if anchored is not None:
+        return PLACED_ANCHORED, anchored
+    game.refresh_from_db(fields=['concept'])
+    if game.concept_id is not None:
+        return PLACED_ELSEWHERE, game.concept
+    stub = Concept.create_default_concept(game)
+    with transaction.atomic():
+        current = Game.objects.select_for_update().get(pk=game.pk)
+        if current.concept_id is not None:
+            stub.delete()
+            game.refresh_from_db(fields=['concept'])
+            return PLACED_ELSEWHERE, game.concept
+        current.add_concept(stub)
+    game.refresh_from_db(fields=['concept'])
+    return PLACED_STUBBED, stub
+
+
+def place_profile_orphan_games(profile, on_stub=None, limit=None):
+    """Place the concept-less Games `profile` plays, oldest first, at most `limit` of them.
+    Never raises; returns how many were placed.
+
+    `on_stub(concept)` runs for each minted stub (the sync paths defer its IGDB enrichment).
+    Per-game isolation: one Game that fails to place is logged and skipped, never the batch.
+    """
+    from trophies.models import Game
+
+    placed = 0
+    try:
+        orphans = Game.objects.filter(
+            played_by__profile=profile, concept__isnull=True,
+        ).distinct().order_by('pk')
+        orphans = list(orphans[:limit] if limit else orphans)
+    except Exception:
+        logger.exception(f'orphan placement could not list games for profile={profile.pk}')
+        return 0
+    for game in orphans:
+        try:
+            outcome, concept = place_concept_less_game(game)
+            if outcome == PLACED_STUBBED and on_stub is not None:
+                on_stub(concept)
+            placed += 1
+        except Exception:
+            logger.exception(
+                f'orphan placement failed profile={profile.pk} game={game.np_communication_id}'
+            )
+    return placed
+
+
 def _upsert_or_reopen_join_review(game, fresh_flags, defaults) -> bool:
     """Create/update a ConceptJoinReview for `game`, re-opening a staff-resolved
     review ONLY when a genuinely new flag appears.

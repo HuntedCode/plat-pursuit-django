@@ -2,8 +2,10 @@ import logging
 
 from django.core.management.base import BaseCommand
 
-from trophies.models import Concept, Game
-from trophies.services.concept_anchor_service import try_anchor_new_game
+from trophies.models import Game
+from trophies.services.concept_anchor_service import (
+    PLACED_ANCHORED, PLACED_ELSEWHERE, place_concept_less_game,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -73,29 +75,22 @@ class Command(BaseCommand):
         failed = 0
         for game in games:
             try:
-                # Clean IGDB match: lands the Game on its anchored Concept
-                # (enriched inline by process_match) and returns it.
-                if try_anchor_new_game(game) is not None:
+                # Anchor-or-stub, shared with sync's orphan reconcile. Unlike sync, stubs minted
+                # here are NOT queued for deferred IGDB enrichment (no worker/profile context to
+                # defer into). Re-run anchor_concepts later to re-evaluate them against IGDB.
+                outcome, concept = place_concept_less_game(game)
+                if outcome == PLACED_ANCHORED:
                     anchored += 1
                     self.stdout.write(
                         f"  [anchored] {game.title_name} ({game.np_communication_id})"
                     )
-                    continue
-                # No clean match: guard against a concurrent placement, then stub.
-                # Unlike sync_complete's orphan reconcile, stubs minted here are
-                # NOT queued for deferred IGDB enrichment (no worker/profile
-                # context to defer into). Re-run anchor_concepts later if you
-                # want these stubs re-evaluated against IGDB.
-                game.refresh_from_db(fields=['concept'])
-                if game.concept_id is None:
-                    stub = Concept.create_default_concept(game)
-                    game.add_concept(stub)
+                elif outcome == PLACED_ELSEWHERE:
+                    anchored += 1  # placed by a concurrent process
+                else:
                     stubbed += 1
                     self.stdout.write(
-                        f"  [stub {stub.concept_id}] {game.title_name} ({game.np_communication_id})"
+                        f"  [stub {concept.concept_id}] {game.title_name} ({game.np_communication_id})"
                     )
-                else:
-                    anchored += 1  # placed by a concurrent process
             except Exception:
                 # Per-game isolation: one bad game must not abort the batch.
                 failed += 1
