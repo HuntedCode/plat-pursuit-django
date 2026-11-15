@@ -7,7 +7,7 @@ The Concept model is the central abstraction that unifies PlayStation games shar
 The system has four core models and several supporting relationships:
 
 1. **Concept**: The logical game entity. Identified by `concept_id` (from the PSN API, or a `PP_` prefix for stub concepts). Groups one or more `Game` records. All user-facing content (ratings, reviews, roadmaps, IGDB enrichment) is scoped to Concept, not Game.
-2. **Game**: A specific platform release. Has a FK to `Concept` (nullable, SET_NULL). The `add_concept()` method handles assignment and triggers `absorb()` when a concept reassignment orphans the old one.
+2. **Game**: A specific platform release. Has a FK to `Concept` (nullable, PROTECT since 2026-11: deleting a Concept that still has Games raises). The `add_concept()` method handles assignment and, when a reassignment empties the old Concept, merges it into the new one via `Concept.merge_in()` (`absorb()` then delete; kept and logged if a Game attached in between).
 3. **TitleID**: Links PSN title IDs (per-platform identifiers) to the system. Used during sync to look up concept details from the PSN API and for deduplication.
 4. **GameFamily**: A lightweight cross-generation grouping layer. Unlike Concept (which merges content), GameFamily groups related Concepts WITHOUT merging them. Each Concept in a family retains its own comments, ratings, and checklists.
 
@@ -55,7 +55,7 @@ The most critical operation in the system is `Concept.absorb(other)`. When a con
 
 | Field | Type | Notes |
 |-------|------|-------|
-| `concept` | FK to Concept (nullable, SET_NULL) | The concept this game belongs to. Assigned via `add_concept()` |
+| `concept` | FK to Concept (nullable, PROTECT) | The concept this game belongs to. Assigned via `add_concept()` |
 | `concept_lock` | BooleanField (default False) | Admin lock. When True, `add_concept()` is a no-op and sync cannot overwrite the concept |
 | `concept_stale` | BooleanField (default False) | Flag for concept re-lookup on next sync. Checked in `update_profile_game_with_title_stats()` |
 | `title_ids` | JSONField (list) | PSN title IDs for this specific game (separate from Concept.title_ids) |

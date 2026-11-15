@@ -31,7 +31,10 @@ from trophies.services import region_service
 from trophies.services.profile_stats_service import update_profile_games, update_profile_trophy_counts
 from trophies.services.badge_apply import evaluate_for_sync
 from trophies.discord_utils.discord_notifications import flush_platinum_announcements
-from trophies.services.concept_anchor_service import place_profile_orphan_games, try_anchor_new_game
+from trophies.services import sync_backoff
+from trophies.services.concept_anchor_service import (
+    PLACED_STUBBED, place_concept_less_game, place_profile_orphan_games, try_anchor_new_game,
+)
 from trophies.services.psn_metadata_service import (
     capture_psn_concept_data,
     capture_title_page_bulk,
@@ -1566,6 +1569,7 @@ class TokenKeeper:
                 logger.exception(f"[profile {profile_id}] moment recording failed")
 
             profile.set_sync_status('synced')
+            sync_backoff.clear(profile_id)
 
             # (job-worker bookend logs DONE; trailing narration line dropped)
         except PSNOutageError:
@@ -2058,13 +2062,12 @@ class TokenKeeper:
                         # PSN returned no usable details; try canonical IGDB
                         # anchor before falling back to a PP_* stub. IGDB often
                         # covers games PSN's storefront has gaps for.
-                        if try_anchor_new_game(game) is None:
-                            default_concept = Concept.create_default_concept(game)
-                            game.add_concept(default_concept)
-                            self._defer_igdb_enrich(profile_id, default_concept)
+                        outcome, placed_concept = place_concept_less_game(game)
+                        if outcome == PLACED_STUBBED:
+                            self._defer_igdb_enrich(profile_id, placed_concept)
                             logger.info(f"Created default concept for {game.title_name}")
                         else:
-                            logger.info(f"Anchored {game.title_name} at canonical IGDB Concept")
+                            logger.info(f"Placed {game.title_name} ({outcome})")
                     except Exception:
                         logger.exception(f"Failed to place concept-less Game {game.title_name} (Title ID {title_id.title_id})")
         except PSNOutageError:
@@ -2551,10 +2554,9 @@ class TokenKeeper:
                         # storefront concept. If the match is clean, land
                         # the Game at the canonical Concept directly and
                         # skip the PP_* stub.
-                        if try_anchor_new_game(game) is None:
-                            default_concept = Concept.create_default_concept(game)
-                            game.add_concept(default_concept)
-                            self._try_igdb_enrich(default_concept)
+                        outcome, placed_concept = place_concept_less_game(game)
+                        if outcome == PLACED_STUBBED:
+                            self._try_igdb_enrich(placed_concept)
                         logger.debug(
                             f"placed legacy game={game.np_communication_id}"
                         )

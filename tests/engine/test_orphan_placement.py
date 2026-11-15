@@ -311,3 +311,75 @@ def test_stranded_placement_drains_only_when_no_jobs_are_in_flight():
 
 def test_sync_complete_still_reconciles_orphans():
     assert _calls(_function('_job_sync_complete'), 'place_profile_orphan_games')
+
+
+# --- Game.concept is PROTECT ------------------------------------------------------
+
+
+def test_deleting_a_concept_that_still_has_games_raises():
+    # Under SET_NULL this silently orphaned the Games (an admin delete skipped absorb() entirely).
+    from django.db.models import ProtectedError
+
+    concept = ConceptFactory()
+    game = GameFactory(concept=concept)
+
+    with pytest.raises(ProtectedError):
+        concept.delete()
+    game.refresh_from_db()
+    assert game.concept == concept
+
+
+def test_an_empty_concept_still_deletes():
+    concept = ConceptFactory()
+
+    concept.delete()
+
+    assert not Concept.objects.filter(pk=concept.pk).exists()
+
+
+def test_reassigning_a_games_last_concept_still_absorbs_and_deletes_it():
+    # add_concept moves the Game off BEFORE deleting, so PROTECT never fires on the normal path.
+    old, new = ConceptFactory(), ConceptFactory()
+    game = GameFactory(concept=old)
+
+    game.add_concept(new)
+
+    assert not Concept.objects.filter(pk=old.pk).exists()
+
+
+# --- token_keeper placement goes through the shared function ----------------------
+
+
+def test_token_keeper_has_no_inline_anchor_or_stub_copies():
+    """Every anchor-or-stub site uses place_concept_less_game. What may remain: the PSN-details branch
+    (anchors or falls back to a PSN concept, never a stub) and sync_title_id's exception recovery,
+    which mints a bare stub on purpose because the exception it recovers from may be IGDB's."""
+    tree = ast.parse(pathlib.Path('trophies/token_keeper.py').read_text(encoding='utf-8'))
+    assert len(_calls(tree, 'try_anchor_new_game')) == 1, 'an inline anchor-or-stub copy came back'
+    assert len(_calls(tree, 'create_default_concept')) == 1, 'an inline stub mint came back'
+    assert len(_calls(tree, 'place_concept_less_game')) >= 2
+
+
+def test_merge_in_keeps_a_concept_that_gained_a_game_instead_of_raising(monkeypatch):
+    # The race PROTECT turns loud: a Game attaches between the caller's empty-check and the delete.
+    # absorb() has already run and cannot roll back, so the concept is kept (it is not orphaned) and
+    # the sync that triggered the merge carries on instead of failing after its own save.
+    survivor, doomed = ConceptFactory(), ConceptFactory()
+    late = GameFactory(concept=None)
+    real_absorb = Concept.absorb
+
+    def absorb_then_race(self, other):
+        real_absorb(self, other)
+        Game.objects.filter(pk=late.pk).update(concept=other)
+
+    monkeypatch.setattr(Concept, 'absorb', absorb_then_race)
+
+    assert survivor.merge_in(doomed) is False
+    assert Concept.objects.filter(pk=doomed.pk).exists()
+
+
+def test_merge_in_deletes_an_empty_concept():
+    survivor, doomed = ConceptFactory(), ConceptFactory()
+
+    assert survivor.merge_in(doomed) is True
+    assert not Concept.objects.filter(pk=doomed.pk).exists()

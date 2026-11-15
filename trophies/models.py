@@ -521,6 +521,11 @@ class Profile(models.Model):
             logger.info(f"Deleting unlinked profile {self.id} (no account_id) after sync error.")
             self.delete()
             return False
+        if value == 'error':
+            # Every failed sync ends here, so this is the one place the cron's retry backoff
+            # can learn about it. A successful sync_complete clears it.
+            from trophies.services import sync_backoff
+            sync_backoff.record_failure(self.id)
         self.sync_status = value
         self.save(update_fields=['sync_status'])
         self.refresh_from_db(fields=['sync_status'])
@@ -634,7 +639,11 @@ class Game(models.Model):
     has_trophy_groups = models.BooleanField(default=False)
     defined_trophies = models.JSONField(default=dict, blank=True)
     metadata = models.JSONField(default=dict, blank=True)
-    concept = models.ForeignKey('Concept', null=True, blank=True, on_delete=models.SET_NULL, related_name='games')
+    # PROTECT, not SET_NULL: deleting a Concept that still has Games must fail loudly. SET_NULL orphaned
+    # them silently (an admin delete skipped absorb() entirely, and a race between add_concept's
+    # empty-check and its delete nulled any Game attached in between). Every legitimate path moves the
+    # Games off first (absorb flows, cleanup_empty_concepts), so they never hit this.
+    concept = models.ForeignKey('Concept', null=True, blank=True, on_delete=models.PROTECT, related_name='games')
     region = models.JSONField(default=list, blank=True)
     title_ids = models.JSONField(default=list, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -760,8 +769,7 @@ class Game(models.Model):
             concept.title_reviewed_at = None
             concept.save(update_fields=['title_reviewed_at'])
         if old_concept and old_concept.games.count() == 0:
-            concept.absorb(old_concept)
-            old_concept.delete()
+            concept.merge_in(old_concept)
             from trophies.services.comment_service import CommentService
             from trophies.services.rating_service import RatingService
             CommentService.invalidate_cache(concept)
@@ -1381,6 +1389,28 @@ class Concept(models.Model):
             except IntegrityError:
                 if attempt == 4:
                     raise
+
+    def merge_in(self, other):
+        """Absorb `other` into this Concept, then delete it. Returns whether it was deleted.
+
+        Callers check `other` is empty first, but nothing locks it between that check and the delete,
+        so a Game can attach in between. `Game.concept` is PROTECT, so that delete raises: `other` is
+        then no longer orphaned and is kept, logged, rather than raising into a sync job whose own
+        reassignment has already saved. absorb() is not transactional (and swallows an error inside
+        without a savepoint), so it cannot be wrapped in an atomic block to roll the merge back; the
+        absorbed social data stays on this Concept, where nothing is lost.
+        """
+        from django.db.models import ProtectedError
+
+        self.absorb(other)
+        try:
+            other.delete()
+        except ProtectedError:
+            logger.warning(
+                f"Concept {other.concept_id} gained a Game while merging into {self.concept_id}; kept it"
+            )
+            return False
+        return True
 
     def absorb(self, other):
         """Migrate all related data from another concept to this one before deletion.

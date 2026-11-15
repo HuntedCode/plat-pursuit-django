@@ -22,7 +22,7 @@ A single PSN trophy list (one per `np_communication_id`). Different regional sta
 **Title cleaning:** All title/name fields are automatically cleaned on `save()` via model overrides. `clean_title_field()` strips trademark symbols and normalizes Unicode Roman numerals. Game titles additionally use `clean_game_title()`, which also strips PSN suffixes like "Trophy Set" and "Trophies". The `clean_titles` management command runs these same functions in bulk for retroactive cleanup. Both functions live in `trophies/models.py`.
 
 Key relationships:
-- `concept` FK to `Concept` (nullable, SET_NULL)
+- `concept` FK to `Concept` (nullable, PROTECT: a Concept with Games cannot be deleted)
 
 ### Concept
 The cross-stack unifier. All regional/platform variants of the same game share one Concept. Stores publisher info, release date, genres, media URLs, and a `slug` for URL routing. The `absorb(other)` method is critical: it migrates all related data (comments, ratings, checklists, featured guides, badge references, stages, etc.) from one Concept to another when a game is reassigned. Any new model with a relationship to Concept **must** update `absorb()`.

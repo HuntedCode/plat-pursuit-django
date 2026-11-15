@@ -54,9 +54,11 @@ Workers consume from all 5 queues via priority-ordered `brpop`.
 | `region_walk:queued:{title_id}` | String (flag) | 86400s (24h) | A title ID's store walk is queued; kept after a FAILED lookup as a cooldown until the nightly retries it, deleted on success. A day because a lookup can wait hours on the bulk queue. Stops a refill or a second sync queueing it twice. See [trophy-list-regions.md](../architecture/trophy-list-regions.md) |
 | `region_walk:chain` | String (flag) | 7200s (2h) | A `resolve_title_regions` refill chain is alive (taken with `nx`, refreshed by every refill and every walk job the chain queued), so a second run cannot start a second chain |
 | `profile:{profile_id}:pending_igdb_enrich` | Set (concept IDs) | 21600s (6h) | Concepts created during a profile's sync that are queued for IGDB enrichment. Populated by `_job_sync_title_id` each time a new Concept is created; drained at the top of `_job_sync_complete` so matching runs after every sibling Game has been attached. 6h TTL is a safety net for crashed/interrupted syncs — the default `enrich_from_igdb` cron picks up any remaining un-enriched concepts. |
+| `sync_error_streak:{profile_id}` | String (int) | 30d | Consecutive failed sync attempts. Incremented by `sync_backoff.record_failure` (from `Profile.set_sync_status('error')`), at most once per backoff window; cleared when `sync_complete` succeeds |
+| `sync_error_backoff:{profile_id}` | String (flag) | 1h doubling per streak, max 7d | Present while an `error` profile is backing off; `refresh_profiles` skips it in every pass. Manual syncs ignore it |
 | `stuck_sync_check_lock` | String (NX lock) | 90s | Ensures only one TK instance runs stuck-sync detection per cycle |
 
-**Files**: `trophies/psn_manager.py`, `trophies/token_keeper.py`, `trophies/views/sync_views.py`
+**Files**: `trophies/psn_manager.py`, `trophies/token_keeper.py`, `trophies/views/sync_views.py`, `trophies/services/sync_backoff.py`
 
 ### Sync Completeness Cooldowns
 
