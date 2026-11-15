@@ -56,7 +56,8 @@ PlatPursuit has **110 custom management commands** spread across 8 Django apps: 
 | `franchise_stats` | Read-only diagnostic reporting franchise/collection totals, per-concept coverage, browse-page surfacing counts, and sample names. Useful for auditing enrichment coverage and deciding whether the collection-orphan rule is producing sensible results. | `--samples N` (default 10, 0 to skip names) | `python manage.py franchise_stats --samples 20` |
 | `inspect_franchise_data` | Read-only diagnostic: compare raw IGDB response to stored links for a concept or franchise. First stop when investigating mis-linked games. Shows drift detection (what's in IGDB but not the DB, or vice versa). | `--search`, `--concept-id`, `--franchise-name` (one required) | `python manage.py inspect_franchise_data --search "College Football"` |
 | `render_profile_sigs` | Pre-render forum-signature PNG and SVG variants of the profile card image. Used as a one-time backfill and as a periodic refresh after design changes. | `--username`, `--all` | `python manage.py render_profile_sigs --all` |
-| `trigger_concept_health_checks` | Resolve a concept for every concept-less Game inline (no PSN/worker): tries the IGDB anchor, falls back to a PP_ stub so nothing stays null. Same anchor-or-stub recovery `sync_complete`'s orphan reconcile runs, on demand. Reaches games PSN's title_stats endpoint omits. PP_ stubs are out of scope (use `anchor_concepts` to re-evaluate those). | `--dry-run`, `--profile-id`, `--limit` | `python manage.py trigger_concept_health_checks --dry-run` |
+| `trigger_concept_health_checks` | Resolve a concept for every concept-less Game inline (no PSN/worker): tries the IGDB anchor, falls back to a PP_ stub so nothing stays null. Same anchor-or-stub recovery (`place_concept_less_game`) that `sync_complete`'s orphan reconcile and the slow path's abort handler run, on demand. Reaches games PSN's title_stats endpoint omits. PP_ stubs are out of scope (use `anchor_concepts` to re-evaluate those). | `--dry-run`, `--profile-id`, `--limit` | `python manage.py trigger_concept_health_checks --dry-run` |
+| `repair_blank_titles` | Fill blank `Game.title_name` from observed PSN names (`PSNTitleObservation`, via `Game.display_list_names`; no PSN calls), rename the `(PS4)` PP_ stubs a blank title produced and regenerate their slugs, then run `anchor_concepts --concept` on each renamed stub. Skips `lock_title` games and `title_lock` stubs. Lists games with no observed name for a hand fix. Re-runnable. | `--dry-run`, `--no-anchor` | `python manage.py repair_blank_titles --dry-run` |
 
 ### core
 
@@ -183,6 +184,7 @@ Commands for staff to run manually as needed.
 | `franchise_stats` | Diagnostic: franchise/collection coverage and browse surfacing |
 | `inspect_franchise_data` | Diagnostic: raw IGDB response vs. stored links for a concept |
 | `trigger_concept_health_checks` | Resolve concept-less games inline via IGDB anchor, else PP_ stub |
+| `repair_blank_titles` | Fill blank game titles from observed PSN names, rename and re-anchor `(PS4)` stubs |
 | `render_profile_sigs` | Pre-render forum-signature PNG/SVG variants of the profile card |
 | `reconcile_contracts` | Revoke Contract credit orphaned by a Concept split / re-anchor (preview by default, `--apply` to write) |
 

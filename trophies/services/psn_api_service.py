@@ -197,7 +197,9 @@ class PsnApiService:
             defaults={
                 "np_service_name": trophy_title.np_service_name,
                 "trophy_set_version": trophy_title.trophy_set_version,
-                "title_name": trophy_title.title_name,
+                # psnawp types this `str | None`; the column is NOT NULL. A blank here is
+                # filled by the first walk that sees a real name (see the update branch).
+                "title_name": (trophy_title.title_name or '').strip(),
                 "title_detail": trophy_title.title_detail,
                 "title_icon_url": trophy_title.title_icon_url,
                 "title_platform": [platform.value for platform in trophy_title.title_platform],
@@ -220,8 +222,13 @@ class PsnApiService:
                 'trophy_set_version', 'np_service_name', 'title_detail',
                 'title_icon_url', 'has_trophy_groups', 'defined_trophies',
             ]
-            if not game.lock_title:
-                game.title_name = trophy_title.title_name
+            # PSN intermittently sends a BLANK trophyTitleName for a title it names correctly on
+            # other syncs (all 86 blank-title Games in Nov 2026 had both on record). A blank is
+            # never a rename: copying it wiped good titles, and every stub minted after that was
+            # named "(PS4)" with no title for IGDB to match on.
+            psn_title = (trophy_title.title_name or '').strip()
+            if not game.lock_title and psn_title:
+                game.title_name = psn_title
                 update_fields.append('title_name')
             game.trophy_set_version = trophy_title.trophy_set_version
             game.np_service_name = trophy_title.np_service_name
