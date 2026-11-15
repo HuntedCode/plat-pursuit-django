@@ -521,8 +521,9 @@ def place_concept_less_game(game):
     """Give a concept-less Game a Concept: its IGDB anchor when the match is clean, else a PP_ stub.
 
     Anchor-or-stub recovery shared by sync_complete's orphan reconcile, the slow path's abort
-    handler and `trigger_concept_health_checks`. (The sync_title_id and legacy-platform
-    fallbacks in token_keeper still carry their own inline copies.)
+    handler, the sync_title_id no-details fallback, the walk's legacy-platform placement and
+    `trigger_concept_health_checks`. (sync_title_id's exception recovery deliberately mints a bare
+    stub instead: the exception it recovers from may BE an IGDB failure.)
 
     The stub attaches under a row lock, re-checking the FK: the abort handler can run while
     sync_title_id jobs the walk already queued are placing these same Games, and an unlocked
@@ -890,8 +891,7 @@ def anchor_concept_to_canonical(source_concept, canonical_igdb_id, *, user=None)
                 f'survived add_concept cascade with 0 games — running '
                 f'defensive absorb + delete.'
             )
-            target.absorb(refreshed_source)
-            refreshed_source.delete()
+            target.merge_in(refreshed_source)
 
         result['moved_count'] = moved_count
         result['flagged_count'] = flagged_count
@@ -1101,8 +1101,7 @@ def anchor_game_to_canonical(game, canonical_igdb_id, *, user=None, raw_data=Non
                     f'survived per-game move with 0 games — running defensive '
                     f'absorb + delete.'
                 )
-                target.absorb(refreshed_source)
-                refreshed_source.delete()
+                target.merge_in(refreshed_source)
 
         result['ok'] = True
         return result

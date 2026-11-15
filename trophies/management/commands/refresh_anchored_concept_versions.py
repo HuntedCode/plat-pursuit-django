@@ -266,8 +266,7 @@ class Command(BaseCommand):
         except Concept.DoesNotExist:
             stale = None
         if stale and stale.games.count() == 0:
-            target.absorb(stale)
-            stale.delete()
+            target.merge_in(stale)
 
         return target
 

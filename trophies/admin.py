@@ -533,8 +533,7 @@ class GameAdmin(admin.ModelAdmin):
             cache.delete(f"game:imageurls:{obj.np_communication_id}")
             # Absorb orphaned old concept into the new one
             if old_concept and old_concept.games.count() == 0:
-                new_concept.absorb(old_concept)
-                old_concept.delete()
+                new_concept.merge_in(old_concept)
                 from trophies.services.comment_service import CommentService
                 from trophies.services.rating_service import RatingService
                 CommentService.invalidate_cache(new_concept)
